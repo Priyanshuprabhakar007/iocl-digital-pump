@@ -395,12 +395,46 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(() => calculateRevenuePaise(Number.MAX_SAFE_INTEGER, 1000000000)).toThrow('FINANCIAL_AMOUNT_OVERFLOW');
   });
 
-  it('25, 26, 27, 28, 29. calculateShiftCngRevenue states A, B, C, D, E', async () => {
+  it('CNG Revenue State A: NO CNG price snapshot and NO CNG log', async () => {
+    const { cookie } = await loginAs();
+    // ro-1001 with default seed has no CNG price active
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    expect(openRes.status).toBe(201);
+    const shiftId = (await openRes.json() as any).data.id;
+
+    const sumRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/financial-summary`, {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(sumRes.status).toBe(200);
+    const json: any = await sumRes.json();
+    const salesRev = json.data.salesRevenue;
+
+    expect(salesRev.cngApplicable).toBe(false);
+    expect(salesRev.cngComplete).toBe(true);
+    expect(salesRev.cngTotalPaise).toBeNull();
+    expect(salesRev.cngTotalStr).toBeNull();
+    expect(salesRev.cngProduct).toBeNull();
+    expect(salesRev.includedComponents).toContain('FUEL');
+    expect(salesRev.pendingComponents).toContain('LUBE');
+    expect(salesRev.pendingComponents).not.toContain('CNG');
+  });
+
+  it('CNG Snapshot without log (State C): cngApplicable=true, cngComplete=false, pending components has CNG and LUBE', async () => {
     const { cookie } = await loginAs();
     const db = getDb(localD1);
     await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
     await db.insert(schema.outletProducts).values({
-      id: 'op-ro1-cng', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+      id: 'op-ro1-cng-snap', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
     });
     const priceRes = await app.fetch(
       new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
@@ -423,43 +457,30 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(openRes.status).toBe(201);
     const shiftId = (await openRes.json() as any).data.id;
 
-    // State C: Snapshot + no log -> cngApplicable=true, cngComplete=false
-    const sumRes1 = await app.fetch(
+    // No cng_shift_log exists
+    const sumRes = await app.fetch(
       new Request(`http://localhost/api/v1/shifts/${shiftId}/financial-summary`, {
         headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
       }),
       env
     );
-    expect(sumRes1.status).toBe(200);
-    const json1: any = await sumRes1.json();
-    expect(json1.data.salesRevenue.cngApplicable).toBe(true);
-    expect(json1.data.salesRevenue.cngComplete).toBe(false);
+    expect(sumRes.status).toBe(200);
+    const json: any = await sumRes.json();
+    const salesRev = json.data.salesRevenue;
 
-    // Add log -> State B
-    const logRes = await app.fetch(
-      new Request(`http://localhost/api/v1/shifts/${shiftId}/cng-log`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
-        body: JSON.stringify({ mfmOpeningKg: '0.000', mfmClosingKg: '100.000' }),
-      }),
-      env
-    );
-    expect(logRes.status).toBe(200);
-
-    const sumRes2 = await app.fetch(
-      new Request(`http://localhost/api/v1/shifts/${shiftId}/financial-summary`, {
-        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
-      }),
-      env
-    );
-    const json2: any = await sumRes2.json();
-    expect(json2.data.salesRevenue.cngApplicable).toBe(true);
-    expect(json2.data.salesRevenue.cngComplete).toBe(true);
-    expect(json2.data.salesRevenue.cngTotalPaise).toBe(855000); // 100.000 kg * 85.50 = 855000 paise
+    expect(salesRev.cngApplicable).toBe(true);
+    expect(salesRev.cngComplete).toBe(false);
+    expect(salesRev.cngTotalPaise).toBeNull();
+    expect(salesRev.cngProduct).toBeNull();
+    expect(salesRev.includedComponents).toEqual(['FUEL']);
+    expect(salesRev.pendingComponents).toContain('CNG');
+    expect(salesRev.pendingComponents).toContain('LUBE');
   });
 
-  it('30, 31, 32. CNG log without snapshot throws CNG_PRICE_SNAPSHOT_UNAVAILABLE', async () => {
+  it('Multiple historical CNG snapshots returns controlled 409 CNG_PRICE_SNAPSHOT_AMBIGUOUS', async () => {
     const { cookie } = await loginAs();
+    const db = getDb(localD1);
+
     const openRes = await app.fetch(
       new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
         method: 'POST',
@@ -470,16 +491,64 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     );
     expect(openRes.status).toBe(201);
     const shiftId = (await openRes.json() as any).data.id;
+
+    // Insert second CNG product
+    await db.insert(schema.products).values({
+      id: 'prod-cng-ambig-2', code: 'CNG_AMB', name: 'CNG Ambig', category: 'CNG', unit: 'KG', status: 'ACTIVE', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    });
+    await db.insert(schema.outletProductPrices).values([
+      { id: 'opp-amb-1', outletId: 'ro-1001', productId: 'prod-cng', pricePaisePerUnit: 8550, effectiveFrom: '2026-11-01', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin' },
+      { id: 'opp-amb-2', outletId: 'ro-1001', productId: 'prod-cng-ambig-2', pricePaisePerUnit: 8600, effectiveFrom: '2026-11-01', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin' },
+    ]);
+
+    // Insert two valid historical CNG/KG snapshots into the shift
+    await db.insert(schema.operationalShiftProductPrices).values([
+      { id: 'ospp-amb-1', operationalShiftId: shiftId, outletId: 'ro-1001', productId: 'prod-cng', productCode: 'CNG', productName: 'CNG Gas', unit: 'KG', productCategory: 'CNG', pricePaisePerUnit: 8550, sourcePriceId: 'opp-amb-1', createdAt: new Date().toISOString() },
+      { id: 'ospp-amb-2', operationalShiftId: shiftId, outletId: 'ro-1001', productId: 'prod-cng-ambig-2', productCode: 'CNG_AMB', productName: 'CNG Ambig', unit: 'KG', productCategory: 'CNG', pricePaisePerUnit: 8600, sourcePriceId: 'opp-amb-2', createdAt: new Date().toISOString() },
+    ]);
+
+    const sumRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/financial-summary`, {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(sumRes.status).toBe(409);
+    const json: any = await sumRes.json();
+    expect(json.error.code).toBe('CNG_PRICE_SNAPSHOT_AMBIGUOUS');
+  });
+
+  it('Malformed CNG/LITRE snapshot is not accepted and with CNG log returns CNG_PRICE_SNAPSHOT_UNAVAILABLE', async () => {
+    const { cookie } = await loginAs();
     const db = getDb(localD1);
 
-    // Create CNG log manually without snapshot
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    expect(openRes.status).toBe(201);
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Insert fake price and malformed snapshot (CNG + LITRE)
+    await db.insert(schema.outletProductPrices).values({
+      id: 'opp-cng-litre-bad', outletId: 'ro-1001', productId: 'prod-cng', pricePaisePerUnit: 8550, effectiveFrom: '2026-11-01', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+    });
+    await db.insert(schema.operationalShiftProductPrices).values({
+      id: 'ospp-malformed-litre', operationalShiftId: shiftId, outletId: 'ro-1001', productId: 'prod-cng', productCode: 'CNG', productName: 'CNG Litre', unit: 'LITRE', productCategory: 'CNG', pricePaisePerUnit: 8550, sourcePriceId: 'opp-cng-litre-bad', createdAt: new Date().toISOString()
+    });
+
+    // Insert CNG log
     await db.insert(schema.cngShiftLogs).values({
-      id: 'cnglog-legacy',
+      id: 'cnglog-malformed',
       operationalShiftId: shiftId,
       outletId: 'ro-1001',
       mfmOpeningKgMilliunits: 0,
-      mfmClosingKgMilliunits: 100000,
-      netSalesKgMilliunits: 100000,
+      mfmClosingKgMilliunits: 50000,
+      netSalesKgMilliunits: 50000,
       recordedByUserId: 'user-admin',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -496,14 +565,32 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(json.error.code).toBe('CNG_PRICE_SNAPSHOT_UNAVAILABLE');
   });
 
-  it('53, 54, 55. Successful CNG shift closes CLOSED and audit contains cngRevenuePaise', async () => {
+  it('Exact HALF-UP CNG rounding boundary (remainder 500 rounds up, remainder 499 does not)', () => {
+    // We want (quantityMilliunits * pricePaisePerUnit) % 1000 === 500
+    // Example: quantity = 1001, price = 500 => 1001 * 500 = 500500 => quotient = 500, remainder = 500 => rounds UP to 501
+    const qty1 = 1001;
+    const price1 = 500;
+    expect((qty1 * price1) % 1000).toBe(500);
+    expect(calculateRevenuePaise(qty1, price1)).toBe(501);
+
+    // Remainder === 499:
+    // Example: quantity = 1001, price = 499 => 1001 * 499 = 499499 => quotient = 499, remainder = 499 => rounds down (no round up) to 499
+    const qty2 = 1001;
+    const price2 = 499;
+    expect((qty2 * price2) % 1000).toBe(499);
+    expect(calculateRevenuePaise(qty2, price2)).toBe(499);
+  });
+
+  it('CNG historical price immutability: master price change after shift open does not alter shift revenue', async () => {
     const { cookie } = await loginAs();
     const db = getDb(localD1);
     await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
     await db.insert(schema.outletProducts).values({
-      id: 'op-ro1-cng', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+      id: 'op-ro1-cng-immut', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
     });
-    const priceRes = await app.fetch(
+
+    // 1. Configure CNG price A (85.50 = 8550 paise)
+    const priceRes1 = await app.fetch(
       new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
@@ -511,8 +598,10 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
       }),
       env
     );
-    expect(priceRes.status).toBe(201);
+    expect(priceRes1.status).toBe(201);
+    const priceAId = (await priceRes1.json() as any).data.id;
 
+    // 2. Open shift
     const openRes = await app.fetch(
       new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
         method: 'POST',
@@ -524,7 +613,24 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(openRes.status).toBe(201);
     const shiftId = (await openRes.json() as any).data.id;
 
-    // Add CNG log
+    // 3. Verify snapshot is price A
+    const [snap] = await db.select().from(schema.operationalShiftProductPrices).where(
+      and(eq(schema.operationalShiftProductPrices.operationalShiftId, shiftId), eq(schema.operationalShiftProductPrices.productId, 'prod-cng'))
+    );
+    expect(snap.pricePaisePerUnit).toBe(8550);
+
+    // 4. Update master CNG price to B (92.00)
+    const updateRes = await app.fetch(
+      new Request(`http://localhost/api/v1/product-prices/${priceAId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '92.00', effectiveFrom: '2026-11-01' }),
+      }),
+      env
+    );
+    expect(updateRes.status).toBe(200);
+
+    // 5. Record CNG MFM sales: 100.000 kg
     const logRes = await app.fetch(
       new Request(`http://localhost/api/v1/shifts/${shiftId}/cng-log`, {
         method: 'PUT',
@@ -535,39 +641,875 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     );
     expect(logRes.status).toBe(200);
 
-    // Setup tank & readings to allow close
+    // 6. Get financial summary: must still use price A (85.50 * 100 = 855000 paise)
+    const sumRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/financial-summary`, {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(sumRes.status).toBe(200);
+    const json: any = await sumRes.json();
+    expect(json.data.salesRevenue.cngTotalPaise).toBe(855000);
+    expect(json.data.salesRevenue.cngProduct.pricePaisePerUnit).toBe(8550);
+  });
+
+  it('Outlet product mapping deactivation after open does not affect financial summary calculation', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+    await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
+    const mappingId = 'op-ro1-cng-deact';
+    await db.insert(schema.outletProducts).values({
+      id: mappingId, outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+    });
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '85.50', effectiveFrom: '2026-11-01' }),
+      }),
+      env
+    );
+
+    // 1. Open shift
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // 2. Record valid CNG log
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/cng-log`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ mfmOpeningKg: '0.000', mfmClosingKg: '50.000' }),
+      }),
+      env
+    );
+
+    // 3. Deactivate current outlet_products mapping
+    await db.update(schema.outletProducts).set({ status: 'INACTIVE' }).where(eq(schema.outletProducts.id, mappingId));
+
+    // 4. Financial summary continues to calculate from snapshot and existing log
+    const sumRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/financial-summary`, {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(sumRes.status).toBe(200);
+    const json: any = await sumRes.json();
+    expect(json.data.salesRevenue.cngTotalPaise).toBe(427500); // 50 * 8550
+  });
+
+  it('Authoritative Fuel + CNG Total: fuel + cng = authoritativeTotalPaise with correct components', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+    await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
+    await db.insert(schema.outletProducts).values({
+      id: 'op-ro1-cng-auth-tot', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+    });
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '85.50', effectiveFrom: '2026-11-01' }),
+      }),
+      env
+    );
+
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Record fuel reading: 10.000 L of MS (price in ro-1001 snapshot: 95.20 = 9520 paise/L => 95200 paise)
+    const pumpRepo = new PumpRepository(db);
+    const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
+    const msNozzle = nozzles.find(n => n.productCode === 'MS')!;
+    await pumpRepo.createReading({
+      id: `mr-auth-${msNozzle.nozzleId}`,
+      operationalShiftId: shiftId,
+      outletId: 'ro-1001',
+      nozzleId: msNozzle.nozzleId,
+      openingMilliunits: 0,
+      closingMilliunits: 10000,
+      testingMilliunits: 0,
+      grossMilliunits: 10000,
+      netMilliunits: 10000,
+      recordedByUserId: 'user-admin',
+      hasOpeningVariance: false,
+      openingVarianceMilliunits: 0,
+      varianceReason: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    // Record CNG reading: 20.000 KG @ 85.50 => 171000 paise
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/cng-log`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ mfmOpeningKg: '0.000', mfmClosingKg: '20.000' }),
+      }),
+      env
+    );
+
+    const sumRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/financial-summary`, {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(sumRes.status).toBe(200);
+    const json: any = await sumRes.json();
+    const salesRev = json.data.salesRevenue;
+
+    expect(salesRev.fuelTotalPaise).toBe(95200);
+    expect(salesRev.cngTotalPaise).toBe(171000);
+    expect(salesRev.authoritativeTotalPaise).toBe(266200);
+    expect(salesRev.lubeTotalPaise).toBeNull();
+    expect(salesRev.lubeTotalStr).toBeNull();
+    expect(salesRev.includedComponents).toEqual(['FUEL', 'CNG']);
+    expect(salesRev.pendingComponents).toEqual(['LUBE']);
+  });
+
+  it('Financial reconciliation DB persistence contains correct fuel, cng and authoritative total', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+    await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
+    await db.insert(schema.outletProducts).values({
+      id: 'op-ro1-cng-persist', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+    });
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '85.50', effectiveFrom: '2026-11-01' }),
+      }),
+      env
+    );
+
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Fuel readings: 0 net sales for all nozzles
     const pumpRepo = new PumpRepository(db);
     const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
     for (const n of nozzles) {
       await pumpRepo.createReading({
-        id: `mr-${n.nozzleId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', nozzleId: n.nozzleId, openingMilliunits: 1000, closingMilliunits: 1000, testingMilliunits: 0, grossMilliunits: 0, netMilliunits: 0, recordedByUserId: 'user-admin', hasOpeningVariance: false, openingVarianceMilliunits: 0, varianceReason: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `mr-p-${n.nozzleId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', nozzleId: n.nozzleId, openingMilliunits: 1000, closingMilliunits: 1000, testingMilliunits: 0, grossMilliunits: 0, netMilliunits: 0, recordedByUserId: 'user-admin', hasOpeningVariance: false, openingVarianceMilliunits: 0, varianceReason: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-p-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-p-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
-    // Close with variance reason to satisfy Phase 2C variance rule
+    // CNG reading: 10.000 KG @ 85.50 = 85500 paise
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/cng-log`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ mfmOpeningKg: '0.000', mfmClosingKg: '10.000' }),
+      }),
+      env
+    );
+
     const closeRes = await app.fetch(
       new Request(`http://localhost/api/v1/shifts/${shiftId}/close`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
-        body: JSON.stringify({ varianceReason: 'Integration test: collections intentionally omitted' }),
+        body: JSON.stringify({ varianceReason: 'Test persistence' }),
       }),
       env
     );
     expect(closeRes.status).toBe(200);
 
-    const [audit] = await db.select().from(schema.auditLogs).where(and(eq(schema.auditLogs.action, 'FINANCIAL_RECONCILIATION'), eq(schema.auditLogs.entityId, shiftId)));
+    // Verify DB record directly
+    const [reconcil] = await db.select().from(schema.shiftFinancialReconciliations).where(eq(schema.shiftFinancialReconciliations.operationalShiftId, shiftId));
+    expect(reconcil).toBeDefined();
+    expect(reconcil.fuelSalesRevenuePaise).toBe(0);
+    expect(reconcil.cngSalesRevenuePaise).toBe(85500);
+    expect(reconcil.lubeSalesRevenuePaise).toBeNull();
+    expect(reconcil.authoritativeSalesRevenuePaise).toBe(85500);
+  });
+
+  it('Balanced Fuel + CNG reconciliation closes without varianceReason when collections match sales', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+    await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
+    await db.insert(schema.outletProducts).values({
+      id: 'op-ro1-cng-bal', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+    });
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '85.50', effectiveFrom: '2026-11-01' }),
+      }),
+      env
+    );
+
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Complete nozzle readings (0 fuel sales)
+    const pumpRepo = new PumpRepository(db);
+    const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
+    for (const n of nozzles) {
+      await pumpRepo.createReading({
+        id: `mr-bal-${n.nozzleId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', nozzleId: n.nozzleId, openingMilliunits: 1000, closingMilliunits: 1000, testingMilliunits: 0, grossMilliunits: 0, netMilliunits: 0, recordedByUserId: 'user-admin', hasOpeningVariance: false, openingVarianceMilliunits: 0, varianceReason: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+    const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
+    for (const t of tanks) {
+      await pumpRepo.createTankReading({
+        id: `tsr-open-b-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+      await pumpRepo.createTankReading({
+        id: `tsr-close-b-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+
+    // 10.000 KG @ 85.50 = 85500 paise (855.00 INR)
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/cng-log`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ mfmOpeningKg: '0.000', mfmClosingKg: '10.000' }),
+      }),
+      env
+    );
+
+    // Record exact matching collections: 855.00
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/collections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ collectionType: 'CASH', amount: '855.00', collectedAt: new Date().toISOString() }),
+      }),
+      env
+    );
+
+    // Close without varianceReason must succeed because variance is 0
+    const closeRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({}),
+      }),
+      env
+    );
+    expect(closeRes.status).toBe(200);
+
+    const [reconcil] = await db.select().from(schema.shiftFinancialReconciliations).where(eq(schema.shiftFinancialReconciliations.operationalShiftId, shiftId));
+    expect(reconcil.salesCollectionVariancePaise).toBe(0);
+    expect(reconcil.varianceStatus).toBe('BALANCED');
+    expect(reconcil.varianceReason).toBeNull();
+  });
+
+  it('CNG SHORTAGE requires varianceReason to close, closing with reason succeeds', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+    await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
+    await db.insert(schema.outletProducts).values({
+      id: 'op-ro1-cng-short', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+    });
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '85.50', effectiveFrom: '2026-11-01' }),
+      }),
+      env
+    );
+
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Complete nozzle readings (0 fuel sales)
+    const pumpRepo = new PumpRepository(db);
+    const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
+    for (const n of nozzles) {
+      await pumpRepo.createReading({
+        id: `mr-sh-${n.nozzleId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', nozzleId: n.nozzleId, openingMilliunits: 1000, closingMilliunits: 1000, testingMilliunits: 0, grossMilliunits: 0, netMilliunits: 0, recordedByUserId: 'user-admin', hasOpeningVariance: false, openingVarianceMilliunits: 0, varianceReason: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+    const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
+    for (const t of tanks) {
+      await pumpRepo.createTankReading({
+        id: `tsr-open-sh-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+      await pumpRepo.createTankReading({
+        id: `tsr-close-sh-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+
+    // CNG 10.000 KG @ 85.50 = 85500 paise
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/cng-log`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ mfmOpeningKg: '0.000', mfmClosingKg: '10.000' }),
+      }),
+      env
+    );
+
+    // Collections: 500.00 (50000 paise) => Shortage = 35500 paise (> 0)
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/collections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ collectionType: 'CASH', amount: '500.00', collectedAt: new Date().toISOString() }),
+      }),
+      env
+    );
+
+    // Close without varianceReason must fail with 400 VARIANCE_REASON_REQUIRED
+    const failClose = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({}),
+      }),
+      env
+    );
+    expect(failClose.status).toBe(400);
+    const failJson: any = await failClose.json();
+    expect(failJson.error.code).toBe('VARIANCE_REASON_REQUIRED');
+
+    // Close with variance reason succeeds
+    const successClose = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ varianceReason: 'Cash shortage investigated' }),
+      }),
+      env
+    );
+    expect(successClose.status).toBe(200);
+
+    const [reconcil] = await db.select().from(schema.shiftFinancialReconciliations).where(eq(schema.shiftFinancialReconciliations.operationalShiftId, shiftId));
+    expect(reconcil.varianceStatus).toBe('SHORTAGE');
+    expect(reconcil.salesCollectionVariancePaise).toBe(35500);
+    expect(reconcil.varianceReason).toBe('Cash shortage investigated');
+  });
+
+  it('CNG EXCESS requires varianceReason to close', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+    await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
+    await db.insert(schema.outletProducts).values({
+      id: 'op-ro1-cng-exc', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+    });
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '85.50', effectiveFrom: '2026-11-01' }),
+      }),
+      env
+    );
+
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Complete nozzle readings (0 fuel sales)
+    const pumpRepo = new PumpRepository(db);
+    const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
+    for (const n of nozzles) {
+      await pumpRepo.createReading({
+        id: `mr-ex-${n.nozzleId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', nozzleId: n.nozzleId, openingMilliunits: 1000, closingMilliunits: 1000, testingMilliunits: 0, grossMilliunits: 0, netMilliunits: 0, recordedByUserId: 'user-admin', hasOpeningVariance: false, openingVarianceMilliunits: 0, varianceReason: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+    const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
+    for (const t of tanks) {
+      await pumpRepo.createTankReading({
+        id: `tsr-open-ex-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+      await pumpRepo.createTankReading({
+        id: `tsr-close-ex-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+
+    // CNG 10.000 KG @ 85.50 = 85500 paise
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/cng-log`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ mfmOpeningKg: '0.000', mfmClosingKg: '10.000' }),
+      }),
+      env
+    );
+
+    // Collections: 1000.00 (100000 paise) => Excess = -14500 paise (< 0)
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/collections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ collectionType: 'CASH', amount: '1000.00', collectedAt: new Date().toISOString() }),
+      }),
+      env
+    );
+
+    // Close without varianceReason fails
+    const failClose = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({}),
+      }),
+      env
+    );
+    expect(failClose.status).toBe(400);
+    const failJson: any = await failClose.json();
+    expect(failJson.error.code).toBe('VARIANCE_REASON_REQUIRED');
+
+    // Close with variance reason succeeds
+    const successClose = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ varianceReason: 'Excess collection from previous shift' }),
+      }),
+      env
+    );
+    expect(successClose.status).toBe(200);
+
+    const [reconcil] = await db.select().from(schema.shiftFinancialReconciliations).where(eq(schema.shiftFinancialReconciliations.operationalShiftId, shiftId));
+    expect(reconcil.varianceStatus).toBe('EXCESS');
+    expect(reconcil.salesCollectionVariancePaise).toBe(-14500);
+  });
+
+  it('Incomplete CNG close rolls back: returns 409 INCOMPLETE_CNG_DATA, restores shift to OPEN, cleans up reconciliations', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+    await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
+    await db.insert(schema.outletProducts).values({
+      id: 'op-ro1-cng-incomp', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+    });
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '85.50', effectiveFrom: '2026-11-01' }),
+      }),
+      env
+    );
+
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Complete all fuel and tank close data
+    const pumpRepo = new PumpRepository(db);
+    const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
+    for (const n of nozzles) {
+      await pumpRepo.createReading({
+        id: `mr-inc-${n.nozzleId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', nozzleId: n.nozzleId, openingMilliunits: 1000, closingMilliunits: 1000, testingMilliunits: 0, grossMilliunits: 0, netMilliunits: 0, recordedByUserId: 'user-admin', hasOpeningVariance: false, openingVarianceMilliunits: 0, varianceReason: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+    const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
+    for (const t of tanks) {
+      await pumpRepo.createTankReading({
+        id: `tsr-open-inc-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+      await pumpRepo.createTankReading({
+        id: `tsr-close-inc-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+
+    // NO CNG log recorded! Attempt close:
+    const closeRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ varianceReason: 'Attempt close without CNG log' }),
+      }),
+      env
+    );
+    expect(closeRes.status).toBe(409);
+    const json: any = await closeRes.json();
+    expect(json.error.code).toBe('INCOMPLETE_CNG_DATA');
+
+    // Assert shift status restored to OPEN
+    const [shift] = await db.select().from(schema.operationalShifts).where(eq(schema.operationalShifts.id, shiftId));
+    expect(shift.status).toBe('OPEN');
+
+    // Assert stock reconciliation created during attempt was deleted/cleaned up
+    const stockRecon = await db.select().from(schema.shiftStockReconciliations).where(eq(schema.shiftStockReconciliations.operationalShiftId, shiftId));
+    expect(stockRecon.length).toBe(0);
+
+    // Assert financial reconciliation does not exist
+    const finRecon = await db.select().from(schema.shiftFinancialReconciliations).where(eq(schema.shiftFinancialReconciliations.operationalShiftId, shiftId));
+    expect(finRecon.length).toBe(0);
+  });
+
+  it('CNG price snapshot unavailable during close: returns 409 CNG_PRICE_SNAPSHOT_UNAVAILABLE and cleans up', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Complete fuel & tank requirements
+    const pumpRepo = new PumpRepository(db);
+    const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
+    for (const n of nozzles) {
+      await pumpRepo.createReading({
+        id: `mr-unav-${n.nozzleId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', nozzleId: n.nozzleId, openingMilliunits: 1000, closingMilliunits: 1000, testingMilliunits: 0, grossMilliunits: 0, netMilliunits: 0, recordedByUserId: 'user-admin', hasOpeningVariance: false, openingVarianceMilliunits: 0, varianceReason: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+    const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
+    for (const t of tanks) {
+      await pumpRepo.createTankReading({
+        id: `tsr-open-unav-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+      await pumpRepo.createTankReading({
+        id: `tsr-close-unav-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+
+    // Legacy/inconsistent state: Insert CNG log without any CNG price snapshot
+    await db.insert(schema.cngShiftLogs).values({
+      id: 'cnglog-no-snap',
+      operationalShiftId: shiftId,
+      outletId: 'ro-1001',
+      mfmOpeningKgMilliunits: 0,
+      mfmClosingKgMilliunits: 10000,
+      netSalesKgMilliunits: 10000,
+      recordedByUserId: 'user-admin',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const closeRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ varianceReason: 'Test snapshot unavailable' }),
+      }),
+      env
+    );
+    expect(closeRes.status).toBe(409);
+    const json: any = await closeRes.json();
+    expect(json.error.code).toBe('CNG_PRICE_SNAPSHOT_UNAVAILABLE');
+
+    // Assert restored OPEN and no reconciliations
+    const [shift] = await db.select().from(schema.operationalShifts).where(eq(schema.operationalShifts.id, shiftId));
+    expect(shift.status).toBe('OPEN');
+    const stockReconUnav = await db.select().from(schema.shiftStockReconciliations).where(eq(schema.shiftStockReconciliations.operationalShiftId, shiftId));
+    expect(stockReconUnav.length).toBe(0);
+    const finRecon = await db.select().from(schema.shiftFinancialReconciliations).where(eq(schema.shiftFinancialReconciliations.operationalShiftId, shiftId));
+    expect(finRecon.length).toBe(0);
+  });
+
+  it('Ambiguous CNG snapshot during close: returns 409 CNG_PRICE_SNAPSHOT_AMBIGUOUS and restores OPEN', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Complete fuel & tank requirements
+    const pumpRepo = new PumpRepository(db);
+    const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
+    for (const n of nozzles) {
+      await pumpRepo.createReading({
+        id: `mr-amb-${n.nozzleId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', nozzleId: n.nozzleId, openingMilliunits: 1000, closingMilliunits: 1000, testingMilliunits: 0, grossMilliunits: 0, netMilliunits: 0, recordedByUserId: 'user-admin', hasOpeningVariance: false, openingVarianceMilliunits: 0, varianceReason: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+    const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
+    for (const t of tanks) {
+      await pumpRepo.createTankReading({
+        id: `tsr-open-amb-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+      await pumpRepo.createTankReading({
+        id: `tsr-close-amb-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+
+    // Insert 2 CNG snapshots directly into shift
+    await db.insert(schema.products).values({
+      id: 'prod-cng-close-amb', code: 'CNG_CL_AMB', name: 'CNG Close Amb', category: 'CNG', unit: 'KG', status: 'ACTIVE', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    });
+    await db.insert(schema.outletProductPrices).values([
+      { id: 'opp-cl-amb-1', outletId: 'ro-1001', productId: 'prod-cng', pricePaisePerUnit: 8550, effectiveFrom: '2026-11-01', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin' },
+      { id: 'opp-cl-amb-2', outletId: 'ro-1001', productId: 'prod-cng-close-amb', pricePaisePerUnit: 8600, effectiveFrom: '2026-11-01', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin' },
+    ]);
+    await db.insert(schema.operationalShiftProductPrices).values([
+      { id: 'ospp-cl-amb-1', operationalShiftId: shiftId, outletId: 'ro-1001', productId: 'prod-cng', productCode: 'CNG', productName: 'CNG 1', unit: 'KG', productCategory: 'CNG', pricePaisePerUnit: 8550, sourcePriceId: 'opp-cl-amb-1', createdAt: new Date().toISOString() },
+      { id: 'ospp-cl-amb-2', operationalShiftId: shiftId, outletId: 'ro-1001', productId: 'prod-cng-close-amb', productCode: 'CNG_CL_AMB', productName: 'CNG 2', unit: 'KG', productCategory: 'CNG', pricePaisePerUnit: 8600, sourcePriceId: 'opp-cl-amb-2', createdAt: new Date().toISOString() },
+    ]);
+
+    // Insert CNG log
+    await db.insert(schema.cngShiftLogs).values({
+      id: 'cnglog-ambig-close',
+      operationalShiftId: shiftId,
+      outletId: 'ro-1001',
+      mfmOpeningKgMilliunits: 0,
+      mfmClosingKgMilliunits: 10000,
+      netSalesKgMilliunits: 10000,
+      recordedByUserId: 'user-admin',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const closeRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ varianceReason: 'Test ambiguous snapshot' }),
+      }),
+      env
+    );
+    expect(closeRes.status).toBe(409);
+    const json: any = await closeRes.json();
+    expect(json.error.code).toBe('CNG_PRICE_SNAPSHOT_AMBIGUOUS');
+
+    // Verify OPEN restoration and cleanup
+    const [shift] = await db.select().from(schema.operationalShifts).where(eq(schema.operationalShifts.id, shiftId));
+    expect(shift.status).toBe('OPEN');
+    const stockReconAmb = await db.select().from(schema.shiftStockReconciliations).where(eq(schema.shiftStockReconciliations.operationalShiftId, shiftId));
+    expect(stockReconAmb.length).toBe(0);
+  });
+
+  it('Audit content for successful CNG close includes fuelRevenuePaise, cngRevenuePaise, authoritativeSalesRevenuePaise, totalCollectionsPaise, variancePaise, varianceStatus, varianceReason', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+    await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
+    await db.insert(schema.outletProducts).values({
+      id: 'op-ro1-cng-aud', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+    });
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '85.50', effectiveFrom: '2026-11-01' }),
+      }),
+      env
+    );
+
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Fuel readings: 0 net sales
+    const pumpRepo = new PumpRepository(db);
+    const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
+    for (const n of nozzles) {
+      await pumpRepo.createReading({
+        id: `mr-aud-${n.nozzleId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', nozzleId: n.nozzleId, openingMilliunits: 1000, closingMilliunits: 1000, testingMilliunits: 0, grossMilliunits: 0, netMilliunits: 0, recordedByUserId: 'user-admin', hasOpeningVariance: false, openingVarianceMilliunits: 0, varianceReason: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+    const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
+    for (const t of tanks) {
+      await pumpRepo.createTankReading({
+        id: `tsr-open-aud-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+      await pumpRepo.createTankReading({
+        id: `tsr-close-aud-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+
+    // CNG 10.000 KG @ 85.50 = 85500 paise
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/cng-log`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ mfmOpeningKg: '0.000', mfmClosingKg: '10.000' }),
+      }),
+      env
+    );
+
+    // Collections: 800.00 (80000 paise) => Shortage = 5500 paise
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/collections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ collectionType: 'CASH', amount: '800.00', collectedAt: new Date().toISOString() }),
+      }),
+      env
+    );
+
+    const closeRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ varianceReason: 'Audited shortage' }),
+      }),
+      env
+    );
+    expect(closeRes.status).toBe(200);
+
+    const [audit] = await db.select().from(schema.auditLogs).where(
+      and(eq(schema.auditLogs.action, 'FINANCIAL_RECONCILIATION'), eq(schema.auditLogs.entityId, shiftId))
+    );
     expect(audit).toBeDefined();
-    const newValue = JSON.parse(audit.newValueJson || '{}');
-    expect(newValue.cngRevenuePaise).toBe(855000);
-    expect(newValue.authoritativeSalesRevenuePaise).toBe(newValue.fuelRevenuePaise + 855000);
+    const nv = JSON.parse(audit.newValueJson || '{}');
+    expect(nv.fuelRevenuePaise).toBe(0);
+    expect(nv.cngRevenuePaise).toBe(85500);
+    expect(nv.authoritativeSalesRevenuePaise).toBe(85500);
+    expect(nv.totalCollectionsPaise).toBe(80000);
+    expect(nv.variancePaise).toBe(5500);
+    expect(nv.varianceStatus).toBe('SHORTAGE');
+    expect(nv.varianceReason).toBe('Audited shortage');
+  });
+
+  it('Non-CNG regression: fuel-only shift maintains cngApplicable=false, cngComplete=true, and authoritative revenue equals fuel revenue', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+
+    // Open shift without any CNG configuration
+    const openRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-20' }),
+      }),
+      env
+    );
+    const shiftId = (await openRes.json() as any).data.id;
+
+    // Record fuel reading: 5.000 L of MS (50000 paise)
+    const pumpRepo = new PumpRepository(db);
+    const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
+    const msNozzle = nozzles.find(n => n.productCode === 'MS')!;
+    await pumpRepo.createReading({
+      id: `mr-reg-${msNozzle.nozzleId}`,
+      operationalShiftId: shiftId,
+      outletId: 'ro-1001',
+      nozzleId: msNozzle.nozzleId,
+      openingMilliunits: 0,
+      closingMilliunits: 5000,
+      testingMilliunits: 0,
+      grossMilliunits: 5000,
+      netMilliunits: 5000,
+      recordedByUserId: 'user-admin',
+      hasOpeningVariance: false,
+      openingVarianceMilliunits: 0,
+      varianceReason: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const sumRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/financial-summary`, {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(sumRes.status).toBe(200);
+    const json: any = await sumRes.json();
+    const salesRev = json.data.salesRevenue;
+
+    expect(salesRev.cngApplicable).toBe(false);
+    expect(salesRev.cngComplete).toBe(true);
+    expect(salesRev.cngTotalPaise).toBeNull();
+    expect(salesRev.authoritativeTotalPaise).toBe(salesRev.fuelTotalPaise);
+    expect(salesRev.pendingComponents).not.toContain('CNG');
+  });
+
+  it('CNG price overlap rejected with 409 OVERLAPPING_PRODUCT_PRICE', async () => {
+    const { cookie } = await loginAs();
+    const db = getDb(localD1);
+    await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
+    await db.insert(schema.outletProducts).values({
+      id: 'op-ro1-cng-ovlp', outletId: 'ro-1001', productId: 'prod-cng', status: 'ACTIVE', createdAt: new Date().toISOString(), createdBy: 'user-admin'
+    });
+
+    // 1. Post price effective from 2026-11-01 (open-ended)
+    const price1 = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '85.50', effectiveFrom: '2026-11-01' }),
+      }),
+      env
+    );
+    expect(price1.status).toBe(201);
+
+    // 2. Attempt overlapping price starting 2026-11-10
+    const price2 = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ productId: 'prod-cng', pricePaisePerUnit: '87.00', effectiveFrom: '2026-11-10' }),
+      }),
+      env
+    );
+    expect(price2.status).toBe(409);
+    const json: any = await price2.json();
+    expect(json.error.code).toBe('OVERLAPPING_PRODUCT_PRICE');
   });
 });
