@@ -196,11 +196,10 @@ export class LocalD1Database {
       if (this.options?.throughMigration) {
         const cutoff = this.options.throughMigration;
         const cutoffIndex = files.indexOf(cutoff);
-        if (cutoffIndex !== -1) {
-          files = files.slice(0, cutoffIndex + 1);
-        } else {
-          files = files.filter(f => f <= cutoff);
+        if (cutoffIndex === -1) {
+          throw new Error(`LOCAL_D1_MIGRATION_CUTOFF_NOT_FOUND: ${cutoff}`);
         }
+        files = files.slice(0, cutoffIndex + 1);
       }
 
       for (const file of files) {

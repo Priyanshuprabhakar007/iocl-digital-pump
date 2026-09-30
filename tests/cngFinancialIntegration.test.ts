@@ -175,7 +175,19 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(columnNamesAfter).toContain('product_category');
 
     // legacy snapshot still exists
-    const migratedRow = await migDbConn.prepare('SELECT * FROM operational_shift_product_prices WHERE id = ?').bind('ospp-legacy-1').first<any>();
+    const migratedRow = await migDbConn
+      .prepare(`
+        SELECT
+          id,
+          product_id,
+          price_paise_per_unit,
+          source_price_id,
+          product_category
+        FROM operational_shift_product_prices
+        WHERE id = ?
+      `)
+      .bind('ospp-legacy-1')
+      .first<any>();
     expect(migratedRow).toBeDefined();
     expect(migratedRow?.id).toBe('ospp-legacy-1');
 
@@ -194,6 +206,18 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     migDbConn.close();
     if (fs.existsSync(MIGRATION_DB_PATH)) {
       try { fs.unlinkSync(MIGRATION_DB_PATH); } catch (e) {}
+    }
+  });
+
+  it('Migration cutoff throws LOCAL_D1_MIGRATION_CUTOFF_NOT_FOUND when cutoff file does not exist', () => {
+    const invalidDbPath = './.sqlite/test_invalid_cutoff.db';
+    expect(() => {
+      createLocalD1Database(invalidDbPath, {
+        throughMigration: '9999_non_existent_migration.sql',
+      });
+    }).toThrow('LOCAL_D1_MIGRATION_CUTOFF_NOT_FOUND');
+    if (fs.existsSync(invalidDbPath)) {
+      try { fs.unlinkSync(invalidDbPath); } catch (e) {}
     }
   });
 
