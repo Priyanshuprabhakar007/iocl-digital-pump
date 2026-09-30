@@ -89,79 +89,112 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     if (fs.existsSync(MIGRATION_DB_PATH)) {
       try { fs.unlinkSync(MIGRATION_DB_PATH); } catch (e) {}
     }
-    const migDbConn = createLocalD1Database(MIGRATION_DB_PATH);
-    const db = getDb(migDbConn);
+    const walPath = `${MIGRATION_DB_PATH}-wal`;
+    const shmPath = `${MIGRATION_DB_PATH}-shm`;
+    if (fs.existsSync(walPath)) { try { fs.unlinkSync(walPath); } catch (e) {} }
+    if (fs.existsSync(shmPath)) { try { fs.unlinkSync(shmPath); } catch (e) {} }
 
-    // Seed base tables
-    await seedDatabase(db);
+    // A. create isolated DB through 0012 only
+    const migDbConn = createLocalD1Database(MIGRATION_DB_PATH, {
+      throughMigration: '0012_phase3a_cng_operations.sql',
+    });
 
-    // Drop product_category column if present or simulate pre-0013 state by updating schema definition or running table recreation.
-    // Actually, SQLite doesn't support DROP COLUMN easily in older versions, but since our base schema has product_category,
-    // let's create a separate migration test database by running base seed, then setting product_category to NULL,
-    // or executing migration 0013 script. To strictly follow prompt instructions:
-    // "1. create a separate temporary database, 2. apply migrations only through 0012, 3. insert legacy row..."
-    // Let's execute sql directly on migDbConn.
-    migDbConn.exec(`
-      CREATE TABLE IF NOT EXISTS operational_shift_product_prices_legacy (
-        id TEXT PRIMARY KEY,
-        operational_shift_id TEXT NOT NULL,
-        outlet_id TEXT NOT NULL,
-        product_id TEXT NOT NULL,
-        product_code TEXT NOT NULL,
-        product_name TEXT NOT NULL,
-        unit TEXT NOT NULL,
-        price_paise_per_unit INTEGER NOT NULL,
-        source_price_id TEXT NOT NULL,
-        created_at TEXT NOT NULL
+    // B. verify via: PRAGMA table_info(operational_shift_product_prices) that product_category DOES NOT exist
+    const columnsBeforeResult = await migDbConn.prepare('PRAGMA table_info(operational_shift_product_prices)').all<{ name: string }>();
+    const columnNamesBefore = columnsBeforeResult.results.map((c) => c.name);
+    expect(columnNamesBefore).not.toContain('product_category');
+
+    // C. insert all minimum FK-dependent fixture data needed for a legacy operational_shift_product_prices row
+    await migDbConn.exec(`
+      INSERT INTO states (id, code, name, status, created_at, updated_at)
+      VALUES ('state-mig-test', 'ST-MIG', 'State Mig', 'ACTIVE', datetime('now'), datetime('now'));
+
+      INSERT INTO divisions (id, state_id, code, name, status, created_at, updated_at)
+      VALUES ('div-mig-test', 'state-mig-test', 'DIV-MIG', 'Division Mig', 'ACTIVE', datetime('now'), datetime('now'));
+
+      INSERT INTO sales_areas (id, division_id, code, name, status, created_at, updated_at)
+      VALUES ('sa-mig-test', 'div-mig-test', 'SA-MIG', 'Sales Area Mig', 'ACTIVE', datetime('now'), datetime('now'));
+
+      INSERT INTO retail_outlets (id, ro_code, name, outlet_type, state_id, division_id, sales_area_id, address, city, district, pincode, status, created_at, updated_at)
+      VALUES ('ro-mig-test', 'RO-MIG', 'Outlet Mig', 'COCO', 'state-mig-test', 'div-mig-test', 'sa-mig-test', '1 Main St', 'Kolkata', 'Kolkata', '700001', 'ACTIVE', datetime('now'), datetime('now'));
+
+      INSERT INTO users (id, emp_code, name, email, phone, password_hash, status, created_at, updated_at)
+      VALUES ('user-mig-test', 'EMP-MIG', 'User Mig', 'usermig@iocl.in', '9800000000', 'hash', 'ACTIVE', datetime('now'), datetime('now'));
+
+      INSERT INTO products (id, code, name, category, unit, status, created_at, updated_at)
+      VALUES ('prod-mig-test', 'MS', 'Motor Spirit', 'FUEL', 'LITRE', 'ACTIVE', datetime('now'), datetime('now'));
+
+      INSERT INTO shift_templates (id, outlet_id, code, name, start_time, end_time, sequence, status, created_at, updated_at, created_by)
+      VALUES ('st-mig-test', 'ro-mig-test', 'ST-1', 'Shift 1', '06:00', '14:00', 1, 'ACTIVE', datetime('now'), datetime('now'), 'user-mig-test');
+
+      INSERT INTO operational_shifts (id, outlet_id, shift_template_id, business_date, started_at, status, opened_by_user_id, created_at, updated_at)
+      VALUES ('shift-mig-test', 'ro-mig-test', 'st-mig-test', '2026-11-20', datetime('now'), 'OPEN', 'user-mig-test', datetime('now'), datetime('now'));
+
+      INSERT INTO outlet_product_prices (id, outlet_id, product_id, price_paise_per_unit, effective_from, status, created_at, created_by)
+      VALUES ('opp-mig-test', 'ro-mig-test', 'prod-mig-test', 9500, '2026-11-20', 'ACTIVE', datetime('now'), 'user-mig-test');
+
+      INSERT INTO operational_shift_product_prices (
+        id,
+        operational_shift_id,
+        outlet_id,
+        product_id,
+        product_code,
+        product_name,
+        unit,
+        price_paise_per_unit,
+        source_price_id,
+        created_at
+      ) VALUES (
+        'ospp-legacy-1',
+        'shift-mig-test',
+        'ro-mig-test',
+        'prod-mig-test',
+        'MS',
+        'Motor Spirit',
+        'LITRE',
+        9500,
+        'opp-mig-test',
+        datetime('now')
       );
     `);
 
-    // Insert legacy row
-    migDbConn.exec(`
-      INSERT INTO operational_shift_product_prices_legacy VALUES (
-        'ospp-legacy-1', 'shift-legacy-1', 'ro-1001', 'prod-ms', 'MS', 'Motor Spirit', 'LITRE', 10000, 'pri-1', '2026-11-20T00:00:00.000Z'
-      );
-    `);
-
-    // Verify row exists without product_category
-    const legacyRow = migDbConn.prepare('SELECT * FROM operational_shift_product_prices_legacy WHERE id = ?').bind('ospp-legacy-1').first();
+    // D. verify legacy snapshot row exists
+    const legacyRow = await migDbConn.prepare('SELECT * FROM operational_shift_product_prices WHERE id = ?').bind('ospp-legacy-1').first<any>();
     expect(legacyRow).toBeDefined();
+    expect(legacyRow?.id).toBe('ospp-legacy-1');
+    expect(legacyRow?.product_category).toBeUndefined();
 
-    // Now apply migration 0013 to the actual table or test migration script on operational_shift_product_prices
-    // Let's test migration script on operational_shift_product_prices after setting a row with NULL product_category
-    const [msPrice] = await db.select().from(schema.outletProductPrices).limit(1);
-    await db.insert(schema.operationalShifts).values({
-      id: 'shift-mig-test',
-      outletId: 'ro-1001',
-      shiftTemplateId: 'st-ro1-1',
-      businessDate: '2026-11-20',
-      startedAt: new Date().toISOString(),
-      status: 'OPEN',
-      openedByUserId: 'user-admin',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    await db.insert(schema.operationalShiftProductPrices).values({
-      id: 'ospp-test-null',
-      operationalShiftId: 'shift-mig-test',
-      outletId: 'ro-1001',
-      productId: msPrice.productId,
-      productCode: 'MS',
-      productName: 'Motor Spirit',
-      unit: 'LITRE',
-      productCategory: null as any,
-      pricePaisePerUnit: 10000,
-      sourcePriceId: msPrice.id,
-      createdAt: new Date().toISOString(),
-    });
-
+    // E. execute migrations/0013_cng_financial_integration.sql exactly ONCE
     const migrationSql = fs.readFileSync('./migrations/0013_cng_financial_integration.sql', 'utf8');
-    await db.run(sql.raw(migrationSql));
+    await migDbConn.exec(migrationSql);
 
-    const [updatedRow] = await db.select().from(schema.operationalShiftProductPrices).where(eq(schema.operationalShiftProductPrices.id, 'ospp-test-null'));
-    expect(updatedRow.productCategory).toBe('FUEL');
+    // F. verify:
+    // product_category now exists
+    const columnsAfterResult = await migDbConn.prepare('PRAGMA table_info(operational_shift_product_prices)').all<{ name: string }>();
+    const columnNamesAfter = columnsAfterResult.results.map((c) => c.name);
+    expect(columnNamesAfter).toContain('product_category');
+
+    // legacy snapshot still exists
+    const migratedRow = await migDbConn.prepare('SELECT * FROM operational_shift_product_prices WHERE id = ?').bind('ospp-legacy-1').first<any>();
+    expect(migratedRow).toBeDefined();
+    expect(migratedRow?.id).toBe('ospp-legacy-1');
+
+    // product_category equals the referenced product.category
+    expect(migratedRow?.product_category).toBe('FUEL');
+
+    // price_paise_per_unit unchanged
+    expect(migratedRow?.price_paise_per_unit).toBe(9500);
+
+    // source_price_id unchanged
+    expect(migratedRow?.source_price_id).toBe('opp-mig-test');
+
+    // product_id unchanged
+    expect(migratedRow?.product_id).toBe('prod-mig-test');
 
     migDbConn.close();
+    if (fs.existsSync(MIGRATION_DB_PATH)) {
+      try { fs.unlinkSync(MIGRATION_DB_PATH); } catch (e) {}
+    }
   });
 
   it('3 & 4. CNG/KG product price CREATE and UPDATE succeed (isolated from seeded data)', async () => {
@@ -170,6 +203,17 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
 
     // Delete seeded CNG price for ro-1001 / prod-cng
     await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
+
+    // Ensure outlet_products mapping for prod-cng
+    await db.delete(schema.outletProducts).where(and(eq(schema.outletProducts.outletId, 'ro-1001'), eq(schema.outletProducts.productId, 'prod-cng')));
+    await db.insert(schema.outletProducts).values({
+      id: `op-cng-ro1-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      outletId: 'ro-1001',
+      productId: 'prod-cng',
+      status: 'ACTIVE',
+      createdBy: 'user-admin',
+      createdAt: new Date().toISOString(),
+    });
 
     const res = await app.fetch(
       new Request('http://localhost/api/v1/outlets/ro-1001/product-prices', {

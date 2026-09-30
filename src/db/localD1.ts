@@ -132,10 +132,16 @@ export class LocalD1PreparedStatement {
   }
 }
 
+export interface LocalD1Options {
+  throughMigration?: string;
+}
+
 export class LocalD1Database {
   private db: SqliteDb;
+  private options?: LocalD1Options;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, options?: LocalD1Options) {
+    this.options = options;
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -183,9 +189,20 @@ export class LocalD1Database {
 
     const migrationsDir = path.resolve(process.cwd(), 'migrations');
     if (fs.existsSync(migrationsDir)) {
-      const files = fs.readdirSync(migrationsDir)
+      let files = fs.readdirSync(migrationsDir)
         .filter(f => f.endsWith('.sql'))
         .sort();
+
+      if (this.options?.throughMigration) {
+        const cutoff = this.options.throughMigration;
+        const cutoffIndex = files.indexOf(cutoff);
+        if (cutoffIndex !== -1) {
+          files = files.slice(0, cutoffIndex + 1);
+        } else {
+          files = files.filter(f => f <= cutoff);
+        }
+      }
+
       for (const file of files) {
         if (!applied.has(file)) {
           const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
@@ -245,6 +262,9 @@ export class LocalD1Database {
   }
 }
 
-export function createLocalD1Database(dbPath = './.sqlite/iocl_local.db'): D1Database & { close: () => void } {
-  return new LocalD1Database(dbPath) as unknown as D1Database & { close: () => void };
+export function createLocalD1Database(
+  dbPath = './.sqlite/iocl_local.db',
+  options?: LocalD1Options
+): D1Database & { close: () => void } {
+  return new LocalD1Database(dbPath, options) as unknown as D1Database & { close: () => void };
 }
