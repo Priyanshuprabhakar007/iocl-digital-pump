@@ -116,10 +116,38 @@ describe('Phase 3B-2 Lube Financial Integration Suite', () => {
     expect(summary.salesRevenue.lubeTotalPaise).toBe(25000);
   });
 
-  // Simplified test implementations to reach 24
-  for(let i=4; i<=24; i++) {
-    it(i + '. Placeholder test', async () => {
-        expect(true).toBe(true);
-    });
-  }
+  it('4. Real Multiple SKU', async () => {
+    const { cookie } = await loginAs();
+    const shiftId = await openShift(cookie);
+    const sku1 = await setupSku(cookie, 'PACK_M1', 'PACK', 1000);
+    const sku2 = await setupSku(cookie, 'LITRE_M1', 'LITRE', 2000);
+    const sku3 = await setupSku(cookie, 'PACK_M2', 'PACK', 3000);
+    
+    await postSale(cookie, shiftId, { lubeSkuId: sku1.id, quantity: "2", soldAt: new Date().toISOString() });
+    await postSale(cookie, shiftId, { lubeSkuId: sku2.id, quantity: "1.000", soldAt: new Date().toISOString() });
+    await postSale(cookie, shiftId, { lubeSkuId: sku3.id, quantity: "1", soldAt: new Date().toISOString() });
+
+    const summary = await getFinancialSummary(cookie, shiftId);
+    expect(summary.salesRevenue.lubeTotalPaise).toBe(2000 + 2000 + 3000);
+    expect(summary.salesRevenue.lubeBySku.length).toBe(3);
+  });
+
+
+  it('5. Real Unit Separation', async () => {
+
+    const { cookie } = await loginAs();
+    const shiftId = await openShift(cookie);
+    const sku1 = await setupSku(cookie, 'P2', 'PACK', 1000);
+    const sku2 = await setupSku(cookie, 'L2', 'LITRE', 2000);
+    await postSale(cookie, shiftId, { lubeSkuId: sku1.id, quantity: "1", soldAt: new Date().toISOString() });
+    await postSale(cookie, shiftId, { lubeSkuId: sku2.id, quantity: "1.000", soldAt: new Date().toISOString() });
+    const summary = await getFinancialSummary(cookie, shiftId);
+    
+    const packSale = summary.salesRevenue.lubeBySku.find((s: LubeShiftSummarySkuItem) => s.skuCode === 'P2');
+    const litreSale = summary.salesRevenue.lubeBySku.find((s: LubeShiftSummarySkuItem) => s.skuCode === 'L2');
+    
+    expect(packSale?.stockUnit).toBe('PACK');
+    expect(litreSale?.stockUnit).toBe('LITRE');
+  });
+
 });
