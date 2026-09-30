@@ -19,6 +19,7 @@ import qualityToleranceRoutes from './routes/qualityTolerances';
 import stockReconciliationRoutes from './routes/stockReconciliation';
 import financialRoutes from './routes/financialRoutes';
 import { cngRoutes } from './routes/cngRoutes';
+import { lubeRoutes } from './routes/lubeRoutes';
 
 export const app = new Hono<{ Bindings: EnvBindings }>();
 
@@ -136,6 +137,7 @@ app.route('/api/v1', qualityToleranceRoutes);
 app.route('/api/v1', stockReconciliationRoutes);
 app.route('/api/v1', financialRoutes);
 app.route('/api/v1', cngRoutes);
+app.route('/api/v1', lubeRoutes);
 
 // Global Error Handler - Generic external response, detailed internal server log
 app.onError((err, c) => {

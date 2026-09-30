@@ -917,3 +917,132 @@ export interface CngDailySummary {
   shiftCount: number;
   gridDataComplete: boolean;
 }
+
+// ==========================================
+// Phase 3B-1: Lube & Auxiliary Inventory Types
+// ==========================================
+
+export type LubeStockUnit = 'LITRE' | 'PACK';
+
+export type LubeSkuCategory = 'ENGINE_OIL' | 'GREASE' | 'COOLANT' | 'OTHER' | string;
+
+export interface LubeSku {
+  id: string;
+  outletId: string;
+  skuCode: string;
+  name: string;
+  category: string;
+  stockUnit: LubeStockUnit;
+  reorderThresholdSubunits: number;
+  reorderThreshold: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export interface LubeSkuPrice {
+  id: string;
+  outletId: string;
+  lubeSkuId: string;
+  pricePaisePerUnit: number;
+  pricePerUnitStr?: string;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  createdBy: string;
+}
+
+export type LubeStockTransactionType = 'OPENING_BALANCE' | 'RECEIPT' | 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT';
+
+export interface LubeStockTransaction {
+  id: string;
+  outletId: string;
+  lubeSkuId: string;
+  transactionType: LubeStockTransactionType;
+  quantitySubunits: number;
+  quantity: string;
+  occurredAt: string;
+  referenceNumber?: string | null;
+  notes?: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface LubeShiftSale {
+  id: string;
+  operationalShiftId: string;
+  outletId: string;
+  lubeSkuId: string;
+  skuCode: string;
+  skuName: string;
+  category: string;
+  stockUnit: LubeStockUnit;
+  quantitySubunits: number;
+  quantity: string;
+  unitPricePaise: number;
+  unitPriceStr: string;
+  revenuePaise: number;
+  revenueStr: string;
+  soldAt: string;
+  recordedByUserId: string;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LubeStockSummaryItem {
+  lubeSkuId: string;
+  skuCode: string;
+  skuName: string;
+  category: string;
+  stockUnit: LubeStockUnit;
+  currentStockSubunits: number;
+  currentStock: string;
+  reorderThresholdSubunits: number;
+  reorderThreshold: string;
+  isLowStock: boolean;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface LubeShiftSummarySkuItem {
+  lubeSkuId: string;
+  skuCode: string;
+  skuName: string;
+  category: string;
+  stockUnit: LubeStockUnit;
+  quantitySubunits: number;
+  quantity: string;
+  saleCount: number;
+  revenuePaise: number;
+  revenueStr: string;
+}
+
+export interface LubeShiftSummary {
+  operationalShiftId: string;
+  outletId: string;
+  businessDate: string;
+  bySku: LubeShiftSummarySkuItem[];
+  totalRevenuePaise: number;
+  totalRevenueStr: string;
+  quantitiesByUnit: {
+    litre: string;
+    pack: string;
+  };
+}
+
+export interface LubeDailySummary {
+  outletId: string;
+  businessDate: string;
+  shiftCountWithLubeSales: number;
+  saleLineCount: number;
+  bySku: LubeShiftSummarySkuItem[];
+  totalRevenuePaise: number;
+  totalRevenueStr: string;
+  quantitiesByUnit: {
+    litre: string;
+    pack: string;
+  };
+}
+

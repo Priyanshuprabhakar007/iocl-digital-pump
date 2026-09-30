@@ -693,3 +693,92 @@ export const cngPressureReadings = sqliteTable('cng_pressure_readings', {
   check('at_least_one_pressure_check', sql`${table.suctionPressureMilliunits} IS NOT NULL OR ${table.dischargePressureMilliunits} IS NOT NULL OR ${table.cascadePressureMilliunits} IS NOT NULL`),
 ]);
 
+// ==========================================
+// Phase 3B-1: Lube & Auxiliary Inventory Tables
+// ==========================================
+
+export const lubeSkus = sqliteTable('lube_skus', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id),
+  skuCode: text('sku_code').notNull(),
+  name: text('name').notNull(),
+  category: text('category').notNull(),
+  stockUnit: text('stock_unit', { enum: ['LITRE', 'PACK'] }).notNull(),
+  reorderThresholdSubunits: integer('reorder_threshold_subunits').notNull(),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  createdBy: text('created_by').notNull().references(() => users.id),
+}, (table) => [
+  uniqueIndex('idx_lube_skus_outlet_code_unique').on(table.outletId, table.skuCode),
+  index('idx_lube_skus_outlet_id').on(table.outletId),
+  index('idx_lube_skus_outlet_code').on(table.outletId, table.skuCode),
+  check('lube_skus_stock_unit_check', sql`${table.stockUnit} IN ('LITRE', 'PACK')`),
+  check('lube_skus_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('lube_skus_reorder_threshold_check', sql`${table.reorderThresholdSubunits} >= 0`),
+]);
+
+export const lubeSkuPrices = sqliteTable('lube_sku_prices', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id),
+  lubeSkuId: text('lube_sku_id').notNull().references(() => lubeSkus.id),
+  pricePaisePerUnit: integer('price_paise_per_unit').notNull(),
+  effectiveFrom: text('effective_from').notNull(),
+  effectiveTo: text('effective_to'),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull(),
+  createdAt: text('created_at').notNull(),
+  createdBy: text('created_by').notNull().references(() => users.id),
+}, (table) => [
+  index('idx_lube_sku_prices_sku_outlet').on(table.outletId, table.lubeSkuId, table.status),
+  check('lube_sku_prices_price_check', sql`${table.pricePaisePerUnit} > 0`),
+  check('lube_sku_prices_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('lube_sku_prices_range_check', sql`${table.effectiveTo} IS NULL OR ${table.effectiveTo} >= ${table.effectiveFrom}`),
+]);
+
+export const lubeStockTransactions = sqliteTable('lube_stock_transactions', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id),
+  lubeSkuId: text('lube_sku_id').notNull().references(() => lubeSkus.id),
+  transactionType: text('transaction_type', { enum: ['OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT'] }).notNull(),
+  quantitySubunits: integer('quantity_subunits').notNull(),
+  occurredAt: text('occurred_at').notNull(),
+  referenceNumber: text('reference_number'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  index('idx_lube_tx_sku_outlet').on(table.outletId, table.lubeSkuId),
+  index('idx_lube_tx_occurred_at').on(table.occurredAt),
+  check('lube_tx_type_check', sql`${table.transactionType} IN ('OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT')`),
+  check('lube_tx_qty_check', sql`${table.quantitySubunits} > 0`),
+  check('lube_tx_notes_check', sql`(${table.transactionType} NOT IN ('ADJUSTMENT_IN', 'ADJUSTMENT_OUT')) OR (${table.notes} IS NOT NULL AND trim(${table.notes}) != '')`),
+]);
+
+export const lubeShiftSales = sqliteTable('lube_shift_sales', {
+  id: text('id').primaryKey(),
+  operationalShiftId: text('operational_shift_id').notNull().references(() => operationalShifts.id),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id),
+  lubeSkuId: text('lube_sku_id').notNull().references(() => lubeSkus.id),
+  skuCode: text('sku_code').notNull(),
+  skuName: text('sku_name').notNull(),
+  category: text('category').notNull(),
+  stockUnit: text('stock_unit', { enum: ['LITRE', 'PACK'] }).notNull(),
+  quantitySubunits: integer('quantity_subunits').notNull(),
+  unitPricePaise: integer('unit_price_paise').notNull(),
+  revenuePaise: integer('revenue_paise').notNull(),
+  soldAt: text('sold_at').notNull(),
+  recordedByUserId: text('recorded_by_user_id').notNull().references(() => users.id),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_lube_sales_shift').on(table.operationalShiftId),
+  index('idx_lube_sales_sku').on(table.lubeSkuId),
+  index('idx_lube_sales_outlet').on(table.outletId),
+  check('lube_sales_qty_check', sql`${table.quantitySubunits} > 0`),
+  check('lube_sales_unit_price_check', sql`${table.unitPricePaise} > 0`),
+  check('lube_sales_revenue_check', sql`${table.revenuePaise} >= 0`),
+  check('lube_sales_stock_unit_check', sql`${table.stockUnit} IN ('LITRE', 'PACK')`),
+]);
+
+

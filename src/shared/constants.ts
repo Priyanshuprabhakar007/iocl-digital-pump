@@ -101,6 +101,12 @@ export const PERMISSIONS = {
   // Phase 3A-1: CNG Operations
   CNG_OPERATIONS_READ: 'cng_operations.read',
   CNG_OPERATIONS_WRITE: 'cng_operations.write',
+
+  // Phase 3B-1: Lube Operations
+  LUBE_OPERATIONS_READ: 'lube_operations.read',
+  LUBE_INVENTORY_WRITE: 'lube_inventory.write',
+  LUBE_SALES_WRITE: 'lube_sales.write',
+  LUBE_PRICES_WRITE: 'lube_prices.write',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];

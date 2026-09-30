@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseMilliunits } from './precision';
+import { parseLubeQuantity } from './lubeUtils';
 
 export const LoginSchema = z.object({
   email: z.string().email('Invalid email address').trim().toLowerCase(),
@@ -532,3 +533,82 @@ export const CngPressureReadingSchema = z.object({
   message: 'At least one pressure reading (suction, discharge, or cascade) is required',
   path: ['suctionPressure'],
 });
+
+// Phase 3B-1: Lube & Auxiliary Inventory Schemas
+export const CreateLubeSkuSchema = z.object({
+  skuCode: z.string().trim().min(1, 'SKU code is required').max(50, 'SKU code is too long').toUpperCase(),
+  name: z.string().trim().min(1, 'SKU name is required').max(100, 'SKU name is too long'),
+  category: z.string().trim().min(1, 'Category is required'),
+  stockUnit: z.enum(['LITRE', 'PACK']),
+  reorderThreshold: z.string().trim().min(1, 'Reorder threshold is required'),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+}).refine(data => {
+  try {
+    const val = parseLubeQuantity(data.stockUnit, data.reorderThreshold);
+    return val >= 0;
+  } catch {
+    return false;
+  }
+}, {
+  message: 'Invalid reorder threshold format for the selected stock unit',
+  path: ['reorderThreshold'],
+});
+
+export const UpdateLubeSkuSchema = z.object({
+  name: z.string().trim().min(1, 'SKU name is required').max(100, 'SKU name is too long').optional(),
+  category: z.string().trim().min(1, 'Category is required').optional(),
+  reorderThreshold: z.string().trim().min(1).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+});
+
+export const CreateLubeSkuPriceSchema = z.object({
+  lubeSkuId: z.string().trim().min(1, 'Lube SKU ID is required'),
+  pricePaisePerUnit: PositiveMoneyStringSchema,
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Effective from date must be YYYY-MM-DD'),
+  effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Effective to date must be YYYY-MM-DD').optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+}).refine(data => {
+  if (data.effectiveTo && data.effectiveTo < data.effectiveFrom) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'effectiveTo cannot be earlier than effectiveFrom',
+  path: ['effectiveTo'],
+});
+
+export const UpdateLubeSkuPriceSchema = z.object({
+  effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Effective to date must be YYYY-MM-DD').optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+});
+
+export const CreateLubeStockTransactionSchema = z.object({
+  lubeSkuId: z.string().trim().min(1, 'Lube SKU ID is required'),
+  transactionType: z.enum(['OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT']),
+  quantity: z.string().trim().min(1, 'Quantity is required'),
+  occurredAt: z.string().trim().min(1, 'Occurred at timestamp is required'),
+  referenceNumber: z.string().trim().optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).refine(data => {
+  if (data.transactionType === 'ADJUSTMENT_IN' || data.transactionType === 'ADJUSTMENT_OUT') {
+    return data.notes != null && data.notes.trim().length > 0;
+  }
+  return true;
+}, {
+  message: 'Notes/reason are required for inventory adjustments (ADJUSTMENT_IN and ADJUSTMENT_OUT)',
+  path: ['notes'],
+});
+
+export const CreateLubeShiftSaleSchema = z.object({
+  lubeSkuId: z.string().trim().min(1, 'Lube SKU ID is required'),
+  quantity: z.string().trim().min(1, 'Quantity is required'),
+  soldAt: z.string().trim().min(1, 'Sold at timestamp is required'),
+  notes: z.string().trim().optional().nullable(),
+});
+
+export const UpdateLubeShiftSaleSchema = z.object({
+  quantity: z.string().trim().min(1, 'Quantity is required'),
+  soldAt: z.string().trim().min(1).optional(),
+  notes: z.string().trim().optional().nullable(),
+});
+
