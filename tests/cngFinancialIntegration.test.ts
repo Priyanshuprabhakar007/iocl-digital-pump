@@ -424,8 +424,11 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(salesRev.cngTotalPaise).toBeNull();
     expect(salesRev.cngTotalStr).toBeNull();
     expect(salesRev.cngProduct).toBeNull();
+    expect(salesRev.lubeTotalPaise).toBe(0);
+    expect(salesRev.lubeTotalStr).toBe("0.00");
     expect(salesRev.includedComponents).toContain('FUEL');
-    expect(salesRev.pendingComponents).toContain('LUBE');
+    expect(salesRev.includedComponents).toContain('LUBE');
+    expect(salesRev.pendingComponents).not.toContain('LUBE');
     expect(salesRev.pendingComponents).not.toContain('CNG');
   });
 
@@ -472,9 +475,9 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(salesRev.cngComplete).toBe(false);
     expect(salesRev.cngTotalPaise).toBeNull();
     expect(salesRev.cngProduct).toBeNull();
-    expect(salesRev.includedComponents).toEqual(['FUEL']);
+    expect(salesRev.includedComponents).toEqual(['FUEL', 'LUBE']);
     expect(salesRev.pendingComponents).toContain('CNG');
-    expect(salesRev.pendingComponents).toContain('LUBE');
+    expect(salesRev.pendingComponents).not.toContain('LUBE');
   });
 
   it('Multiple historical CNG snapshots returns controlled 409 CNG_PRICE_SNAPSHOT_AMBIGUOUS', async () => {
@@ -778,10 +781,10 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(salesRev.fuelTotalPaise).toBe(95200);
     expect(salesRev.cngTotalPaise).toBe(171000);
     expect(salesRev.authoritativeTotalPaise).toBe(266200);
-    expect(salesRev.lubeTotalPaise).toBeNull();
-    expect(salesRev.lubeTotalStr).toBeNull();
-    expect(salesRev.includedComponents).toEqual(['FUEL', 'CNG']);
-    expect(salesRev.pendingComponents).toEqual(['LUBE']);
+    expect(salesRev.lubeTotalPaise).toBe(0);
+    expect(salesRev.lubeTotalStr).toBe("0.00");
+    expect(salesRev.includedComponents).toEqual(['FUEL', 'CNG', 'LUBE']);
+    expect(salesRev.pendingComponents).toEqual([]);
   });
 
   it('Financial reconciliation DB persistence contains correct fuel, cng and authoritative total', async () => {
