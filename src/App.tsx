@@ -14,6 +14,7 @@ import { ProductsPage } from './frontend/pages/ProductsPage';
 import { PumpInfrastructurePage } from './frontend/pages/PumpInfrastructurePage';
 import { ShiftOperationsPage } from './frontend/pages/ShiftOperationsPage';
 import { StockOperationsPage } from './frontend/pages/StockOperationsPage';
+import { CngOperationsPage } from './frontend/pages/CngOperationsPage';
 import { FinancialOperationsPage } from './frontend/pages/FinancialOperationsPage';
 
 function MainAppContent() {
@@ -48,6 +49,7 @@ function MainAppContent() {
       {activeTab === 'pump-infra' && <PumpInfrastructurePage />}
       {activeTab === 'shift-ops' && <ShiftOperationsPage />}
       {activeTab === 'stock-ops' && <StockOperationsPage />}
+      {activeTab === 'cng-ops' && <CngOperationsPage />}
       {activeTab === 'financials' && <FinancialOperationsPage />}
       {activeTab === 'users' && <UsersPage />}
       {activeTab === 'scopes' && <ScopesPage />}

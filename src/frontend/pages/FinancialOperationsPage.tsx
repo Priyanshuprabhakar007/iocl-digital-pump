@@ -36,7 +36,8 @@ import {
   Trash2,
   CheckCircle,
   XCircle,
-  Camera
+  Camera,
+  Info
 } from 'lucide-react';
 import { formatPaiseToMoney } from '../../shared/financialUtils';
 import { PERMISSIONS } from '../../shared/constants';
@@ -71,7 +72,6 @@ export const FinancialOperationsPage: React.FC = () => {
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [showHandoverModal, setShowHandoverModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
-  const [showReconcileModal, setShowReconcileModal] = useState(false);
   const [varianceReason, setVarianceReason] = useState('');
 
   // Load Outlets
@@ -127,7 +127,15 @@ export const FinancialOperationsPage: React.FC = () => {
     
     if (results[0].success) setPrices(results[0].data);
     if (results[1].success) setCreditParties(results[1].data);
-    if (results[2].success) setProducts(results[2].data.filter((p: Product) => p.unit === 'LITRE'));
+    if (results[2].success) {
+      setProducts(
+        results[2].data.filter(
+          (p: Product) =>
+            (p.unit === 'LITRE' && p.category !== 'CNG') ||
+            (p.category === 'CNG' && p.unit === 'KG')
+        )
+      );
+    }
 
     if (selectedShiftId && results[3]) {
       if (results[3].success) setSelectedShift(results[3].data);
@@ -216,22 +224,6 @@ export const FinancialOperationsPage: React.FC = () => {
       refreshData();
     } else {
       setActionError(res.error?.message || 'Failed to submit deposit');
-    }
-  };
-
-  const handleReconcile = async () => {
-    const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/financial-reconcile`, {
-      method: 'POST',
-      body: JSON.stringify({ varianceReason }),
-    });
-
-    if (res.success) {
-      setActionSuccess('Financial reconciliation performed');
-      setShowReconcileModal(false);
-      setVarianceReason('');
-      refreshData();
-    } else {
-      setActionError(res.error?.message || 'Reconciliation failed');
     }
   };
 
@@ -462,9 +454,85 @@ export const FinancialOperationsPage: React.FC = () => {
                       <div className="text-white font-bold font-mono text-sm">₹{p.revenueStr}</div>
                     </div>
                   ))}
-                  <div className="pt-2 flex items-center justify-between font-black text-white text-lg font-mono">
-                    <span>TOTAL FUEL</span>
-                    <span className="text-orange-500">₹{summary.salesRevenue.fuelTotalStr}</span>
+
+                  {/* CNG Row / Card if applicable */}
+                  {summary.salesRevenue.cngApplicable && (
+                    summary.salesRevenue.cngComplete ? (
+                      <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2 bg-orange-500/5 -mx-2 px-2 py-1.5 rounded-lg border border-orange-500/20">
+                        <div className="font-mono">
+                          <div className="text-orange-400 font-bold flex items-center gap-1.5">
+                            <span>CNG</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-normal">Gas</span>
+                          </div>
+                          <div className="text-slate-400">
+                            {summary.salesRevenue.cngProduct
+                              ? `${summary.salesRevenue.cngProduct.quantityStr} ${summary.salesRevenue.cngProduct.unit} × ₹${summary.salesRevenue.cngProduct.pricePerUnitStr}/${summary.salesRevenue.cngProduct.unit}`
+                              : 'CNG Dispensed'}
+                          </div>
+                        </div>
+                        <div className="text-orange-400 font-bold font-mono text-sm">
+                          ₹{summary.salesRevenue.cngTotalStr}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2 text-xs text-amber-400">
+                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                        <span>CNG operational data is incomplete.</span>
+                      </div>
+                    )
+                  )}
+
+                  {/* Revenue Summary Totals */}
+                  <div className="pt-2 space-y-1.5 border-t border-slate-800 font-mono text-xs">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Fuel Revenue:</span>
+                      <span className="text-white font-bold">₹{summary.salesRevenue.fuelTotalStr}</span>
+                    </div>
+                    {summary.salesRevenue.cngApplicable && summary.salesRevenue.cngComplete && (
+                      <div className="flex justify-between text-orange-400">
+                        <span>CNG Revenue:</span>
+                        <span className="font-bold">₹{summary.salesRevenue.cngTotalStr}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between font-black text-white text-base pt-1.5 border-t border-slate-800/80">
+                      <span>Authoritative Sales Total:</span>
+                      <span className="text-emerald-400">₹{summary.salesRevenue.authoritativeTotalStr}</span>
+                    </div>
+                  </div>
+
+                  {/* Component Completeness Visibility */}
+                  <div className="pt-3 border-t border-slate-800/80">
+                    <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+                      Component Completeness
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-mono">
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                        <div className="text-slate-500 text-[10px]">Fuel</div>
+                        <div className="text-emerald-400 font-bold mt-0.5">
+                          {summary.salesRevenue.includedComponents?.includes('FUEL') ? 'Included' : 'Pending'}
+                        </div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                        <div className="text-slate-500 text-[10px]">CNG</div>
+                        <div className={`font-bold mt-0.5 ${
+                          !summary.salesRevenue.cngApplicable
+                            ? 'text-slate-500'
+                            : summary.salesRevenue.cngComplete
+                            ? 'text-emerald-400'
+                            : 'text-amber-400'
+                        }`}>
+                          {!summary.salesRevenue.cngApplicable
+                            ? 'Not Applicable'
+                            : summary.salesRevenue.cngComplete
+                            ? 'Included'
+                            : 'Pending'}
+                        </div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                        <div className="text-slate-500 text-[10px]">Lube</div>
+                        <div className="text-slate-500 font-bold mt-0.5">Pending</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -534,17 +602,15 @@ export const FinancialOperationsPage: React.FC = () => {
                 </div>
               </div>
 
-              {selectedShift?.status === 'OPEN' && (
-                <button
-                  onClick={() => {
-                    setVarianceReason(summary.varianceReason || '');
-                    setShowReconcileModal(true);
-                  }}
-                  className="px-6 py-3 bg-white text-slate-950 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-slate-200 transition-colors shadow-xl"
-                >
-                  Confirm Reconciliation
-                </button>
-              )}
+              <div className="max-w-xs text-xs text-slate-400 bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
+                <div className="font-semibold text-slate-300 flex items-center gap-1.5 mb-1">
+                  <Info className="w-3.5 h-3.5 text-orange-400" />
+                  <span>Authoritative Finalization</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-400">
+                  Authoritative financial reconciliation is finalized during Shift Close. If this shift is open, complete operational entries and finalize in Shift Operations.
+                </p>
+              </div>
             </div>
 
             {summary.varianceReason && (
@@ -737,7 +803,7 @@ export const FinancialOperationsPage: React.FC = () => {
         {activeTab === 'prices' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Fuel Price Master</h2>
+              <h2 className="text-lg font-bold text-white">Product Price Master</h2>
               <button
                 onClick={() => setShowPriceModal(true)}
                 className="px-3 py-1.5 bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
@@ -751,28 +817,36 @@ export const FinancialOperationsPage: React.FC = () => {
                 <thead className="bg-slate-800/60 text-slate-400 font-mono uppercase text-[10px] border-b border-slate-800">
                   <tr>
                     <th className="py-3 px-4">Product</th>
-                    <th className="py-3 px-4">Price / Ltr</th>
+                    <th className="py-3 px-4">Price / Unit</th>
                     <th className="py-3 px-4">Effective From</th>
                     <th className="py-3 px-4">Effective To</th>
                     <th className="py-3 px-4">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {prices.map(p => (
-                    <tr key={p.id} className="hover:bg-slate-800/30">
-                      <td className="py-3 px-4 text-white font-bold">{p.productId}</td>
-                      <td className="py-3 px-4 font-mono font-black text-sm text-orange-400">₹ {formatPaiseToMoney(p.pricePaisePerUnit)}</td>
-                      <td className="py-3 px-4 font-mono">{p.effectiveFrom}</td>
-                      <td className="py-3 px-4 font-mono">{p.effectiveTo || 'Active Indefinitely'}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          p.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'
-                        }`}>
-                          {p.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {prices.map(p => {
+                    const matchedProduct = products.find(prod => prod.id === p.productId);
+                    const unit = matchedProduct?.unit || 'Unit';
+                    const name = matchedProduct?.name || p.productId;
+                    return (
+                      <tr key={p.id} className="hover:bg-slate-800/30">
+                        <td className="py-3 px-4 text-white font-bold">{name}</td>
+                        <td className="py-3 px-4 font-mono font-black text-sm text-orange-400">
+                          ₹ {formatPaiseToMoney(p.pricePaisePerUnit)}{' '}
+                          <span className="text-[10px] text-slate-400 font-normal">/ {unit}</span>
+                        </td>
+                        <td className="py-3 px-4 font-mono">{p.effectiveFrom}</td>
+                        <td className="py-3 px-4 font-mono">{p.effectiveTo || 'Active Indefinitely'}</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            p.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'
+                          }`}>
+                            {p.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -900,46 +974,6 @@ export const FinancialOperationsPage: React.FC = () => {
         </div>
       )}
 
-      {showReconcileModal && summary && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowReconcileModal(false)} />
-          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-white">Confirm Financial Reconciliation</h2>
-            <p className="text-xs text-slate-400">Review variance and provide justification if required.</p>
-            
-            <div className={`p-4 rounded-xl border font-mono ${summary.variancePaise === 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
-              <div className="text-[10px] uppercase font-bold text-slate-500">Net Variance</div>
-              <div className="text-xl font-black">₹ {summary.varianceStr}</div>
-            </div>
-
-            {summary.variancePaise !== 0 && (
-              <div>
-                <label className="block text-xs text-slate-300 mb-1 font-bold">Variance Justification <span className="text-rose-500">*</span></label>
-                <textarea
-                  required
-                  value={varianceReason}
-                  onChange={(e) => setVarianceReason(e.target.value)}
-                  placeholder="Explain shortage/excess (e.g. Coin shortage, system error...)"
-                  rows={3}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                />
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowReconcileModal(false)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
-              <button 
-                onClick={handleReconcile}
-                disabled={summary.variancePaise !== 0 && varianceReason.length < 3}
-                className="px-5 py-2 bg-white text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider disabled:opacity-50"
-              >
-                Confirm & Reconcile
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showPartyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPartyModal(false)} />
@@ -1013,16 +1047,17 @@ export const FinancialOperationsPage: React.FC = () => {
             <h2 className="text-lg font-bold text-white">Configure Product Price</h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Product Grade</label>
+                <label className="block text-xs text-slate-400 mb-1">Product</label>
                 <select name="productId" required className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white">
                   {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
+                    <option key={p.id} value={p.id}>{p.name} ({p.code}) — ₹ / {p.unit}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Selling Price (₹ per Ltr)</label>
+                <label className="block text-xs text-slate-400 mb-1">Selling Price (₹ / Unit)</label>
                 <input name="price" type="text" inputMode="decimal" required placeholder="0.00" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono" />
+                <span className="text-[10px] text-slate-500 mt-1 block">Specify ₹/LITRE for liquid fuels or ₹/KG for CNG</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
