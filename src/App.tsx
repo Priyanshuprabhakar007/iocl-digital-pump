@@ -16,11 +16,12 @@ import { ShiftOperationsPage } from './frontend/pages/ShiftOperationsPage';
 import { StockOperationsPage } from './frontend/pages/StockOperationsPage';
 import { CngOperationsPage } from './frontend/pages/CngOperationsPage';
 import { FinancialOperationsPage } from './frontend/pages/FinancialOperationsPage';
+import { LubeOperationsPage } from './frontend/pages/LubeOperationsPage';
 
 function MainAppContent() {
   const { userCtx, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
-
+  
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
@@ -50,6 +51,7 @@ function MainAppContent() {
       {activeTab === 'shift-ops' && <ShiftOperationsPage />}
       {activeTab === 'stock-ops' && <StockOperationsPage />}
       {activeTab === 'cng-ops' && <CngOperationsPage />}
+      {activeTab === 'lube-ops' && <LubeOperationsPage />}
       {activeTab === 'financials' && <FinancialOperationsPage />}
       {activeTab === 'users' && <UsersPage />}
       {activeTab === 'scopes' && <ScopesPage />}

@@ -18,6 +18,7 @@ import {
   Droplets,
   Flame,
   Banknote,
+  Package,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -77,6 +78,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'CNG Operations',
       icon: Flame,
       perm: PERMISSIONS.CNG_OPERATIONS_READ,
+    },
+    {
+      id: 'lube-ops',
+      label: 'Lube Operations',
+      icon: Package,
+      perm: PERMISSIONS.LUBE_OPERATIONS_READ,
     },
     {
       id: 'financials',
