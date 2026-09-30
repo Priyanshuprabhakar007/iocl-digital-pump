@@ -1554,8 +1554,8 @@ describe('Phase 3B-1 Lube & Auxiliary Inventory Core Backend Suite', () => {
     });
 
     // Direct SQL insert of ADJUSTMENT_OUT exceeding stock (e.g. 10 packs) must be aborted by trigger!
-    expect(async () => {
-      await db.insert(schema.lubeStockTransactions).values({
+    await expect(
+      db.insert(schema.lubeStockTransactions).values({
         id: 'tx-trig-bad',
         outletId: 'ro-1001',
         lubeSkuId: skuId,
@@ -1565,8 +1565,8 @@ describe('Phase 3B-1 Lube & Auxiliary Inventory Core Backend Suite', () => {
         notes: 'Excessive adjustment',
         createdBy: adminUser.id,
         createdAt: new Date().toISOString(),
-      });
-    }).toThrow();
+      })
+    ).rejects.toThrow();
   });
 
   it('32. SQLite trigger aborts direct sale insert exceeding stock', async () => {
