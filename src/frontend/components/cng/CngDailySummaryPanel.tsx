@@ -100,7 +100,7 @@ export const CngDailySummaryPanel: React.FC<CngDailySummaryPanelProps> = ({
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
-      ) : !summary ? (
+      ) : !summary || summary.shiftCount === 0 ? (
         <div className="py-8 text-center text-xs text-slate-500 italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800">
           No CNG operations recorded for the selected business date.
         </div>

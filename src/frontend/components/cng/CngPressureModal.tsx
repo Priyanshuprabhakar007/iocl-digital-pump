@@ -24,9 +24,11 @@ function toLocalDatetimeInputString(date: Date = new Date()): string {
 }
 
 function parseLocalInputToIso(localStr: string): string {
-  if (!localStr) return new Date().toISOString();
   const d = new Date(localStr);
-  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+  if (isNaN(d.getTime())) {
+    throw new Error('Invalid date');
+  }
+  return d.toISOString();
 }
 
 function isoToLocalDatetimeInputString(isoStr: string | null | undefined): string {
@@ -45,7 +47,7 @@ export const CngPressureModal: React.FC<CngPressureModalProps> = ({
   onSuccess,
 }) => {
   const [recordedAtLocal, setRecordedAtLocal] = useState(toLocalDatetimeInputString());
-  const [pressureUnit, setPressureUnit] = useState('bar');
+  const [pressureUnit, setPressureUnit] = useState('');
   const [suctionPressure, setSuctionPressure] = useState('');
   const [dischargePressure, setDischargePressure] = useState('');
   const [cascadePressure, setCascadePressure] = useState('');
@@ -56,14 +58,14 @@ export const CngPressureModal: React.FC<CngPressureModalProps> = ({
   useEffect(() => {
     if (initialData) {
       setRecordedAtLocal(isoToLocalDatetimeInputString(initialData.recordedAt));
-      setPressureUnit(initialData.pressureUnit ?? 'bar');
+      setPressureUnit(initialData.pressureUnit ?? '');
       setSuctionPressure(initialData.suctionPressure ?? '');
       setDischargePressure(initialData.dischargePressure ?? '');
       setCascadePressure(initialData.cascadePressure ?? '');
       setNotes(initialData.notes ?? '');
     } else {
       setRecordedAtLocal(toLocalDatetimeInputString());
-      setPressureUnit('bar');
+      setPressureUnit('');
       setSuctionPressure('');
       setDischargePressure('');
       setCascadePressure('');
@@ -76,6 +78,17 @@ export const CngPressureModal: React.FC<CngPressureModalProps> = ({
 
   const validate = (): boolean => {
     setClientError(null);
+
+    if (!recordedAtLocal || !recordedAtLocal.trim()) {
+      setClientError('Recorded at date and time is required.');
+      return false;
+    }
+    const dateObj = new Date(recordedAtLocal.trim());
+    if (isNaN(dateObj.getTime())) {
+      setClientError('Recorded at date and time is invalid.');
+      return false;
+    }
+
     if (!pressureUnit.trim()) {
       setClientError('Pressure engineering unit is required (e.g. bar, kg/cm², psi).');
       return false;
@@ -107,6 +120,22 @@ export const CngPressureModal: React.FC<CngPressureModalProps> = ({
     return true;
   };
 
+  const mapBackendError = (code?: string, defaultMsg?: string): string => {
+    if (code === 'SHIFT_CLOSED') {
+      return 'Cannot modify pressure readings because this shift is no longer open.';
+    }
+    if (code === 'CNG_NOT_AVAILABLE_AT_OUTLET') {
+      return 'CNG operations are not currently available for this outlet.';
+    }
+    if (code === 'NOT_FOUND') {
+      return 'Pressure reading no longer exists.';
+    }
+    if (code === 'VALIDATION_ERROR') {
+      return defaultMsg || 'Invalid pressure reading data entered.';
+    }
+    return defaultMsg || 'Operation failed.';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
@@ -136,7 +165,7 @@ export const CngPressureModal: React.FC<CngPressureModalProps> = ({
           onSaved(res.data);
           onClose();
         } else {
-          setClientError(res.error?.message || 'Failed to update pressure reading.');
+          setClientError(mapBackendError(res.error?.code, res.error?.message));
         }
       } else {
         // Create new reading: POST /api/v1/shifts/:shiftId/cng-pressure-readings
@@ -150,7 +179,7 @@ export const CngPressureModal: React.FC<CngPressureModalProps> = ({
           onSaved(res.data);
           onClose();
         } else {
-          setClientError(res.error?.message || 'Failed to create pressure reading.');
+          setClientError(mapBackendError(res.error?.code, res.error?.message));
         }
       }
     } catch (err: any) {

@@ -169,6 +169,18 @@ export const CngOperationsPage: React.FC = () => {
     loadShiftData();
   }, [selectedShiftId]);
 
+  const reloadPressureReadings = async () => {
+    if (!selectedShiftId) return;
+    try {
+      const res = await apiFetch<CngPressureReading[]>(`/api/v1/shifts/${selectedShiftId}/cng-pressure-readings`);
+      if (res.success && res.data) {
+        setPressureReadings(res.data);
+      }
+    } catch {
+      // keep existing state on transient fetch error
+    }
+  };
+
   const handleRefresh = async () => {
     await loadShiftData();
     setDailySummaryRefreshCounter((c) => c + 1);
@@ -199,7 +211,7 @@ export const CngOperationsPage: React.FC = () => {
 
       if (res.success) {
         setActionSuccess('Pressure reading deleted successfully.');
-        setPressureReadings((prev) => prev.filter((r) => r.id !== readingId));
+        await reloadPressureReadings();
       } else {
         const code = res.error?.code;
         let msg = res.error?.message || 'Failed to delete pressure reading';
@@ -462,16 +474,8 @@ export const CngOperationsPage: React.FC = () => {
               setPressureModalOpen(false);
               setEditingPressureReading(null);
             }}
-            onSaved={(reading) => {
-              setPressureReadings((prev) => {
-                const idx = prev.findIndex((r) => r.id === reading.id);
-                if (idx >= 0) {
-                  const updated = [...prev];
-                  updated[idx] = reading;
-                  return updated;
-                }
-                return [reading, ...prev];
-              });
+            onSaved={async () => {
+              await reloadPressureReadings();
             }}
             onError={(msg) => setActionError(msg)}
             onSuccess={(msg) => setActionSuccess(msg)}

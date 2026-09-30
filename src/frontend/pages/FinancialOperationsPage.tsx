@@ -131,8 +131,9 @@ export const FinancialOperationsPage: React.FC = () => {
       setProducts(
         results[2].data.filter(
           (p: Product) =>
-            (p.unit === 'LITRE' && p.category !== 'CNG') ||
-            (p.category === 'CNG' && p.unit === 'KG')
+            p.status === 'ACTIVE' &&
+            ((p.unit === 'LITRE' && p.category !== 'CNG') ||
+             (p.category === 'CNG' && p.unit === 'KG'))
         )
       );
     }
@@ -804,12 +805,14 @@ export const FinancialOperationsPage: React.FC = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Product Price Master</h2>
-              <button
-                onClick={() => setShowPriceModal(true)}
-                className="px-3 py-1.5 bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
-              >
-                <Plus className="w-4 h-4" /> Set New Price
-              </button>
+              {hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && (
+                <button
+                  onClick={() => setShowPriceModal(true)}
+                  className="px-3 py-1.5 bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" /> Set New Price
+                </button>
+              )}
             </div>
 
             <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl">
@@ -1024,7 +1027,7 @@ export const FinancialOperationsPage: React.FC = () => {
         </div>
       )}
 
-      {showPriceModal && (
+      {showPriceModal && hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPriceModal(false)} />
           <form 
