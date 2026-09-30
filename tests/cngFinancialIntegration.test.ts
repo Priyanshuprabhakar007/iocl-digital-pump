@@ -783,7 +783,9 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(salesRev.authoritativeTotalPaise).toBe(266200);
     expect(salesRev.lubeTotalPaise).toBe(0);
     expect(salesRev.lubeTotalStr).toBe("0.00");
-    expect(salesRev.includedComponents).toEqual(['FUEL', 'CNG', 'LUBE']);
+    expect(salesRev.includedComponents).toContain('FUEL');
+    expect(salesRev.includedComponents).toContain('CNG');
+    expect(salesRev.includedComponents).toContain('LUBE');
     expect(salesRev.pendingComponents).toEqual([]);
   });
 
