@@ -27,6 +27,8 @@ export const LubeTransactionsPanel: React.FC<LubeTransactionsPanelProps> = ({
   const { hasPermission } = useAuth();
   const canWrite = hasPermission(PERMISSIONS.LUBE_INVENTORY_WRITE);
 
+  const activeSkus = skus.filter(s => s.status === 'ACTIVE');
+
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -39,7 +41,8 @@ export const LubeTransactionsPanel: React.FC<LubeTransactionsPanelProps> = ({
   const [localFormError, setLocalFormError] = useState<string | null>(null);
 
   const openCreateModal = () => {
-    setLubeSkuId(skus[0]?.id || '');
+    if (activeSkus.length === 0) return;
+    setLubeSkuId(activeSkus[0]?.id || '');
     setTransactionType('RECEIPT');
     setQuantity('');
     setReferenceNumber('');
@@ -117,14 +120,20 @@ export const LubeTransactionsPanel: React.FC<LubeTransactionsPanelProps> = ({
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          {canWrite && skus.length > 0 && (
-            <button
-              onClick={openCreateModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-orange-500 to-amber-600 rounded-lg hover:from-orange-600 hover:to-amber-700 transition-all shadow-md shadow-orange-500/10"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Record Transaction</span>
-            </button>
+          {canWrite && (
+            activeSkus.length > 0 ? (
+              <button
+                onClick={openCreateModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-orange-500 to-amber-600 rounded-lg hover:from-orange-600 hover:to-amber-700 transition-all shadow-md shadow-orange-500/10"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Record Transaction</span>
+              </button>
+            ) : skus.length > 0 ? (
+              <span className="text-xs text-amber-500 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg">
+                No active Lube SKUs available for transactions
+              </span>
+            ) : null
           )}
         </div>
       </div>
@@ -140,13 +149,19 @@ export const LubeTransactionsPanel: React.FC<LubeTransactionsPanelProps> = ({
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             Log receipts or adjustments to populate the inventory transaction ledger.
           </p>
-          {canWrite && skus.length > 0 && (
-            <button
-              onClick={openCreateModal}
-              className="px-4 py-2 text-xs font-bold text-white bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-lg transition-all mt-2"
-            >
-              Record First Transaction
-            </button>
+          {canWrite && (
+            activeSkus.length > 0 ? (
+              <button
+                onClick={openCreateModal}
+                className="px-4 py-2 text-xs font-bold text-white bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-lg transition-all mt-2"
+              >
+                Record First Transaction
+              </button>
+            ) : skus.length > 0 ? (
+              <p className="text-xs text-amber-500 font-semibold mt-2">
+                No active Lube SKUs are available for transactions.
+              </p>
+            ) : null
           )}
         </div>
       ) : (
@@ -226,7 +241,7 @@ export const LubeTransactionsPanel: React.FC<LubeTransactionsPanelProps> = ({
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-lg focus:outline-none focus:border-orange-500"
                   required
                 >
-                  {skus.map(s => (
+                  {activeSkus.map(s => (
                     <option key={s.id} value={s.id}>
                       {s.name} ({s.skuCode}) [{s.stockUnit}]
                     </option>

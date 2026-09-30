@@ -34,6 +34,8 @@ import { LubeSummaryPanel } from '../components/lube/LubeSummaryPanel';
 export const LubeOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
   const canRead = hasPermission(PERMISSIONS.LUBE_OPERATIONS_READ);
+  const hasShiftsRead = hasPermission(PERMISSIONS.SHIFTS_READ);
+  const hasOutletsRead = hasPermission(PERMISSIONS.OUTLETS_READ);
 
   const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
   const [selectedOutletId, setSelectedOutletId] = useState<string>('');
@@ -60,6 +62,10 @@ export const LubeOperationsPage: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
+  // Stale request guards
+  const currentCtxRef = React.useRef({ outletId: '', shiftId: '' });
+  const shiftsRequestRef = React.useRef<string>(''); // outletId for shifts request tracking
+
   // Auto clear success message after 5 seconds
   useEffect(() => {
     if (actionSuccess) {
@@ -73,12 +79,19 @@ export const LubeOperationsPage: React.FC = () => {
     const loadOutlets = async () => {
       setLoadingOutlets(true);
       try {
+        if (!hasOutletsRead) {
+          setOutlets([]);
+          return;
+        }
         const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
         if (res.success && res.data && res.data.length > 0) {
           setOutlets(res.data);
           setSelectedOutletId(res.data[0].id);
         } else {
           setOutlets([]);
+          if (res.success === false) {
+            setActionError(res.error?.message || 'Failed to load retail outlets');
+          }
         }
       } catch (err: any) {
         setActionError(err.message || 'Failed to load retail outlets');
@@ -90,22 +103,51 @@ export const LubeOperationsPage: React.FC = () => {
     if (canRead) {
       loadOutlets();
     }
-  }, [canRead]);
+  }, [canRead, hasOutletsRead]);
+
+  // Point 4: Synchronous State Reset on Outlet Switch
+  useEffect(() => {
+    setShiftsList([]);
+    setSelectedShiftId('');
+    setSelectedShift(null);
+    setSkus([]);
+    setPrices([]);
+    setStockSummary([]);
+    setLowStockItems([]);
+    setTransactions([]);
+    setSales([]);
+    setShiftSummary(null);
+  }, [selectedOutletId]);
 
   // Load Shifts when Outlet Changes
   useEffect(() => {
     if (!selectedOutletId) {
+      return;
+    }
+
+    if (!hasShiftsRead) {
       setShiftsList([]);
       setSelectedShiftId('');
       setSelectedShift(null);
+      setSales([]);
+      setShiftSummary(null);
       return;
     }
 
     const loadShifts = async () => {
       setLoadingShifts(true);
       setActionError(null);
+      const reqOutletId = selectedOutletId;
+      shiftsRequestRef.current = reqOutletId;
+
       try {
         const res = await apiFetch<OperationalShift[]>(`/api/v1/outlets/${selectedOutletId}/shifts`);
+        
+        // Guard against stale async shifts response
+        if (shiftsRequestRef.current !== reqOutletId) {
+          return;
+        }
+
         if (res.success && res.data) {
           setShiftsList(res.data);
           if (res.data.length > 0) {
@@ -116,16 +158,33 @@ export const LubeOperationsPage: React.FC = () => {
             setSales([]);
             setShiftSummary(null);
           }
+        } else {
+          setShiftsList([]);
+          setSelectedShiftId('');
+          setSelectedShift(null);
+          setSales([]);
+          setShiftSummary(null);
+          setActionError(res.error?.message || 'Failed to load operational shifts');
         }
       } catch (err: any) {
+        if (shiftsRequestRef.current !== reqOutletId) {
+          return;
+        }
+        setShiftsList([]);
+        setSelectedShiftId('');
+        setSelectedShift(null);
+        setSales([]);
+        setShiftSummary(null);
         setActionError(err.message || 'Failed to load operational shifts');
       } finally {
-        setLoadingShifts(false);
+        if (shiftsRequestRef.current === reqOutletId) {
+          setLoadingShifts(false);
+        }
       }
     };
 
     loadShifts();
-  }, [selectedOutletId]);
+  }, [selectedOutletId, hasShiftsRead]);
 
   // Main data fetching function
   const loadOutletLubeData = async () => {
@@ -133,6 +192,10 @@ export const LubeOperationsPage: React.FC = () => {
 
     setLoadingData(true);
     setActionError(null);
+
+    const reqOutletId = selectedOutletId;
+    const reqShiftId = selectedShiftId;
+    currentCtxRef.current = { outletId: reqOutletId, shiftId: reqShiftId };
 
     try {
       const promises: Promise<any>[] = [
@@ -143,39 +206,127 @@ export const LubeOperationsPage: React.FC = () => {
         apiFetch<LubeStockTransaction[]>(`/api/v1/outlets/${selectedOutletId}/lube/stock-transactions`),
       ];
 
-      if (selectedShiftId) {
+      const hasShiftContext = !!(selectedShiftId && hasShiftsRead);
+
+      if (hasShiftContext) {
         promises.push(apiFetch<OperationalShift>(`/api/v1/shifts/${selectedShiftId}`));
         promises.push(apiFetch<LubeShiftSale[]>(`/api/v1/shifts/${selectedShiftId}/lube-sales`));
         promises.push(apiFetch<LubeShiftSummary>(`/api/v1/shifts/${selectedShiftId}/lube-summary`));
       }
 
-      const results = await Promise.all(promises);
+      const results = await Promise.allSettled(promises);
 
-      if (results[0].success) setSkus(results[0].data);
-      if (results[1].success) setPrices(results[1].data);
-      if (results[2].success) setStockSummary(results[2].data);
-      if (results[3].success) setLowStockItems(results[3].data);
-      if (results[4].success) setTransactions(results[4].data);
+      // Guard against stale async responses belonging to a previous outlet/shift context
+      if (currentCtxRef.current.outletId !== reqOutletId || currentCtxRef.current.shiftId !== reqShiftId) {
+        return;
+      }
 
-      if (selectedShiftId && results[5]) {
-        if (results[5].success) setSelectedShift(results[5].data);
-        if (results[6].success) setSales(results[6].data);
-        if (results[7].success) setShiftSummary(results[7].data);
+      let errorAccumulator: string[] = [];
+
+      // 0. Lube SKUs
+      const skusRes = results[0];
+      if (skusRes.status === 'fulfilled' && skusRes.value.success) {
+        setSkus(skusRes.value.data);
+      } else {
+        setSkus([]);
+        const errMsg = skusRes.status === 'fulfilled' ? skusRes.value.error?.message : 'Network error';
+        errorAccumulator.push(`SKU catalog failed: ${errMsg}`);
+      }
+
+      // 1. Lube Prices
+      const pricesRes = results[1];
+      if (pricesRes.status === 'fulfilled' && pricesRes.value.success) {
+        setPrices(pricesRes.value.data);
+      } else {
+        setPrices([]);
+        const errMsg = pricesRes.status === 'fulfilled' ? pricesRes.value.error?.message : 'Network error';
+        errorAccumulator.push(`Prices failed: ${errMsg}`);
+      }
+
+      // 2. Stock Summary
+      const stockRes = results[2];
+      if (stockRes.status === 'fulfilled' && stockRes.value.success) {
+        setStockSummary(stockRes.value.data);
+      } else {
+        setStockSummary([]);
+        const errMsg = stockRes.status === 'fulfilled' ? stockRes.value.error?.message : 'Network error';
+        errorAccumulator.push(`Stock summary failed: ${errMsg}`);
+      }
+
+      // 3. Low Stock Items
+      const lowStockRes = results[3];
+      if (lowStockRes.status === 'fulfilled' && lowStockRes.value.success) {
+        setLowStockItems(lowStockRes.value.data);
+      } else {
+        setLowStockItems([]);
+        const errMsg = lowStockRes.status === 'fulfilled' ? lowStockRes.value.error?.message : 'Network error';
+        errorAccumulator.push(`Low stock warning check failed: ${errMsg}`);
+      }
+
+      // 4. Stock Transactions
+      const txsRes = results[4];
+      if (txsRes.status === 'fulfilled' && txsRes.value.success) {
+        setTransactions(txsRes.value.data);
+      } else {
+        setTransactions([]);
+        const errMsg = txsRes.status === 'fulfilled' ? txsRes.value.error?.message : 'Network error';
+        errorAccumulator.push(`Transaction history failed: ${errMsg}`);
+      }
+
+      if (hasShiftContext && results[5] && results[6] && results[7]) {
+        // 5. Shift Details
+        const shiftRes = results[5];
+        if (shiftRes.status === 'fulfilled' && shiftRes.value.success) {
+          setSelectedShift(shiftRes.value.data);
+        } else {
+          setSelectedShift(null);
+          const errMsg = shiftRes.status === 'fulfilled' ? shiftRes.value.error?.message : 'Network error';
+          errorAccumulator.push(`Shift details failed: ${errMsg}`);
+        }
+
+        // 6. Shift Sales Log
+        const salesRes = results[6];
+        if (salesRes.status === 'fulfilled' && salesRes.value.success) {
+          setSales(salesRes.value.data);
+        } else {
+          setSales([]);
+          const errMsg = salesRes.status === 'fulfilled' ? salesRes.value.error?.message : 'Network error';
+          errorAccumulator.push(`Sales list failed: ${errMsg}`);
+        }
+
+        // 7. Lube Shift Summary
+        const summaryRes = results[7];
+        if (summaryRes.status === 'fulfilled' && summaryRes.value.success) {
+          setShiftSummary(summaryRes.value.data);
+        } else {
+          setShiftSummary(null);
+          const errMsg = summaryRes.status === 'fulfilled' ? summaryRes.value.error?.message : 'Network error';
+          errorAccumulator.push(`Shift summary failed: ${errMsg}`);
+        }
       } else {
         setSelectedShift(null);
         setSales([]);
         setShiftSummary(null);
       }
+
+      if (errorAccumulator.length > 0) {
+        setActionError(errorAccumulator.join(' | '));
+      }
     } catch (err: any) {
+      if (currentCtxRef.current.outletId !== reqOutletId || currentCtxRef.current.shiftId !== reqShiftId) {
+        return;
+      }
       setActionError(err.message || 'Failed to load outlet lube metrics');
     } finally {
-      setLoadingData(false);
+      if (currentCtxRef.current.outletId === reqOutletId && currentCtxRef.current.shiftId === reqShiftId) {
+        setLoadingData(false);
+      }
     }
   };
 
   useEffect(() => {
     loadOutletLubeData();
-  }, [selectedOutletId, selectedShiftId]);
+  }, [selectedOutletId, selectedShiftId, hasShiftsRead]);
 
   const handleRefresh = async () => {
     await loadOutletLubeData();
@@ -190,6 +341,18 @@ export const LubeOperationsPage: React.FC = () => {
         <h2 className="text-lg font-bold text-white">Access Restricted</h2>
         <p className="text-xs text-slate-400">
           You do not have permission (<code className="font-mono text-orange-400">lube_operations.read</code>) to view Lube Operations.
+        </p>
+      </div>
+    );
+  }
+
+  if (!hasOutletsRead) {
+    return (
+      <div className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl max-w-xl mx-auto my-12 space-y-3">
+        <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
+        <h2 className="text-lg font-bold text-white">Access Restricted</h2>
+        <p className="text-xs text-slate-400">
+          Outlet read permissions (<code className="font-mono text-orange-400">outlets.read</code>) are required to access this workspace.
         </p>
       </div>
     );
@@ -243,10 +406,12 @@ export const LubeOperationsPage: React.FC = () => {
             <select
               value={selectedShiftId}
               onChange={(e) => setSelectedShiftId(e.target.value)}
-              disabled={loadingOutlets || loadingShifts || loadingData || shiftsList.length === 0}
+              disabled={loadingOutlets || loadingShifts || loadingData || shiftsList.length === 0 || !hasShiftsRead}
               className="pl-8 pr-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-lg text-xs font-semibold focus:outline-none focus:border-orange-500 w-56 disabled:opacity-50 font-mono"
             >
-              {loadingShifts ? (
+              {!hasShiftsRead ? (
+                <option>Shift permissions required</option>
+              ) : loadingShifts ? (
                 <option>Loading shifts...</option>
               ) : shiftsList.length === 0 ? (
                 <option>No operational shifts</option>
@@ -271,7 +436,7 @@ export const LubeOperationsPage: React.FC = () => {
       </div>
 
       {/* Global Status/Context Banner */}
-      {selectedShift && (
+      {hasShiftsRead && selectedShift && (
         <div className={`p-4 rounded-xl flex items-center justify-between border text-xs ${
           selectedShift.status === 'OPEN'
             ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
@@ -397,24 +562,36 @@ export const LubeOperationsPage: React.FC = () => {
 
       {/* Main Tab Viewports */}
       <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl">
-        {activeTab === 'sales' && (
-          <LubeSalesPanel
-            shift={selectedShift}
-            skus={skus}
-            sales={sales}
-            loading={loadingData}
-            onRefresh={handleRefresh}
-            setError={setActionError}
-            setSuccess={setActionSuccess}
-          />
-        )}
-        {activeTab === 'summary' && (
-          <LubeSummaryPanel
-            shift={selectedShift}
-            shiftSummary={shiftSummary}
-            loading={loadingData}
-            onRefresh={handleRefresh}
-          />
+        {(activeTab === 'sales' || activeTab === 'summary') && !hasShiftsRead ? (
+          <div className="p-12 text-center bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
+            <Lock className="w-8 h-8 text-slate-500 mx-auto" />
+            <h4 className="text-sm font-semibold text-white">Shift Permissions Required</h4>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Shift operational features are not available because you do not have shift read permissions (shifts.read).
+            </p>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'sales' && (
+              <LubeSalesPanel
+                shift={selectedShift}
+                skus={skus}
+                sales={sales}
+                loading={loadingData}
+                onRefresh={handleRefresh}
+                setError={setActionError}
+                setSuccess={setActionSuccess}
+              />
+            )}
+            {activeTab === 'summary' && (
+              <LubeSummaryPanel
+                shift={selectedShift}
+                shiftSummary={shiftSummary}
+                loading={loadingData}
+                onRefresh={handleRefresh}
+              />
+            )}
+          </>
         )}
         {activeTab === 'inventory' && (
           <LubeInventoryPanel

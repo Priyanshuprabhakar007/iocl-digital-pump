@@ -17,14 +17,26 @@ export const LubeDailySummaryPanel: React.FC<LubeDailySummaryPanelProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const activeRequestRef = React.useRef({ outletId, businessDate });
+
   const fetchDailySummary = async () => {
     if (!outletId || !businessDate) return;
     setLoading(true);
     setError(null);
+    const thisRequest = { outletId, businessDate };
+    activeRequestRef.current = thisRequest;
+
     try {
       const res = await apiFetch<LubeDailySummary>(
         `/api/v1/outlets/${outletId}/lube/daily-summary?businessDate=${businessDate}`
       );
+      if (
+        activeRequestRef.current.outletId !== thisRequest.outletId ||
+        activeRequestRef.current.businessDate !== thisRequest.businessDate
+      ) {
+        return; // Stale response discarded
+      }
+
       if (res.success) {
         setSummary(res.data);
       } else {
@@ -32,10 +44,21 @@ export const LubeDailySummaryPanel: React.FC<LubeDailySummaryPanelProps> = ({
         setSummary(null);
       }
     } catch (err: any) {
+      if (
+        activeRequestRef.current.outletId !== thisRequest.outletId ||
+        activeRequestRef.current.businessDate !== thisRequest.businessDate
+      ) {
+        return; // Stale error discarded
+      }
       setError(err.message || 'An unexpected error occurred');
       setSummary(null);
     } finally {
-      setLoading(false);
+      if (
+        activeRequestRef.current.outletId === thisRequest.outletId &&
+        activeRequestRef.current.businessDate === thisRequest.businessDate
+      ) {
+        setLoading(false);
+      }
     }
   };
 

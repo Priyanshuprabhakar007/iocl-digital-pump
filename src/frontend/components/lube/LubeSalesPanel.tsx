@@ -28,6 +28,8 @@ export const LubeSalesPanel: React.FC<LubeSalesPanelProps> = ({
   const canWrite = hasPermission(PERMISSIONS.LUBE_SALES_WRITE);
   const isShiftOpen = shift?.status === 'OPEN';
 
+  const activeSkus = skus.filter(s => s.status === 'ACTIVE');
+
   const [showModal, setShowModal] = useState(false);
   const [editingSale, setEditingSale] = useState<LubeShiftSale | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -40,9 +42,9 @@ export const LubeSalesPanel: React.FC<LubeSalesPanelProps> = ({
   const [localFormError, setLocalFormError] = useState<string | null>(null);
 
   const openCreateModal = () => {
-    if (!shift || !isShiftOpen) return;
+    if (!shift || !isShiftOpen || activeSkus.length === 0) return;
     setEditingSale(null);
-    setLubeSkuId(skus[0]?.id || '');
+    setLubeSkuId(activeSkus[0]?.id || '');
     setQuantity('');
     setNotes('');
     setLocalFormError(null);
@@ -75,7 +77,6 @@ export const LubeSalesPanel: React.FC<LubeSalesPanelProps> = ({
           method: 'PUT',
           body: JSON.stringify({
             quantity: quantity.trim(),
-            soldAt: new Date().toISOString(),
             notes: notes.trim() || null,
           }),
         });
@@ -157,14 +158,20 @@ export const LubeSalesPanel: React.FC<LubeSalesPanelProps> = ({
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          {canWrite && shift && isShiftOpen && skus.length > 0 && (
-            <button
-              onClick={openCreateModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-orange-500 to-amber-600 rounded-lg hover:from-orange-600 hover:to-amber-700 transition-all shadow-md shadow-orange-500/10"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Record Sale</span>
-            </button>
+          {canWrite && shift && isShiftOpen && (
+            activeSkus.length > 0 ? (
+              <button
+                onClick={openCreateModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-orange-500 to-amber-600 rounded-lg hover:from-orange-600 hover:to-amber-700 transition-all shadow-md shadow-orange-500/10"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Record Sale</span>
+              </button>
+            ) : skus.length > 0 ? (
+              <span className="text-xs text-amber-500 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg">
+                No active Lube SKUs available
+              </span>
+            ) : null
           )}
         </div>
       </div>
@@ -188,13 +195,19 @@ export const LubeSalesPanel: React.FC<LubeSalesPanelProps> = ({
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             No lube sales have been recorded for this operational shift yet.
           </p>
-          {canWrite && isShiftOpen && skus.length > 0 && (
-            <button
-              onClick={openCreateModal}
-              className="px-4 py-2 text-xs font-bold text-white bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-lg transition-all mt-2"
-            >
-              Record First Sale
-            </button>
+          {canWrite && isShiftOpen && (
+            activeSkus.length > 0 ? (
+              <button
+                onClick={openCreateModal}
+                className="px-4 py-2 text-xs font-bold text-white bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-lg transition-all mt-2"
+              >
+                Record First Sale
+              </button>
+            ) : skus.length > 0 ? (
+              <p className="text-xs text-amber-500 font-semibold mt-2">
+                No active Lube SKUs are available for sale.
+              </p>
+            ) : null
           )}
         </div>
       ) : (
@@ -294,7 +307,7 @@ export const LubeSalesPanel: React.FC<LubeSalesPanelProps> = ({
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-lg focus:outline-none focus:border-orange-500 disabled:opacity-50"
                   required
                 >
-                  {skus.filter(s => s.status === 'ACTIVE').map(s => (
+                  {(editingSale ? skus : activeSkus).map(s => (
                     <option key={s.id} value={s.id}>
                       {s.name} ({s.skuCode}) [{s.stockUnit}]
                     </option>

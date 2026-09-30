@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { LubeShiftSummary, OperationalShift, ShiftFinancialSummary } from '../../../shared/types';
 import { apiFetch } from '../../services/api';
 import { AlertCircle, RefreshCw, BarChart3, Banknote, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../../shared/constants';
 
 interface LubeSummaryPanelProps {
   shift: OperationalShift | null;
@@ -16,11 +18,14 @@ export const LubeSummaryPanel: React.FC<LubeSummaryPanelProps> = ({
   loading,
   onRefresh,
 }) => {
+  const { hasPermission } = useAuth();
+  const hasFinRead = hasPermission(PERMISSIONS.FINANCIAL_RECONCILIATION_READ);
+
   const [finSummary, setFinSummary] = useState<ShiftFinancialSummary | null>(null);
   const [loadingFin, setLoadingFin] = useState(false);
 
   useEffect(() => {
-    if (!shift) {
+    if (!shift || !hasFinRead) {
       setFinSummary(null);
       return;
     }
@@ -42,7 +47,7 @@ export const LubeSummaryPanel: React.FC<LubeSummaryPanelProps> = ({
     };
 
     fetchFinSummary();
-  }, [shift, shiftSummary]); // Re-fetch on shift or sales update to stay accurate
+  }, [shift, shiftSummary, hasFinRead]); // Re-fetch on shift or sales update to stay accurate
 
   if (!shift) {
     return (
@@ -149,7 +154,11 @@ export const LubeSummaryPanel: React.FC<LubeSummaryPanelProps> = ({
         {/* Right: Authoritative Financial summary card */}
         <div className="space-y-3">
           <h4 className="text-xs font-bold text-white tracking-wider uppercase font-mono">Financial Reconciliation Context</h4>
-          {loadingFin ? (
+          {!hasFinRead ? (
+            <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl text-center text-xs text-slate-400 leading-relaxed italic">
+              Financial reconciliation details are not available for your role.
+            </div>
+          ) : loadingFin ? (
             <div className="p-8 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-center">
               <RefreshCw className="w-5 h-5 text-orange-500 animate-spin" />
             </div>
