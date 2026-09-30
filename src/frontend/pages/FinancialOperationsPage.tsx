@@ -495,6 +495,12 @@ export const FinancialOperationsPage: React.FC = () => {
                         <span className="font-bold">₹{summary.salesRevenue.cngTotalStr}</span>
                       </div>
                     )}
+                    {summary.salesRevenue.lubeTotalStr != null && (
+                      <div className="flex justify-between text-indigo-400">
+                        <span>Lube Revenue:</span>
+                        <span className="font-bold">₹{summary.salesRevenue.lubeTotalStr}</span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between font-black text-white text-base pt-1.5 border-t border-slate-800/80">
                       <span>Authoritative Sales Total:</span>
                       <span className="text-emerald-400">₹{summary.salesRevenue.authoritativeTotalStr}</span>
@@ -531,7 +537,9 @@ export const FinancialOperationsPage: React.FC = () => {
                       </div>
                       <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
                         <div className="text-slate-500 text-[10px]">Lube</div>
-                        <div className="text-slate-500 font-bold mt-0.5">Pending</div>
+                        <div className="text-emerald-400 font-bold mt-0.5">
+                          {summary.salesRevenue.includedComponents?.includes('LUBE') ? 'Included' : 'Pending'}
+                        </div>
                       </div>
                     </div>
                   </div>

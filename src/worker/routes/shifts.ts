@@ -15,6 +15,7 @@ import { PERMISSIONS } from '../../shared/constants';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
 import { FinancialRepository } from '../repositories/financialRepository';
 import { CngRepository } from '../repositories/cngRepository';
+import { LubeRepository } from '../repositories/lubeRepository';
 import { FinancialService } from '../services/financialService';
 import { ShiftCloseService } from '../services/shiftCloseService';
 
@@ -217,7 +218,8 @@ shifts.post('/shifts/:shiftId/close', requirePermission(PERMISSIONS.SHIFTS_CLOSE
 
   const financialRepo = new FinancialRepository(db);
   const cngRepo = new CngRepository(db);
-  const financialService = new FinancialService(financialRepo, pumpRepo, cngRepo);
+  const lubeRepo = new LubeRepository(db);
+  const financialService = new FinancialService(financialRepo, pumpRepo, cngRepo, lubeRepo);
   const shiftCloseService = new ShiftCloseService(pumpRepo, financialRepo, financialService, auditRepo);
 
   const closeRes = await shiftCloseService.closeShift(

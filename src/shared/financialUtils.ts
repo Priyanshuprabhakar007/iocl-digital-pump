@@ -66,3 +66,19 @@ export function calculateRevenuePaise(quantityMilliunits: number, pricePaisePerU
 
   return Number(revenuePaise);
 }
+
+export function checkedMoneyAdd(...values: number[]): number {
+  let sum = 0n;
+  for (const v of values) {
+    if (!Number.isSafeInteger(v)) {
+      throw new Error("FINANCIAL_AMOUNT_OVERFLOW");
+    }
+    sum += BigInt(v);
+  }
+
+  if (sum > BigInt(Number.MAX_SAFE_INTEGER) || sum < -BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("FINANCIAL_AMOUNT_OVERFLOW");
+  }
+
+  return Number(sum);
+}

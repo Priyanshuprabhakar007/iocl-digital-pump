@@ -158,6 +158,7 @@ export class ShiftCloseService {
         newValue: {
           fuelRevenuePaise: recon.fuelSalesRevenuePaise,
           cngRevenuePaise: recon.cngSalesRevenuePaise,
+          lubeRevenuePaise: recon.lubeSalesRevenuePaise,
           authoritativeSalesRevenuePaise: recon.authoritativeSalesRevenuePaise,
           totalCollectionsPaise: recon.totalCollectionsPaise,
           variancePaise: recon.salesCollectionVariancePaise,

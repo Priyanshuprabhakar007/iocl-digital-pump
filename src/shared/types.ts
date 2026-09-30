@@ -673,8 +673,9 @@ export interface ShiftFinancialSummary {
     fuelTotalStr: string;
     cngTotalPaise: number | null;
     cngTotalStr: string | null;
-    lubeTotalPaise: number | null;
-    lubeTotalStr: string | null;
+    lubeTotalPaise: number;
+    lubeTotalStr: string;
+    lubeBySku: LubeShiftSummarySkuItem[];
     cngApplicable: boolean;
     cngComplete: boolean;
     includedComponents: string[];

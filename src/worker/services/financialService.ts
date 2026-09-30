@@ -1,21 +1,40 @@
 import { FinancialRepository } from '../repositories/financialRepository';
 import { PumpRepository } from '../repositories/pumpRepository';
 import { CngRepository } from '../repositories/cngRepository';
+import { LubeRepository } from '../repositories/lubeRepository';
 import { 
   ShiftFinancialSummary, 
   FinancialRevenueProduct, 
   FinancialVarianceStatus,
-  ShiftFinancialReconciliation
+  ShiftFinancialReconciliation,
+  LubeShiftSummarySkuItem
 } from '../../shared/types';
-import { formatPaiseToMoney, calculateRevenuePaise } from '../../shared/financialUtils';
+import { formatPaiseToMoney, calculateRevenuePaise, checkedMoneyAdd } from '../../shared/financialUtils';
 import { formatMilliunits } from '../../shared/precision';
 
 export class FinancialService {
   constructor(
     private financialRepo: FinancialRepository,
     private pumpRepo: PumpRepository,
-    private cngRepo: CngRepository
+    private cngRepo: CngRepository,
+    private lubeRepo: LubeRepository
   ) {}
+
+  async calculateShiftLubeRevenue(shiftId: string): Promise<{
+    lubeTotalPaise: number;
+    lubeTotalStr: string;
+    lubeBySku: LubeShiftSummarySkuItem[];
+  }> {
+    const shift = await this.pumpRepo.findOperationalShiftById(shiftId);
+    if (!shift) throw new Error('SHIFT_NOT_FOUND');
+
+    const summary = await this.lubeRepo.getShiftSummary(shiftId, shift.outletId, shift.businessDate);
+    return {
+      lubeTotalPaise: summary.totalRevenuePaise,
+      lubeTotalStr: summary.totalRevenueStr,
+      lubeBySku: summary.bySku,
+    };
+  }
 
   async calculateShiftFuelRevenue(shiftId: string) {
     const shift = await this.pumpRepo.findOperationalShiftById(shiftId);
@@ -154,6 +173,7 @@ export class FinancialService {
 
     const revenue = await this.calculateShiftFuelRevenue(shiftId);
     const cngRevenue = await this.calculateShiftCngRevenue(shiftId);
+    const lubeRevenue = await this.calculateShiftLubeRevenue(shiftId);
     const collections = await this.financialRepo.listCollections(shiftId);
     const handovers = await this.financialRepo.listCashHandovers(shiftId);
     const deposits = await this.financialRepo.listBankDeposits(shiftId);
@@ -192,18 +212,20 @@ export class FinancialService {
 
     const totalCollectionsPaise = Object.values(totals).reduce((a, b) => a + b, 0);
 
-    const includedComponents = ['FUEL'];
-    const pendingComponents = ['LUBE'];
-    let authoritativeTotalPaise = revenue.fuelTotalPaise;
+    const includedComponents = ['FUEL', 'LUBE'];
+    const pendingComponents: string[] = [];
+    const componentsToAdd: number[] = [revenue.fuelTotalPaise, lubeRevenue.lubeTotalPaise];
     
     if (cngRevenue.cngApplicable) {
       if (cngRevenue.cngComplete) {
         includedComponents.push('CNG');
-        authoritativeTotalPaise += (cngRevenue.cngTotalPaise || 0);
+        componentsToAdd.push(cngRevenue.cngTotalPaise || 0);
       } else {
-        pendingComponents.unshift('CNG');
+        pendingComponents.push('CNG');
       }
     }
+
+    const authoritativeTotalPaise = checkedMoneyAdd(...componentsToAdd);
 
     const variancePaise = authoritativeTotalPaise - totalCollectionsPaise;
     let varianceStatus: FinancialVarianceStatus = 'BALANCED';
@@ -225,8 +247,9 @@ export class FinancialService {
         fuelTotalStr: revenue.fuelTotalStr,
         cngTotalPaise: cngRevenue.cngTotalPaise,
         cngTotalStr: cngRevenue.cngTotalStr,
-        lubeTotalPaise: null,
-        lubeTotalStr: null,
+        lubeTotalPaise: lubeRevenue.lubeTotalPaise,
+        lubeTotalStr: lubeRevenue.lubeTotalStr,
+        lubeBySku: lubeRevenue.lubeBySku,
         cngApplicable: cngRevenue.cngApplicable,
         cngComplete: cngRevenue.cngComplete,
         includedComponents: includedComponents as any,
@@ -312,7 +335,7 @@ export class FinancialService {
       outletId: summary.outletId,
       fuelSalesRevenuePaise: summary.salesRevenue.fuelTotalPaise,
       cngSalesRevenuePaise: cngRevenue.cngApplicable ? cngRevenue.cngTotalPaise : null,
-      lubeSalesRevenuePaise: null,
+      lubeSalesRevenuePaise: summary.salesRevenue.lubeTotalPaise,
       authoritativeSalesRevenuePaise: summary.salesRevenue.authoritativeTotalPaise,
       cashCollectionPaise: summary.collections.cashPaise,
       posCollectionPaise: summary.collections.posCardPaise,

@@ -4,6 +4,7 @@ import * as schema from '../../db/schema';
 import { getDb } from '../../db';
 import { FinancialRepository } from '../repositories/financialRepository';
 import { CngRepository } from '../repositories/cngRepository';
+import { LubeRepository } from '../repositories/lubeRepository';
 import { FinancialService } from '../services/financialService';
 import { PumpRepository } from '../repositories/pumpRepository';
 import { OutletRepository } from '../repositories/outletRepository';
@@ -860,8 +861,9 @@ financialRoutes.get('/shifts/:shiftId/financial-summary', requirePermission(PERM
   const financialRepo = new FinancialRepository(db);
   const pumpRepo = new PumpRepository(db);
   const cngRepo = new CngRepository(db);
+  const lubeRepo = new LubeRepository(db);
   const outletRepo = new OutletRepository(db);
-  const service = new FinancialService(financialRepo, pumpRepo, cngRepo);
+  const service = new FinancialService(financialRepo, pumpRepo, cngRepo, lubeRepo);
 
   const shift = await pumpRepo.findOperationalShiftById(shiftId);
   if (!shift) return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Shift not found' } }, 404);
