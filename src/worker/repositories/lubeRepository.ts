@@ -1,6 +1,6 @@
 import { AppDatabase } from '../../db';
 import * as schema from '../../db/schema';
-import { eq, and, sql, desc, asc, lte } from 'drizzle-orm';
+import { eq, and, sql, desc, asc, lte, inArray } from 'drizzle-orm';
 import {
   LubeSku,
   LubeSkuPrice,
@@ -11,7 +11,7 @@ import {
   LubeDailySummary,
   LubeStockUnit,
 } from '../../shared/types';
-import { formatLubeQuantity } from '../../shared/lubeUtils';
+import { formatLubeQuantity, checkedSafeIntegerAdd } from '../../shared/lubeUtils';
 import { formatPaiseToMoney } from '../../shared/financialUtils';
 
 export class LubeRepository {
@@ -218,27 +218,37 @@ export class LubeRepository {
   }
 
   async calculateCurrentStockSubunits(lubeSkuId: string): Promise<number> {
-    const [txRow] = await this.db
+    const txRows = await this.db
       .select({
-        totalIn: sql<number>`COALESCE(SUM(CASE 
-          WHEN ${schema.lubeStockTransactions.transactionType} IN ('OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN') THEN ${schema.lubeStockTransactions.quantitySubunits}
-          WHEN ${schema.lubeStockTransactions.transactionType} = 'ADJUSTMENT_OUT' THEN -${schema.lubeStockTransactions.quantitySubunits}
-          ELSE 0
-        END), 0)`,
+        transactionType: schema.lubeStockTransactions.transactionType,
+        quantitySubunits: schema.lubeStockTransactions.quantitySubunits,
       })
       .from(schema.lubeStockTransactions)
       .where(eq(schema.lubeStockTransactions.lubeSkuId, lubeSkuId));
 
-    const [saleRow] = await this.db
+    const saleRows = await this.db
       .select({
-        totalSales: sql<number>`COALESCE(SUM(${schema.lubeShiftSales.quantitySubunits}), 0)`,
+        quantitySubunits: schema.lubeShiftSales.quantitySubunits,
       })
       .from(schema.lubeShiftSales)
       .where(eq(schema.lubeShiftSales.lubeSkuId, lubeSkuId));
 
-    const totalIn = Number(txRow?.totalIn ?? 0);
-    const totalSales = Number(saleRow?.totalSales ?? 0);
-    return totalIn - totalSales;
+    let stockBig = 0n;
+    for (const tx of txRows) {
+      if (tx.transactionType === 'ADJUSTMENT_OUT') {
+        stockBig -= BigInt(tx.quantitySubunits);
+      } else {
+        stockBig += BigInt(tx.quantitySubunits);
+      }
+    }
+    for (const s of saleRows) {
+      stockBig -= BigInt(s.quantitySubunits);
+    }
+
+    if (stockBig > BigInt(Number.MAX_SAFE_INTEGER) || stockBig < -BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error('QUANTITY_OVERFLOW');
+    }
+    return Number(stockBig);
   }
 
   async getStockSummaryByOutlet(outletId: string): Promise<LubeStockSummaryItem[]> {
@@ -337,18 +347,18 @@ export class LubeRepository {
     let totalPackSubunits = 0;
 
     for (const sale of sales) {
-      totalRevenuePaise += sale.revenuePaise;
+      totalRevenuePaise = checkedSafeIntegerAdd(totalRevenuePaise, sale.revenuePaise, 'FINANCIAL_AMOUNT_OVERFLOW');
       if (sale.stockUnit === 'LITRE') {
-        totalLitreSubunits += sale.quantitySubunits;
+        totalLitreSubunits = checkedSafeIntegerAdd(totalLitreSubunits, sale.quantitySubunits, 'QUANTITY_OVERFLOW');
       } else {
-        totalPackSubunits += sale.quantitySubunits;
+        totalPackSubunits = checkedSafeIntegerAdd(totalPackSubunits, sale.quantitySubunits, 'QUANTITY_OVERFLOW');
       }
 
       const existing = skuMap.get(sale.lubeSkuId);
       if (existing) {
-        existing.quantitySubunits += sale.quantitySubunits;
+        existing.quantitySubunits = checkedSafeIntegerAdd(existing.quantitySubunits, sale.quantitySubunits, 'QUANTITY_OVERFLOW');
         existing.saleCount += 1;
-        existing.revenuePaise += sale.revenuePaise;
+        existing.revenuePaise = checkedSafeIntegerAdd(existing.revenuePaise, sale.revenuePaise, 'FINANCIAL_AMOUNT_OVERFLOW');
       } else {
         skuMap.set(sale.lubeSkuId, {
           lubeSkuId: sale.lubeSkuId,
@@ -414,7 +424,7 @@ export class LubeRepository {
     const sales = await this.db
       .select()
       .from(schema.lubeShiftSales)
-      .where(sql`${schema.lubeShiftSales.operationalShiftId} IN ${shiftIds}`);
+      .where(inArray(schema.lubeShiftSales.operationalShiftId, shiftIds));
 
     const shiftsWithSales = new Set(sales.map(s => s.operationalShiftId));
 
@@ -435,18 +445,18 @@ export class LubeRepository {
 
     for (const sale of sales) {
       const stockUnit = sale.stockUnit as LubeStockUnit;
-      totalRevenuePaise += sale.revenuePaise;
+      totalRevenuePaise = checkedSafeIntegerAdd(totalRevenuePaise, sale.revenuePaise, 'FINANCIAL_AMOUNT_OVERFLOW');
       if (stockUnit === 'LITRE') {
-        totalLitreSubunits += sale.quantitySubunits;
+        totalLitreSubunits = checkedSafeIntegerAdd(totalLitreSubunits, sale.quantitySubunits, 'QUANTITY_OVERFLOW');
       } else {
-        totalPackSubunits += sale.quantitySubunits;
+        totalPackSubunits = checkedSafeIntegerAdd(totalPackSubunits, sale.quantitySubunits, 'QUANTITY_OVERFLOW');
       }
 
       const existing = skuMap.get(sale.lubeSkuId);
       if (existing) {
-        existing.quantitySubunits += sale.quantitySubunits;
+        existing.quantitySubunits = checkedSafeIntegerAdd(existing.quantitySubunits, sale.quantitySubunits, 'QUANTITY_OVERFLOW');
         existing.saleCount += 1;
-        existing.revenuePaise += sale.revenuePaise;
+        existing.revenuePaise = checkedSafeIntegerAdd(existing.revenuePaise, sale.revenuePaise, 'FINANCIAL_AMOUNT_OVERFLOW');
       } else {
         skuMap.set(sale.lubeSkuId, {
           lubeSkuId: sale.lubeSkuId,

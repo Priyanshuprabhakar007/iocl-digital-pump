@@ -420,7 +420,7 @@ export class LubeService {
       throw new LubeError('LUBE_SKU_INACTIVE', 'Cannot record sales for an inactive SKU', 409);
     }
 
-    const quantitySubunits = parseLubeQuantity(sku.stockUnit, input.quantity);
+    const quantitySubunits = safeParseQuantity(sku.stockUnit, input.quantity, 'sale quantity');
     if (quantitySubunits <= 0) {
       throw new LubeError('VALIDATION_ERROR', 'Sale quantity must be greater than zero', 400);
     }
@@ -477,8 +477,20 @@ export class LubeService {
 
       return sale;
     } catch (err: any) {
+      if (err.message?.includes('SHIFT_CLOSED')) {
+        throw new LubeError('SHIFT_CLOSED', 'Cannot record lube sales on a non-open shift', 409);
+      }
       if (err.message?.includes('INSUFFICIENT_LUBE_STOCK')) {
         throw new LubeError('INSUFFICIENT_LUBE_STOCK', 'Insufficient stock to fulfill sale', 409);
+      }
+      if (err.message?.includes('LUBE_SKU_INACTIVE')) {
+        throw new LubeError('LUBE_SKU_INACTIVE', 'Cannot record sales for an inactive SKU', 409);
+      }
+      if (err.message?.includes('OUTLET_MISMATCH')) {
+        throw new LubeError('OUTLET_MISMATCH', 'SKU does not belong to the shift outlet', 400);
+      }
+      if (err.message?.includes('LUBE_SKU_NOT_FOUND')) {
+        throw new LubeError('LUBE_SKU_NOT_FOUND', 'Lube SKU not found', 404);
       }
       throw err;
     }
@@ -503,7 +515,7 @@ export class LubeService {
       throw new LubeError('SHIFT_CLOSED', 'Cannot update sale on a non-open shift', 409);
     }
 
-    const newQuantitySubunits = parseLubeQuantity(sale.stockUnit, input.quantity);
+    const newQuantitySubunits = safeParseQuantity(sale.stockUnit, input.quantity, 'sale quantity');
     if (newQuantitySubunits <= 0) {
       throw new LubeError('VALIDATION_ERROR', 'Sale quantity must be greater than zero', 400);
     }
@@ -544,6 +556,9 @@ export class LubeService {
 
       return updated;
     } catch (err: any) {
+      if (err.message?.includes('SHIFT_CLOSED')) {
+        throw new LubeError('SHIFT_CLOSED', 'Cannot update sale on a non-open shift', 409);
+      }
       if (err.message?.includes('INSUFFICIENT_LUBE_STOCK')) {
         throw new LubeError('INSUFFICIENT_LUBE_STOCK', 'Insufficient stock to fulfill updated sale quantity', 409);
       }
@@ -562,7 +577,14 @@ export class LubeService {
       throw new LubeError('SHIFT_CLOSED', 'Cannot delete sale on a non-open shift', 409);
     }
 
-    await this.lubeRepo.deleteShiftSale(saleId);
+    try {
+      await this.lubeRepo.deleteShiftSale(saleId);
+    } catch (err: any) {
+      if (err.message?.includes('SHIFT_CLOSED')) {
+        throw new LubeError('SHIFT_CLOSED', 'Cannot delete sale on a non-open shift', 409);
+      }
+      throw err;
+    }
 
     await this.auditRepo.logAction({
       id: crypto.randomUUID(),
@@ -582,10 +604,24 @@ export class LubeService {
       throw new LubeError('NOT_FOUND', 'Operational shift not found', 404);
     }
 
-    return this.lubeRepo.getShiftSummary(shiftId, shift.outletId, shift.businessDate);
+    try {
+      return await this.lubeRepo.getShiftSummary(shiftId, shift.outletId, shift.businessDate);
+    } catch (err: any) {
+      if (err.message === 'FINANCIAL_AMOUNT_OVERFLOW' || err.message === 'QUANTITY_OVERFLOW') {
+        throw new LubeError(err.message, 'Calculated summary amount exceeds safe maximum', 400);
+      }
+      throw err;
+    }
   }
 
   async getDailySummary(outletId: string, businessDate: string): Promise<LubeDailySummary> {
-    return this.lubeRepo.getDailySummary(outletId, businessDate);
+    try {
+      return await this.lubeRepo.getDailySummary(outletId, businessDate);
+    } catch (err: any) {
+      if (err.message === 'FINANCIAL_AMOUNT_OVERFLOW' || err.message === 'QUANTITY_OVERFLOW') {
+        throw new LubeError(err.message, 'Calculated summary amount exceeds safe maximum', 400);
+      }
+      throw err;
+    }
   }
 }

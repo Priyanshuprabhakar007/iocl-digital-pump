@@ -586,7 +586,7 @@ export const CreateLubeStockTransactionSchema = z.object({
   lubeSkuId: z.string().trim().min(1, 'Lube SKU ID is required'),
   transactionType: z.enum(['OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT']),
   quantity: z.string().trim().min(1, 'Quantity is required'),
-  occurredAt: z.string().trim().min(1, 'Occurred at timestamp is required'),
+  occurredAt: z.string().datetime({ offset: true, message: 'occurredAt must be a valid ISO-8601 timestamp with timezone' }),
   referenceNumber: z.string().trim().optional().nullable(),
   notes: z.string().trim().optional().nullable(),
 }).refine(data => {
@@ -602,13 +602,13 @@ export const CreateLubeStockTransactionSchema = z.object({
 export const CreateLubeShiftSaleSchema = z.object({
   lubeSkuId: z.string().trim().min(1, 'Lube SKU ID is required'),
   quantity: z.string().trim().min(1, 'Quantity is required'),
-  soldAt: z.string().trim().min(1, 'Sold at timestamp is required'),
+  soldAt: z.string().datetime({ offset: true, message: 'soldAt must be a valid ISO-8601 timestamp with timezone' }),
   notes: z.string().trim().optional().nullable(),
 });
 
 export const UpdateLubeShiftSaleSchema = z.object({
   quantity: z.string().trim().min(1, 'Quantity is required'),
-  soldAt: z.string().trim().min(1).optional(),
+  soldAt: z.string().datetime({ offset: true, message: 'soldAt must be a valid ISO-8601 timestamp with timezone' }).optional(),
   notes: z.string().trim().optional().nullable(),
 });
 

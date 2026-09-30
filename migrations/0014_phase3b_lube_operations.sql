@@ -134,11 +134,44 @@ BEGIN
     END;
 END;
 
--- Prevent Sale CREATE from exceeding current stock
+-- Prevent Sale CREATE from exceeding current stock or modifying closed shifts
 CREATE TRIGGER check_lube_stock_on_sale_insert
 BEFORE INSERT ON lube_shift_sales
 FOR EACH ROW
 BEGIN
+    -- 1. Operational shift must exist and be OPEN
+    SELECT CASE
+        WHEN NOT EXISTS (
+            SELECT 1 FROM operational_shifts
+            WHERE id = NEW.operational_shift_id AND status = 'OPEN'
+        ) THEN RAISE(ABORT, 'SHIFT_CLOSED')
+    END;
+
+    -- 2. Shift outlet must match sale outlet
+    SELECT CASE
+        WHEN NOT EXISTS (
+            SELECT 1 FROM operational_shifts
+            WHERE id = NEW.operational_shift_id AND outlet_id = NEW.outlet_id
+        ) THEN RAISE(ABORT, 'OUTLET_MISMATCH')
+    END;
+
+    -- 3. SKU must exist and belong to the same outlet
+    SELECT CASE
+        WHEN NOT EXISTS (
+            SELECT 1 FROM lube_skus
+            WHERE id = NEW.lube_sku_id AND outlet_id = NEW.outlet_id
+        ) THEN RAISE(ABORT, 'LUBE_SKU_NOT_FOUND')
+    END;
+
+    -- 4. SKU must be ACTIVE for new sales
+    SELECT CASE
+        WHEN NOT EXISTS (
+            SELECT 1 FROM lube_skus
+            WHERE id = NEW.lube_sku_id AND status = 'ACTIVE'
+        ) THEN RAISE(ABORT, 'LUBE_SKU_INACTIVE')
+    END;
+
+    -- 5. Stock sufficiency check
     SELECT CASE
         WHEN (
             (
@@ -163,14 +196,22 @@ BEGIN
     END;
 END;
 
--- Prevent Sale UPDATE from exceeding current stock
+-- Prevent Sale UPDATE from exceeding current stock or modifying non-open shifts
 CREATE TRIGGER check_lube_stock_on_sale_update
 BEFORE UPDATE ON lube_shift_sales
 FOR EACH ROW
-WHEN NEW.quantity_subunits != OLD.quantity_subunits
 BEGIN
+    -- 1. Operational shift must still be OPEN
     SELECT CASE
-        WHEN (
+        WHEN NOT EXISTS (
+            SELECT 1 FROM operational_shifts
+            WHERE id = OLD.operational_shift_id AND status = 'OPEN'
+        ) THEN RAISE(ABORT, 'SHIFT_CLOSED')
+    END;
+
+    -- 2. Stock sufficiency check if quantity changed
+    SELECT CASE
+        WHEN (NEW.quantity_subunits != OLD.quantity_subunits) AND (
             (
                 COALESCE((
                     SELECT SUM(CASE 
@@ -190,6 +231,19 @@ BEGIN
             ) < NEW.quantity_subunits
         )
         THEN RAISE(ABORT, 'INSUFFICIENT_LUBE_STOCK')
+    END;
+END;
+
+-- Prevent Sale DELETE on non-open shifts
+CREATE TRIGGER check_lube_stock_on_sale_delete
+BEFORE DELETE ON lube_shift_sales
+FOR EACH ROW
+BEGIN
+    SELECT CASE
+        WHEN NOT EXISTS (
+            SELECT 1 FROM operational_shifts
+            WHERE id = OLD.operational_shift_id AND status = 'OPEN'
+        ) THEN RAISE(ABORT, 'SHIFT_CLOSED')
     END;
 END;
 

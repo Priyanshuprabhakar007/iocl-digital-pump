@@ -90,3 +90,18 @@ export function calculateLubeRevenuePaise(unit: LubeStockUnit, quantitySubunits:
 
   throw new Error('INVALID_STOCK_UNIT');
 }
+
+export function checkedSafeIntegerAdd(
+  a: number,
+  b: number,
+  overflowError: 'FINANCIAL_AMOUNT_OVERFLOW' | 'QUANTITY_OVERFLOW' = 'FINANCIAL_AMOUNT_OVERFLOW'
+): number {
+  if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b)) {
+    throw new Error(overflowError);
+  }
+  const sum = BigInt(a) + BigInt(b);
+  if (sum > BigInt(Number.MAX_SAFE_INTEGER) || sum < -BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(overflowError);
+  }
+  return Number(sum);
+}

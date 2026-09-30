@@ -47,6 +47,34 @@ function handleLubeError(c: AppContext, err: any) {
       error: { code: err.code, message: err.message },
     }, err.status as any);
   }
+  if (err.message?.includes('SHIFT_CLOSED')) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'SHIFT_CLOSED', message: 'Shift is not open' },
+    }, 409);
+  }
+  if (err.message?.includes('INSUFFICIENT_LUBE_STOCK')) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'INSUFFICIENT_LUBE_STOCK', message: 'Insufficient lube stock' },
+    }, 409);
+  }
+  if (err.message?.includes('FINANCIAL_AMOUNT_OVERFLOW')) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'FINANCIAL_AMOUNT_OVERFLOW', message: 'Financial amount overflow' },
+    }, 400);
+  }
+  if (err.message?.includes('QUANTITY_OVERFLOW')) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'QUANTITY_OVERFLOW', message: 'Quantity overflow' },
+    }, 400);
+  }
   console.error('[Lube Operation Error]:', err);
   return c.json({
     success: false,

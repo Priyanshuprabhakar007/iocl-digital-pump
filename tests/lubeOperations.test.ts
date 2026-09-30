@@ -1186,13 +1186,15 @@ describe('Phase 3B-1 Lube & Auxiliary Inventory Core Backend Suite', () => {
     expect(sale.revenuePaise).toBe(20000);
     expect(sale.skuName).toBe('Original SKU Name');
 
-    // 1. Rename SKU
+    // 1. Rename SKU, change category, and set status to INACTIVE
     await app.fetch(
       new Request(`http://localhost/api/v1/lube/skus/${sku.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
         body: JSON.stringify({
           name: 'Renamed Brand New Name',
+          category: 'COOLANT',
+          status: 'INACTIVE',
         }),
       }),
       env
@@ -1221,7 +1223,10 @@ describe('Phase 3B-1 Lube & Auxiliary Inventory Core Backend Suite', () => {
     );
     const fetchedSales: any = ((await fetchedSaleRes.json()) as any).data;
     const historical = fetchedSales.find((s: any) => s.id === sale.id);
+    expect(historical.skuCode).toBe('SERVO-HIST-1');      // preserved
     expect(historical.skuName).toBe('Original SKU Name'); // preserved
+    expect(historical.category).toBe('ENGINE_OIL');       // preserved
+    expect(historical.stockUnit).toBe('PACK');            // preserved
     expect(historical.unitPricePaise).toBe(10000);        // preserved ₹100
     expect(historical.revenuePaise).toBe(20000);          // preserved ₹200
   });
@@ -1610,7 +1615,8 @@ describe('Phase 3B-1 Lube & Auxiliary Inventory Core Backend Suite', () => {
     });
 
     // Direct SQL insert of sale with 5 packs (exceeds stock 3) must be aborted by trigger!
-    expect(async () => {
+    let triggerErr: any;
+    try {
       await db.insert(schema.lubeShiftSales).values({
         id: 'sale-trig-bad',
         operationalShiftId: shiftId,
@@ -1628,6 +1634,2054 @@ describe('Phase 3B-1 Lube & Auxiliary Inventory Core Backend Suite', () => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-    }).toThrow();
+    } catch (e) {
+      triggerErr = e;
+    }
+    expect(triggerErr).toBeDefined();
+  });
+
+  // 10. CLOSED / CLOSING SHIFT API TESTS
+  it('33. sale CREATE on CLOSED shift returns 409 SHIFT_CLOSED and row not inserted', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftId = await openShift(cookie, 'ro-1001', '2026-10-15');
+
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-CLS-1',
+          name: 'Closed Shift Test 1',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '100.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '10',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    // Transition shift to CLOSED
+    const db = getDb(localD1);
+    await db.update(schema.operationalShifts).set({ status: 'CLOSED' }).where(eq(schema.operationalShifts.id, shiftId));
+
+    const saleRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          quantity: '1',
+          soldAt: '2026-10-15T12:00:00Z',
+        }),
+      }),
+      env
+    );
+    expect(saleRes.status).toBe(409);
+    const json: any = await saleRes.json();
+    expect(json.error.code).toBe('SHIFT_CLOSED');
+
+    const salesInDb = await db.select().from(schema.lubeShiftSales).where(eq(schema.lubeShiftSales.operationalShiftId, shiftId));
+    expect(salesInDb.length).toBe(0);
+  });
+
+  it('34. sale CREATE on CLOSING shift returns 409 SHIFT_CLOSED and row not inserted', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftId = await openShift(cookie, 'ro-1001', '2026-10-15');
+
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-CLS-2',
+          name: 'Closing Shift Test 2',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '100.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '10',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    // Transition shift to CLOSING
+    const db = getDb(localD1);
+    await db.update(schema.operationalShifts).set({ status: 'CLOSING' }).where(eq(schema.operationalShifts.id, shiftId));
+
+    const saleRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          quantity: '1',
+          soldAt: '2026-10-15T12:00:00Z',
+        }),
+      }),
+      env
+    );
+    expect(saleRes.status).toBe(409);
+    const json: any = await saleRes.json();
+    expect(json.error.code).toBe('SHIFT_CLOSED');
+
+    const salesInDb = await db.select().from(schema.lubeShiftSales).where(eq(schema.lubeShiftSales.operationalShiftId, shiftId));
+    expect(salesInDb.length).toBe(0);
+  });
+
+  it('35. sale UPDATE on CLOSED shift returns 409 SHIFT_CLOSED and row not updated', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftId = await openShift(cookie, 'ro-1001', '2026-10-15');
+
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-CLS-3',
+          name: 'Closed Shift Test 3',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '100.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '10',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    const saleRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          quantity: '2',
+          soldAt: '2026-10-15T09:00:00Z',
+        }),
+      }),
+      env
+    );
+    const sale: any = ((await saleRes.json()) as any).data;
+
+    // Transition shift to CLOSED
+    const db = getDb(localD1);
+    await db.update(schema.operationalShifts).set({ status: 'CLOSED' }).where(eq(schema.operationalShifts.id, shiftId));
+
+    const updateRes = await app.fetch(
+      new Request(`http://localhost/api/v1/lube-sales/${sale.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ quantity: '4' }),
+      }),
+      env
+    );
+    expect(updateRes.status).toBe(409);
+    const json: any = await updateRes.json();
+    expect(json.error.code).toBe('SHIFT_CLOSED');
+
+    const [saleInDb] = await db.select().from(schema.lubeShiftSales).where(eq(schema.lubeShiftSales.id, sale.id));
+    expect(saleInDb.quantitySubunits).toBe(2);
+  });
+
+  it('36. sale UPDATE on CLOSING shift returns 409 SHIFT_CLOSED and row not updated', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftId = await openShift(cookie, 'ro-1001', '2026-10-15');
+
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-CLS-4',
+          name: 'Closing Shift Test 4',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '100.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '10',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    const saleRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          quantity: '2',
+          soldAt: '2026-10-15T09:00:00Z',
+        }),
+      }),
+      env
+    );
+    const sale: any = ((await saleRes.json()) as any).data;
+
+    // Transition shift to CLOSING
+    const db = getDb(localD1);
+    await db.update(schema.operationalShifts).set({ status: 'CLOSING' }).where(eq(schema.operationalShifts.id, shiftId));
+
+    const updateRes = await app.fetch(
+      new Request(`http://localhost/api/v1/lube-sales/${sale.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ quantity: '4' }),
+      }),
+      env
+    );
+    expect(updateRes.status).toBe(409);
+    const json: any = await updateRes.json();
+    expect(json.error.code).toBe('SHIFT_CLOSED');
+
+    const [saleInDb] = await db.select().from(schema.lubeShiftSales).where(eq(schema.lubeShiftSales.id, sale.id));
+    expect(saleInDb.quantitySubunits).toBe(2);
+  });
+
+  it('37. sale DELETE on CLOSED shift returns 409 SHIFT_CLOSED and row not deleted', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftId = await openShift(cookie, 'ro-1001', '2026-10-15');
+
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-CLS-5',
+          name: 'Closed Shift Delete Test',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '100.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '10',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    const saleRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          quantity: '2',
+          soldAt: '2026-10-15T09:00:00Z',
+        }),
+      }),
+      env
+    );
+    const sale: any = ((await saleRes.json()) as any).data;
+
+    // Transition shift to CLOSED
+    const db = getDb(localD1);
+    await db.update(schema.operationalShifts).set({ status: 'CLOSED' }).where(eq(schema.operationalShifts.id, shiftId));
+
+    const delRes = await app.fetch(
+      new Request(`http://localhost/api/v1/lube-sales/${sale.id}`, {
+        method: 'DELETE',
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(delRes.status).toBe(409);
+    const json: any = await delRes.json();
+    expect(json.error.code).toBe('SHIFT_CLOSED');
+
+    const [saleInDb] = await db.select().from(schema.lubeShiftSales).where(eq(schema.lubeShiftSales.id, sale.id));
+    expect(saleInDb).toBeDefined();
+  });
+
+  it('38. sale DELETE on CLOSING shift returns 409 SHIFT_CLOSED and row not deleted', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftId = await openShift(cookie, 'ro-1001', '2026-10-15');
+
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-CLS-6',
+          name: 'Closing Shift Delete Test',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '100.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '10',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    const saleRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          quantity: '2',
+          soldAt: '2026-10-15T09:00:00Z',
+        }),
+      }),
+      env
+    );
+    const sale: any = ((await saleRes.json()) as any).data;
+
+    // Transition shift to CLOSING
+    const db = getDb(localD1);
+    await db.update(schema.operationalShifts).set({ status: 'CLOSING' }).where(eq(schema.operationalShifts.id, shiftId));
+
+    const delRes = await app.fetch(
+      new Request(`http://localhost/api/v1/lube-sales/${sale.id}`, {
+        method: 'DELETE',
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(delRes.status).toBe(409);
+    const json: any = await delRes.json();
+    expect(json.error.code).toBe('SHIFT_CLOSED');
+
+    const [saleInDb] = await db.select().from(schema.lubeShiftSales).where(eq(schema.lubeShiftSales.id, sale.id));
+    expect(saleInDb).toBeDefined();
+  });
+
+  // 11. WRITE-RACE DB TRIGGER TESTS
+  it('39. DB trigger rejects sale INSERT when shift transitioned to CLOSING', async () => {
+    const db = getDb(localD1);
+    const [adminUser] = await db.select().from(schema.users).limit(1);
+
+    const shiftId = 'shift-trig-closing-ins';
+    await db.insert(schema.operationalShifts).values({
+      id: shiftId,
+      outletId: 'ro-1001',
+      shiftTemplateId: 'st-ro1-1',
+      businessDate: '2026-10-15',
+      startedAt: new Date().toISOString(),
+      openedByUserId: adminUser.id,
+      status: 'CLOSING', // Non-open
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const skuId = 'sku-trig-closing-ins';
+    await db.insert(schema.lubeSkus).values({
+      id: skuId,
+      outletId: 'ro-1001',
+      skuCode: 'TRIG-CLS-INS',
+      name: 'Trigger Closing Insert SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      reorderThresholdSubunits: 1,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+    });
+
+    await db.insert(schema.lubeStockTransactions).values({
+      id: 'tx-trig-c1',
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      transactionType: 'RECEIPT',
+      quantitySubunits: 10,
+      occurredAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+      createdAt: new Date().toISOString(),
+    });
+
+    let insertErr: any;
+    try {
+      await db.insert(schema.lubeShiftSales).values({
+        id: 'sale-trig-closing',
+        operationalShiftId: shiftId,
+        outletId: 'ro-1001',
+        lubeSkuId: skuId,
+        skuCode: 'TRIG-CLS-INS',
+        skuName: 'Trigger Closing Insert SKU',
+        category: 'ENGINE_OIL',
+        stockUnit: 'PACK',
+        quantitySubunits: 2,
+        unitPricePaise: 10000,
+        revenuePaise: 20000,
+        soldAt: new Date().toISOString(),
+        recordedByUserId: adminUser.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      insertErr = e;
+    }
+    expect(insertErr).toBeDefined();
+  });
+
+  it('40. DB trigger rejects sale UPDATE when shift transitioned to CLOSING', async () => {
+    const db = getDb(localD1);
+    const [adminUser] = await db.select().from(schema.users).limit(1);
+
+    const shiftId = 'shift-trig-closing-upd';
+    await db.insert(schema.operationalShifts).values({
+      id: shiftId,
+      outletId: 'ro-1001',
+      shiftTemplateId: 'st-ro1-1',
+      businessDate: '2026-10-15',
+      startedAt: new Date().toISOString(),
+      openedByUserId: adminUser.id,
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const skuId = 'sku-trig-closing-upd';
+    await db.insert(schema.lubeSkus).values({
+      id: skuId,
+      outletId: 'ro-1001',
+      skuCode: 'TRIG-CLS-UPD',
+      name: 'Trigger Closing Update SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      reorderThresholdSubunits: 1,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+    });
+
+    await db.insert(schema.lubeStockTransactions).values({
+      id: 'tx-trig-u1',
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      transactionType: 'RECEIPT',
+      quantitySubunits: 10,
+      occurredAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+      createdAt: new Date().toISOString(),
+    });
+
+    const saleId = 'sale-trig-before-closing';
+    await db.insert(schema.lubeShiftSales).values({
+      id: saleId,
+      operationalShiftId: shiftId,
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      skuCode: 'TRIG-CLS-UPD',
+      skuName: 'Trigger Closing Update SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      quantitySubunits: 2,
+      unitPricePaise: 10000,
+      revenuePaise: 20000,
+      soldAt: new Date().toISOString(),
+      recordedByUserId: adminUser.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Shift transitions to CLOSING
+    await db.update(schema.operationalShifts).set({ status: 'CLOSING' }).where(eq(schema.operationalShifts.id, shiftId));
+
+    let updateErr: any;
+    try {
+      await db.update(schema.lubeShiftSales).set({ quantitySubunits: 4 }).where(eq(schema.lubeShiftSales.id, saleId));
+    } catch (e) {
+      updateErr = e;
+    }
+    expect(updateErr).toBeDefined();
+  });
+
+  it('41. DB trigger rejects sale DELETE when shift transitioned to CLOSING', async () => {
+    const db = getDb(localD1);
+    const [adminUser] = await db.select().from(schema.users).limit(1);
+
+    const shiftId = 'shift-trig-closing-del';
+    await db.insert(schema.operationalShifts).values({
+      id: shiftId,
+      outletId: 'ro-1001',
+      shiftTemplateId: 'st-ro1-1',
+      businessDate: '2026-10-15',
+      startedAt: new Date().toISOString(),
+      openedByUserId: adminUser.id,
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const skuId = 'sku-trig-closing-del';
+    await db.insert(schema.lubeSkus).values({
+      id: skuId,
+      outletId: 'ro-1001',
+      skuCode: 'TRIG-CLS-DEL',
+      name: 'Trigger Closing Delete SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      reorderThresholdSubunits: 1,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+    });
+
+    await db.insert(schema.lubeStockTransactions).values({
+      id: 'tx-trig-d1',
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      transactionType: 'RECEIPT',
+      quantitySubunits: 10,
+      occurredAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+      createdAt: new Date().toISOString(),
+    });
+
+    const saleId = 'sale-trig-del-test';
+    await db.insert(schema.lubeShiftSales).values({
+      id: saleId,
+      operationalShiftId: shiftId,
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      skuCode: 'TRIG-CLS-DEL',
+      skuName: 'Trigger Closing Delete SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      quantitySubunits: 2,
+      unitPricePaise: 10000,
+      revenuePaise: 20000,
+      soldAt: new Date().toISOString(),
+      recordedByUserId: adminUser.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Shift transitions to CLOSING
+    await db.update(schema.operationalShifts).set({ status: 'CLOSING' }).where(eq(schema.operationalShifts.id, shiftId));
+
+    let deleteErr: any;
+    try {
+      await db.delete(schema.lubeShiftSales).where(eq(schema.lubeShiftSales.id, saleId));
+    } catch (e) {
+      deleteErr = e;
+    }
+    expect(deleteErr).toBeDefined();
+  });
+
+  it('42. Two competing sale inserts cannot drive stock negative', async () => {
+    const db = getDb(localD1);
+    const [adminUser] = await db.select().from(schema.users).limit(1);
+
+    const shiftId = 'shift-trig-comp-ins';
+    await db.insert(schema.operationalShifts).values({
+      id: shiftId,
+      outletId: 'ro-1001',
+      shiftTemplateId: 'st-ro1-1',
+      businessDate: '2026-10-15',
+      startedAt: new Date().toISOString(),
+      openedByUserId: adminUser.id,
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const skuId = 'sku-trig-comp-ins';
+    await db.insert(schema.lubeSkus).values({
+      id: skuId,
+      outletId: 'ro-1001',
+      skuCode: 'TRIG-COMP-INS',
+      name: 'Comp Insert SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      reorderThresholdSubunits: 1,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+    });
+
+    // Stock: 5 packs
+    await db.insert(schema.lubeStockTransactions).values({
+      id: 'tx-trig-comp1',
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      transactionType: 'RECEIPT',
+      quantitySubunits: 5,
+      occurredAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Sale 1: 3 packs -> succeeds
+    await db.insert(schema.lubeShiftSales).values({
+      id: 'sale-comp-1',
+      operationalShiftId: shiftId,
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      skuCode: 'TRIG-COMP-INS',
+      skuName: 'Comp Insert SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      quantitySubunits: 3,
+      unitPricePaise: 10000,
+      revenuePaise: 30000,
+      soldAt: new Date().toISOString(),
+      recordedByUserId: adminUser.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Sale 2: 3 packs -> exceeds remaining 2 packs -> trigger aborts
+    let compErr: any;
+    try {
+      await db.insert(schema.lubeShiftSales).values({
+        id: 'sale-comp-2',
+        operationalShiftId: shiftId,
+        outletId: 'ro-1001',
+        lubeSkuId: skuId,
+        skuCode: 'TRIG-COMP-INS',
+        skuName: 'Comp Insert SKU',
+        category: 'ENGINE_OIL',
+        stockUnit: 'PACK',
+        quantitySubunits: 3,
+        unitPricePaise: 10000,
+        revenuePaise: 30000,
+        soldAt: new Date().toISOString(),
+        recordedByUserId: adminUser.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      compErr = e;
+    }
+    expect(compErr).toBeDefined();
+
+    // Verify stock is non-negative and exactly 2
+    const sales = await db.select().from(schema.lubeShiftSales).where(eq(schema.lubeShiftSales.lubeSkuId, skuId));
+    expect(sales.length).toBe(1);
+    expect(sales[0].quantitySubunits).toBe(3);
+  });
+
+  it('43. Sale update competing with another sale cannot drive stock negative', async () => {
+    const db = getDb(localD1);
+    const [adminUser] = await db.select().from(schema.users).limit(1);
+
+    const shiftId = 'shift-trig-comp-upd';
+    await db.insert(schema.operationalShifts).values({
+      id: shiftId,
+      outletId: 'ro-1001',
+      shiftTemplateId: 'st-ro1-1',
+      businessDate: '2026-10-15',
+      startedAt: new Date().toISOString(),
+      openedByUserId: adminUser.id,
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const skuId = 'sku-trig-comp-upd';
+    await db.insert(schema.lubeSkus).values({
+      id: skuId,
+      outletId: 'ro-1001',
+      skuCode: 'TRIG-COMP-UPD',
+      name: 'Comp Update SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      reorderThresholdSubunits: 1,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+    });
+
+    // 10 packs
+    await db.insert(schema.lubeStockTransactions).values({
+      id: 'tx-trig-comp-u',
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      transactionType: 'RECEIPT',
+      quantitySubunits: 10,
+      occurredAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Sale A: 4 packs
+    const saleAId = 'sale-comp-a';
+    await db.insert(schema.lubeShiftSales).values({
+      id: saleAId,
+      operationalShiftId: shiftId,
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      skuCode: 'TRIG-COMP-UPD',
+      skuName: 'Comp Update SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      quantitySubunits: 4,
+      unitPricePaise: 10000,
+      revenuePaise: 40000,
+      soldAt: new Date().toISOString(),
+      recordedByUserId: adminUser.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Sale B: 5 packs (remaining stock 1 pack)
+    await db.insert(schema.lubeShiftSales).values({
+      id: 'sale-comp-b',
+      operationalShiftId: shiftId,
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      skuCode: 'TRIG-COMP-UPD',
+      skuName: 'Comp Update SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      quantitySubunits: 5,
+      unitPricePaise: 10000,
+      revenuePaise: 50000,
+      soldAt: new Date().toISOString(),
+      recordedByUserId: adminUser.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Sale A tries to update to 8 packs (needs 4 more, but only 1 available)
+    let updateCompErr: any;
+    try {
+      await db.update(schema.lubeShiftSales).set({ quantitySubunits: 8 }).where(eq(schema.lubeShiftSales.id, saleAId));
+    } catch (e) {
+      updateCompErr = e;
+    }
+    expect(updateCompErr).toBeDefined();
+
+    const [saleA] = await db.select().from(schema.lubeShiftSales).where(eq(schema.lubeShiftSales.id, saleAId));
+    expect(saleA.quantitySubunits).toBe(4);
+  });
+
+  it('44. ADJUSTMENT_OUT competing with a sale cannot drive stock negative', async () => {
+    const db = getDb(localD1);
+    const [adminUser] = await db.select().from(schema.users).limit(1);
+
+    const shiftId = 'shift-trig-comp-adj';
+    await db.insert(schema.operationalShifts).values({
+      id: shiftId,
+      outletId: 'ro-1001',
+      shiftTemplateId: 'st-ro1-1',
+      businessDate: '2026-10-15',
+      startedAt: new Date().toISOString(),
+      openedByUserId: adminUser.id,
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const skuId = 'sku-trig-comp-adj';
+    await db.insert(schema.lubeSkus).values({
+      id: skuId,
+      outletId: 'ro-1001',
+      skuCode: 'TRIG-COMP-ADJ',
+      name: 'Comp Adj SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      reorderThresholdSubunits: 1,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+    });
+
+    // Stock: 6 packs
+    await db.insert(schema.lubeStockTransactions).values({
+      id: 'tx-trig-adj1',
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      transactionType: 'RECEIPT',
+      quantitySubunits: 6,
+      occurredAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Sale: 4 packs (remaining 2)
+    await db.insert(schema.lubeShiftSales).values({
+      id: 'sale-comp-adj',
+      operationalShiftId: shiftId,
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      skuCode: 'TRIG-COMP-ADJ',
+      skuName: 'Comp Adj SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      quantitySubunits: 4,
+      unitPricePaise: 10000,
+      revenuePaise: 40000,
+      soldAt: new Date().toISOString(),
+      recordedByUserId: adminUser.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // ADJUSTMENT_OUT tries to adjust out 5 packs (only 2 left)
+    let adjErr: any;
+    try {
+      await db.insert(schema.lubeStockTransactions).values({
+        id: 'tx-trig-excess',
+        outletId: 'ro-1001',
+        lubeSkuId: skuId,
+        transactionType: 'ADJUSTMENT_OUT',
+        quantitySubunits: 5,
+        occurredAt: new Date().toISOString(),
+        notes: 'Excessive out',
+        createdBy: adminUser.id,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      adjErr = e;
+    }
+    expect(adjErr).toBeDefined();
+  });
+
+  // 12 & 13. SHIFT & DAILY SUMMARIES
+  it('45. Shift summary returns exact bySku, separate Litre and Pack quantities and formatted revenue', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftId = await openShift(cookie, 'ro-1001', '2026-10-15');
+
+    // 1. Pack SKU
+    const packSkuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-SUMM-P',
+          name: 'Summary Pack SKU',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '2',
+        }),
+      }),
+      env
+    );
+    const packSku: any = ((await packSkuRes.json()) as any).data;
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: packSku.id,
+          pricePaisePerUnit: '300.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: packSku.id,
+          transactionType: 'RECEIPT',
+          quantity: '20',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    // 2. Litre SKU
+    const litreSkuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-SUMM-L',
+          name: 'Summary Litre SKU',
+          category: 'ENGINE_OIL',
+          stockUnit: 'LITRE',
+          reorderThreshold: '10.000',
+        }),
+      }),
+      env
+    );
+    const litreSku: any = ((await litreSkuRes.json()) as any).data;
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: litreSku.id,
+          pricePaisePerUnit: '400.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: litreSku.id,
+          transactionType: 'RECEIPT',
+          quantity: '50.000',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    // Record sales: 3 Packs @ ₹300 = ₹900 (90000 paise)
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: packSku.id,
+          quantity: '3',
+          soldAt: '2026-10-15T09:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    // Record sales: 2.500 Litres @ ₹400 = ₹1000 (100000 paise)
+    await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: litreSku.id,
+          quantity: '2.500',
+          soldAt: '2026-10-15T10:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    const summaryRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-summary`, {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(summaryRes.status).toBe(200);
+    const summary: any = ((await summaryRes.json()) as any).data;
+    expect(summary.operationalShiftId).toBe(shiftId);
+    expect(summary.outletId).toBe('ro-1001');
+    expect(summary.businessDate).toBe('2026-10-15');
+    expect(summary.totalRevenuePaise).toBe(190000);
+    expect(summary.totalRevenueStr).toBe('1900.00');
+    expect(summary.quantitiesByUnit.pack).toBe('3');
+    expect(summary.quantitiesByUnit.litre).toBe('2.500');
+    expect(summary.bySku.length).toBe(2);
+  });
+
+  it('46. Daily summary returns accurate data exercising inArray query across multiple shifts', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+
+    const shift1Id = 'shift-daily-1';
+    const shift2Id = 'shift-daily-2';
+    const otherDateShiftId = 'shift-daily-3';
+    const db = getDb(localD1);
+    const [adminUser] = await db.select().from(schema.users).limit(1);
+
+    const skuId = 'sku-daily-inarray';
+    await db.insert(schema.lubeSkus).values({
+      id: skuId,
+      outletId: 'ro-1001',
+      skuCode: 'SERVO-DAILY-IN',
+      name: 'Daily inArray Test SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      reorderThresholdSubunits: 1,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+    });
+
+    await db.insert(schema.lubeStockTransactions).values({
+      id: 'tx-daily-1',
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      transactionType: 'RECEIPT',
+      quantitySubunits: 100,
+      occurredAt: '2026-10-25T00:00:00Z',
+      createdBy: adminUser.id,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Shift 1: open -> insert sale -> close
+    await db.insert(schema.operationalShifts).values({
+      id: shift1Id,
+      outletId: 'ro-1001',
+      shiftTemplateId: 'st-ro1-1',
+      businessDate: '2026-10-25',
+      startedAt: '2026-10-25T06:00:00Z',
+      openedByUserId: adminUser.id,
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Sale in Shift 1: 2 packs @ ₹100 = ₹200 (20000 paise)
+    await db.insert(schema.lubeShiftSales).values({
+      id: 'sale-d-1',
+      operationalShiftId: shift1Id,
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      skuCode: 'SERVO-DAILY-IN',
+      skuName: 'Daily inArray Test SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      quantitySubunits: 2,
+      unitPricePaise: 10000,
+      revenuePaise: 20000,
+      soldAt: '2026-10-25T08:00:00Z',
+      recordedByUserId: adminUser.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await db.update(schema.operationalShifts).set({ status: 'CLOSED' }).where(eq(schema.operationalShifts.id, shift1Id));
+
+    // Shift 2: open -> insert sale -> close
+    await db.insert(schema.operationalShifts).values({
+      id: shift2Id,
+      outletId: 'ro-1001',
+      shiftTemplateId: 'st-ro1-2',
+      businessDate: '2026-10-25',
+      startedAt: '2026-10-25T14:00:00Z',
+      openedByUserId: adminUser.id,
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Sale in Shift 2: 3 packs @ ₹100 = ₹300 (30000 paise)
+    await db.insert(schema.lubeShiftSales).values({
+      id: 'sale-d-2',
+      operationalShiftId: shift2Id,
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      skuCode: 'SERVO-DAILY-IN',
+      skuName: 'Daily inArray Test SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      quantitySubunits: 3,
+      unitPricePaise: 10000,
+      revenuePaise: 30000,
+      soldAt: '2026-10-25T16:00:00Z',
+      recordedByUserId: adminUser.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await db.update(schema.operationalShifts).set({ status: 'CLOSED' }).where(eq(schema.operationalShifts.id, shift2Id));
+
+    // Shift on other date: open -> insert sale -> close
+    await db.insert(schema.operationalShifts).values({
+      id: otherDateShiftId,
+      outletId: 'ro-1001',
+      shiftTemplateId: 'st-ro1-1',
+      businessDate: '2026-10-26', // different date!
+      startedAt: '2026-10-26T06:00:00Z',
+      openedByUserId: adminUser.id,
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Sale on other date: 10 packs @ ₹100 = ₹1000 (must be excluded)
+    await db.insert(schema.lubeShiftSales).values({
+      id: 'sale-d-3-other',
+      operationalShiftId: otherDateShiftId,
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      skuCode: 'SERVO-DAILY-IN',
+      skuName: 'Daily inArray Test SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      quantitySubunits: 10,
+      unitPricePaise: 10000,
+      revenuePaise: 100000,
+      soldAt: '2026-10-26T08:00:00Z',
+      recordedByUserId: adminUser.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const res = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/daily-summary?businessDate=2026-10-25', {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(res.status).toBe(200);
+    const summary: any = ((await res.json()) as any).data;
+    expect(summary.shiftCountWithLubeSales).toBe(2);
+    expect(summary.saleLineCount).toBe(2);
+    expect(summary.totalRevenuePaise).toBe(50000); // 20000 + 30000
+    expect(summary.totalRevenueStr).toBe('500.00');
+    expect(summary.quantitiesByUnit.pack).toBe('5');
+    expect(summary.quantitiesByUnit.litre).toBe('0.000');
+  });
+
+  it('47. Daily summary returns empty zero summary when no shifts exist for the business date', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const res = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/daily-summary?businessDate=2025-01-01', {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(res.status).toBe(200);
+    const summary: any = ((await res.json()) as any).data;
+    expect(summary.shiftCountWithLubeSales).toBe(0);
+    expect(summary.saleLineCount).toBe(0);
+    expect(summary.totalRevenuePaise).toBe(0);
+    expect(summary.totalRevenueStr).toBe('0.00');
+    expect(summary.quantitiesByUnit.litre).toBe('0.000');
+    expect(summary.quantitiesByUnit.pack).toBe('0');
+    expect(summary.bySku).toEqual([]);
+  });
+
+  it('48. Summary fails with FINANCIAL_AMOUNT_OVERFLOW when aggregate revenue exceeds MAX_SAFE_INTEGER', async () => {
+    const db = getDb(localD1);
+    const [adminUser] = await db.select().from(schema.users).limit(1);
+
+    const shiftId = 'shift-overflow-test';
+    await db.insert(schema.operationalShifts).values({
+      id: shiftId,
+      outletId: 'ro-1001',
+      shiftTemplateId: 'st-ro1-1',
+      businessDate: '2026-10-30',
+      startedAt: new Date().toISOString(),
+      openedByUserId: adminUser.id,
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const skuId = 'sku-overflow';
+    await db.insert(schema.lubeSkus).values({
+      id: skuId,
+      outletId: 'ro-1001',
+      skuCode: 'SERVO-OVERFLOW',
+      name: 'Overflow Test SKU',
+      category: 'ENGINE_OIL',
+      stockUnit: 'PACK',
+      reorderThresholdSubunits: 1,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+    });
+
+    await db.insert(schema.lubeStockTransactions).values({
+      id: 'tx-ov-init',
+      outletId: 'ro-1001',
+      lubeSkuId: skuId,
+      transactionType: 'OPENING_BALANCE',
+      quantitySubunits: 100,
+      occurredAt: new Date().toISOString(),
+      createdBy: adminUser.id,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Two sales that each have safe integers, but together exceed MAX_SAFE_INTEGER
+    await db.insert(schema.lubeShiftSales).values([
+      {
+        id: 'sale-ov-1',
+        operationalShiftId: shiftId,
+        outletId: 'ro-1001',
+        lubeSkuId: skuId,
+        skuCode: 'SERVO-OVERFLOW',
+        skuName: 'Overflow Test SKU',
+        category: 'ENGINE_OIL',
+        stockUnit: 'PACK',
+        quantitySubunits: 1,
+        unitPricePaise: 100,
+        revenuePaise: Number.MAX_SAFE_INTEGER - 100,
+        soldAt: new Date().toISOString(),
+        recordedByUserId: adminUser.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        id: 'sale-ov-2',
+        operationalShiftId: shiftId,
+        outletId: 'ro-1001',
+        lubeSkuId: skuId,
+        skuCode: 'SERVO-OVERFLOW',
+        skuName: 'Overflow Test SKU',
+        category: 'ENGINE_OIL',
+        stockUnit: 'PACK',
+        quantitySubunits: 1,
+        unitPricePaise: 100,
+        revenuePaise: 200,
+        soldAt: new Date().toISOString(),
+        recordedByUserId: adminUser.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftSummaryRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-summary`, {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(shiftSummaryRes.status).toBe(400);
+    const json: any = await shiftSummaryRes.json();
+    expect(json.error.code).toBe('FINANCIAL_AMOUNT_OVERFLOW');
+
+    const dailySummaryRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/daily-summary?businessDate=2026-10-30', {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(dailySummaryRes.status).toBe(400);
+    const dailyJson: any = await dailySummaryRes.json();
+    expect(dailyJson.error.code).toBe('FINANCIAL_AMOUNT_OVERFLOW');
+  });
+
+  // 14. LOW STOCK ENDPOINT
+  it('49. Low stock endpoint includes items at or below threshold and excludes items above threshold', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+
+    // SKU 1: threshold 5, stock 3 (< 5) -> included
+    const sku1Res = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-LOW-BELOW',
+          name: 'Below Threshold SKU',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '5',
+        }),
+      }),
+      env
+    );
+    const sku1: any = ((await sku1Res.json()) as any).data;
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku1.id,
+          transactionType: 'RECEIPT',
+          quantity: '3',
+          occurredAt: '2026-10-01T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    // SKU 2: threshold 5, stock 5 (== 5) -> included
+    const sku2Res = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-LOW-EQUAL',
+          name: 'Equal Threshold SKU',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '5',
+        }),
+      }),
+      env
+    );
+    const sku2: any = ((await sku2Res.json()) as any).data;
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku2.id,
+          transactionType: 'RECEIPT',
+          quantity: '5',
+          occurredAt: '2026-10-01T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    // SKU 3: threshold 5, stock 8 (> 5) -> excluded
+    const sku3Res = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-LOW-ABOVE',
+          name: 'Above Threshold SKU',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '5',
+        }),
+      }),
+      env
+    );
+    const sku3: any = ((await sku3Res.json()) as any).data;
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku3.id,
+          transactionType: 'RECEIPT',
+          quantity: '8',
+          occurredAt: '2026-10-01T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    const lowStockRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/low-stock', {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(lowStockRes.status).toBe(200);
+    const items: any[] = ((await lowStockRes.json()) as any).data;
+    const ids = items.map(i => i.lubeSkuId);
+    expect(ids).toContain(sku1.id);
+    expect(ids).toContain(sku2.id);
+    expect(ids).not.toContain(sku3.id);
+  });
+
+  it('50. Low stock endpoint excludes INACTIVE SKUs even if stock is below threshold', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-LOW-INACT',
+          name: 'Inactive Low Stock SKU',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '10',
+          status: 'INACTIVE',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    const lowStockRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/low-stock', {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(lowStockRes.status).toBe(200);
+    const items: any[] = ((await lowStockRes.json()) as any).data;
+    const found = items.some(i => i.lubeSkuId === sku.id);
+    expect(found).toBe(false);
+  });
+
+  // 15 & 16. RBAC & SCOPE TESTS
+  it('51. CSP and Dealer can mutate inventory and sales in own outlet, but cannot configure prices (403)', async () => {
+    // Dealer on ro-1001
+    const { cookie: dealerCookie } = await loginAs('dealer.parkstreet@iocl.in');
+
+    // 1. Dealer reads SKU
+    const readRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        headers: { Cookie: dealerCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(readRes.status).toBe(200);
+
+    // 2. Dealer creates SKU in own outlet -> allowed
+    const createSkuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-DEALER-1',
+          name: 'Dealer Created SKU',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '5',
+        }),
+      }),
+      env
+    );
+    expect(createSkuRes.status).toBe(201);
+    const sku: any = ((await createSkuRes.json()) as any).data;
+
+    // 3. Dealer tries to configure Price -> FORBIDDEN (403)
+    const priceRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '150.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+    expect(priceRes.status).toBe(403);
+
+    // 4. CSP on ro-1001
+    const { cookie: cspCookie } = await loginAs('csp.parkstreet@iocl.in');
+    const cspPriceRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cspCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '150.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+    expect(cspPriceRes.status).toBe(403);
+
+    // 5. Dealer tries to mutate SKU on other outlet (ro-1002) -> 403
+    const otherOutletRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1002/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-DEALER-OTHER',
+          name: 'Other Outlet SKU',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '5',
+        }),
+      }),
+      env
+    );
+    expect(otherOutletRes.status).toBe(403);
+  });
+
+  it('52. State Office, Divisional Office, BM, FO can read but cannot mutate lube inventory or sales (403)', async () => {
+    const { cookie: soCookie } = await loginAs('wbso@iocl.in');
+
+    // SO can read
+    const readRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        headers: { Cookie: soCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(readRes.status).toBe(200);
+
+    // SO cannot create SKU (lube_inventory.write forbidden)
+    const writeSkuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: soCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-SO-WRITE',
+          name: 'SO Write Test',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    expect(writeSkuRes.status).toBe(403);
+
+    // SO cannot record sale (lube_sales.write forbidden)
+    const saleRes = await app.fetch(
+      new Request('http://localhost/api/v1/shifts/non-existent-shift/lube-sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: soCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: 'any-sku',
+          quantity: '1',
+          soldAt: '2026-10-15T10:00:00Z',
+        }),
+      }),
+      env
+    );
+    expect(saleRes.status).toBe(403);
+
+    // DO user
+    const { cookie: doCookie } = await loginAs('kolkatado@iocl.in');
+    const doReadRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        headers: { Cookie: doCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(doReadRes.status).toBe(200);
+
+    const doWriteRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: doCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-DO-WRITE',
+          name: 'DO Write Test',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    expect(doWriteRes.status).toBe(403);
+  });
+
+  it('53. Price write scope: Admin creates price in accessible outlet, unauthorized cross-outlet attempt fails with 403', async () => {
+    const { cookie: adminCookie } = await loginAs('admin@iocl.in');
+
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-PRICE-SCOPE',
+          name: 'Price Scope SKU',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    // Admin creates price for ro-1001 -> 201
+    const priceRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '120.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+    expect(priceRes.status).toBe(201);
+
+    // User without authority over ro-1001 cannot configure prices
+    const { cookie: dealerCookie } = await loginAs('dealer.parkstreet@iocl.in');
+    const unauthorizedRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '150.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+    expect(unauthorizedRes.status).toBe(403);
+  });
+
+  // 17. AUDIT COVERAGE
+  it('54. Audit trail captures LUBE_SKU_UPDATE, LUBE_PRICE_UPDATE, LUBE_SALE_UPDATE, and LUBE_SALE_DELETE with exact values', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftId = await openShift(cookie, 'ro-1001', '2026-10-15');
+
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-AUDIT-ALL',
+          name: 'Audit Full Test',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    // 1. LUBE_SKU_UPDATE
+    await app.fetch(
+      new Request(`http://localhost/api/v1/lube/skus/${sku.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ name: 'Updated Audit SKU Name' }),
+      }),
+      env
+    );
+
+    // Create price
+    const priceRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '100.00',
+          effectiveFrom: '2026-10-01',
+        }),
+      }),
+      env
+    );
+    const price: any = ((await priceRes.json()) as any).data;
+
+    // 2. LUBE_PRICE_UPDATE
+    await app.fetch(
+      new Request(`http://localhost/api/v1/lube/prices/${price.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ effectiveTo: '2026-10-25' }),
+      }),
+      env
+    );
+
+    // Stock receipt
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '10',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+
+    // Create sale
+    const saleRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          quantity: '2',
+          soldAt: '2026-10-15T09:00:00Z',
+        }),
+      }),
+      env
+    );
+    const sale: any = ((await saleRes.json()) as any).data;
+
+    // 3. LUBE_SALE_UPDATE
+    await app.fetch(
+      new Request(`http://localhost/api/v1/lube-sales/${sale.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ quantity: '4' }),
+      }),
+      env
+    );
+
+    // 4. LUBE_SALE_DELETE
+    await app.fetch(
+      new Request(`http://localhost/api/v1/lube-sales/${sale.id}`, {
+        method: 'DELETE',
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+
+    const db = getDb(localD1);
+    const logs = await db.select().from(schema.auditLogs);
+    const actions = logs.map(l => l.action);
+    expect(actions).toContain('LUBE_SKU_UPDATE');
+    expect(actions).toContain('LUBE_PRICE_UPDATE');
+    expect(actions).toContain('LUBE_SALE_UPDATE');
+    expect(actions).toContain('LUBE_SALE_DELETE');
+  });
+
+  // 18. VALIDATION COVERAGE
+  it('55. Validation coverage: rejects numeric quantities, scientific notation, negative values, and zero quantities', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftId = await openShift(cookie, 'ro-1001', '2026-10-15');
+
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-VAL-QTY',
+          name: 'Validation Quantity Test',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    // A. Numeric quantity instead of string
+    const numRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: 10, // number, not string
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+    expect(numRes.status).toBe(400);
+
+    // B. Scientific notation
+    const sciRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '1e2',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+    expect(sciRes.status).toBe(400);
+
+    // C. Negative quantity
+    const negRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '-5',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+    expect(negRes.status).toBe(400);
+
+    // D. Zero stock movement
+    const zeroTxRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '0',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+    expect(zeroTxRes.status).toBe(400);
+
+    // E. Zero sale quantity
+    const zeroSaleRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          quantity: '0',
+          soldAt: '2026-10-15T09:00:00Z',
+        }),
+      }),
+      env
+    );
+    expect(zeroSaleRes.status).toBe(400);
+
+    // F. PACK fractional value
+    const packFracRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '2.5',
+          occurredAt: '2026-10-15T08:00:00Z',
+        }),
+      }),
+      env
+    );
+    expect(packFracRes.status).toBe(400);
+  });
+
+  it('56. Validation coverage: rejects invalid occurredAt, invalid soldAt, blank SKU codes, blank names, and reversed dates', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const shiftId = await openShift(cookie, 'ro-1001', '2026-10-15');
+
+    // A. Blank SKU code
+    const blankCodeRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: '   ',
+          name: 'Blank Code Test',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    expect(blankCodeRes.status).toBe(400);
+
+    // B. Blank SKU name
+    const blankNameRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-BLANK-N',
+          name: '   ',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    expect(blankNameRes.status).toBe(400);
+
+    // Valid SKU for subsequent tests
+    const skuRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/skus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          skuCode: 'SERVO-VAL-DATES',
+          name: 'Validation Dates SKU',
+          category: 'ENGINE_OIL',
+          stockUnit: 'PACK',
+          reorderThreshold: '1',
+        }),
+      }),
+      env
+    );
+    const sku: any = ((await skuRes.json()) as any).data;
+
+    // C. Reversed dates: effectiveTo earlier than effectiveFrom
+    const revDateRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          pricePaisePerUnit: '100.00',
+          effectiveFrom: '2026-10-15',
+          effectiveTo: '2026-10-10',
+        }),
+      }),
+      env
+    );
+    expect(revDateRes.status).toBe(400);
+
+    // D. Invalid occurredAt timestamp
+    const invalidOccurredRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/lube/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          transactionType: 'RECEIPT',
+          quantity: '5',
+          occurredAt: 'not-a-valid-timestamp',
+        }),
+      }),
+      env
+    );
+    expect(invalidOccurredRes.status).toBe(400);
+
+    // E. Invalid soldAt timestamp
+    const invalidSoldRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/lube-sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          lubeSkuId: sku.id,
+          quantity: '1',
+          soldAt: 'yesterday',
+        }),
+      }),
+      env
+    );
+    expect(invalidSoldRes.status).toBe(400);
   });
 });
+
