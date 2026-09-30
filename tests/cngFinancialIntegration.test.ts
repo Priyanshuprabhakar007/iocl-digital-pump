@@ -432,7 +432,7 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(salesRev.pendingComponents).not.toContain('CNG');
   });
 
-  it('CNG Snapshot without log (State C): cngApplicable=true, cngComplete=false, pending components has CNG and LUBE', async () => {
+  it('CNG Snapshot without log (State C): CNG pending, LUBE included', async () => {
     const { cookie } = await loginAs();
     const db = getDb(localD1);
     await db.delete(schema.outletProductPrices).where(and(eq(schema.outletProductPrices.outletId, 'ro-1001'), eq(schema.outletProductPrices.productId, 'prod-cng')));
@@ -856,7 +856,7 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     expect(reconcil).toBeDefined();
     expect(reconcil.fuelSalesRevenuePaise).toBe(0);
     expect(reconcil.cngSalesRevenuePaise).toBe(85500);
-    expect(reconcil.lubeSalesRevenuePaise).toBeNull();
+    expect(reconcil.lubeSalesRevenuePaise).toBe(0);
     expect(reconcil.authoritativeSalesRevenuePaise).toBe(85500);
   });
 
