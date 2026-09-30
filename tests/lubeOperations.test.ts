@@ -1555,18 +1555,42 @@ describe('Phase 3B-1 Lube & Auxiliary Inventory Core Backend Suite', () => {
 
     // Direct SQL insert of ADJUSTMENT_OUT exceeding stock (e.g. 10 packs) must be aborted by trigger!
     await expect(
-      db.insert(schema.lubeStockTransactions).values({
-        id: 'tx-trig-bad',
-        outletId: 'ro-1001',
-        lubeSkuId: skuId,
-        transactionType: 'ADJUSTMENT_OUT',
-        quantitySubunits: 10,
-        occurredAt: new Date().toISOString(),
-        notes: 'Excessive adjustment',
-        createdBy: adminUser.id,
-        createdAt: new Date().toISOString(),
-      })
-    ).rejects.toThrow();
+      (async () => {
+        await db.insert(schema.lubeStockTransactions).values({
+          id: 'tx-trig-bad',
+          outletId: 'ro-1001',
+          lubeSkuId: skuId,
+          transactionType: 'ADJUSTMENT_OUT',
+          quantitySubunits: 10,
+          occurredAt: new Date().toISOString(),
+          notes: 'Excessive adjustment',
+          createdBy: adminUser.id,
+          createdAt: new Date().toISOString(),
+        });
+      })()
+    ).rejects.toThrow(/Failed query: insert into "lube_stock_transactions"/);
+
+    // Verify no invalid row was created
+    const badRows = await db
+      .select()
+      .from(schema.lubeStockTransactions)
+      .where(eq(schema.lubeStockTransactions.id, 'tx-trig-bad'));
+    expect(badRows).toHaveLength(0);
+
+    // Verify stock is still the original 5 subunits
+    const txs = await db
+      .select()
+      .from(schema.lubeStockTransactions)
+      .where(eq(schema.lubeStockTransactions.lubeSkuId, skuId));
+    let totalStock = 0;
+    for (const tx of txs) {
+      if (tx.transactionType === 'ADJUSTMENT_OUT') {
+        totalStock -= tx.quantitySubunits;
+      } else {
+        totalStock += tx.quantitySubunits;
+      }
+    }
+    expect(totalStock).toBe(5);
   });
 
   it('32. SQLite trigger aborts direct sale insert exceeding stock', async () => {
