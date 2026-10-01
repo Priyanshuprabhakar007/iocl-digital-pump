@@ -1,4 +1,4 @@
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc, asc } from 'drizzle-orm';
 import { AppDatabase } from '../../db';
 import { equipmentAssets, equipmentBreakdownTickets, equipmentBreakdownEvents, dispensers } from '../../db/schema';
 import { EquipmentAsset, EquipmentBreakdownTicket, EquipmentBreakdownEvent, TicketStatus } from '../../shared/types';
@@ -52,11 +52,12 @@ export class EquipmentRepository {
     }).returning().get();
   }
 
-  async updateTicketStatus(id: string, status: TicketStatus, updates: Partial<EquipmentBreakdownTicket>) {
-    return await this.db.update(equipmentBreakdownTickets)
+  async updateTicketStatusConditional(id: string, expectedStatus: TicketStatus, status: TicketStatus, updates: Partial<EquipmentBreakdownTicket>) {
+    const res = await this.db.update(equipmentBreakdownTickets)
       .set({ status, ...updates, updatedAt: new Date().toISOString() })
-      .where(and(eq(equipmentBreakdownTickets.id, id), sql`status != ${status}`))
+      .where(and(eq(equipmentBreakdownTickets.id, id), eq(equipmentBreakdownTickets.status, expectedStatus)))
       .returning().get();
+    return res;
   }
 
   async createEvent(event: Omit<EquipmentBreakdownEvent, 'id' | 'createdAt'>) {
@@ -68,10 +69,14 @@ export class EquipmentRepository {
   }
 
   async listEvents(ticketId: string) {
-    return await this.db.select().from(equipmentBreakdownEvents).where(eq(equipmentBreakdownEvents.ticketId, ticketId)).orderBy(equipmentBreakdownEvents.createdAt).all();
+    return await this.db.select().from(equipmentBreakdownEvents).where(eq(equipmentBreakdownEvents.ticketId, ticketId)).orderBy(asc(equipmentBreakdownEvents.createdAt)).all();
   }
   
   async getDispenserById(id: string) {
     return await this.db.select().from(dispensers).where(eq(dispensers.id, id)).get();
+  }
+
+  async listDispensers(outletId: string) {
+    return await this.db.select().from(dispensers).where(eq(dispensers.outletId, outletId)).all();
   }
 }

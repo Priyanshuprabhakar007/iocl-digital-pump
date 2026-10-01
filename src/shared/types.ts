@@ -1047,13 +1047,14 @@ export interface LubeDailySummary {
   };
 }
 
-export type EquipmentCategory = 'DISPENSER' | 'ATG' | 'AIR_COMPRESSOR' | 'CNG_COMPRESSOR' | 'DG_SET' | 'OTHER';
+export type EquipmentAssetCategory = 'ATG' | 'AIR_COMPRESSOR' | 'CNG_COMPRESSOR' | 'DG_SET' | 'OTHER';
+export type EquipmentType = 'DISPENSER' | EquipmentAssetCategory;
 
 export interface EquipmentAsset {
   id: string;
   outletId: string;
   assetCode: string;
-  equipmentType: EquipmentCategory;
+  equipmentType: EquipmentAssetCategory;
   name: string;
   manufacturer: string | null;
   model: string | null;

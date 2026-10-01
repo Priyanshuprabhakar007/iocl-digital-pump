@@ -806,6 +806,10 @@ export const equipmentAssets = sqliteTable('equipment_assets', {
   index('idx_eq_assets_outlet_id').on(table.outletId),
   index('idx_eq_assets_type').on(table.equipmentType),
   index('idx_eq_assets_status').on(table.status),
+  check('eq_assets_type_check', sql`${table.equipmentType} IN ('ATG', 'AIR_COMPRESSOR', 'CNG_COMPRESSOR', 'DG_SET', 'OTHER')`),
+  check('eq_assets_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE', 'MAINTENANCE', 'DECOMMISSIONED')`),
+  check('eq_assets_code_check', sql`trim(${table.assetCode}) <> ''`),
+  check('eq_assets_name_check', sql`trim(${table.name}) <> ''`),
 ]);
 
 export const equipmentBreakdownTickets = sqliteTable('equipment_breakdown_tickets', {
@@ -842,7 +846,15 @@ export const equipmentBreakdownTickets = sqliteTable('equipment_breakdown_ticket
   index('idx_eq_tickets_dispenser_id').on(table.dispenserId),
   index('idx_eq_tickets_asset_id').on(table.equipmentAssetId),
   index('idx_eq_tickets_status').on(table.status),
+  index('idx_eq_tickets_priority').on(table.priority),
+  index('idx_eq_tickets_breakdown_at').on(table.breakdownAt),
   check('eq_tickets_target_check', sql`(${table.dispenserId} IS NOT NULL AND ${table.equipmentAssetId} IS NULL) OR (${table.dispenserId} IS NULL AND ${table.equipmentAssetId} IS NOT NULL)`),
+  check('eq_tickets_type_check', sql`${table.equipmentTypeSnapshot} IN ('DISPENSER', 'ATG', 'AIR_COMPRESSOR', 'CNG_COMPRESSOR', 'DG_SET', 'OTHER')`),
+  check('eq_tickets_priority_check', sql`${table.priority} IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')`),
+  check('eq_tickets_cat_check', sql`${table.failureCategory} IN ('ELECTRICAL', 'MECHANICAL', 'ELECTRONICS', 'COMMUNICATION', 'CALIBRATION', 'PRESSURE', 'LEAKAGE', 'POWER', 'SOFTWARE', 'OTHER')`),
+  check('eq_tickets_status_check', sql`${table.status} IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED')`),
+  check('eq_tickets_desc_check', sql`trim(${table.description}) <> ''`),
+  check('eq_tickets_downtime_check', sql`${table.downtimeSeconds} IS NULL OR ${table.downtimeSeconds} >= 0`),
 ]);
 
 export const equipmentBreakdownEvents = sqliteTable('equipment_breakdown_events', {

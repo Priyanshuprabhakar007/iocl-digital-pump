@@ -1,7 +1,15 @@
 import { EquipmentRepository } from '../repositories/equipmentRepository';
 import { AuditRepository } from '../repositories/auditRepository';
 import { AppDatabase } from '../../db';
-import { CreateEquipmentAssetSchema, CreateEquipmentTicketSchema } from '../../shared/validators';
+import { 
+  CreateEquipmentAssetSchema, 
+  UpdateEquipmentAssetSchema, 
+  CreateEquipmentTicketSchema,
+  AssignTicketSchema,
+  ResolveTicketSchema,
+  SignoffTicketSchema,
+  CancelTicketSchema
+} from '../../shared/validators';
 import { EquipmentAsset, EquipmentBreakdownTicket, TicketStatus } from '../../shared/types';
 
 export class EquipmentError extends Error {
@@ -40,6 +48,71 @@ export class EquipmentService {
     return asset;
   }
 
+  async updateAsset(assetId: string, userId: string, data: any) {
+    const validated = UpdateEquipmentAssetSchema.parse(data);
+    const repo = new EquipmentRepository(this.db);
+    const existing = await repo.getAssetById(assetId);
+    if (!existing) throw new EquipmentError('EQUIPMENT_ASSET_NOT_FOUND', 'Asset not found', 404);
+
+    const updated = await repo.updateAsset(assetId, {
+      ...validated,
+      manufacturer: validated.manufacturer !== undefined ? validated.manufacturer : existing.manufacturer,
+      model: validated.model !== undefined ? validated.model : existing.model,
+      serialNumber: validated.serialNumber !== undefined ? validated.serialNumber : existing.serialNumber,
+      status: validated.status !== undefined ? validated.status : (existing.status as any),
+      commissionedAt: validated.commissionedAt !== undefined ? validated.commissionedAt : existing.commissionedAt,
+      notes: validated.notes !== undefined ? validated.notes : existing.notes,
+    });
+
+    await new AuditRepository(this.db).logAction({
+        id: crypto.randomUUID(),
+        userId,
+        action: 'EQUIPMENT_ASSET_UPDATE',
+        entityType: 'EQUIPMENT_ASSET',
+        entityId: assetId,
+        oldValue: existing as any,
+        newValue: updated as any,
+        createdAt: new Date().toISOString()
+    });
+    return updated;
+  }
+
+  async listTargets(outletId: string) {
+    const repo = new EquipmentRepository(this.db);
+    const dispensers = await repo.listDispensers(outletId);
+    const assets = await repo.listAssets(outletId);
+
+    const targets: Array<{
+      targetType: "DISPENSER" | "ASSET";
+      targetId: string;
+      equipmentType: string;
+      label: string;
+      status: string;
+    }> = [];
+
+    for (const d of dispensers) {
+      targets.push({
+        targetType: 'DISPENSER',
+        targetId: d.id,
+        equipmentType: 'DISPENSER',
+        label: d.name,
+        status: d.status,
+      });
+    }
+
+    for (const a of assets) {
+      targets.push({
+        targetType: 'ASSET',
+        targetId: a.id,
+        equipmentType: a.equipmentType,
+        label: a.name,
+        status: a.status,
+      });
+    }
+
+    return targets;
+  }
+
   async createTicket(outletId: string, userId: string, data: any) {
     const validated = CreateEquipmentTicketSchema.parse(data);
     const repo = new EquipmentRepository(this.db);
@@ -50,11 +123,17 @@ export class EquipmentService {
     if (validated.dispenserId) {
         const dispenser = await repo.getDispenserById(validated.dispenserId);
         if (!dispenser || dispenser.outletId !== outletId) throw new EquipmentError('EQUIPMENT_TARGET_NOT_FOUND', 'Dispenser not found', 404);
+        if (dispenser.status === 'INACTIVE' || dispenser.status === 'DECOMMISSIONED') {
+            throw new EquipmentError('EQUIPMENT_TARGET_INACTIVE', 'Target is inactive or decommissioned', 400);
+        }
         equipmentTypeSnapshot = 'DISPENSER';
         equipmentLabelSnapshot = dispenser.name;
     } else if (validated.equipmentAssetId) {
         const asset = await repo.getAssetById(validated.equipmentAssetId);
         if (!asset || asset.outletId !== outletId) throw new EquipmentError('EQUIPMENT_TARGET_NOT_FOUND', 'Asset not found', 404);
+        if (asset.status === 'INACTIVE' || asset.status === 'DECOMMISSIONED') {
+            throw new EquipmentError('EQUIPMENT_TARGET_INACTIVE', 'Target is inactive or decommissioned', 400);
+        }
         equipmentTypeSnapshot = asset.equipmentType;
         equipmentLabelSnapshot = asset.name;
     } else {
@@ -87,6 +166,15 @@ export class EquipmentService {
         equipmentAssetId: validated.equipmentAssetId ?? null,
     });
     
+    await repo.createEvent({
+        ticketId: ticket.id,
+        eventType: 'CREATED',
+        fromStatus: null,
+        toStatus: 'OPEN',
+        notes: null,
+        actorUserId: userId,
+    });
+
     await new AuditRepository(this.db).logAction({
         id: crypto.randomUUID(),
         userId,
@@ -98,36 +186,268 @@ export class EquipmentService {
     });
     return ticket;
   }
+
+  async assignTicket(ticketId: string, userId: string, data: any) {
+    const validated = AssignTicketSchema.parse(data);
+    const repo = new EquipmentRepository(this.db);
+    const ticket = await repo.getTicketById(ticketId);
+    if (!ticket) throw new EquipmentError('EQUIPMENT_TICKET_NOT_FOUND', 'Ticket not found', 404);
+
+    if (ticket.status !== 'OPEN' && ticket.status !== 'ASSIGNED') {
+        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 400);
+    }
+
+    const isReassign = ticket.status === 'ASSIGNED';
+    const assignedAt = new Date().toISOString();
+
+    const updated = await repo.updateTicketStatusConditional(ticketId, ticket.status, 'ASSIGNED', {
+        technicianName: validated.technicianName,
+        technicianPhone: validated.technicianPhone ?? null,
+        assignedAt,
+        assignedByUserId: userId,
+    });
+
+    if (!updated) {
+        throw new EquipmentError('EQUIPMENT_TICKET_STATE_CHANGED', 'Ticket state changed concurrently', 409);
+    }
+
+    await repo.createEvent({
+        ticketId,
+        eventType: isReassign ? 'REASSIGNED' : 'ASSIGNED',
+        fromStatus: ticket.status,
+        toStatus: 'ASSIGNED',
+        notes: `Assigned to ${validated.technicianName}`,
+        actorUserId: userId,
+    });
+
+    await new AuditRepository(this.db).logAction({
+        id: crypto.randomUUID(),
+        userId,
+        action: isReassign ? 'EQUIPMENT_TICKET_REASSIGN' : 'EQUIPMENT_TICKET_ASSIGN',
+        entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
+        entityId: ticketId,
+        oldValue: ticket as any,
+        newValue: updated as any,
+        createdAt: new Date().toISOString()
+    });
+
+    return updated;
+  }
+
+  async startTicket(ticketId: string, userId: string) {
+    const repo = new EquipmentRepository(this.db);
+    const ticket = await repo.getTicketById(ticketId);
+    if (!ticket) throw new EquipmentError('EQUIPMENT_TICKET_NOT_FOUND', 'Ticket not found', 404);
+
+    if (ticket.status !== 'ASSIGNED') {
+        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 400);
+    }
+
+    const updated = await repo.updateTicketStatusConditional(ticketId, 'ASSIGNED', 'IN_PROGRESS', {});
+    if (!updated) {
+        throw new EquipmentError('EQUIPMENT_TICKET_STATE_CHANGED', 'Ticket state changed concurrently', 409);
+    }
+
+    await repo.createEvent({
+        ticketId,
+        eventType: 'WORK_STARTED',
+        fromStatus: 'ASSIGNED',
+        toStatus: 'IN_PROGRESS',
+        notes: null,
+        actorUserId: userId,
+    });
+
+    await new AuditRepository(this.db).logAction({
+        id: crypto.randomUUID(),
+        userId,
+        action: 'EQUIPMENT_TICKET_START',
+        entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
+        entityId: ticketId,
+        oldValue: ticket as any,
+        newValue: updated as any,
+        createdAt: new Date().toISOString()
+    });
+
+    return updated;
+  }
+
+  async resolveTicket(ticketId: string, userId: string, data: any) {
+    const validated = ResolveTicketSchema.parse(data);
+    const repo = new EquipmentRepository(this.db);
+    const ticket = await repo.getTicketById(ticketId);
+    if (!ticket) throw new EquipmentError('EQUIPMENT_TICKET_NOT_FOUND', 'Ticket not found', 404);
+
+    if (ticket.status !== 'IN_PROGRESS') {
+        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 400);
+    }
+
+    const resolvedAt = validated.resolvedAt ? new Date(validated.resolvedAt).toISOString() : new Date().toISOString();
+    if (new Date(resolvedAt).getTime() < new Date(ticket.breakdownAt).getTime()) {
+        throw new EquipmentError('INVALID_RESOLUTION_TIMESTAMP', 'Resolved at cannot be earlier than breakdown at', 400);
+    }
+
+    const downtimeSeconds = Math.floor((new Date(resolvedAt).getTime() - new Date(ticket.breakdownAt).getTime()) / 1000);
+    if (!Number.isSafeInteger(downtimeSeconds) || downtimeSeconds < 0) {
+        throw new EquipmentError('DOWNTIME_OVERFLOW', 'Invalid downtime calculation', 400);
+    }
+
+    const updated = await repo.updateTicketStatusConditional(ticketId, 'IN_PROGRESS', 'RESOLVED', {
+        resolutionNotes: validated.resolutionNotes,
+        resolvedAt,
+        resolvedByUserId: userId,
+        downtimeSeconds,
+    });
+
+    if (!updated) {
+        throw new EquipmentError('EQUIPMENT_TICKET_STATE_CHANGED', 'Ticket state changed concurrently', 409);
+    }
+
+    await repo.createEvent({
+        ticketId,
+        eventType: 'RESOLVED',
+        fromStatus: 'IN_PROGRESS',
+        toStatus: 'RESOLVED',
+        notes: validated.resolutionNotes,
+        actorUserId: userId,
+    });
+
+    await new AuditRepository(this.db).logAction({
+        id: crypto.randomUUID(),
+        userId,
+        action: 'EQUIPMENT_TICKET_RESOLVE',
+        entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
+        entityId: ticketId,
+        oldValue: ticket as any,
+        newValue: updated as any,
+        createdAt: new Date().toISOString()
+    });
+
+    return updated;
+  }
+
+  async signoffTicket(ticketId: string, userId: string, data: any) {
+    const validated = SignoffTicketSchema.parse(data);
+    const repo = new EquipmentRepository(this.db);
+    const ticket = await repo.getTicketById(ticketId);
+    if (!ticket) throw new EquipmentError('EQUIPMENT_TICKET_NOT_FOUND', 'Ticket not found', 404);
+
+    if (ticket.status !== 'RESOLVED') {
+        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 400);
+    }
+
+    const signedOffAt = new Date().toISOString();
+    const updated = await repo.updateTicketStatusConditional(ticketId, 'RESOLVED', 'CLOSED', {
+        signoffNotes: validated.signoffNotes ?? null,
+        signedOffAt,
+        signedOffByUserId: userId,
+    });
+
+    if (!updated) {
+        throw new EquipmentError('EQUIPMENT_TICKET_STATE_CHANGED', 'Ticket state changed concurrently', 409);
+    }
+
+    await repo.createEvent({
+        ticketId,
+        eventType: 'SIGNED_OFF',
+        fromStatus: 'RESOLVED',
+        toStatus: 'CLOSED',
+        notes: validated.signoffNotes ?? null,
+        actorUserId: userId,
+    });
+
+    await new AuditRepository(this.db).logAction({
+        id: crypto.randomUUID(),
+        userId,
+        action: 'EQUIPMENT_TICKET_SIGNOFF',
+        entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
+        entityId: ticketId,
+        oldValue: ticket as any,
+        newValue: updated as any,
+        createdAt: new Date().toISOString()
+    });
+
+    return updated;
+  }
+
+  async cancelTicket(ticketId: string, userId: string, data: any) {
+    const validated = CancelTicketSchema.parse(data);
+    const repo = new EquipmentRepository(this.db);
+    const ticket = await repo.getTicketById(ticketId);
+    if (!ticket) throw new EquipmentError('EQUIPMENT_TICKET_NOT_FOUND', 'Ticket not found', 404);
+
+    if (ticket.status !== 'OPEN' && ticket.status !== 'ASSIGNED') {
+        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 400);
+    }
+
+    const cancelledAt = new Date().toISOString();
+    const updated = await repo.updateTicketStatusConditional(ticketId, ticket.status, 'CANCELLED', {
+        cancelReason: validated.reason,
+        cancelledAt,
+        cancelledByUserId: userId,
+    });
+
+    if (!updated) {
+        throw new EquipmentError('EQUIPMENT_TICKET_STATE_CHANGED', 'Ticket state changed concurrently', 409);
+    }
+
+    await repo.createEvent({
+        ticketId,
+        eventType: 'CANCELLED',
+        fromStatus: ticket.status,
+        toStatus: 'CANCELLED',
+        notes: validated.reason,
+        actorUserId: userId,
+    });
+
+    await new AuditRepository(this.db).logAction({
+        id: crypto.randomUUID(),
+        userId,
+        action: 'EQUIPMENT_TICKET_CANCEL',
+        entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
+        entityId: ticketId,
+        oldValue: ticket as any,
+        newValue: updated as any,
+        createdAt: new Date().toISOString()
+    });
+
+    return updated;
+  }
   
   async getHealthSummary(outletId: string) {
     const tickets = await new EquipmentRepository(this.db).listTickets(outletId);
     
-    const summary = {
-        activeTicketCount: 0,
-        criticalActiveCount: 0,
-        resolvedAwaitingSignoffCount: 0,
-        currentlyDownTargetCount: 0,
-        countsByEquipmentType: {} as Record<string, number>,
-        countsByStatus: {} as Record<string, number>,
-        activeTargets: new Set<string>(),
-    };
+    let activeTicketCount = 0;
+    let criticalActiveCount = 0;
+    let resolvedAwaitingSignoffCount = 0;
+    const activeTargets = new Set<string>();
+    const countsByEquipmentType: Record<string, number> = {};
+    const countsByStatus: Record<string, number> = {};
 
     for (const ticket of tickets) {
-        summary.countsByStatus[ticket.status] = (summary.countsByStatus[ticket.status] || 0) + 1;
-        summary.countsByEquipmentType[ticket.equipmentTypeSnapshot] = (summary.countsByEquipmentType[ticket.equipmentTypeSnapshot] || 0) + 1;
+        countsByStatus[ticket.status] = (countsByStatus[ticket.status] || 0) + 1;
+        countsByEquipmentType[ticket.equipmentTypeSnapshot] = (countsByEquipmentType[ticket.equipmentTypeSnapshot] || 0) + 1;
         
         if (['OPEN', 'ASSIGNED', 'IN_PROGRESS'].includes(ticket.status)) {
-            summary.activeTicketCount++;
-            if (ticket.priority === 'CRITICAL') summary.criticalActiveCount++;
-            const targetId = ticket.dispenserId || ticket.equipmentAssetId;
-            if(targetId) summary.activeTargets.add(targetId);
+            activeTicketCount++;
+            if (ticket.priority === 'CRITICAL') criticalActiveCount++;
+            if (ticket.dispenserId) {
+                activeTargets.add(`DISPENSER:${ticket.dispenserId}`);
+            } else if (ticket.equipmentAssetId) {
+                activeTargets.add(`ASSET:${ticket.equipmentAssetId}`);
+            }
         } else if (ticket.status === 'RESOLVED') {
-            summary.resolvedAwaitingSignoffCount++;
+            resolvedAwaitingSignoffCount++;
         }
     }
-    summary.currentlyDownTargetCount = summary.activeTargets.size;
-    // @ts-ignore
-    delete summary.activeTargets;
-    return summary;
+    const currentlyDownTargetCount = activeTargets.size;
+
+    return {
+        activeTicketCount,
+        criticalActiveCount,
+        resolvedAwaitingSignoffCount,
+        currentlyDownTargetCount,
+        countsByEquipmentType,
+        countsByStatus,
+    };
   }
 }

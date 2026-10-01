@@ -618,7 +618,7 @@ export const UpdateLubeShiftSaleSchema = z.object({
 
 export const CreateEquipmentAssetSchema = z.object({
   assetCode: z.string().trim().min(1, 'Asset code is required').toUpperCase(),
-  equipmentType: z.enum(['DISPENSER', 'ATG', 'AIR_COMPRESSOR', 'CNG_COMPRESSOR', 'DG_SET', 'OTHER']),
+  equipmentType: z.enum(['ATG', 'AIR_COMPRESSOR', 'CNG_COMPRESSOR', 'DG_SET', 'OTHER']),
   name: z.string().trim().min(1, 'Name is required'),
   manufacturer: z.string().trim().optional().nullable(),
   model: z.string().trim().optional().nullable(),

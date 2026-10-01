@@ -16,7 +16,11 @@ CREATE TABLE IF NOT EXISTS "equipment_assets" (
 	"created_at" text NOT NULL,
 	"updated_at" text NOT NULL,
 	FOREIGN KEY ("outlet_id") REFERENCES "retail_outlets"("id") ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY ("created_by") REFERENCES "users"("id") ON UPDATE no action ON DELETE no action
+	FOREIGN KEY ("created_by") REFERENCES "users"("id") ON UPDATE no action ON DELETE no action,
+    CHECK (equipment_type IN ('ATG', 'AIR_COMPRESSOR', 'CNG_COMPRESSOR', 'DG_SET', 'OTHER')),
+    CHECK (status IN ('ACTIVE', 'INACTIVE', 'MAINTENANCE', 'DECOMMISSIONED')),
+    CHECK (trim(asset_code) <> ''),
+    CHECK (trim(name) <> '')
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_eq_assets_outlet_code_unique" ON "equipment_assets" ("outlet_id","asset_code");
@@ -62,13 +66,21 @@ CREATE TABLE IF NOT EXISTS "equipment_breakdown_tickets" (
 	FOREIGN KEY ("signed_off_by_user_id") REFERENCES "users"("id") ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY ("cancelled_by_user_id") REFERENCES "users"("id") ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY ("created_by") REFERENCES "users"("id") ON UPDATE no action ON DELETE no action,
-    CHECK ( (dispenser_id IS NOT NULL AND equipment_asset_id IS NULL) OR (dispenser_id IS NULL AND equipment_asset_id IS NOT NULL) )
+    CHECK ( (dispenser_id IS NOT NULL AND equipment_asset_id IS NULL) OR (dispenser_id IS NULL AND equipment_asset_id IS NOT NULL) ),
+    CHECK (equipment_type_snapshot IN ('DISPENSER', 'ATG', 'AIR_COMPRESSOR', 'CNG_COMPRESSOR', 'DG_SET', 'OTHER')),
+    CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
+    CHECK (failure_category IN ('ELECTRICAL', 'MECHANICAL', 'ELECTRONICS', 'COMMUNICATION', 'CALIBRATION', 'PRESSURE', 'LEAKAGE', 'POWER', 'SOFTWARE', 'OTHER')),
+    CHECK (status IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED')),
+    CHECK (trim(description) <> ''),
+    CHECK (downtime_seconds IS NULL OR downtime_seconds >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS "idx_eq_tickets_outlet_id" ON "equipment_breakdown_tickets" ("outlet_id");
 CREATE INDEX IF NOT EXISTS "idx_eq_tickets_dispenser_id" ON "equipment_breakdown_tickets" ("dispenser_id");
 CREATE INDEX IF NOT EXISTS "idx_eq_tickets_asset_id" ON "equipment_breakdown_tickets" ("equipment_asset_id");
 CREATE INDEX IF NOT EXISTS "idx_eq_tickets_status" ON "equipment_breakdown_tickets" ("status");
+CREATE INDEX IF NOT EXISTS "idx_eq_tickets_priority" ON "equipment_breakdown_tickets" ("priority");
+CREATE INDEX IF NOT EXISTS "idx_eq_tickets_breakdown_at" ON "equipment_breakdown_tickets" ("breakdown_at");
 
 CREATE TABLE IF NOT EXISTS "equipment_breakdown_events" (
 	"id" text PRIMARY KEY NOT NULL,
@@ -80,38 +92,64 @@ CREATE TABLE IF NOT EXISTS "equipment_breakdown_events" (
 	"actor_user_id" text NOT NULL,
 	"created_at" text NOT NULL,
 	FOREIGN KEY ("ticket_id") REFERENCES "equipment_breakdown_tickets"("id") ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY ("actor_user_id") REFERENCES "users"("id") ON UPDATE no action ON DELETE no action
+	FOREIGN KEY ("actor_user_id") REFERENCES "users"("id") ON UPDATE no action ON DELETE no action,
+    CHECK (event_type IN ('CREATED', 'ASSIGNED', 'REASSIGNED', 'WORK_STARTED', 'RESOLVED', 'SIGNED_OFF', 'CANCELLED'))
 );
 
 CREATE INDEX IF NOT EXISTS "idx_eq_events_ticket_id" ON "equipment_breakdown_events" ("ticket_id");
 
 -- Triggers for lifecycle and immutability protection
 
--- Immutability Trigger
+-- Immutability Trigger (NULL-safe)
 CREATE TRIGGER IF NOT EXISTS "trg_eq_ticket_immutability"
 BEFORE UPDATE ON "equipment_breakdown_tickets"
 BEGIN
     SELECT
         CASE
-            WHEN OLD.outlet_id <> NEW.outlet_id THEN RAISE(ABORT, 'EQUIPMENT_TICKET_IMMUTABLE_FIELDS')
-            WHEN OLD.dispenser_id <> NEW.dispenser_id THEN RAISE(ABORT, 'EQUIPMENT_TICKET_IMMUTABLE_FIELDS')
-            WHEN OLD.equipment_asset_id <> NEW.equipment_asset_id THEN RAISE(ABORT, 'EQUIPMENT_TICKET_IMMUTABLE_FIELDS')
-            WHEN OLD.equipment_type_snapshot <> NEW.equipment_type_snapshot THEN RAISE(ABORT, 'EQUIPMENT_TICKET_IMMUTABLE_FIELDS')
-            WHEN OLD.equipment_label_snapshot <> NEW.equipment_label_snapshot THEN RAISE(ABORT, 'EQUIPMENT_TICKET_IMMUTABLE_FIELDS')
-            WHEN OLD.breakdown_at <> NEW.breakdown_at THEN RAISE(ABORT, 'EQUIPMENT_TICKET_IMMUTABLE_FIELDS')
+            WHEN (OLD.outlet_id IS NOT NEW.outlet_id) OR
+                 (OLD.dispenser_id IS NOT NEW.dispenser_id) OR
+                 (OLD.equipment_asset_id IS NOT NEW.equipment_asset_id) OR
+                 (OLD.equipment_type_snapshot IS NOT NEW.equipment_type_snapshot) OR
+                 (OLD.equipment_label_snapshot IS NOT NEW.equipment_label_snapshot) OR
+                 (OLD.breakdown_at IS NOT NEW.breakdown_at)
+            THEN RAISE(ABORT, 'EQUIPMENT_TICKET_IMMUTABLE_FIELDS')
         END;
 END;
 
--- Lifecycle Trigger
+-- Terminal Ticket Protection
+CREATE TRIGGER IF NOT EXISTS "trg_eq_ticket_terminal"
+BEFORE UPDATE ON "equipment_breakdown_tickets"
+BEGIN
+    SELECT
+        CASE
+            WHEN OLD.status IN ('CLOSED', 'CANCELLED') THEN RAISE(ABORT, 'EQUIPMENT_TICKET_TERMINAL')
+        END;
+END;
+
+-- Lifecycle Trigger (Only on change, NULL-safe)
 CREATE TRIGGER IF NOT EXISTS "trg_eq_ticket_lifecycle"
 BEFORE UPDATE OF "status" ON "equipment_breakdown_tickets"
 BEGIN
     SELECT
         CASE
-            WHEN OLD.status = 'OPEN' AND NEW.status NOT IN ('ASSIGNED', 'CANCELLED') THEN RAISE(ABORT, 'INVALID_EQUIPMENT_TICKET_TRANSITION')
-            WHEN OLD.status = 'ASSIGNED' AND NEW.status NOT IN ('IN_PROGRESS', 'CANCELLED') THEN RAISE(ABORT, 'INVALID_EQUIPMENT_TICKET_TRANSITION')
-            WHEN OLD.status = 'IN_PROGRESS' AND NEW.status NOT IN ('RESOLVED') THEN RAISE(ABORT, 'INVALID_EQUIPMENT_TICKET_TRANSITION')
-            WHEN OLD.status = 'RESOLVED' AND NEW.status NOT IN ('CLOSED') THEN RAISE(ABORT, 'INVALID_EQUIPMENT_TICKET_TRANSITION')
-            WHEN OLD.status IN ('CLOSED', 'CANCELLED') THEN RAISE(ABORT, 'INVALID_EQUIPMENT_TICKET_TRANSITION')
+            WHEN OLD.status IS NOT NEW.status AND (
+                (OLD.status = 'OPEN' AND NEW.status NOT IN ('ASSIGNED', 'CANCELLED')) OR
+                (OLD.status = 'ASSIGNED' AND NEW.status NOT IN ('IN_PROGRESS', 'CANCELLED')) OR
+                (OLD.status = 'IN_PROGRESS' AND NEW.status NOT IN ('RESOLVED')) OR
+                (OLD.status = 'RESOLVED' AND NEW.status NOT IN ('CLOSED'))
+            ) THEN RAISE(ABORT, 'INVALID_EQUIPMENT_TICKET_TRANSITION')
         END;
+END;
+
+-- Append-only Event Ledger Protection
+CREATE TRIGGER IF NOT EXISTS "trg_eq_event_immutable_update"
+BEFORE UPDATE ON "equipment_breakdown_events"
+BEGIN
+    SELECT RAISE(ABORT, 'EQUIPMENT_EVENT_IMMUTABLE');
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_eq_event_immutable_delete"
+BEFORE DELETE ON "equipment_breakdown_events"
+BEGIN
+    SELECT RAISE(ABORT, 'EQUIPMENT_EVENT_IMMUTABLE');
 END;
