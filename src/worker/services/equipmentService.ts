@@ -36,7 +36,7 @@ export class EquipmentService {
         manufacturer: validated.manufacturer ?? null,
         model: validated.model ?? null,
         serialNumber: validated.serialNumber ?? null,
-        commissionedAt: validated.commissionedAt ?? null,
+        commissionedAt: validated.commissionedAt ? new Date(validated.commissionedAt).toISOString() : null,
         notes: validated.notes ?? null,
       });
       await new AuditRepository(this.db).logAction({
@@ -45,14 +45,15 @@ export class EquipmentService {
           action: 'EQUIPMENT_ASSET_CREATE',
           entityType: 'EQUIPMENT_ASSET',
           entityId: asset.id,
-          newValue: asset as any,
+          newValue: asset as unknown as Record<string, unknown>,
           createdAt: new Date().toISOString()
       });
       return asset as EquipmentAsset;
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof EquipmentError) throw err;
-      const msg = err.message || '';
-      const causeMsg = err.cause ? String(err.cause) : '';
+      const errorObj = err as { message?: string; cause?: unknown };
+      const msg = errorObj.message || '';
+      const causeMsg = errorObj.cause ? String(errorObj.cause) : '';
       const fullStr = `${msg} ${causeMsg}`;
       if (fullStr.includes('equipment_assets.outlet_id, equipment_assets.asset_code') || fullStr.includes('idx_eq_assets_outlet_code_unique')) {
         throw new EquipmentError('EQUIPMENT_ASSET_CODE_EXISTS', 'Asset code already exists in this outlet', 409);
@@ -79,12 +80,12 @@ export class EquipmentService {
     try {
       const updated = await repo.updateAsset(assetId, {
         ...validated,
-        equipmentType: (validated as any).equipmentType ? ((validated as any).equipmentType as EquipmentAssetType) : (existing.equipmentType as EquipmentAssetType),
+        equipmentType: (validated as Record<string, unknown>).equipmentType ? ((validated as Record<string, unknown>).equipmentType as EquipmentAssetType) : (existing.equipmentType as EquipmentAssetType),
         manufacturer: validated.manufacturer !== undefined ? validated.manufacturer : existing.manufacturer,
         model: validated.model !== undefined ? validated.model : existing.model,
         serialNumber: validated.serialNumber !== undefined ? validated.serialNumber : existing.serialNumber,
         status: validated.status !== undefined ? (validated.status as EquipmentAssetStatus) : (existing.status as EquipmentAssetStatus),
-        commissionedAt: validated.commissionedAt !== undefined ? validated.commissionedAt : existing.commissionedAt,
+        commissionedAt: validated.commissionedAt !== undefined ? (validated.commissionedAt ? new Date(validated.commissionedAt).toISOString() : null) : existing.commissionedAt,
         notes: validated.notes !== undefined ? validated.notes : existing.notes,
       });
 
@@ -94,15 +95,16 @@ export class EquipmentService {
           action: 'EQUIPMENT_ASSET_UPDATE',
           entityType: 'EQUIPMENT_ASSET',
           entityId: assetId,
-          oldValue: existing as any,
-          newValue: updated as any,
+          oldValue: existing as unknown as Record<string, unknown>,
+          newValue: updated as unknown as Record<string, unknown>,
           createdAt: new Date().toISOString()
       });
       return updated as EquipmentAsset;
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof EquipmentError) throw err;
-      const msg = err.message || '';
-      const causeMsg = err.cause ? String(err.cause) : '';
+      const errorObj = err as { message?: string; cause?: unknown };
+      const msg = errorObj.message || '';
+      const causeMsg = errorObj.cause ? String(errorObj.cause) : '';
       const fullStr = `${msg} ${causeMsg}`;
       if (fullStr.includes('equipment_assets.outlet_id, equipment_assets.asset_code') || fullStr.includes('idx_eq_assets_outlet_code_unique')) {
         throw new EquipmentError('EQUIPMENT_ASSET_CODE_EXISTS', 'Asset code already exists in this outlet', 409);
@@ -184,6 +186,7 @@ export class EquipmentService {
         equipmentTypeSnapshot,
         equipmentLabelSnapshot,
         status: 'OPEN',
+        breakdownAt: new Date(validated.breakdownAt).toISOString(),
         technicianName: null,
         technicianPhone: null,
         assignedAt: null,
@@ -218,7 +221,7 @@ export class EquipmentService {
         action: 'EQUIPMENT_TICKET_CREATE',
         entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
         entityId: ticket.id,
-        newValue: ticket as any,
+        newValue: ticket as unknown as Record<string, unknown>,
         createdAt: new Date().toISOString()
     });
     return ticket as EquipmentBreakdownTicket;
@@ -263,8 +266,8 @@ export class EquipmentService {
         action: isReassign ? 'EQUIPMENT_TICKET_REASSIGN' : 'EQUIPMENT_TICKET_ASSIGN',
         entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
         entityId: ticketId,
-        oldValue: ticket as any,
-        newValue: updated as any,
+        oldValue: ticket as unknown as Record<string, unknown>,
+        newValue: updated as unknown as Record<string, unknown>,
         createdAt: new Date().toISOString()
     });
 
@@ -300,8 +303,8 @@ export class EquipmentService {
         action: 'EQUIPMENT_TICKET_START',
         entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
         entityId: ticketId,
-        oldValue: ticket as any,
-        newValue: updated as any,
+        oldValue: ticket as unknown as Record<string, unknown>,
+        newValue: updated as unknown as Record<string, unknown>,
         createdAt: new Date().toISOString()
     });
 
@@ -354,8 +357,8 @@ export class EquipmentService {
         action: 'EQUIPMENT_TICKET_RESOLVE',
         entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
         entityId: ticketId,
-        oldValue: ticket as any,
-        newValue: updated as any,
+        oldValue: ticket as unknown as Record<string, unknown>,
+        newValue: updated as unknown as Record<string, unknown>,
         createdAt: new Date().toISOString()
     });
 
@@ -398,8 +401,8 @@ export class EquipmentService {
         action: 'EQUIPMENT_TICKET_SIGNOFF',
         entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
         entityId: ticketId,
-        oldValue: ticket as any,
-        newValue: updated as any,
+        oldValue: ticket as unknown as Record<string, unknown>,
+        newValue: updated as unknown as Record<string, unknown>,
         createdAt: new Date().toISOString()
     });
 
@@ -442,8 +445,8 @@ export class EquipmentService {
         action: 'EQUIPMENT_TICKET_CANCEL',
         entityType: 'EQUIPMENT_BREAKDOWN_TICKET',
         entityId: ticketId,
-        oldValue: ticket as any,
-        newValue: updated as any,
+        oldValue: ticket as unknown as Record<string, unknown>,
+        newValue: updated as unknown as Record<string, unknown>,
         createdAt: new Date().toISOString()
     });
 
