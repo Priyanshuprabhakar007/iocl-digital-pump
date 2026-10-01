@@ -112,6 +112,10 @@ async function startServer() {
           DOCUMENTS_BUCKET: localR2 as any,
           ENVIRONMENT: process.env.ENVIRONMENT || 'development',
           ALLOWED_ORIGINS: Array.from(originsSet).join(','),
+        }, {
+          waitUntil: (promise) => {
+            promise.catch(console.error);
+          },
         });
 
         res.status(webRes.status);
