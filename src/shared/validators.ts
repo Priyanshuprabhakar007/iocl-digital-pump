@@ -612,3 +612,64 @@ export const UpdateLubeShiftSaleSchema = z.object({
   notes: z.string().trim().optional().nullable(),
 });
 
+// ==========================================
+// Phase 3C-1: Equipment Breakdown Management Validators
+// ==========================================
+
+export const CreateEquipmentAssetSchema = z.object({
+  assetCode: z.string().trim().min(1, 'Asset code is required').toUpperCase(),
+  equipmentType: z.enum(['DISPENSER', 'ATG', 'AIR_COMPRESSOR', 'CNG_COMPRESSOR', 'DG_SET', 'OTHER']),
+  name: z.string().trim().min(1, 'Name is required'),
+  manufacturer: z.string().trim().optional().nullable(),
+  model: z.string().trim().optional().nullable(),
+  serialNumber: z.string().trim().optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'MAINTENANCE', 'DECOMMISSIONED']).default('ACTIVE'),
+  commissionedAt: z.string().datetime().optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+});
+
+export const UpdateEquipmentAssetSchema = z.object({
+  name: z.string().trim().optional(),
+  manufacturer: z.string().trim().optional().nullable(),
+  model: z.string().trim().optional().nullable(),
+  serialNumber: z.string().trim().optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'MAINTENANCE', 'DECOMMISSIONED']).optional(),
+  commissionedAt: z.string().datetime().optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+});
+
+export const CreateEquipmentTicketSchema = z.object({
+  dispenserId: z.string().optional().nullable(),
+  equipmentAssetId: z.string().optional().nullable(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
+  failureCategory: z.enum(['ELECTRICAL', 'MECHANICAL', 'ELECTRONICS', 'COMMUNICATION', 'CALIBRATION', 'PRESSURE', 'LEAKAGE', 'POWER', 'SOFTWARE', 'OTHER']),
+  description: z.string().trim().min(1, 'Description is required'),
+  breakdownAt: z.string().datetime({ message: 'breakdownAt must be a valid ISO-8601 timestamp with timezone' }),
+}).refine(data => !!data.dispenserId !== !!data.equipmentAssetId, {
+    message: 'Exactly one of dispenserId or equipmentAssetId must be provided',
+});
+
+export const AssignTicketSchema = z.object({
+  technicianName: z.string().trim().min(1, 'Technician name is required'),
+  technicianPhone: z.string().trim().optional().nullable(),
+});
+
+export const ResolveTicketSchema = z.object({
+  resolutionNotes: z.string().trim().min(1, 'Resolution notes are required'),
+  resolvedAt: z.string().datetime({ message: 'resolvedAt must be a valid ISO-8601 timestamp with timezone' }).optional(),
+});
+
+export const SignoffTicketSchema = z.object({
+  signoffNotes: z.string().trim().optional().nullable(),
+});
+
+export const CancelTicketSchema = z.object({
+  reason: z.string().trim().min(1, 'Cancellation reason is required'),
+});
+
+export const EquipmentTicketFilterSchema = z.object({
+  status: z.enum(['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED']).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
+  equipmentType: z.string().optional(),
+});
+

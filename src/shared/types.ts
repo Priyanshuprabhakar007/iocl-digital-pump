@@ -1047,3 +1047,85 @@ export interface LubeDailySummary {
   };
 }
 
+export type EquipmentCategory = 'DISPENSER' | 'ATG' | 'AIR_COMPRESSOR' | 'CNG_COMPRESSOR' | 'DG_SET' | 'OTHER';
+
+export interface EquipmentAsset {
+  id: string;
+  outletId: string;
+  assetCode: string;
+  equipmentType: EquipmentCategory;
+  name: string;
+  manufacturer: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  status: EquipmentStatus;
+  commissionedAt: string | null;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type FailureCategory = 'ELECTRICAL' | 'MECHANICAL' | 'ELECTRONICS' | 'COMMUNICATION' | 'CALIBRATION' | 'PRESSURE' | 'LEAKAGE' | 'POWER' | 'SOFTWARE' | 'OTHER';
+export type TicketStatus = 'OPEN' | 'ASSIGNED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'CANCELLED';
+
+export interface EquipmentBreakdownTicket {
+  id: string;
+  outletId: string;
+  dispenserId: string | null;
+  equipmentAssetId: string | null;
+  equipmentTypeSnapshot: string;
+  equipmentLabelSnapshot: string;
+  priority: TicketPriority;
+  failureCategory: FailureCategory;
+  description: string;
+  status: TicketStatus;
+  breakdownAt: string;
+  technicianName: string | null;
+  technicianPhone: string | null;
+  assignedAt: string | null;
+  assignedByUserId: string | null;
+  resolutionNotes: string | null;
+  resolvedAt: string | null;
+  resolvedByUserId: string | null;
+  downtimeSeconds: number | null;
+  signoffNotes: string | null;
+  signedOffAt: string | null;
+  signedOffByUserId: string | null;
+  cancelReason: string | null;
+  cancelledAt: string | null;
+  cancelledByUserId: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EquipmentBreakdownEvent {
+  id: string;
+  ticketId: string;
+  eventType: string;
+  fromStatus: TicketStatus | null;
+  toStatus: TicketStatus | null;
+  notes: string | null;
+  actorUserId: string;
+  createdAt: string;
+}
+
+export interface EquipmentHealthSummary {
+    activeTicketCount: number;
+    criticalActiveCount: number;
+    resolvedAwaitingSignoffCount: number;
+    currentlyDownTargetCount: number;
+    countsByEquipmentType: Record<string, number>;
+    countsByStatus: Record<string, number>;
+}
+
+export interface EquipmentTarget {
+  targetType: "DISPENSER" | "ASSET";
+  targetId: string;
+  equipmentType: string;
+  label: string;
+  status: string;
+}
+

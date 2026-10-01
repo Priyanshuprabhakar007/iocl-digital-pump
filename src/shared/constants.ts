@@ -107,6 +107,13 @@ export const PERMISSIONS = {
   LUBE_INVENTORY_WRITE: 'lube_inventory.write',
   LUBE_SALES_WRITE: 'lube_sales.write',
   LUBE_PRICES_WRITE: 'lube_prices.write',
+
+  // Phase 3C-1: Equipment Breakdowns
+  EQUIPMENT_READ: 'equipment.read',
+  EQUIPMENT_ASSETS_WRITE: 'equipment_assets.write',
+  EQUIPMENT_TICKETS_CREATE: 'equipment_tickets.create',
+  EQUIPMENT_TICKETS_MANAGE: 'equipment_tickets.manage',
+  EQUIPMENT_TICKETS_SIGNOFF: 'equipment_tickets.signoff',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];

@@ -781,4 +781,81 @@ export const lubeShiftSales = sqliteTable('lube_shift_sales', {
   check('lube_sales_stock_unit_check', sql`${table.stockUnit} IN ('LITRE', 'PACK')`),
 ]);
 
+// ==========================================
+// Phase 3C-1: Equipment Breakdown Management Tables
+// ==========================================
+
+export const equipmentAssets = sqliteTable('equipment_assets', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  assetCode: text('asset_code').notNull(),
+  equipmentType: text('equipment_type').notNull(),
+  name: text('name').notNull(),
+  manufacturer: text('manufacturer'),
+  model: text('model'),
+  serialNumber: text('serial_number'),
+  status: text('status').notNull().default('ACTIVE'),
+  commissionedAt: text('commissioned_at'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_eq_assets_outlet_code_unique').on(table.outletId, table.assetCode),
+  uniqueIndex('idx_eq_assets_outlet_serial_unique').on(table.outletId, table.serialNumber).where(sql`serial_number IS NOT NULL`),
+  index('idx_eq_assets_outlet_id').on(table.outletId),
+  index('idx_eq_assets_type').on(table.equipmentType),
+  index('idx_eq_assets_status').on(table.status),
+]);
+
+export const equipmentBreakdownTickets = sqliteTable('equipment_breakdown_tickets', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  dispenserId: text('dispenser_id').references(() => dispensers.id),
+  equipmentAssetId: text('equipment_asset_id').references(() => equipmentAssets.id),
+  equipmentTypeSnapshot: text('equipment_type_snapshot').notNull(),
+  equipmentLabelSnapshot: text('equipment_label_snapshot').notNull(),
+  priority: text('priority').notNull(),
+  failureCategory: text('failure_category').notNull(),
+  description: text('description').notNull(),
+  status: text('status').notNull().default('OPEN'),
+  breakdownAt: text('breakdown_at').notNull(),
+  technicianName: text('technician_name'),
+  technicianPhone: text('technician_phone'),
+  assignedAt: text('assigned_at'),
+  assignedByUserId: text('assigned_by_user_id').references(() => users.id),
+  resolutionNotes: text('resolution_notes'),
+  resolvedAt: text('resolved_at'),
+  resolvedByUserId: text('resolved_by_user_id').references(() => users.id),
+  downtimeSeconds: integer('downtime_seconds'),
+  signoffNotes: text('signoff_notes'),
+  signedOffAt: text('signed_off_at'),
+  signedOffByUserId: text('signed_off_by_user_id').references(() => users.id),
+  cancelReason: text('cancel_reason'),
+  cancelledAt: text('cancelled_at'),
+  cancelledByUserId: text('cancelled_by_user_id').references(() => users.id),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_eq_tickets_outlet_id').on(table.outletId),
+  index('idx_eq_tickets_dispenser_id').on(table.dispenserId),
+  index('idx_eq_tickets_asset_id').on(table.equipmentAssetId),
+  index('idx_eq_tickets_status').on(table.status),
+  check('eq_tickets_target_check', sql`(${table.dispenserId} IS NOT NULL AND ${table.equipmentAssetId} IS NULL) OR (${table.dispenserId} IS NULL AND ${table.equipmentAssetId} IS NOT NULL)`),
+]);
+
+export const equipmentBreakdownEvents = sqliteTable('equipment_breakdown_events', {
+  id: text('id').primaryKey(),
+  ticketId: text('ticket_id').notNull().references(() => equipmentBreakdownTickets.id, { onDelete: 'cascade' }),
+  eventType: text('event_type').notNull(),
+  fromStatus: text('from_status'),
+  toStatus: text('to_status'),
+  notes: text('notes'),
+  actorUserId: text('actor_user_id').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  index('idx_eq_events_ticket_id').on(table.ticketId),
+]);
+
 
