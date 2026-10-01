@@ -5,9 +5,9 @@ import { getDb } from '../src/db';
 import { seedDatabase } from '../src/db/seed';
 import fs from 'fs';
 import { eq } from 'drizzle-orm';
-import { equipmentAssets, equipmentBreakdownTickets } from '../src/db/schema';
+import { equipmentAssets, equipmentBreakdownTickets, equipmentBreakdownEvents } from '../src/db/schema';
 
-const TEST_DB_PATH = './.sqlite/test_equipment_phase3c_exhaustive.db';
+const TEST_DB_PATH = `./.sqlite/test_equipment_phase3c_${Math.random().toString(36).substring(2)}.db`;
 
 class MockR2Bucket {
   private store = new Map<string, { data: Uint8Array; metadata: Record<string, string> }>();
@@ -70,6 +70,8 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     const setCookie = res.headers.get('set-cookie');
     return setCookie ? setCookie.split(';')[0] : '';
   }
+
+  // --- EXISTING 54 TESTS ---
 
   it('migration creates equipment_assets table', async () => {
     const db = getDb(localD1);
@@ -680,5 +682,582 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     const evs = (await eventsRes.json() as any).data;
     expect(Array.isArray(evs)).toBe(true);
     expect(evs.length).toBeGreaterThan(0);
+  });
+
+  // --- NEW ADDITIONAL TARGETED FREEZE-CRITICAL TESTS (SECTIONS 2 - 25) ---
+
+  it('direct SQL OPEN to RESOLVED is rejected', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({
+      id: 'a-sq1', outletId: 'ro-1001', assetCode: 'SQ-1', equipmentType: 'ATG', name: 'T1', createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await db.insert(equipmentBreakdownTickets).values({
+      id: 't-sq1', outletId: 'ro-1001', equipmentAssetId: 'a-sq1', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T1',
+      priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await expect(db.update(equipmentBreakdownTickets).set({
+      status: 'RESOLVED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq1'))).rejects.toThrow();
+  });
+
+  it('direct SQL OPEN to CLOSED is rejected', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({
+      id: 'a-sq2', outletId: 'ro-1001', assetCode: 'SQ-2', equipmentType: 'ATG', name: 'T2', createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await db.insert(equipmentBreakdownTickets).values({
+      id: 't-sq2', outletId: 'ro-1001', equipmentAssetId: 'a-sq2', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T2',
+      priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await expect(db.update(equipmentBreakdownTickets).set({
+      status: 'CLOSED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10, signedOffAt: now, signedOffByUserId: 'user-admin'
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq2'))).rejects.toThrow();
+  });
+
+  it('direct SQL ASSIGNED to RESOLVED is rejected', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({
+      id: 'a-sq3', outletId: 'ro-1001', assetCode: 'SQ-3', equipmentType: 'ATG', name: 'T3', createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await db.insert(equipmentBreakdownTickets).values({
+      id: 't-sq3', outletId: 'ro-1001', equipmentAssetId: 'a-sq3', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T3',
+      priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'ASSIGNED', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await expect(db.update(equipmentBreakdownTickets).set({
+      status: 'RESOLVED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq3'))).rejects.toThrow();
+  });
+
+  it('direct SQL ASSIGNED to CLOSED is rejected', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({
+      id: 'a-sq4', outletId: 'ro-1001', assetCode: 'SQ-4', equipmentType: 'ATG', name: 'T4', createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await db.insert(equipmentBreakdownTickets).values({
+      id: 't-sq4', outletId: 'ro-1001', equipmentAssetId: 'a-sq4', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T4',
+      priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'ASSIGNED', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await expect(db.update(equipmentBreakdownTickets).set({
+      status: 'CLOSED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10, signedOffAt: now, signedOffByUserId: 'user-admin'
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq4'))).rejects.toThrow();
+  });
+
+  it('direct SQL IN_PROGRESS to CLOSED is rejected', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({
+      id: 'a-sq5', outletId: 'ro-1001', assetCode: 'SQ-5', equipmentType: 'ATG', name: 'T5', createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await db.insert(equipmentBreakdownTickets).values({
+      id: 't-sq5', outletId: 'ro-1001', equipmentAssetId: 'a-sq5', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T5',
+      priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'IN_PROGRESS', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await expect(db.update(equipmentBreakdownTickets).set({
+      status: 'CLOSED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10, signedOffAt: now, signedOffByUserId: 'user-admin'
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq5'))).rejects.toThrow();
+  });
+
+  it('direct SQL CLOSED to OPEN is rejected', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({
+      id: 'a-sq6', outletId: 'ro-1001', assetCode: 'SQ-6', equipmentType: 'ATG', name: 'T6', createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await db.insert(equipmentBreakdownTickets).values({
+      id: 't-sq6', outletId: 'ro-1001', equipmentAssetId: 'a-sq6', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T6',
+      priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'CLOSED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10, signedOffAt: now, signedOffByUserId: 'user-admin', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await expect(db.update(equipmentBreakdownTickets).set({
+      status: 'OPEN'
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq6'))).rejects.toThrow();
+  });
+
+  it('direct SQL CANCELLED to OPEN is rejected', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({
+      id: 'a-sq7', outletId: 'ro-1001', assetCode: 'SQ-7', equipmentType: 'ATG', name: 'T7', createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await db.insert(equipmentBreakdownTickets).values({
+      id: 't-sq7', outletId: 'ro-1001', equipmentAssetId: 'a-sq7', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T7',
+      priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'CANCELLED', cancelReason: 'Canceled', cancelledAt: now, cancelledByUserId: 'user-admin', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    });
+    await expect(db.update(equipmentBreakdownTickets).set({
+      status: 'OPEN'
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq7'))).rejects.toThrow();
+  });
+
+  it('outlet_id mutation rejected by immutable trigger', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({ id: 'a-im1', outletId: 'ro-1001', assetCode: 'IM-1', equipmentType: 'ATG', name: 'IM1', createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im1', outletId: 'ro-1001', equipmentAssetId: 'a-im1', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'IM1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await expect(db.update(equipmentBreakdownTickets).set({ outletId: 'ro-1002' }).where(eq(equipmentBreakdownTickets.id, 't-im1'))).rejects.toThrow();
+  });
+
+  it('dispenser_id value to NULL rejected by immutable trigger', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im2', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await expect(db.update(equipmentBreakdownTickets).set({ dispenserId: null }).where(eq(equipmentBreakdownTickets.id, 't-im2'))).rejects.toThrow();
+  });
+
+  it('dispenser_id NULL to value rejected by immutable trigger', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({ id: 'a-im3', outletId: 'ro-1001', assetCode: 'IM-3', equipmentType: 'ATG', name: 'IM3', createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im3', outletId: 'ro-1001', equipmentAssetId: 'a-im3', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'IM3', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await expect(db.update(equipmentBreakdownTickets).set({ dispenserId: 'disp-ro1-1' }).where(eq(equipmentBreakdownTickets.id, 't-im3'))).rejects.toThrow();
+  });
+
+  it('equipment_asset_id value to NULL rejected by immutable trigger', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({ id: 'a-im4', outletId: 'ro-1001', assetCode: 'IM-4', equipmentType: 'ATG', name: 'IM4', createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im4', outletId: 'ro-1001', equipmentAssetId: 'a-im4', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'IM4', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await expect(db.update(equipmentBreakdownTickets).set({ equipmentAssetId: null }).where(eq(equipmentBreakdownTickets.id, 't-im4'))).rejects.toThrow();
+  });
+
+  it('equipment_asset_id NULL to value rejected by immutable trigger', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im5', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await expect(db.update(equipmentBreakdownTickets).set({ equipmentAssetId: 'a-im4' }).where(eq(equipmentBreakdownTickets.id, 't-im5'))).rejects.toThrow();
+  });
+
+  it('equipment_type_snapshot mutation rejected by immutable trigger', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im6', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await expect(db.update(equipmentBreakdownTickets).set({ equipmentTypeSnapshot: 'ATG' }).where(eq(equipmentBreakdownTickets.id, 't-im6'))).rejects.toThrow();
+  });
+
+  it('equipment_label_snapshot mutation rejected by immutable trigger', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im7', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await expect(db.update(equipmentBreakdownTickets).set({ equipmentLabelSnapshot: 'Changed' }).where(eq(equipmentBreakdownTickets.id, 't-im7'))).rejects.toThrow();
+  });
+
+  it('breakdown_at mutation rejected by immutable trigger', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im8', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await expect(db.update(equipmentBreakdownTickets).set({ breakdownAt: '2025-01-01T00:00:00Z' }).where(eq(equipmentBreakdownTickets.id, 't-im8'))).rejects.toThrow();
+  });
+
+  it('direct UPDATE on equipment_breakdown_events rejected by immutable trigger', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-ev1', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await db.insert(equipmentBreakdownEvents).values({ id: 'ev-1', ticketId: 't-ev1', eventType: 'CREATED', fromStatus: null, toStatus: 'OPEN', actorUserId: 'user-admin', createdAt: now });
+    await expect(db.update(equipmentBreakdownEvents).set({ notes: 'hack' }).where(eq(equipmentBreakdownEvents.id, 'ev-1'))).rejects.toThrow();
+  });
+
+  it('direct DELETE on equipment_breakdown_events rejected by immutable trigger', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-ev2', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await db.insert(equipmentBreakdownEvents).values({ id: 'ev-2', ticketId: 't-ev2', eventType: 'CREATED', fromStatus: null, toStatus: 'OPEN', actorUserId: 'user-admin', createdAt: now });
+    await expect(db.delete(equipmentBreakdownEvents).where(eq(equipmentBreakdownEvents.id, 'ev-2'))).rejects.toThrow();
+  });
+
+  it('invalid ticket priority rejected directly by DB', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await expect(db.insert(equipmentBreakdownTickets).values({
+      id: 't-bp', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1',
+      priority: 'INVALID' as any, failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    })).rejects.toThrow();
+  });
+
+  it('invalid failure_category rejected directly by DB', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await expect(db.insert(equipmentBreakdownTickets).values({
+      id: 't-fc', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1',
+      priority: 'HIGH', failureCategory: 'INVALID' as any, description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    })).rejects.toThrow();
+  });
+
+  it('invalid ticket status rejected directly by DB', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await expect(db.insert(equipmentBreakdownTickets).values({
+      id: 't-st', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1',
+      priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'INVALID' as any, breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    })).rejects.toThrow();
+  });
+
+  it('negative downtime_seconds rejected directly by DB', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await expect(db.insert(equipmentBreakdownTickets).values({
+      id: 't-dt', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1',
+      priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'RESOLVED',
+      resolutionNotes: 'Fixed', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: -5,
+      breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
+    })).rejects.toThrow();
+  });
+
+  it('invalid equipment event_type rejected directly by DB', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-et', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await expect(db.insert(equipmentBreakdownEvents).values({
+      id: 'ev-bad', ticketId: 't-et', eventType: 'INVALID' as any, actorUserId: 'user-admin', createdAt: now
+    })).rejects.toThrow();
+  });
+
+  it('CSP can read own-outlet equipment assets', async () => {
+    const cspCookie = await loginAs('csp.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      headers: { 'Cookie': cspCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(res.status).toBe(200);
+  });
+
+  it('CSP can create auxiliary asset in own outlet', async () => {
+    const cspCookie = await loginAs('csp.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cspCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'CSP-ATG-1', equipmentType: 'ATG', name: 'CSP Tank' })
+    }, env);
+    expect(res.status).toBe(201);
+  });
+
+  it('CSP can create ticket in own outlet', async () => {
+    const cspCookie = await loginAs('csp.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cspCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'MEDIUM', failureCategory: 'MECHANICAL', description: 'CSP ticket', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    expect(res.status).toBe(201);
+  });
+
+  it('CSP cannot assign ticket', async () => {
+    const cspCookie = await loginAs('csp.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/equipment/tickets/nonexistent/assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cspCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ technicianName: 'Tech' })
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('CSP cannot resolve ticket', async () => {
+    const cspCookie = await loginAs('csp.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/equipment/tickets/nonexistent/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cspCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ resolutionNotes: 'Fixed', resolvedAt: '2026-10-01T10:00:00Z' })
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('CSP cannot signoff ticket', async () => {
+    const cspCookie = await loginAs('csp.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/equipment/tickets/nonexistent/signoff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cspCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ signoffNotes: 'OK' })
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('Field Officer can assign scoped equipment ticket', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const foCookie = await loginAs('fo.central@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    const ticketId = (await createRes.json() as any).data.id;
+
+    const assignRes = await app.request(`/api/v1/equipment/tickets/${ticketId}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': foCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ technicianName: 'Tech Alex' })
+    }, env);
+    expect(assignRes.status).toBe(200);
+    expect((await assignRes.json() as any).data.status).toBe('ASSIGNED');
+  });
+
+  it('Field Officer can start scoped equipment ticket', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const foCookie = await loginAs('fo.central@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    const ticketId = (await createRes.json() as any).data.id;
+    await app.request(`/api/v1/equipment/tickets/${ticketId}/assign`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': foCookie, 'Origin': 'http://localhost:3000' }, body: JSON.stringify({ technicianName: 'Tech Alex' })
+    }, env);
+
+    const startRes = await app.request(`/api/v1/equipment/tickets/${ticketId}/start`, {
+      method: 'POST', headers: { 'Cookie': foCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(startRes.status).toBe(200);
+    expect((await startRes.json() as any).data.status).toBe('IN_PROGRESS');
+  });
+
+  it('Field Officer can resolve scoped equipment ticket', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const foCookie = await loginAs('fo.central@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    const ticketId = (await createRes.json() as any).data.id;
+    await app.request(`/api/v1/equipment/tickets/${ticketId}/assign`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': foCookie, 'Origin': 'http://localhost:3000' }, body: JSON.stringify({ technicianName: 'Tech Alex' })
+    }, env);
+    await app.request(`/api/v1/equipment/tickets/${ticketId}/start`, {
+      method: 'POST', headers: { 'Cookie': foCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+
+    const resolveRes = await app.request(`/api/v1/equipment/tickets/${ticketId}/resolve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': foCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ resolutionNotes: 'Resolved', resolvedAt: '2026-10-01T09:00:00Z' })
+    }, env);
+    expect(resolveRes.status).toBe(200);
+    expect((await resolveRes.json() as any).data.status).toBe('RESOLVED');
+  });
+
+  it('Field Officer can signoff scoped equipment ticket', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const foCookie = await loginAs('fo.central@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    const ticketId = (await createRes.json() as any).data.id;
+    await app.request(`/api/v1/equipment/tickets/${ticketId}/assign`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': foCookie, 'Origin': 'http://localhost:3000' }, body: JSON.stringify({ technicianName: 'Tech Alex' })
+    }, env);
+    await app.request(`/api/v1/equipment/tickets/${ticketId}/start`, {
+      method: 'POST', headers: { 'Cookie': foCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    await app.request(`/api/v1/equipment/tickets/${ticketId}/resolve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': foCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ resolutionNotes: 'Resolved', resolvedAt: '2026-10-01T09:00:00Z' })
+    }, env);
+
+    const signoffRes = await app.request(`/api/v1/equipment/tickets/${ticketId}/signoff`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': foCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ signoffNotes: 'Verified OK' })
+    }, env);
+    expect(signoffRes.status).toBe(200);
+    expect((await signoffRes.json() as any).data.status).toBe('CLOSED');
+  });
+
+  it('cross-outlet asset PUT returns 403', async () => {
+    const adminCookie = await loginAs('admin@iocl.in');
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1002/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': adminCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'RO2-AST', equipmentType: 'ATG', name: 'RO2 Tank' })
+    }, env);
+    const assetId = (await createRes.json() as any).data.id;
+
+    const res = await app.request(`/api/v1/equipment/assets/${assetId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ name: 'Hacked' })
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('cross-outlet ticket detail GET returns 403 when out of scope', async () => {
+    const adminCookie = await loginAs('admin@iocl.in');
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const uniqueCode = `RO2-AST-${Date.now()}`;
+    const createRes = await app.request('/api/v1/outlets/ro-1002/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': adminCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: uniqueCode, equipmentType: 'ATG', name: 'RO2 Tank 2' })
+    }, env);
+    const assetId = (await createRes.json() as any).data.id;
+
+    // Create a ticket for that asset
+    const ticketRes = await app.request('/api/v1/outlets/ro-1002/equipment/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': adminCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ equipmentAssetId: assetId, priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'RO2 ticket', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    const ticketId = (await ticketRes.json() as any).data.id;
+
+    const res = await app.request(`/api/v1/equipment/tickets/${ticketId}`, {
+      headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('duplicate auxiliary equipment serial number in same outlet returns 409 EQUIPMENT_ASSET_SERIAL_EXISTS', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'SER-1', equipmentType: 'ATG', name: 'Tank 1', serialNumber: 'SN-12345' })
+    }, env);
+
+    const dupRes = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'SER-2', equipmentType: 'ATG', name: 'Tank 2', serialNumber: 'SN-12345' })
+    }, env);
+    expect(dupRes.status).toBe(409);
+    expect((await dupRes.json() as any).error.code).toBe('EQUIPMENT_ASSET_SERIAL_EXISTS');
+  });
+
+  it('asset update with assetCode rejected with 400', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'UP-2', equipmentType: 'ATG', name: 'Asset' })
+    }, env);
+    const assetId = (await createRes.json() as any).data.id;
+
+    const updRes = await app.request(`/api/v1/equipment/assets/${assetId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'CHANGED' })
+    }, env);
+    expect(updRes.status).toBe(400);
+  });
+
+  it('asset update with equipmentType rejected with 400', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'UP-3', equipmentType: 'ATG', name: 'Asset' })
+    }, env);
+    const assetId = (await createRes.json() as any).data.id;
+
+    const updRes = await app.request(`/api/v1/equipment/assets/${assetId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ equipmentType: 'DG_SET' })
+    }, env);
+    expect(updRes.status).toBe(400);
+  });
+
+  it('asset update with outletId rejected with 400', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'UP-4', equipmentType: 'ATG', name: 'Asset' })
+    }, env);
+    const assetId = (await createRes.json() as any).data.id;
+
+    const updRes = await app.request(`/api/v1/equipment/assets/${assetId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ outletId: 'ro-1002' })
+    }, env);
+    expect(updRes.status).toBe(400);
+  });
+
+  it('asset update with unknown field rejected with 400', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'UP-5', equipmentType: 'ATG', name: 'Asset' })
+    }, env);
+    const assetId = (await createRes.json() as any).data.id;
+
+    const updRes = await app.request(`/api/v1/equipment/assets/${assetId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ unknownField: 'hack' })
+    }, env);
+    expect(updRes.status).toBe(400);
+  });
+
+  it('both dispenserId and equipmentAssetId provided on ticket create rejected with 400', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', equipmentAssetId: 'some-asset', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    expect(res.status).toBe(400);
+  });
+
+  it('neither dispenserId nor equipmentAssetId provided on ticket create rejected with 400', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    expect(res.status).toBe(400);
+  });
+
+  it('timezone-less breakdownAt rejected with 400', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01 08:00:00' })
+    }, env);
+    expect(res.status).toBe(400);
+  });
+
+  it('OPEN to start returns 409 INVALID_EQUIPMENT_TICKET_TRANSITION', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const foCookie = await loginAs('fo.central@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    const ticketId = (await createRes.json() as any).data.id;
+
+    const startRes = await app.request(`/api/v1/equipment/tickets/${ticketId}/start`, {
+      method: 'POST', headers: { 'Cookie': foCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(startRes.status).toBe(409);
+    expect((await startRes.json() as any).error.code).toBe('INVALID_EQUIPMENT_TICKET_TRANSITION');
+  });
+
+  it('ASSIGNED to resolve returns 409', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const foCookie = await loginAs('fo.central@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    const ticketId = (await createRes.json() as any).data.id;
+    await app.request(`/api/v1/equipment/tickets/${ticketId}/assign`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': foCookie, 'Origin': 'http://localhost:3000' }, body: JSON.stringify({ technicianName: 'Tech' })
+    }, env);
+
+    const resolveRes = await app.request(`/api/v1/equipment/tickets/${ticketId}/resolve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': foCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ resolutionNotes: 'Done', resolvedAt: '2026-10-01T10:00:00Z' })
+    }, env);
+    expect(resolveRes.status).toBe(409);
+  });
+
+  it('failed ticket transition does not append an equipment event', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const foCookie = await loginAs('fo.central@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    const ticketId = (await createRes.json() as any).data.id;
+
+    const eventsBefore = await (await app.request(`/api/v1/equipment/tickets/${ticketId}/events`, { headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' } }, env)).json() as any;
+
+    await app.request(`/api/v1/equipment/tickets/${ticketId}/start`, {
+      method: 'POST', headers: { 'Cookie': foCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+
+    const eventsAfter = await (await app.request(`/api/v1/equipment/tickets/${ticketId}/events`, { headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' } }, env)).json() as any;
+    expect(eventsAfter.data.length).toBe(eventsBefore.data.length);
   });
 });
