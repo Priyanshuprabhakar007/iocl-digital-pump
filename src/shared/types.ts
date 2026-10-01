@@ -1047,19 +1047,67 @@ export interface LubeDailySummary {
   };
 }
 
-export type EquipmentAssetCategory = 'ATG' | 'AIR_COMPRESSOR' | 'CNG_COMPRESSOR' | 'DG_SET' | 'OTHER';
-export type EquipmentType = 'DISPENSER' | EquipmentAssetCategory;
+export type EquipmentAssetType =
+  'ATG' |
+  'AIR_COMPRESSOR' |
+  'CNG_COMPRESSOR' |
+  'DG_SET' |
+  'OTHER';
+
+export type EquipmentType =
+  'DISPENSER' | EquipmentAssetType;
+
+export type EquipmentAssetStatus =
+  'ACTIVE' |
+  'INACTIVE' |
+  'MAINTENANCE' |
+  'DECOMMISSIONED';
+
+export type EquipmentTicketPriority =
+  'LOW' |
+  'MEDIUM' |
+  'HIGH' |
+  'CRITICAL';
+
+export type EquipmentFailureCategory =
+  'ELECTRICAL' |
+  'MECHANICAL' |
+  'ELECTRONICS' |
+  'COMMUNICATION' |
+  'CALIBRATION' |
+  'PRESSURE' |
+  'LEAKAGE' |
+  'POWER' |
+  'SOFTWARE' |
+  'OTHER';
+
+export type EquipmentTicketStatus =
+  'OPEN' |
+  'ASSIGNED' |
+  'IN_PROGRESS' |
+  'RESOLVED' |
+  'CLOSED' |
+  'CANCELLED';
+
+export type EquipmentBreakdownEventType =
+  'CREATED' |
+  'ASSIGNED' |
+  'REASSIGNED' |
+  'WORK_STARTED' |
+  'RESOLVED' |
+  'SIGNED_OFF' |
+  'CANCELLED';
 
 export interface EquipmentAsset {
   id: string;
   outletId: string;
   assetCode: string;
-  equipmentType: EquipmentAssetCategory;
+  equipmentType: EquipmentAssetType;
   name: string;
   manufacturer: string | null;
   model: string | null;
   serialNumber: string | null;
-  status: EquipmentStatus;
+  status: EquipmentAssetStatus;
   commissionedAt: string | null;
   notes: string | null;
   createdBy: string;
@@ -1067,21 +1115,17 @@ export interface EquipmentAsset {
   updatedAt: string;
 }
 
-export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type FailureCategory = 'ELECTRICAL' | 'MECHANICAL' | 'ELECTRONICS' | 'COMMUNICATION' | 'CALIBRATION' | 'PRESSURE' | 'LEAKAGE' | 'POWER' | 'SOFTWARE' | 'OTHER';
-export type TicketStatus = 'OPEN' | 'ASSIGNED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'CANCELLED';
-
 export interface EquipmentBreakdownTicket {
   id: string;
   outletId: string;
   dispenserId: string | null;
   equipmentAssetId: string | null;
-  equipmentTypeSnapshot: string;
+  equipmentTypeSnapshot: EquipmentType;
   equipmentLabelSnapshot: string;
-  priority: TicketPriority;
-  failureCategory: FailureCategory;
+  priority: EquipmentTicketPriority;
+  failureCategory: EquipmentFailureCategory;
   description: string;
-  status: TicketStatus;
+  status: EquipmentTicketStatus;
   breakdownAt: string;
   technicianName: string | null;
   technicianPhone: string | null;
@@ -1105,9 +1149,9 @@ export interface EquipmentBreakdownTicket {
 export interface EquipmentBreakdownEvent {
   id: string;
   ticketId: string;
-  eventType: string;
-  fromStatus: TicketStatus | null;
-  toStatus: TicketStatus | null;
+  eventType: EquipmentBreakdownEventType;
+  fromStatus: EquipmentTicketStatus | null;
+  toStatus: EquipmentTicketStatus | null;
   notes: string | null;
   actorUserId: string;
   createdAt: string;
@@ -1125,8 +1169,8 @@ export interface EquipmentHealthSummary {
 export interface EquipmentTarget {
   targetType: "DISPENSER" | "ASSET";
   targetId: string;
-  equipmentType: string;
+  equipmentType: EquipmentType;
   label: string;
-  status: string;
+  status: EquipmentAssetStatus;
 }
 

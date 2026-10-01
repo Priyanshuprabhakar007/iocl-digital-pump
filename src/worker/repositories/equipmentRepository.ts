@@ -1,7 +1,7 @@
 import { eq, and, sql, desc, asc } from 'drizzle-orm';
 import { AppDatabase } from '../../db';
 import { equipmentAssets, equipmentBreakdownTickets, equipmentBreakdownEvents, dispensers } from '../../db/schema';
-import { EquipmentAsset, EquipmentBreakdownTicket, EquipmentBreakdownEvent, TicketStatus } from '../../shared/types';
+import { EquipmentAsset, EquipmentBreakdownTicket, EquipmentBreakdownEvent, EquipmentTicketStatus } from '../../shared/types';
 
 export class EquipmentRepository {
   constructor(private db: AppDatabase) {}
@@ -36,7 +36,7 @@ export class EquipmentRepository {
     return await this.db.select().from(equipmentBreakdownTickets).where(eq(equipmentBreakdownTickets.id, id)).get();
   }
 
-  async listTickets(outletId: string, filters: { status?: TicketStatus, priority?: string, equipmentType?: string } = {}) {
+  async listTickets(outletId: string, filters: { status?: EquipmentTicketStatus, priority?: string, equipmentType?: string } = {}) {
     const conditions = [eq(equipmentBreakdownTickets.outletId, outletId)];
     if (filters.status) conditions.push(eq(equipmentBreakdownTickets.status, filters.status));
     if (filters.priority) conditions.push(eq(equipmentBreakdownTickets.priority, filters.priority));
@@ -52,7 +52,7 @@ export class EquipmentRepository {
     }).returning().get();
   }
 
-  async updateTicketStatusConditional(id: string, expectedStatus: TicketStatus, status: TicketStatus, updates: Partial<EquipmentBreakdownTicket>) {
+  async updateTicketStatusConditional(id: string, expectedStatus: EquipmentTicketStatus, status: EquipmentTicketStatus, updates: Partial<EquipmentBreakdownTicket>) {
     const res = await this.db.update(equipmentBreakdownTickets)
       .set({ status, ...updates, updatedAt: new Date().toISOString() })
       .where(and(eq(equipmentBreakdownTickets.id, id), eq(equipmentBreakdownTickets.status, expectedStatus)))

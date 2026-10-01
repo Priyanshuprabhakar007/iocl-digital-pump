@@ -848,6 +848,7 @@ export const equipmentBreakdownTickets = sqliteTable('equipment_breakdown_ticket
   index('idx_eq_tickets_status').on(table.status),
   index('idx_eq_tickets_priority').on(table.priority),
   index('idx_eq_tickets_breakdown_at').on(table.breakdownAt),
+  index('idx_eq_tickets_type_snapshot').on(table.equipmentTypeSnapshot),
   check('eq_tickets_target_check', sql`(${table.dispenserId} IS NOT NULL AND ${table.equipmentAssetId} IS NULL) OR (${table.dispenserId} IS NULL AND ${table.equipmentAssetId} IS NOT NULL)`),
   check('eq_tickets_type_check', sql`${table.equipmentTypeSnapshot} IN ('DISPENSER', 'ATG', 'AIR_COMPRESSOR', 'CNG_COMPRESSOR', 'DG_SET', 'OTHER')`),
   check('eq_tickets_priority_check', sql`${table.priority} IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')`),
@@ -855,6 +856,9 @@ export const equipmentBreakdownTickets = sqliteTable('equipment_breakdown_ticket
   check('eq_tickets_status_check', sql`${table.status} IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED')`),
   check('eq_tickets_desc_check', sql`trim(${table.description}) <> ''`),
   check('eq_tickets_downtime_check', sql`${table.downtimeSeconds} IS NULL OR ${table.downtimeSeconds} >= 0`),
+  check('eq_tickets_resolved_check', sql`${table.status} NOT IN ('RESOLVED', 'CLOSED') OR (${table.resolutionNotes} IS NOT NULL AND trim(${table.resolutionNotes}) <> '' AND ${table.resolvedAt} IS NOT NULL AND ${table.resolvedByUserId} IS NOT NULL AND ${table.downtimeSeconds} IS NOT NULL AND ${table.downtimeSeconds} >= 0)`),
+  check('eq_tickets_closed_check', sql`${table.status} != 'CLOSED' OR (${table.signedOffAt} IS NOT NULL AND ${table.signedOffByUserId} IS NOT NULL)`),
+  check('eq_tickets_cancelled_check', sql`${table.status} != 'CANCELLED' OR (${table.cancelReason} IS NOT NULL AND trim(${table.cancelReason}) <> '' AND ${table.cancelledAt} IS NOT NULL AND ${table.cancelledByUserId} IS NOT NULL)`),
 ]);
 
 export const equipmentBreakdownEvents = sqliteTable('equipment_breakdown_events', {
@@ -868,6 +872,10 @@ export const equipmentBreakdownEvents = sqliteTable('equipment_breakdown_events'
   createdAt: text('created_at').notNull(),
 }, (table) => [
   index('idx_eq_events_ticket_id').on(table.ticketId),
+  index('idx_eq_events_ticket_created').on(table.ticketId, table.createdAt),
+  check('eq_events_type_check', sql`${table.eventType} IN ('CREATED', 'ASSIGNED', 'REASSIGNED', 'WORK_STARTED', 'RESOLVED', 'SIGNED_OFF', 'CANCELLED')`),
+  check('eq_events_from_status_check', sql`${table.fromStatus} IS NULL OR ${table.fromStatus} IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED')`),
+  check('eq_events_to_status_check', sql`${table.toStatus} IS NULL OR ${table.toStatus} IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED')`),
 ]);
 
 

@@ -8,7 +8,7 @@ import { ScopeService } from '../services/scopeService';
 import { requireAuth, AppContext, EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 import { PERMISSIONS } from '../../shared/constants';
-import { EquipmentTicketFilterSchema } from '../../shared/validators';
+import { EquipmentTicketFilterSchema, EquipmentAssetFilterSchema } from '../../shared/validators';
 
 export const equipmentRoutes = new Hono<{ Bindings: EnvBindings }>();
 
@@ -61,10 +61,16 @@ equipmentRoutes.get('/outlets/:outletId/equipment/assets', requirePermission(PER
     return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
   }
 
-  const equipmentType = c.req.query('equipmentType');
-  const status = c.req.query('status');
+  const query = {
+    equipmentType: c.req.query('equipmentType'),
+    status: c.req.query('status'),
+  };
+  const parsed = EquipmentAssetFilterSchema.safeParse(query);
+  if (!parsed.success) {
+    return c.json({ success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid asset filters' } }, 400);
+  }
 
-  const assets = await equipmentRepo.listAssets(outletId, { equipmentType, status });
+  const assets = await equipmentRepo.listAssets(outletId, parsed.data);
   return c.json({ success: true, data: assets, error: null });
 });
 

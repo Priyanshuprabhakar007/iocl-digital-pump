@@ -1,5 +1,30 @@
 -- Migration 0015: Phase 3C-1 Equipment Breakdown Management
 
+INSERT OR IGNORE INTO "roles" ("id", "code", "name", "description") VALUES
+('role-admin', 'ADMIN', 'System Administrator', 'Full access across all organizational units and capabilities'),
+('role-so', 'STATE_OFFICE', 'State Office Executive', 'State-level oversight, user scope management, and monitoring'),
+('role-do', 'DIVISIONAL_OFFICE', 'Divisional Office Manager', 'Divisional operations management and outlet supervision'),
+('role-bm', 'BUSINESS_MANAGER', 'Business Manager', 'Regional business analytics and field officer supervision'),
+('role-fo', 'FIELD_OFFICER', 'Field Officer', 'Field level inspection and retail outlet compliance manager'),
+('role-dealer', 'DEALER', 'Retail Outlet Dealer', 'Outlet franchisee / owner with access to assigned outlet operations'),
+('role-csp', 'CSP', 'Customer Service Provider', 'Outlet staff / attendant with operational data access');
+
+INSERT OR IGNORE INTO "permissions" ("id", "code", "name", "description") VALUES
+('perm-eq-r', 'equipment.read', 'Read Equipment', 'View equipment assets and breakdown tickets'),
+('perm-eq-as-w', 'equipment_assets.write', 'Write Equipment Assets', 'Manage equipment assets'),
+('perm-eq-t-c', 'equipment_tickets.create', 'Create Equipment Tickets', 'Create new breakdown tickets'),
+('perm-eq-t-m', 'equipment_tickets.manage', 'Manage Equipment Tickets', 'Assign and resolve breakdown tickets'),
+('perm-eq-t-s', 'equipment_tickets.signoff', 'Signoff Equipment Tickets', 'Sign off and close breakdown tickets');
+
+INSERT OR IGNORE INTO "role_permissions" ("role_id", "permission_id") VALUES
+('role-admin', 'perm-eq-r'), ('role-admin', 'perm-eq-as-w'), ('role-admin', 'perm-eq-t-c'), ('role-admin', 'perm-eq-t-m'), ('role-admin', 'perm-eq-t-s'),
+('role-so', 'perm-eq-r'),
+('role-do', 'perm-eq-r'), ('role-do', 'perm-eq-t-m'), ('role-do', 'perm-eq-t-s'),
+('role-bm', 'perm-eq-r'), ('role-bm', 'perm-eq-as-w'), ('role-bm', 'perm-eq-t-m'), ('role-bm', 'perm-eq-t-s'),
+('role-fo', 'perm-eq-r'), ('role-fo', 'perm-eq-as-w'), ('role-fo', 'perm-eq-t-m'), ('role-fo', 'perm-eq-t-s'),
+('role-dealer', 'perm-eq-r'), ('role-dealer', 'perm-eq-as-w'), ('role-dealer', 'perm-eq-t-c'),
+('role-csp', 'perm-eq-r'), ('role-csp', 'perm-eq-as-w'), ('role-csp', 'perm-eq-t-c');
+
 CREATE TABLE IF NOT EXISTS "equipment_assets" (
 	"id" text PRIMARY KEY NOT NULL,
 	"outlet_id" text NOT NULL,
@@ -72,7 +97,28 @@ CREATE TABLE IF NOT EXISTS "equipment_breakdown_tickets" (
     CHECK (failure_category IN ('ELECTRICAL', 'MECHANICAL', 'ELECTRONICS', 'COMMUNICATION', 'CALIBRATION', 'PRESSURE', 'LEAKAGE', 'POWER', 'SOFTWARE', 'OTHER')),
     CHECK (status IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED')),
     CHECK (trim(description) <> ''),
-    CHECK (downtime_seconds IS NULL OR downtime_seconds >= 0)
+    CHECK (downtime_seconds IS NULL OR downtime_seconds >= 0),
+    CHECK (
+      status NOT IN ('RESOLVED', 'CLOSED') OR (
+        resolution_notes IS NOT NULL AND trim(resolution_notes) <> '' AND
+        resolved_at IS NOT NULL AND
+        resolved_by_user_id IS NOT NULL AND
+        downtime_seconds IS NOT NULL AND downtime_seconds >= 0
+      )
+    ),
+    CHECK (
+      status != 'CLOSED' OR (
+        signed_off_at IS NOT NULL AND
+        signed_off_by_user_id IS NOT NULL
+      )
+    ),
+    CHECK (
+      status != 'CANCELLED' OR (
+        cancel_reason IS NOT NULL AND trim(cancel_reason) <> '' AND
+        cancelled_at IS NOT NULL AND
+        cancelled_by_user_id IS NOT NULL
+      )
+    )
 );
 
 CREATE INDEX IF NOT EXISTS "idx_eq_tickets_outlet_id" ON "equipment_breakdown_tickets" ("outlet_id");
@@ -81,6 +127,7 @@ CREATE INDEX IF NOT EXISTS "idx_eq_tickets_asset_id" ON "equipment_breakdown_tic
 CREATE INDEX IF NOT EXISTS "idx_eq_tickets_status" ON "equipment_breakdown_tickets" ("status");
 CREATE INDEX IF NOT EXISTS "idx_eq_tickets_priority" ON "equipment_breakdown_tickets" ("priority");
 CREATE INDEX IF NOT EXISTS "idx_eq_tickets_breakdown_at" ON "equipment_breakdown_tickets" ("breakdown_at");
+CREATE INDEX IF NOT EXISTS "idx_eq_tickets_type_snapshot" ON "equipment_breakdown_tickets" ("equipment_type_snapshot");
 
 CREATE TABLE IF NOT EXISTS "equipment_breakdown_events" (
 	"id" text PRIMARY KEY NOT NULL,
@@ -93,10 +140,13 @@ CREATE TABLE IF NOT EXISTS "equipment_breakdown_events" (
 	"created_at" text NOT NULL,
 	FOREIGN KEY ("ticket_id") REFERENCES "equipment_breakdown_tickets"("id") ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY ("actor_user_id") REFERENCES "users"("id") ON UPDATE no action ON DELETE no action,
-    CHECK (event_type IN ('CREATED', 'ASSIGNED', 'REASSIGNED', 'WORK_STARTED', 'RESOLVED', 'SIGNED_OFF', 'CANCELLED'))
+    CHECK (event_type IN ('CREATED', 'ASSIGNED', 'REASSIGNED', 'WORK_STARTED', 'RESOLVED', 'SIGNED_OFF', 'CANCELLED')),
+    CHECK (from_status IS NULL OR from_status IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED')),
+    CHECK (to_status IS NULL OR to_status IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED'))
 );
 
 CREATE INDEX IF NOT EXISTS "idx_eq_events_ticket_id" ON "equipment_breakdown_events" ("ticket_id");
+CREATE INDEX IF NOT EXISTS "idx_eq_events_ticket_created" ON "equipment_breakdown_events" ("ticket_id", "created_at");
 
 -- Triggers for lifecycle and immutability protection
 

@@ -10,7 +10,7 @@ import {
   SignoffTicketSchema,
   CancelTicketSchema
 } from '../../shared/validators';
-import { EquipmentAsset, EquipmentBreakdownTicket, TicketStatus } from '../../shared/types';
+import { EquipmentAsset, EquipmentBreakdownTicket, EquipmentTarget, EquipmentTicketStatus, EquipmentAssetType, EquipmentType, EquipmentAssetStatus } from '../../shared/types';
 
 export class EquipmentError extends Error {
     constructor(public code: string, message: string, public status: number = 400) {
@@ -22,73 +22,110 @@ export class EquipmentError extends Error {
 export class EquipmentService {
   constructor(private db: AppDatabase) {}
 
-  async createAsset(outletId: string, userId: string, data: any) {
+  async createAsset(outletId: string, userId: string, data: unknown): Promise<EquipmentAsset> {
     const validated = CreateEquipmentAssetSchema.parse(data);
     const repo = new EquipmentRepository(this.db);
-    const asset = await repo.createAsset({
-      ...validated,
-      id: crypto.randomUUID(),
-      outletId,
-      createdBy: userId,
-      manufacturer: validated.manufacturer ?? null,
-      model: validated.model ?? null,
-      serialNumber: validated.serialNumber ?? null,
-      commissionedAt: validated.commissionedAt ?? null,
-      notes: validated.notes ?? null,
-    });
-    await new AuditRepository(this.db).logAction({
+    try {
+      const asset = await repo.createAsset({
+        ...validated,
         id: crypto.randomUUID(),
-        userId,
-        action: 'EQUIPMENT_ASSET_CREATE',
-        entityType: 'EQUIPMENT_ASSET',
-        entityId: asset.id,
-        newValue: asset as any,
-        createdAt: new Date().toISOString()
-    });
-    return asset;
+        outletId,
+        equipmentType: validated.equipmentType as EquipmentAssetType,
+        status: validated.status as EquipmentAssetStatus,
+        createdBy: userId,
+        manufacturer: validated.manufacturer ?? null,
+        model: validated.model ?? null,
+        serialNumber: validated.serialNumber ?? null,
+        commissionedAt: validated.commissionedAt ?? null,
+        notes: validated.notes ?? null,
+      });
+      await new AuditRepository(this.db).logAction({
+          id: crypto.randomUUID(),
+          userId,
+          action: 'EQUIPMENT_ASSET_CREATE',
+          entityType: 'EQUIPMENT_ASSET',
+          entityId: asset.id,
+          newValue: asset as any,
+          createdAt: new Date().toISOString()
+      });
+      return asset as EquipmentAsset;
+    } catch (err: any) {
+      if (err instanceof EquipmentError) throw err;
+      const msg = err.message || '';
+      const causeMsg = err.cause ? String(err.cause) : '';
+      const fullStr = `${msg} ${causeMsg}`;
+      if (fullStr.includes('equipment_assets.outlet_id, equipment_assets.asset_code') || fullStr.includes('idx_eq_assets_outlet_code_unique')) {
+        throw new EquipmentError('EQUIPMENT_ASSET_CODE_EXISTS', 'Asset code already exists in this outlet', 409);
+      }
+      if (fullStr.includes('equipment_assets.outlet_id, equipment_assets.serial_number') || fullStr.includes('idx_eq_assets_outlet_serial_unique')) {
+        throw new EquipmentError('EQUIPMENT_ASSET_SERIAL_EXISTS', 'Serial number already exists in this outlet', 409);
+      }
+      if (fullStr.includes('UNIQUE constraint failed')) {
+        if (fullStr.includes('serial_number')) {
+          throw new EquipmentError('EQUIPMENT_ASSET_SERIAL_EXISTS', 'Serial number already exists in this outlet', 409);
+        }
+        throw new EquipmentError('EQUIPMENT_ASSET_CODE_EXISTS', 'Asset code already exists in this outlet', 409);
+      }
+      throw err;
+    }
   }
 
-  async updateAsset(assetId: string, userId: string, data: any) {
+  async updateAsset(assetId: string, userId: string, data: unknown): Promise<EquipmentAsset> {
     const validated = UpdateEquipmentAssetSchema.parse(data);
     const repo = new EquipmentRepository(this.db);
     const existing = await repo.getAssetById(assetId);
     if (!existing) throw new EquipmentError('EQUIPMENT_ASSET_NOT_FOUND', 'Asset not found', 404);
 
-    const updated = await repo.updateAsset(assetId, {
-      ...validated,
-      manufacturer: validated.manufacturer !== undefined ? validated.manufacturer : existing.manufacturer,
-      model: validated.model !== undefined ? validated.model : existing.model,
-      serialNumber: validated.serialNumber !== undefined ? validated.serialNumber : existing.serialNumber,
-      status: validated.status !== undefined ? validated.status : (existing.status as any),
-      commissionedAt: validated.commissionedAt !== undefined ? validated.commissionedAt : existing.commissionedAt,
-      notes: validated.notes !== undefined ? validated.notes : existing.notes,
-    });
+    try {
+      const updated = await repo.updateAsset(assetId, {
+        ...validated,
+        equipmentType: (validated as any).equipmentType ? ((validated as any).equipmentType as EquipmentAssetType) : (existing.equipmentType as EquipmentAssetType),
+        manufacturer: validated.manufacturer !== undefined ? validated.manufacturer : existing.manufacturer,
+        model: validated.model !== undefined ? validated.model : existing.model,
+        serialNumber: validated.serialNumber !== undefined ? validated.serialNumber : existing.serialNumber,
+        status: validated.status !== undefined ? (validated.status as EquipmentAssetStatus) : (existing.status as EquipmentAssetStatus),
+        commissionedAt: validated.commissionedAt !== undefined ? validated.commissionedAt : existing.commissionedAt,
+        notes: validated.notes !== undefined ? validated.notes : existing.notes,
+      });
 
-    await new AuditRepository(this.db).logAction({
-        id: crypto.randomUUID(),
-        userId,
-        action: 'EQUIPMENT_ASSET_UPDATE',
-        entityType: 'EQUIPMENT_ASSET',
-        entityId: assetId,
-        oldValue: existing as any,
-        newValue: updated as any,
-        createdAt: new Date().toISOString()
-    });
-    return updated;
+      await new AuditRepository(this.db).logAction({
+          id: crypto.randomUUID(),
+          userId,
+          action: 'EQUIPMENT_ASSET_UPDATE',
+          entityType: 'EQUIPMENT_ASSET',
+          entityId: assetId,
+          oldValue: existing as any,
+          newValue: updated as any,
+          createdAt: new Date().toISOString()
+      });
+      return updated as EquipmentAsset;
+    } catch (err: any) {
+      if (err instanceof EquipmentError) throw err;
+      const msg = err.message || '';
+      const causeMsg = err.cause ? String(err.cause) : '';
+      const fullStr = `${msg} ${causeMsg}`;
+      if (fullStr.includes('equipment_assets.outlet_id, equipment_assets.asset_code') || fullStr.includes('idx_eq_assets_outlet_code_unique')) {
+        throw new EquipmentError('EQUIPMENT_ASSET_CODE_EXISTS', 'Asset code already exists in this outlet', 409);
+      }
+      if (fullStr.includes('equipment_assets.outlet_id, equipment_assets.serial_number') || fullStr.includes('idx_eq_assets_outlet_serial_unique')) {
+        throw new EquipmentError('EQUIPMENT_ASSET_SERIAL_EXISTS', 'Serial number already exists in this outlet', 409);
+      }
+      if (fullStr.includes('UNIQUE constraint failed')) {
+        if (fullStr.includes('serial_number')) {
+          throw new EquipmentError('EQUIPMENT_ASSET_SERIAL_EXISTS', 'Serial number already exists in this outlet', 409);
+        }
+        throw new EquipmentError('EQUIPMENT_ASSET_CODE_EXISTS', 'Asset code already exists in this outlet', 409);
+      }
+      throw err;
+    }
   }
 
-  async listTargets(outletId: string) {
+  async listTargets(outletId: string): Promise<EquipmentTarget[]> {
     const repo = new EquipmentRepository(this.db);
     const dispensers = await repo.listDispensers(outletId);
     const assets = await repo.listAssets(outletId);
 
-    const targets: Array<{
-      targetType: "DISPENSER" | "ASSET";
-      targetId: string;
-      equipmentType: string;
-      label: string;
-      status: string;
-    }> = [];
+    const targets: EquipmentTarget[] = [];
 
     for (const d of dispensers) {
       targets.push({
@@ -96,7 +133,7 @@ export class EquipmentService {
         targetId: d.id,
         equipmentType: 'DISPENSER',
         label: d.name,
-        status: d.status,
+        status: d.status as EquipmentAssetStatus,
       });
     }
 
@@ -104,20 +141,20 @@ export class EquipmentService {
       targets.push({
         targetType: 'ASSET',
         targetId: a.id,
-        equipmentType: a.equipmentType,
+        equipmentType: a.equipmentType as EquipmentType,
         label: a.name,
-        status: a.status,
+        status: a.status as EquipmentAssetStatus,
       });
     }
 
     return targets;
   }
 
-  async createTicket(outletId: string, userId: string, data: any) {
+  async createTicket(outletId: string, userId: string, data: unknown): Promise<EquipmentBreakdownTicket> {
     const validated = CreateEquipmentTicketSchema.parse(data);
     const repo = new EquipmentRepository(this.db);
     
-    let equipmentTypeSnapshot = '';
+    let equipmentTypeSnapshot: EquipmentType = 'DISPENSER';
     let equipmentLabelSnapshot = '';
 
     if (validated.dispenserId) {
@@ -126,7 +163,7 @@ export class EquipmentService {
         if (dispenser.status === 'INACTIVE' || dispenser.status === 'DECOMMISSIONED') {
             throw new EquipmentError('EQUIPMENT_TARGET_INACTIVE', 'Target is inactive or decommissioned', 400);
         }
-        equipmentTypeSnapshot = 'DISPENSER';
+        equipmentTypeSnapshot = 'DISPENSER' as EquipmentType;
         equipmentLabelSnapshot = dispenser.name;
     } else if (validated.equipmentAssetId) {
         const asset = await repo.getAssetById(validated.equipmentAssetId);
@@ -134,7 +171,7 @@ export class EquipmentService {
         if (asset.status === 'INACTIVE' || asset.status === 'DECOMMISSIONED') {
             throw new EquipmentError('EQUIPMENT_TARGET_INACTIVE', 'Target is inactive or decommissioned', 400);
         }
-        equipmentTypeSnapshot = asset.equipmentType;
+        equipmentTypeSnapshot = asset.equipmentType as EquipmentType;
         equipmentLabelSnapshot = asset.name;
     } else {
         throw new EquipmentError('EQUIPMENT_TARGET_NOT_FOUND', 'Target required');
@@ -184,17 +221,17 @@ export class EquipmentService {
         newValue: ticket as any,
         createdAt: new Date().toISOString()
     });
-    return ticket;
+    return ticket as EquipmentBreakdownTicket;
   }
 
-  async assignTicket(ticketId: string, userId: string, data: any) {
+  async assignTicket(ticketId: string, userId: string, data: unknown): Promise<EquipmentBreakdownTicket> {
     const validated = AssignTicketSchema.parse(data);
     const repo = new EquipmentRepository(this.db);
     const ticket = await repo.getTicketById(ticketId);
     if (!ticket) throw new EquipmentError('EQUIPMENT_TICKET_NOT_FOUND', 'Ticket not found', 404);
 
     if (ticket.status !== 'OPEN' && ticket.status !== 'ASSIGNED') {
-        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 400);
+        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 409);
     }
 
     const isReassign = ticket.status === 'ASSIGNED';
@@ -214,7 +251,7 @@ export class EquipmentService {
     await repo.createEvent({
         ticketId,
         eventType: isReassign ? 'REASSIGNED' : 'ASSIGNED',
-        fromStatus: ticket.status,
+        fromStatus: ticket.status as EquipmentTicketStatus,
         toStatus: 'ASSIGNED',
         notes: `Assigned to ${validated.technicianName}`,
         actorUserId: userId,
@@ -231,16 +268,16 @@ export class EquipmentService {
         createdAt: new Date().toISOString()
     });
 
-    return updated;
+    return updated as EquipmentBreakdownTicket;
   }
 
-  async startTicket(ticketId: string, userId: string) {
+  async startTicket(ticketId: string, userId: string): Promise<EquipmentBreakdownTicket> {
     const repo = new EquipmentRepository(this.db);
     const ticket = await repo.getTicketById(ticketId);
     if (!ticket) throw new EquipmentError('EQUIPMENT_TICKET_NOT_FOUND', 'Ticket not found', 404);
 
     if (ticket.status !== 'ASSIGNED') {
-        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 400);
+        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 409);
     }
 
     const updated = await repo.updateTicketStatusConditional(ticketId, 'ASSIGNED', 'IN_PROGRESS', {});
@@ -268,17 +305,17 @@ export class EquipmentService {
         createdAt: new Date().toISOString()
     });
 
-    return updated;
+    return updated as EquipmentBreakdownTicket;
   }
 
-  async resolveTicket(ticketId: string, userId: string, data: any) {
+  async resolveTicket(ticketId: string, userId: string, data: unknown): Promise<EquipmentBreakdownTicket> {
     const validated = ResolveTicketSchema.parse(data);
     const repo = new EquipmentRepository(this.db);
     const ticket = await repo.getTicketById(ticketId);
     if (!ticket) throw new EquipmentError('EQUIPMENT_TICKET_NOT_FOUND', 'Ticket not found', 404);
 
     if (ticket.status !== 'IN_PROGRESS') {
-        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 400);
+        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 409);
     }
 
     const resolvedAt = validated.resolvedAt ? new Date(validated.resolvedAt).toISOString() : new Date().toISOString();
@@ -322,17 +359,17 @@ export class EquipmentService {
         createdAt: new Date().toISOString()
     });
 
-    return updated;
+    return updated as EquipmentBreakdownTicket;
   }
 
-  async signoffTicket(ticketId: string, userId: string, data: any) {
+  async signoffTicket(ticketId: string, userId: string, data: unknown): Promise<EquipmentBreakdownTicket> {
     const validated = SignoffTicketSchema.parse(data);
     const repo = new EquipmentRepository(this.db);
     const ticket = await repo.getTicketById(ticketId);
     if (!ticket) throw new EquipmentError('EQUIPMENT_TICKET_NOT_FOUND', 'Ticket not found', 404);
 
     if (ticket.status !== 'RESOLVED') {
-        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 400);
+        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 409);
     }
 
     const signedOffAt = new Date().toISOString();
@@ -366,17 +403,17 @@ export class EquipmentService {
         createdAt: new Date().toISOString()
     });
 
-    return updated;
+    return updated as EquipmentBreakdownTicket;
   }
 
-  async cancelTicket(ticketId: string, userId: string, data: any) {
+  async cancelTicket(ticketId: string, userId: string, data: unknown): Promise<EquipmentBreakdownTicket> {
     const validated = CancelTicketSchema.parse(data);
     const repo = new EquipmentRepository(this.db);
     const ticket = await repo.getTicketById(ticketId);
     if (!ticket) throw new EquipmentError('EQUIPMENT_TICKET_NOT_FOUND', 'Ticket not found', 404);
 
     if (ticket.status !== 'OPEN' && ticket.status !== 'ASSIGNED') {
-        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 400);
+        throw new EquipmentError('INVALID_EQUIPMENT_TICKET_TRANSITION', 'Invalid transition', 409);
     }
 
     const cancelledAt = new Date().toISOString();
@@ -393,7 +430,7 @@ export class EquipmentService {
     await repo.createEvent({
         ticketId,
         eventType: 'CANCELLED',
-        fromStatus: ticket.status,
+        fromStatus: ticket.status as EquipmentTicketStatus,
         toStatus: 'CANCELLED',
         notes: validated.reason,
         actorUserId: userId,
@@ -410,7 +447,7 @@ export class EquipmentService {
         createdAt: new Date().toISOString()
     });
 
-    return updated;
+    return updated as EquipmentBreakdownTicket;
   }
   
   async getHealthSummary(outletId: string) {
