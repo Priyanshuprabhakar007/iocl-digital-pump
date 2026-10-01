@@ -1,5 +1,6 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
+import { ExecutionContext } from '@cloudflare/workers-types';
 import app from './src/worker/app';
 import { createLocalD1Database } from './src/db/localD1';
 import { getDb } from './src/db';
@@ -38,6 +39,13 @@ async function startServer() {
       this.storage.delete(key);
     },
   };
+
+  const mockContext = {
+    waitUntil: (promise: Promise<any>) => {
+      promise.catch(console.error);
+    },
+    passThroughOnException: () => {},
+  } as ExecutionContext;
 
   // Route API requests to Hono worker app
   server.use(async (req, res, next) => {
@@ -112,11 +120,7 @@ async function startServer() {
           DOCUMENTS_BUCKET: localR2 as any,
           ENVIRONMENT: process.env.ENVIRONMENT || 'development',
           ALLOWED_ORIGINS: Array.from(originsSet).join(','),
-        }, {
-          waitUntil: (promise) => {
-            promise.catch(console.error);
-          },
-        });
+        }, mockContext);
 
         res.status(webRes.status);
 
