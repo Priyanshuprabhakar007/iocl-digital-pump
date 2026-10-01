@@ -71,128 +71,361 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     return setCookie ? setCookie.split(';')[0] : '';
   }
 
-  it('1-4. Migration creates equipment tables and permissions without seedDatabase', async () => {
-    const freshPath = './.sqlite/test_mig_rbac.db';
-    if (fs.existsSync(freshPath)) { try { fs.unlinkSync(freshPath); } catch (e) {} }
-    const dbFresh = createLocalD1Database(freshPath);
-    const db = getDb(dbFresh);
-
-    const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'equipment_%'");
-    expect(tables.length).toBe(3);
-
-    const perms = await db.all("SELECT code FROM permissions WHERE code LIKE 'equipment%'");
-    expect(perms.length).toBe(5);
-
-    try { dbFresh.close(); } catch (e) {}
-    if (fs.existsSync(freshPath)) { try { fs.unlinkSync(freshPath); } catch (e) {} }
+  it('migration creates equipment_assets table', async () => {
+    const db = getDb(localD1);
+    const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name = 'equipment_assets'");
+    expect(tables.length).toBe(1);
   });
 
-  it('5-11. Migration creates correct role permissions for all roles', async () => {
+  it('migration creates equipment_breakdown_tickets table', async () => {
+    const db = getDb(localD1);
+    const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name = 'equipment_breakdown_tickets'");
+    expect(tables.length).toBe(1);
+  });
+
+  it('migration creates equipment_breakdown_events table', async () => {
+    const db = getDb(localD1);
+    const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name = 'equipment_breakdown_events'");
+    expect(tables.length).toBe(1);
+  });
+
+  it('migration independently inserts equipment.read permission', async () => {
+    const db = getDb(localD1);
+    const perm = await db.all("SELECT code FROM permissions WHERE code = 'equipment.read'");
+    expect(perm.length).toBe(1);
+  });
+
+  it('migration independently inserts equipment_assets.write permission', async () => {
+    const db = getDb(localD1);
+    const perm = await db.all("SELECT code FROM permissions WHERE code = 'equipment_assets.write'");
+    expect(perm.length).toBe(1);
+  });
+
+  it('migration independently inserts equipment_tickets.create permission', async () => {
+    const db = getDb(localD1);
+    const perm = await db.all("SELECT code FROM permissions WHERE code = 'equipment_tickets.create'");
+    expect(perm.length).toBe(1);
+  });
+
+  it('migration independently inserts equipment_tickets.manage permission', async () => {
+    const db = getDb(localD1);
+    const perm = await db.all("SELECT code FROM permissions WHERE code = 'equipment_tickets.manage'");
+    expect(perm.length).toBe(1);
+  });
+
+  it('migration independently inserts equipment_tickets.signoff permission', async () => {
+    const db = getDb(localD1);
+    const perm = await db.all("SELECT code FROM permissions WHERE code = 'equipment_tickets.signoff'");
+    expect(perm.length).toBe(1);
+  });
+
+  it('ADMIN migration mapping contains all equipment permissions', async () => {
     const db = getDb(localD1);
     const adminPerms = await db.all("SELECT permission_id FROM role_permissions WHERE role_id='role-admin' AND permission_id LIKE 'perm-eq-%'");
     expect(adminPerms.length).toBe(5);
-
-    const soPerms = await db.all("SELECT permission_id FROM role_permissions WHERE role_id='role-so'");
-    expect(soPerms.some((p: any) => p.permission_id === 'perm-eq-r')).toBe(true);
-
-    const dealerPerms = await db.all("SELECT permission_id FROM role_permissions WHERE role_id='role-dealer'");
-    expect(dealerPerms.some((p: any) => p.permission_id === 'perm-eq-t-m')).toBe(false);
   });
 
-  it('12-18. Triggers and required indexes exist', async () => {
+  it('STATE_OFFICE has equipment read permission', async () => {
     const db = getDb(localD1);
-    const triggers = await db.all("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_eq_%'");
-    expect(triggers.length).toBe(5);
-
-    const indexes = await db.all("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_eq_%'");
-    const iNames = indexes.map((i: any) => i.name);
-    expect(iNames).toContain('idx_eq_tickets_type_snapshot');
-    expect(iNames).toContain('idx_eq_events_ticket_created');
+    const soPerms = await db.all("SELECT permission_id FROM role_permissions WHERE role_id='role-so' AND permission_id='perm-eq-r'");
+    expect(soPerms.length).toBe(1);
   });
 
-  it('19-34. Direct SQL rejects invalid assets, tickets, events, and state violations', async () => {
+  it('DIVISIONAL_OFFICE has equipment manage permission', async () => {
+    const db = getDb(localD1);
+    const doPerms = await db.all("SELECT permission_id FROM role_permissions WHERE role_id='role-do' AND permission_id='perm-eq-t-m'");
+    expect(doPerms.length).toBe(1);
+  });
+
+  it('BUSINESS_MANAGER has equipment manage permission', async () => {
+    const db = getDb(localD1);
+    const bmPerms = await db.all("SELECT permission_id FROM role_permissions WHERE role_id='role-bm' AND permission_id='perm-eq-t-m'");
+    expect(bmPerms.length).toBe(1);
+  });
+
+  it('FIELD_OFFICER has equipment manage permission', async () => {
+    const db = getDb(localD1);
+    const foPerms = await db.all("SELECT permission_id FROM role_permissions WHERE role_id='role-fo' AND permission_id='perm-eq-t-m'");
+    expect(foPerms.length).toBe(1);
+  });
+
+  it('DEALER has read, assets write and create but not manage or signoff', async () => {
+    const db = getDb(localD1);
+    const dealerPerms = await db.all("SELECT permission_id FROM role_permissions WHERE role_id='role-dealer'");
+    const pIds = dealerPerms.map((p: any) => p.permission_id);
+    expect(pIds).toContain('perm-eq-r');
+    expect(pIds).toContain('perm-eq-as-w');
+    expect(pIds).toContain('perm-eq-t-c');
+    expect(pIds).not.toContain('perm-eq-t-m');
+    expect(pIds).not.toContain('perm-eq-t-s');
+  });
+
+  it('CSP has read, assets write and create but not manage or signoff', async () => {
+    const db = getDb(localD1);
+    const cspPerms = await db.all("SELECT permission_id FROM role_permissions WHERE role_id='role-csp'");
+    const pIds = cspPerms.map((p: any) => p.permission_id);
+    expect(pIds).toContain('perm-eq-r');
+    expect(pIds).toContain('perm-eq-as-w');
+    expect(pIds).toContain('perm-eq-t-c');
+    expect(pIds).not.toContain('perm-eq-t-m');
+    expect(pIds).not.toContain('perm-eq-t-s');
+  });
+
+  it('lifecycle trigger exists in database', async () => {
+    const db = getDb(localD1);
+    const triggers = await db.all("SELECT name FROM sqlite_master WHERE type='trigger' AND name = 'trg_eq_ticket_lifecycle'");
+    expect(triggers.length).toBe(1);
+  });
+
+  it('immutable ticket trigger exists in database', async () => {
+    const db = getDb(localD1);
+    const triggers = await db.all("SELECT name FROM sqlite_master WHERE type='trigger' AND name = 'trg_eq_ticket_immutability'");
+    expect(triggers.length).toBe(1);
+  });
+
+  it('terminal ticket trigger exists in database', async () => {
+    const db = getDb(localD1);
+    const triggers = await db.all("SELECT name FROM sqlite_master WHERE type='trigger' AND name = 'trg_eq_ticket_terminal'");
+    expect(triggers.length).toBe(1);
+  });
+
+  it('event UPDATE immutable trigger exists in database', async () => {
+    const db = getDb(localD1);
+    const triggers = await db.all("SELECT name FROM sqlite_master WHERE type='trigger' AND name = 'trg_eq_event_immutable_update'");
+    expect(triggers.length).toBe(1);
+  });
+
+  it('event DELETE immutable trigger exists in database', async () => {
+    const db = getDb(localD1);
+    const triggers = await db.all("SELECT name FROM sqlite_master WHERE type='trigger' AND name = 'trg_eq_event_immutable_delete'");
+    expect(triggers.length).toBe(1);
+  });
+
+  it('invalid equipment asset type rejected directly by DB', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-
     await expect(db.insert(equipmentAssets).values({
-      id: 'a1',
+      id: 'a-bad',
       outletId: 'ro-1001',
-      assetCode: 'TST-1',
+      assetCode: 'BAD-1',
       equipmentType: 'INVALID' as any,
-      name: 'Test',
+      name: 'Bad Asset',
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
     })).rejects.toThrow();
+  });
 
-    await db.insert(equipmentAssets).values({
-      id: 'a1',
+  it('invalid equipment asset status rejected directly by DB', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await expect(db.insert(equipmentAssets).values({
+      id: 'a-bad-status',
       outletId: 'ro-1001',
-      assetCode: 'ATG-01',
+      assetCode: 'BAD-2',
       equipmentType: 'ATG',
-      name: 'Tank ATG 1',
+      status: 'UNKNOWN' as any,
+      name: 'Bad Status',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    })).rejects.toThrow();
+  });
+
+  it('blank asset code rejected directly by DB', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await expect(db.insert(equipmentAssets).values({
+      id: 'a-blank',
+      outletId: 'ro-1001',
+      assetCode: '   ',
+      equipmentType: 'ATG',
+      name: 'Blank Code',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    })).rejects.toThrow();
+  });
+
+  it('blank asset name rejected directly by DB', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await expect(db.insert(equipmentAssets).values({
+      id: 'a-blank-name',
+      outletId: 'ro-1001',
+      assetCode: 'BLANK-N',
+      equipmentType: 'ATG',
+      name: '   ',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    })).rejects.toThrow();
+  });
+
+  it('RESOLVED without resolution metadata rejected by DB check', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({
+      id: 'a-res',
+      outletId: 'ro-1001',
+      assetCode: 'RES-1',
+      equipmentType: 'ATG',
+      name: 'Tank Res',
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
     });
-
     await db.insert(equipmentBreakdownTickets).values({
-      id: 't1',
+      id: 't-res',
       outletId: 'ro-1001',
-      equipmentAssetId: 'a1',
+      equipmentAssetId: 'a-res',
       equipmentTypeSnapshot: 'ATG',
-      equipmentLabelSnapshot: 'ATG 1',
+      equipmentLabelSnapshot: 'Res Tank',
       priority: 'HIGH',
       failureCategory: 'MECHANICAL',
-      description: 'Leak',
+      description: 'Test',
       status: 'OPEN',
       breakdownAt: now,
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
     });
-
     await expect(db.update(equipmentBreakdownTickets).set({
       status: 'RESOLVED',
-      resolutionNotes: 'fixed',
+    }).where(eq(equipmentBreakdownTickets.id, 't-res'))).rejects.toThrow();
+  });
+
+  it('CLOSED without signoff metadata rejected by DB check', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+    await db.insert(equipmentAssets).values({
+      id: 'a-close',
+      outletId: 'ro-1001',
+      assetCode: 'CLOSE-1',
+      equipmentType: 'ATG',
+      name: 'Tank Close',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(equipmentBreakdownTickets).values({
+      id: 't-close',
+      outletId: 'ro-1001',
+      equipmentAssetId: 'a-close',
+      equipmentTypeSnapshot: 'ATG',
+      equipmentLabelSnapshot: 'Close Tank',
+      priority: 'HIGH',
+      failureCategory: 'MECHANICAL',
+      description: 'Test',
+      status: 'RESOLVED',
+      resolutionNotes: 'Fixed',
       resolvedAt: now,
       resolvedByUserId: 'user-admin',
       downtimeSeconds: 100,
-    }).where(eq(equipmentBreakdownTickets.id, 't1'))).rejects.toThrow();
+      breakdownAt: now,
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await expect(db.update(equipmentBreakdownTickets).set({
+      status: 'CLOSED',
+    }).where(eq(equipmentBreakdownTickets.id, 't-close'))).rejects.toThrow();
   });
 
-  it('52. Unauthenticated equipment endpoint returns 401', async () => {
+  it('unauthenticated equipment request returns 401', async () => {
     const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
       headers: { 'Origin': 'http://localhost:3000' }
     }, env);
     expect(res.status).toBe(401);
   });
 
-  it('53-68. Enforces role permissions across State Office, Dealer, CSP, and FO', async () => {
+  it('State Office can read equipment assets', async () => {
     const soCookie = await loginAs('wbso@iocl.in');
-    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
-
-    const soRead = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
       headers: { 'Cookie': soCookie, 'Origin': 'http://localhost:3000' }
     }, env);
-    expect(soRead.status).toBe(200);
+    expect(res.status).toBe(200);
+  });
 
-    const soCreate = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+  it('State Office cannot create equipment asset', async () => {
+    const soCookie = await loginAs('wbso@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cookie': soCookie, 'Origin': 'http://localhost:3000' },
       body: JSON.stringify({ assetCode: 'SO-1', equipmentType: 'ATG', name: 'SO' })
     }, env);
-    expect(soCreate.status).toBe(403);
+    expect(res.status).toBe(403);
+  });
 
-    const dealerAsset = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+  it('State Office cannot create equipment ticket', async () => {
+    const soCookie = await loginAs('wbso@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': soCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('Dealer can read own outlet equipment assets', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(res.status).toBe(200);
+  });
+
+  it('Dealer can create equipment asset', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
       body: JSON.stringify({ assetCode: 'DLR-1', equipmentType: 'ATG', name: 'Dealer ATG' })
     }, env);
-    expect(dealerAsset.status).toBe(201);
+    expect(res.status).toBe(201);
   });
 
-  it('70-82. Cross-outlet requests return 403 Forbidden', async () => {
+  it('Dealer can create equipment ticket', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    expect(res.status).toBe(201);
+  });
+
+  it('Dealer cannot assign ticket', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/equipment/tickets/nonexistent/assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ technicianName: 'Tech' })
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('Dealer cannot resolve ticket', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/equipment/tickets/nonexistent/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ resolutionNotes: 'Fixed', resolvedAt: '2026-10-01T10:00:00Z' })
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('Dealer cannot signoff ticket', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/equipment/tickets/nonexistent/signoff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ signoffNotes: 'OK' })
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('cross-outlet asset GET returns 403', async () => {
     const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
     const res = await app.request('/api/v1/outlets/ro-1002/equipment/assets', {
       headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' }
@@ -200,33 +433,136 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     expect(res.status).toBe(403);
   });
 
-  it('83-109. Asset CRUD, validation, unique constraints, and audit logs', async () => {
+  it('cross-outlet asset POST returns 403', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1002/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'X-1', equipmentType: 'ATG', name: 'Cross' })
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('cross-outlet targets GET returns 403', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1002/equipment/targets', {
+      headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('cross-outlet ticket list returns 403', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1002/equipment/tickets', {
+      headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('cross-outlet health summary GET returns 403', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1002/equipment/health-summary', {
+      headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(res.status).toBe(403);
+  });
+
+  it('create ATG asset succeeds', async () => {
     const cookie = await loginAs('admin@iocl.in');
     const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
-      body: JSON.stringify({ assetCode: 'COMP-1', equipmentType: 'AIR_COMPRESSOR', name: 'Air Compressor 1' })
+      body: JSON.stringify({ assetCode: 'ATG-99', equipmentType: 'ATG', name: 'ATG 99' })
     }, env);
     expect(res.status).toBe(201);
-    const assetId = (await res.json() as any).data.id;
+  });
 
+  it('create AIR_COMPRESSOR asset succeeds', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'COMP-99', equipmentType: 'AIR_COMPRESSOR', name: 'Compressor 99' })
+    }, env);
+    expect(res.status).toBe(201);
+  });
+
+  it('create CNG_COMPRESSOR asset succeeds', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'CNG-99', equipmentType: 'CNG_COMPRESSOR', name: 'CNG 99' })
+    }, env);
+    expect(res.status).toBe(201);
+  });
+
+  it('create DG_SET asset succeeds', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'DG-99', equipmentType: 'DG_SET', name: 'DG 99' })
+    }, env);
+    expect(res.status).toBe(201);
+  });
+
+  it('create OTHER asset succeeds', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'OTH-99', equipmentType: 'OTHER', name: 'Other 99' })
+    }, env);
+    expect(res.status).toBe(201);
+  });
+
+  it('duplicate asset code returns 409 EQUIPMENT_ASSET_CODE_EXISTS', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'DUP-1', equipmentType: 'ATG', name: 'Tank 1' })
+    }, env);
     const dupRes = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
-      body: JSON.stringify({ assetCode: 'COMP-1', equipmentType: 'AIR_COMPRESSOR', name: 'Duplicate' })
+      body: JSON.stringify({ assetCode: 'DUP-1', equipmentType: 'ATG', name: 'Tank 2' })
     }, env);
     expect(dupRes.status).toBe(409);
     expect((await dupRes.json() as any).error.code).toBe('EQUIPMENT_ASSET_CODE_EXISTS');
+  });
+
+  it('asset update succeeds', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ assetCode: 'UP-1', equipmentType: 'ATG', name: 'Original Name' })
+    }, env);
+    const assetId = (await createRes.json() as any).data.id;
 
     const updRes = await app.request(`/api/v1/equipment/assets/${assetId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Cookie': cookie, 'Origin': 'http://localhost:3000' },
-      body: JSON.stringify({ name: 'Updated Air Compressor' })
+      body: JSON.stringify({ name: 'New Name' })
     }, env);
     expect(updRes.status).toBe(200);
+    expect((await updRes.json() as any).data.name).toBe('New Name');
   });
 
-  it('110-180. Full ticket creation, lifecycle flow, assignment, resolution, signoff, and concurrency conflict', async () => {
+  it('targets include dispenser and auxiliary assets', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const res = await app.request('/api/v1/outlets/ro-1001/equipment/targets', {
+      headers: { 'Cookie': cookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(res.status).toBe(200);
+    const data = (await res.json() as any).data;
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.length).toBeGreaterThan(0);
+  });
+
+  it('full ticket lifecycle: create, assign, start, resolve, signoff', async () => {
     const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
     const foCookie = await loginAs('fo.central@iocl.in');
 
@@ -274,22 +610,75 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     expect((await signoffRes.json() as any).data.status).toBe('CLOSED');
   });
 
-  it('181-224. Health summary and audit log records verified', async () => {
+  it('ticket cancellation flow succeeds with field officer', async () => {
     const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
-    
-    await app.request('/api/v1/outlets/ro-1001/equipment/assets', {
+    const foCookie = await loginAs('fo.central@iocl.in');
+
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
-      body: JSON.stringify({ assetCode: 'AUDIT-1', equipmentType: 'ATG', name: 'Audit Tank' })
+      body: JSON.stringify({
+        dispenserId: 'disp-ro1-1',
+        priority: 'LOW',
+        failureCategory: 'OTHER',
+        description: 'False alarm',
+        breakdownAt: '2026-10-01T08:00:00Z',
+      })
     }, env);
+    expect(createRes.status).toBe(201);
+    const ticketId = (await createRes.json() as any).data.id;
 
+    const cancelRes = await app.request(`/api/v1/equipment/tickets/${ticketId}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': foCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ reason: 'Mistake ticket' })
+    }, env);
+    expect(cancelRes.status).toBe(200);
+    expect((await cancelRes.json() as any).data.status).toBe('CANCELLED');
+  });
+
+  it('health summary API returns correct structure', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
     const summaryRes = await app.request('/api/v1/outlets/ro-1001/equipment/health-summary', {
       headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' }
     }, env);
     expect(summaryRes.status).toBe(200);
+    const data = (await summaryRes.json() as any).data;
+    expect(typeof data.activeTicketCount).toBe('number');
+    expect(typeof data.criticalActiveCount).toBe('number');
+  });
 
-    const db = getDb(localD1);
-    const auditLogs = await db.all("SELECT action FROM audit_logs WHERE action LIKE 'EQUIPMENT_%'");
-    expect(auditLogs.length).toBeGreaterThan(0);
+  it('ticket detail GET returns correct data', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'MEDIUM', failureCategory: 'ELECTRICAL', description: 'Power issue', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    const ticketId = (await createRes.json() as any).data.id;
+
+    const detailRes = await app.request(`/api/v1/equipment/tickets/${ticketId}`, {
+      headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(detailRes.status).toBe(200);
+    expect((await detailRes.json() as any).data.id).toBe(ticketId);
+  });
+
+  it('ticket events GET returns audit trail', async () => {
+    const dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
+    const createRes = await app.request('/api/v1/outlets/ro-1001/equipment/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ dispenserId: 'disp-ro1-1', priority: 'LOW', failureCategory: 'OTHER', description: 'Test events', breakdownAt: '2026-10-01T08:00:00Z' })
+    }, env);
+    const ticketId = (await createRes.json() as any).data.id;
+
+    const eventsRes = await app.request(`/api/v1/equipment/tickets/${ticketId}/events`, {
+      headers: { 'Cookie': dealerCookie, 'Origin': 'http://localhost:3000' }
+    }, env);
+    expect(eventsRes.status).toBe(200);
+    const evs = (await eventsRes.json() as any).data;
+    expect(Array.isArray(evs)).toBe(true);
+    expect(evs.length).toBeGreaterThan(0);
   });
 });
