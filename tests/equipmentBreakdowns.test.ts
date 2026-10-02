@@ -215,7 +215,7 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
-    })).rejects.toThrow();
+    }).run()).rejects.toThrow();
   });
 
   it('invalid equipment asset status rejected directly by DB', async () => {
@@ -231,7 +231,7 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
-    })).rejects.toThrow();
+    }).run()).rejects.toThrow();
   });
 
   it('blank asset code rejected directly by DB', async () => {
@@ -246,7 +246,7 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
-    })).rejects.toThrow();
+    }).run()).rejects.toThrow();
   });
 
   it('blank asset name rejected directly by DB', async () => {
@@ -261,7 +261,7 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
-    })).rejects.toThrow();
+    }).run()).rejects.toThrow();
   });
 
   it('RESOLVED without resolution metadata rejected by DB check', async () => {
@@ -276,7 +276,7 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
-    });
+    }).run();
     await db.insert(equipmentBreakdownTickets).values({
       id: 't-res',
       outletId: 'ro-1001',
@@ -291,10 +291,10 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
-    });
+    }).run();
     await expect(db.update(equipmentBreakdownTickets).set({
       status: 'RESOLVED',
-    }).where(eq(equipmentBreakdownTickets.id, 't-res'))).rejects.toThrow();
+    }).where(eq(equipmentBreakdownTickets.id, 't-res')).run()).rejects.toThrow();
   });
 
   it('CLOSED without signoff metadata rejected by DB check', async () => {
@@ -309,7 +309,7 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
-    });
+    }).run();
     await db.insert(equipmentBreakdownTickets).values({
       id: 't-close',
       outletId: 'ro-1001',
@@ -328,10 +328,10 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
       createdBy: 'user-admin',
       createdAt: now,
       updatedAt: now,
-    });
+    }).run();
     await expect(db.update(equipmentBreakdownTickets).set({
       status: 'CLOSED',
-    }).where(eq(equipmentBreakdownTickets.id, 't-close'))).rejects.toThrow();
+    }).where(eq(equipmentBreakdownTickets.id, 't-close')).run()).rejects.toThrow();
   });
 
   it('unauthenticated equipment request returns 401', async () => {
@@ -691,14 +691,14 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     const now = new Date().toISOString();
     await db.insert(equipmentAssets).values({
       id: 'a-sq1', outletId: 'ro-1001', assetCode: 'SQ-1', equipmentType: 'ATG', name: 'T1', createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await db.insert(equipmentBreakdownTickets).values({
       id: 't-sq1', outletId: 'ro-1001', equipmentAssetId: 'a-sq1', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T1',
       priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await expect(db.update(equipmentBreakdownTickets).set({
       status: 'RESOLVED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10
-    }).where(eq(equipmentBreakdownTickets.id, 't-sq1'))).rejects.toThrow();
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq1')).run()).rejects.toThrow();
   });
 
   it('direct SQL OPEN to CLOSED is rejected', async () => {
@@ -706,14 +706,14 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     const now = new Date().toISOString();
     await db.insert(equipmentAssets).values({
       id: 'a-sq2', outletId: 'ro-1001', assetCode: 'SQ-2', equipmentType: 'ATG', name: 'T2', createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await db.insert(equipmentBreakdownTickets).values({
       id: 't-sq2', outletId: 'ro-1001', equipmentAssetId: 'a-sq2', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T2',
       priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await expect(db.update(equipmentBreakdownTickets).set({
       status: 'CLOSED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10, signedOffAt: now, signedOffByUserId: 'user-admin'
-    }).where(eq(equipmentBreakdownTickets.id, 't-sq2'))).rejects.toThrow();
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq2')).run()).rejects.toThrow();
   });
 
   it('direct SQL ASSIGNED to RESOLVED is rejected', async () => {
@@ -721,14 +721,14 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     const now = new Date().toISOString();
     await db.insert(equipmentAssets).values({
       id: 'a-sq3', outletId: 'ro-1001', assetCode: 'SQ-3', equipmentType: 'ATG', name: 'T3', createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await db.insert(equipmentBreakdownTickets).values({
       id: 't-sq3', outletId: 'ro-1001', equipmentAssetId: 'a-sq3', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T3',
       priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'ASSIGNED', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await expect(db.update(equipmentBreakdownTickets).set({
       status: 'RESOLVED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10
-    }).where(eq(equipmentBreakdownTickets.id, 't-sq3'))).rejects.toThrow();
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq3')).run()).rejects.toThrow();
   });
 
   it('direct SQL ASSIGNED to CLOSED is rejected', async () => {
@@ -736,14 +736,14 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     const now = new Date().toISOString();
     await db.insert(equipmentAssets).values({
       id: 'a-sq4', outletId: 'ro-1001', assetCode: 'SQ-4', equipmentType: 'ATG', name: 'T4', createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await db.insert(equipmentBreakdownTickets).values({
       id: 't-sq4', outletId: 'ro-1001', equipmentAssetId: 'a-sq4', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T4',
       priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'ASSIGNED', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await expect(db.update(equipmentBreakdownTickets).set({
       status: 'CLOSED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10, signedOffAt: now, signedOffByUserId: 'user-admin'
-    }).where(eq(equipmentBreakdownTickets.id, 't-sq4'))).rejects.toThrow();
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq4')).run()).rejects.toThrow();
   });
 
   it('direct SQL IN_PROGRESS to CLOSED is rejected', async () => {
@@ -751,14 +751,14 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     const now = new Date().toISOString();
     await db.insert(equipmentAssets).values({
       id: 'a-sq5', outletId: 'ro-1001', assetCode: 'SQ-5', equipmentType: 'ATG', name: 'T5', createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await db.insert(equipmentBreakdownTickets).values({
       id: 't-sq5', outletId: 'ro-1001', equipmentAssetId: 'a-sq5', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T5',
       priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'IN_PROGRESS', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await expect(db.update(equipmentBreakdownTickets).set({
       status: 'CLOSED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10, signedOffAt: now, signedOffByUserId: 'user-admin'
-    }).where(eq(equipmentBreakdownTickets.id, 't-sq5'))).rejects.toThrow();
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq5')).run()).rejects.toThrow();
   });
 
   it('direct SQL CLOSED to OPEN is rejected', async () => {
@@ -766,14 +766,14 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     const now = new Date().toISOString();
     await db.insert(equipmentAssets).values({
       id: 'a-sq6', outletId: 'ro-1001', assetCode: 'SQ-6', equipmentType: 'ATG', name: 'T6', createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await db.insert(equipmentBreakdownTickets).values({
       id: 't-sq6', outletId: 'ro-1001', equipmentAssetId: 'a-sq6', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T6',
       priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'CLOSED', resolutionNotes: 'ok', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: 10, signedOffAt: now, signedOffByUserId: 'user-admin', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await expect(db.update(equipmentBreakdownTickets).set({
       status: 'OPEN'
-    }).where(eq(equipmentBreakdownTickets.id, 't-sq6'))).rejects.toThrow();
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq6')).run()).rejects.toThrow();
   });
 
   it('direct SQL CANCELLED to OPEN is rejected', async () => {
@@ -781,89 +781,90 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     const now = new Date().toISOString();
     await db.insert(equipmentAssets).values({
       id: 'a-sq7', outletId: 'ro-1001', assetCode: 'SQ-7', equipmentType: 'ATG', name: 'T7', createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await db.insert(equipmentBreakdownTickets).values({
       id: 't-sq7', outletId: 'ro-1001', equipmentAssetId: 'a-sq7', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'T7',
       priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'CANCELLED', cancelReason: 'Canceled', cancelledAt: now, cancelledByUserId: 'user-admin', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    });
+    }).run();
     await expect(db.update(equipmentBreakdownTickets).set({
       status: 'OPEN'
-    }).where(eq(equipmentBreakdownTickets.id, 't-sq7'))).rejects.toThrow();
+    }).where(eq(equipmentBreakdownTickets.id, 't-sq7')).run()).rejects.toThrow();
   });
 
   it('outlet_id mutation rejected by immutable trigger', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentAssets).values({ id: 'a-im1', outletId: 'ro-1001', assetCode: 'IM-1', equipmentType: 'ATG', name: 'IM1', createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-im1', outletId: 'ro-1001', equipmentAssetId: 'a-im1', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'IM1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await expect(db.update(equipmentBreakdownTickets).set({ outletId: 'ro-1002' }).where(eq(equipmentBreakdownTickets.id, 't-im1'))).rejects.toThrow();
+    await db.insert(equipmentAssets).values({ id: 'a-im1', outletId: 'ro-1001', assetCode: 'IM-1', equipmentType: 'ATG', name: 'IM1', createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im1', outletId: 'ro-1001', equipmentAssetId: 'a-im1', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'IM1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await expect(db.update(equipmentBreakdownTickets).set({ outletId: 'ro-1002' }).where(eq(equipmentBreakdownTickets.id, 't-im1')).run()).rejects.toThrow();
   });
 
   it('dispenser_id value to NULL rejected by immutable trigger', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-im2', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await expect(db.update(equipmentBreakdownTickets).set({ dispenserId: null }).where(eq(equipmentBreakdownTickets.id, 't-im2'))).rejects.toThrow();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im2', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await expect(db.update(equipmentBreakdownTickets).set({ dispenserId: null }).where(eq(equipmentBreakdownTickets.id, 't-im2')).run()).rejects.toThrow();
   });
 
   it('dispenser_id NULL to value rejected by immutable trigger', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentAssets).values({ id: 'a-im3', outletId: 'ro-1001', assetCode: 'IM-3', equipmentType: 'ATG', name: 'IM3', createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-im3', outletId: 'ro-1001', equipmentAssetId: 'a-im3', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'IM3', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await expect(db.update(equipmentBreakdownTickets).set({ dispenserId: 'disp-ro1-1' }).where(eq(equipmentBreakdownTickets.id, 't-im3'))).rejects.toThrow();
+    await db.insert(equipmentAssets).values({ id: 'a-im3', outletId: 'ro-1001', assetCode: 'IM-3', equipmentType: 'ATG', name: 'IM3', createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im3', outletId: 'ro-1001', equipmentAssetId: 'a-im3', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'IM3', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await expect(db.update(equipmentBreakdownTickets).set({ dispenserId: 'disp-ro1-1' }).where(eq(equipmentBreakdownTickets.id, 't-im3')).run()).rejects.toThrow();
   });
 
   it('equipment_asset_id value to NULL rejected by immutable trigger', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentAssets).values({ id: 'a-im4', outletId: 'ro-1001', assetCode: 'IM-4', equipmentType: 'ATG', name: 'IM4', createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-im4', outletId: 'ro-1001', equipmentAssetId: 'a-im4', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'IM4', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await expect(db.update(equipmentBreakdownTickets).set({ equipmentAssetId: null }).where(eq(equipmentBreakdownTickets.id, 't-im4'))).rejects.toThrow();
+    await db.insert(equipmentAssets).values({ id: 'a-im4', outletId: 'ro-1001', assetCode: 'IM-4', equipmentType: 'ATG', name: 'IM4', createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im4', outletId: 'ro-1001', equipmentAssetId: 'a-im4', equipmentTypeSnapshot: 'ATG', equipmentLabelSnapshot: 'IM4', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await expect(db.update(equipmentBreakdownTickets).set({ equipmentAssetId: null }).where(eq(equipmentBreakdownTickets.id, 't-im4')).run()).rejects.toThrow();
   });
 
   it('equipment_asset_id NULL to value rejected by immutable trigger', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-im5', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await expect(db.update(equipmentBreakdownTickets).set({ equipmentAssetId: 'a-im4' }).where(eq(equipmentBreakdownTickets.id, 't-im5'))).rejects.toThrow();
+    await db.insert(equipmentAssets).values({ id: 'a-im5-ast', outletId: 'ro-1001', assetCode: 'IM-5', equipmentType: 'ATG', name: 'IM5', createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im5', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await expect(db.update(equipmentBreakdownTickets).set({ equipmentAssetId: 'a-im5-ast' }).where(eq(equipmentBreakdownTickets.id, 't-im5')).run()).rejects.toThrow();
   });
 
   it('equipment_type_snapshot mutation rejected by immutable trigger', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-im6', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await expect(db.update(equipmentBreakdownTickets).set({ equipmentTypeSnapshot: 'ATG' }).where(eq(equipmentBreakdownTickets.id, 't-im6'))).rejects.toThrow();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im6', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await expect(db.update(equipmentBreakdownTickets).set({ equipmentTypeSnapshot: 'ATG' }).where(eq(equipmentBreakdownTickets.id, 't-im6')).run()).rejects.toThrow();
   });
 
   it('equipment_label_snapshot mutation rejected by immutable trigger', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-im7', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await expect(db.update(equipmentBreakdownTickets).set({ equipmentLabelSnapshot: 'Changed' }).where(eq(equipmentBreakdownTickets.id, 't-im7'))).rejects.toThrow();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im7', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await expect(db.update(equipmentBreakdownTickets).set({ equipmentLabelSnapshot: 'Changed' }).where(eq(equipmentBreakdownTickets.id, 't-im7')).run()).rejects.toThrow();
   });
 
   it('breakdown_at mutation rejected by immutable trigger', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-im8', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await expect(db.update(equipmentBreakdownTickets).set({ breakdownAt: '2025-01-01T00:00:00Z' }).where(eq(equipmentBreakdownTickets.id, 't-im8'))).rejects.toThrow();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-im8', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await expect(db.update(equipmentBreakdownTickets).set({ breakdownAt: '2025-01-01T00:00:00Z' }).where(eq(equipmentBreakdownTickets.id, 't-im8')).run()).rejects.toThrow();
   });
 
   it('direct UPDATE on equipment_breakdown_events rejected by immutable trigger', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-ev1', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await db.insert(equipmentBreakdownEvents).values({ id: 'ev-1', ticketId: 't-ev1', eventType: 'CREATED', fromStatus: null, toStatus: 'OPEN', actorUserId: 'user-admin', createdAt: now });
-    await expect(db.update(equipmentBreakdownEvents).set({ notes: 'hack' }).where(eq(equipmentBreakdownEvents.id, 'ev-1'))).rejects.toThrow();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-ev1', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await db.insert(equipmentBreakdownEvents).values({ id: 'ev-1', ticketId: 't-ev1', eventType: 'CREATED', fromStatus: null, toStatus: 'OPEN', actorUserId: 'user-admin', createdAt: now }).run();
+    await expect(db.update(equipmentBreakdownEvents).set({ notes: 'hack' }).where(eq(equipmentBreakdownEvents.id, 'ev-1')).run()).rejects.toThrow();
   });
 
   it('direct DELETE on equipment_breakdown_events rejected by immutable trigger', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-ev2', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
-    await db.insert(equipmentBreakdownEvents).values({ id: 'ev-2', ticketId: 't-ev2', eventType: 'CREATED', fromStatus: null, toStatus: 'OPEN', actorUserId: 'user-admin', createdAt: now });
-    await expect(db.delete(equipmentBreakdownEvents).where(eq(equipmentBreakdownEvents.id, 'ev-2'))).rejects.toThrow();
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-ev2', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
+    await db.insert(equipmentBreakdownEvents).values({ id: 'ev-2', ticketId: 't-ev2', eventType: 'CREATED', fromStatus: null, toStatus: 'OPEN', actorUserId: 'user-admin', createdAt: now }).run();
+    await expect(db.delete(equipmentBreakdownEvents).where(eq(equipmentBreakdownEvents.id, 'ev-2')).run()).rejects.toThrow();
   });
 
   it('invalid ticket priority rejected directly by DB', async () => {
@@ -872,7 +873,7 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     await expect(db.insert(equipmentBreakdownTickets).values({
       id: 't-bp', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1',
       priority: 'INVALID' as any, failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    })).rejects.toThrow();
+    }).run()).rejects.toThrow();
   });
 
   it('invalid failure_category rejected directly by DB', async () => {
@@ -881,7 +882,7 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     await expect(db.insert(equipmentBreakdownTickets).values({
       id: 't-fc', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1',
       priority: 'HIGH', failureCategory: 'INVALID' as any, description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    })).rejects.toThrow();
+    }).run()).rejects.toThrow();
   });
 
   it('invalid ticket status rejected directly by DB', async () => {
@@ -890,7 +891,7 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
     await expect(db.insert(equipmentBreakdownTickets).values({
       id: 't-st', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1',
       priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'INVALID' as any, breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    })).rejects.toThrow();
+    }).run()).rejects.toThrow();
   });
 
   it('negative downtime_seconds rejected directly by DB', async () => {
@@ -901,16 +902,16 @@ describe('Phase 3C-1 Exhaustive Integration Suite', () => {
       priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'RESOLVED',
       resolutionNotes: 'Fixed', resolvedAt: now, resolvedByUserId: 'user-admin', downtimeSeconds: -5,
       breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now
-    })).rejects.toThrow();
+    }).run()).rejects.toThrow();
   });
 
   it('invalid equipment event_type rejected directly by DB', async () => {
     const db = getDb(localD1);
     const now = new Date().toISOString();
-    await db.insert(equipmentBreakdownTickets).values({ id: 't-et', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now });
+    await db.insert(equipmentBreakdownTickets).values({ id: 't-et', outletId: 'ro-1001', dispenserId: 'disp-ro1-1', equipmentTypeSnapshot: 'DISPENSER', equipmentLabelSnapshot: 'Disp 1', priority: 'HIGH', failureCategory: 'MECHANICAL', description: 'Test', status: 'OPEN', breakdownAt: now, createdBy: 'user-admin', createdAt: now, updatedAt: now }).run();
     await expect(db.insert(equipmentBreakdownEvents).values({
       id: 'ev-bad', ticketId: 't-et', eventType: 'INVALID' as any, actorUserId: 'user-admin', createdAt: now
-    })).rejects.toThrow();
+    }).run()).rejects.toThrow();
   });
 
   it('CSP can read own-outlet equipment assets', async () => {
