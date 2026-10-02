@@ -21,6 +21,7 @@ import {
   Package,
   Wrench,
   Zap,
+  Landmark,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -98,6 +99,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Utilities & Sub-Meters',
       icon: Zap,
       perm: PERMISSIONS.UTILITIES_READ,
+    },
+    {
+      id: 'municipal-taxes',
+      label: 'Municipal Taxes',
+      icon: Landmark,
+      perm: PERMISSIONS.MUNICIPAL_TAXES_READ,
     },
     {
       id: 'financials',

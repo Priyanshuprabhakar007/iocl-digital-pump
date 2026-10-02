@@ -19,6 +19,7 @@ import { FinancialOperationsPage } from './frontend/pages/FinancialOperationsPag
 import { LubeOperationsPage } from './frontend/pages/LubeOperationsPage';
 import { EquipmentOperationsPage } from './frontend/pages/EquipmentOperationsPage';
 import { UtilitiesOperationsPage } from './frontend/pages/UtilitiesOperationsPage';
+import { MunicipalTaxesPage } from './frontend/pages/MunicipalTaxesPage';
 
 function MainAppContent() {
   const { userCtx, loading } = useAuth();
@@ -56,6 +57,7 @@ function MainAppContent() {
       {activeTab === 'lube-ops' && <LubeOperationsPage />}
       {activeTab === 'equipment-ops' && <EquipmentOperationsPage />}
       {activeTab === 'utilities-ops' && <UtilitiesOperationsPage />}
+      {activeTab === 'municipal-taxes' && <MunicipalTaxesPage />}
       {activeTab === 'financials' && <FinancialOperationsPage />}
       {activeTab === 'users' && <UsersPage />}
       {activeTab === 'scopes' && <ScopesPage />}
