@@ -23,11 +23,7 @@ export class MunicipalTaxError extends Error {
 
 function safeParseMoney(amount: string): number {
   try {
-    const paise = parseMoneyToPaise(amount);
-    if (paise > 100_000_000_00) {
-      throw new MunicipalTaxError('VALIDATION_ERROR', 'Money amount exceeds safe limits.', 400);
-    }
-    return paise;
+    return parseMoneyToPaise(amount);
   } catch (err: any) {
     if (err instanceof MunicipalTaxError) throw err;
     if (err.message && err.message.includes('OVERFLOW')) {

@@ -14,6 +14,8 @@ import {
   roles,
 } from '../src/db/schema';
 import { PERMISSIONS, ROLES } from '../src/shared/constants';
+import { MunicipalTaxRepository } from '../src/worker/repositories/municipalTaxRepository';
+import { MunicipalTaxService, MunicipalTaxError } from '../src/worker/services/municipalTaxService';
 
 const SAFE_MONEY_LIMIT_PAISE = 100_000_000_00; // 100,000,000.00 INR = 10,000,000,000 paise
 
@@ -298,6 +300,38 @@ describe('Phase 4B-1 Municipal Taxes & Statutory Dues Core Backend Suite', () =>
 
       await expect(
         db.update(municipalTaxDues).set({ notes: 'Trying to edit paid due' }).where(eq(municipalTaxDues.id, 'mtax-paid-imm-test')).run()
+      ).rejects.toThrow();
+    });
+
+    it('1.7b should enforce DB trigger trg_municipal_tax_paid_immutable on direct SQL NO-OP update on PAID row', async () => {
+      const db = getDb(localD1);
+      const receiptDocId = await createTestDocument(OUTLET_1_ID);
+      const now = new Date().toISOString();
+      await db.insert(municipalTaxDues).values({
+        id: 'mtax-paid-noop-test',
+        outletId: OUTLET_1_ID,
+        taxType: 'PROPERTY_TAX',
+        authorityName: 'KMC',
+        referenceNumber: 'REF-PAID-NOOP-1',
+        assessmentFrequency: 'ANNUAL',
+        assessmentPeriodStart: '2026-04-01',
+        assessmentPeriodEnd: '2027-03-31',
+        amountPaise: 500000,
+        dueDate: '2026-06-30',
+        status: 'PAID',
+        paymentReceiptDocumentId: receiptDocId,
+        paymentReference: 'PAY-1234',
+        paidAt: now,
+        paidByUserId: 'user-admin',
+        createdBy: 'user-admin',
+        createdAt: now,
+        updatedAt: now,
+        notes: 'Original note',
+      }).run();
+
+      // No-op update writing notes back to itself
+      await expect(
+        db.update(municipalTaxDues).set({ notes: 'Original note' }).where(eq(municipalTaxDues.id, 'mtax-paid-noop-test')).run()
       ).rejects.toThrow();
     });
 
@@ -660,7 +694,29 @@ describe('Phase 4B-1 Municipal Taxes & Statutory Dues Core Backend Suite', () =>
       expect(res.status).toBe(400);
     });
 
-    it('3.9 should reject amount exceeding safe integer financial limit', async () => {
+    it('3.9a should accept large valid decimal amount above old 10-billion paise ceiling', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/municipal-taxes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({
+          taxType: 'PROPERTY_TAX',
+          authorityName: 'KMC High Valuation',
+          referenceNumber: 'HIGH-VAL-1',
+          assessmentFrequency: 'ANNUAL',
+          assessmentPeriodStart: '2026-04-01',
+          assessmentPeriodEnd: '2027-03-31',
+          amount: '200000000.00', // 200 million INR = 20 billion paise
+          dueDate: '2030-06-30',
+        }),
+      }, env);
+      expect(res.status).toBe(201);
+      const body = await jsonOf(res);
+      expect(body.data.amountPaise).toBe(20000000000);
+      expect(body.data.amountStr).toBe('200000000.00');
+    });
+
+    it('3.9b should reject amount exceeding safe integer financial limit (MAX_SAFE_PAISE)', async () => {
       const cookie = await loginAs('admin@iocl.in');
       const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/municipal-taxes`, {
         method: 'POST',
@@ -668,15 +724,17 @@ describe('Phase 4B-1 Municipal Taxes & Statutory Dues Core Backend Suite', () =>
         body: JSON.stringify({
           taxType: 'PROPERTY_TAX',
           authorityName: 'KMC',
-          referenceNumber: 'REF-1',
+          referenceNumber: 'REF-OVERFLOW-1',
           assessmentFrequency: 'ANNUAL',
           assessmentPeriodStart: '2026-04-01',
           assessmentPeriodEnd: '2027-03-31',
-          amount: '1000000000.00', // Exceeds safe boundary
-          dueDate: '2026-06-30',
+          amount: '1000000000000000.00', // Exceeds MAX_SAFE_PAISE
+          dueDate: '2030-06-30',
         }),
       }, env);
       expect(res.status).toBe(400);
+      const body = await jsonOf(res);
+      expect(body.error.code).toBe('VALIDATION_ERROR');
     });
 
     it('3.10 should reject impossible dates like 2026-02-31', async () => {
@@ -2064,18 +2122,65 @@ describe('Phase 4B-1 Municipal Taxes & Statutory Dues Core Backend Suite', () =>
   // 14. CONCURRENCY & CONDITIONAL WRITE TESTS
   // =========================================================================
   describe('14. Concurrency & Race Condition Guards', () => {
-    it('14.1 updatePending conditional write returns 409 MUNICIPAL_TAX_STATE_CHANGED when row status changed concurrently', async () => {
+    it('14.1 MunicipalTaxRepository.updatePending returns undefined when row is already PAID', async () => {
       const receiptDocId = await createTestDocument(OUTLET_1_ID);
-      const cookie = await loginAs('admin@iocl.in');
+      const db = getDb(localD1);
+      const repo = new MunicipalTaxRepository(db);
+      const now = new Date().toISOString();
 
-      // Create due
-      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/municipal-taxes`, {
+      // Create due directly
+      await repo.create({
+        id: 'mtax-repo-conc-1',
+        outletId: OUTLET_1_ID,
+        taxType: 'PROPERTY_TAX',
+        authorityName: 'KMC',
+        referenceNumber: 'REPO-CONC-1',
+        assessmentFrequency: 'ANNUAL',
+        assessmentPeriodStart: '2026-04-01',
+        assessmentPeriodEnd: '2027-03-31',
+        amountPaise: 100000,
+        dueDate: '2030-06-30',
+        assessmentDocumentId: null,
+        status: 'PENDING',
+        paymentReceiptDocumentId: null,
+        paymentReference: null,
+        paidAt: null,
+        paidByUserId: null,
+        notes: 'Original note',
+        createdBy: 'user-admin',
+      });
+
+      // Directly update status to PAID
+      await db.update(municipalTaxDues).set({
+        status: 'PAID',
+        paymentReceiptDocumentId: receiptDocId,
+        paymentReference: 'PAY-1',
+        paidAt: now,
+        paidByUserId: 'user-admin',
+      }).where(eq(municipalTaxDues.id, 'mtax-repo-conc-1')).run();
+
+      // Call updatePending directly on repository
+      const res = await repo.updatePending('mtax-repo-conc-1', {
+        notes: 'Trying to update a paid row',
+      });
+
+      expect(res).toBeUndefined();
+
+      // Verify row in DB is still untouched and PAID
+      const row = await repo.getById('mtax-repo-conc-1');
+      expect(row?.status).toBe('PAID');
+      expect(row?.notes).toBe('Original note');
+    });
+
+    it('14.2 MunicipalTaxService.updatePendingDue throws 409 MUNICIPAL_TAX_STATE_CHANGED on conditional update race failure', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const createRes = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/municipal-taxes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: cookie },
         body: JSON.stringify({
           taxType: 'PROPERTY_TAX',
           authorityName: 'KMC',
-          referenceNumber: 'CONC-TEST-1',
+          referenceNumber: 'SRV-RACE-1',
           assessmentFrequency: 'ANNUAL',
           assessmentPeriodStart: '2026-04-01',
           assessmentPeriodEnd: '2027-03-31',
@@ -2083,32 +2188,126 @@ describe('Phase 4B-1 Municipal Taxes & Statutory Dues Core Backend Suite', () =>
           dueDate: '2030-06-30',
         }),
       }, env);
-      const dueId = (await jsonOf(res)).data.id;
+      const dueId = (await jsonOf(createRes)).data.id;
 
-      // Direct SQL mutate status to PAID behind the service's back to simulate race condition
+      const origUpdatePending = MunicipalTaxRepository.prototype.updatePending;
+      try {
+        // Mock updatePending to return undefined simulating race condition between getById and updatePending
+        MunicipalTaxRepository.prototype.updatePending = async () => undefined;
+
+        const db = getDb(localD1);
+        const service = new MunicipalTaxService(db);
+
+        await expect(
+          service.updatePendingDue(dueId, OUTLET_1_ID, 'user-admin', {
+            notes: 'Race attempt note',
+          })
+        ).rejects.toMatchObject({
+          code: 'MUNICIPAL_TAX_STATE_CHANGED',
+          status: 409,
+        });
+      } finally {
+        MunicipalTaxRepository.prototype.updatePending = origUpdatePending;
+      }
+    });
+
+    it('14.3 MunicipalTaxRepository.markPaidConditional returns undefined when row is already PAID', async () => {
+      const receiptDocId = await createTestDocument(OUTLET_1_ID);
       const db = getDb(localD1);
-      await db.update(municipalTaxDues).set({
-        status: 'PAID',
+      const repo = new MunicipalTaxRepository(db);
+      const now = new Date().toISOString();
+
+      await repo.create({
+        id: 'mtax-repo-pay-conc',
+        outletId: OUTLET_1_ID,
+        taxType: 'PROPERTY_TAX',
+        authorityName: 'KMC',
+        referenceNumber: 'REPO-PAY-CONC',
+        assessmentFrequency: 'ANNUAL',
+        assessmentPeriodStart: '2026-04-01',
+        assessmentPeriodEnd: '2027-03-31',
+        amountPaise: 100000,
+        dueDate: '2030-06-30',
+        assessmentDocumentId: null,
+        status: 'PENDING',
+        paymentReceiptDocumentId: null,
+        paymentReference: null,
+        paidAt: null,
+        paidByUserId: null,
+        notes: null,
+        createdBy: 'user-admin',
+      });
+
+      // First conditional payment -> succeeds
+      const firstPay = await repo.markPaidConditional('mtax-repo-pay-conc', {
         paymentReceiptDocumentId: receiptDocId,
-        paidAt: new Date().toISOString(),
+        paymentReference: 'FIRST-PAY-REF',
+        paidAt: now,
         paidByUserId: 'user-admin',
-      }).where(eq(municipalTaxDues.id, dueId)).run();
+      });
+      expect(firstPay).toBeDefined();
+      expect(firstPay?.status).toBe('PAID');
 
-      // Now service attempts updatePending on dueId -> should return 409
-      const updRes = await app.request(`/api/v1/municipal-taxes/${dueId}`, {
-        method: 'PUT',
+      // Second conditional payment -> returns undefined
+      const secondPay = await repo.markPaidConditional('mtax-repo-pay-conc', {
+        paymentReceiptDocumentId: receiptDocId,
+        paymentReference: 'SECOND-OVERWRITE-ATTEMPT',
+        paidAt: now,
+        paidByUserId: 'user-dealer',
+      });
+      expect(secondPay).toBeUndefined();
+
+      // Verify row in DB kept the first payment's reference
+      const row = await repo.getById('mtax-repo-pay-conc');
+      expect(row?.paymentReference).toBe('FIRST-PAY-REF');
+      expect(row?.paidByUserId).toBe('user-admin');
+    });
+
+    it('14.4 MunicipalTaxService.markPaid throws 409 MUNICIPAL_TAX_ALREADY_PAID on concurrent payment race failure', async () => {
+      const receiptDocId = await createTestDocument(OUTLET_1_ID);
+      const cookie = await loginAs('admin@iocl.in');
+      const createRes = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/municipal-taxes`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: cookie },
-        body: JSON.stringify({ notes: 'Concurrent update attempt' }),
+        body: JSON.stringify({
+          taxType: 'PROPERTY_TAX',
+          authorityName: 'KMC',
+          referenceNumber: 'SRV-PAY-RACE',
+          assessmentFrequency: 'ANNUAL',
+          assessmentPeriodStart: '2026-04-01',
+          assessmentPeriodEnd: '2027-03-31',
+          amount: '10000.00',
+          dueDate: '2030-06-30',
+        }),
       }, env);
+      const dueId = (await jsonOf(createRes)).data.id;
 
-      expect(updRes.status).toBe(409);
+      const origMarkPaidConditional = MunicipalTaxRepository.prototype.markPaidConditional;
+      try {
+        // Mock markPaidConditional to return undefined simulating race condition between getById and markPaidConditional
+        MunicipalTaxRepository.prototype.markPaidConditional = async () => undefined;
+
+        const db = getDb(localD1);
+        const service = new MunicipalTaxService(db);
+
+        await expect(
+          service.markPaid(dueId, OUTLET_1_ID, 'user-admin', {
+            paymentReceiptDocumentId: receiptDocId,
+          })
+        ).rejects.toMatchObject({
+          code: 'MUNICIPAL_TAX_ALREADY_PAID',
+          status: 409,
+        });
+      } finally {
+        MunicipalTaxRepository.prototype.markPaidConditional = origMarkPaidConditional;
+      }
     });
   });
 
   // =========================================================================
-  // 15. DIRECT SQL CONSTRAINT VERIFICATION
+  // 15. DIRECT SQL CONSTRAINT & BOUNDARY VERIFICATION
   // =========================================================================
-  describe('15. Direct SQL Check Constraints', () => {
+  describe('15. Direct SQL Check Constraints & Boundaries', () => {
     it('15.1 rejects invalid tax_type CHECK directly in SQL', async () => {
       const db = getDb(localD1);
       const now = new Date().toISOString();
@@ -2243,6 +2442,53 @@ describe('Phase 4B-1 Municipal Taxes & Statutory Dues Core Backend Suite', () =>
           paymentReceiptDocumentId: null, // Prohibited for PAID
           paidAt: now,
           paidByUserId: 'user-admin',
+          createdBy: 'user-admin',
+          createdAt: now,
+          updatedAt: now,
+        }).run()
+      ).rejects.toThrow();
+    });
+
+    it('15.7 accepts amount_paise exactly at safe integer boundary (9000000000000000) directly in SQL', async () => {
+      const db = getDb(localD1);
+      const now = new Date().toISOString();
+      await db.insert(municipalTaxDues).values({
+        id: 'mtax-max-safe',
+        outletId: OUTLET_1_ID,
+        taxType: 'PROPERTY_TAX',
+        authorityName: 'KMC',
+        referenceNumber: 'MAX-SAFE-1',
+        assessmentFrequency: 'ANNUAL',
+        assessmentPeriodStart: '2026-04-01',
+        assessmentPeriodEnd: '2027-03-31',
+        amountPaise: 9000000000000000, // Exactly MAX_SAFE_PAISE
+        dueDate: '2030-06-30',
+        status: 'PENDING',
+        createdBy: 'user-admin',
+        createdAt: now,
+        updatedAt: now,
+      }).run();
+
+      const inserted = await db.select().from(municipalTaxDues).where(eq(municipalTaxDues.id, 'mtax-max-safe')).get();
+      expect(inserted?.amountPaise).toBe(9000000000000000);
+    });
+
+    it('15.8 rejects amount_paise exceeding safe integer boundary (9000000000000001) directly in SQL', async () => {
+      const db = getDb(localD1);
+      const now = new Date().toISOString();
+      await expect(
+        db.insert(municipalTaxDues).values({
+          id: 'mtax-over-safe',
+          outletId: OUTLET_1_ID,
+          taxType: 'PROPERTY_TAX',
+          authorityName: 'KMC',
+          referenceNumber: 'OVER-SAFE-1',
+          assessmentFrequency: 'ANNUAL',
+          assessmentPeriodStart: '2026-04-01',
+          assessmentPeriodEnd: '2027-03-31',
+          amountPaise: 9000000000000001, // 1 paise above boundary
+          dueDate: '2030-06-30',
+          status: 'PENDING',
           createdBy: 'user-admin',
           createdAt: now,
           updatedAt: now,

@@ -93,28 +93,10 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "trg_municipal_tax_paid_immutable"
 BEFORE UPDATE ON "municipal_tax_dues"
+FOR EACH ROW
+WHEN OLD.status = 'PAID'
 BEGIN
-    SELECT
-        CASE
-            WHEN OLD.status = 'PAID' AND (
-                (OLD.outlet_id IS NOT NEW.outlet_id) OR
-                (OLD.tax_type IS NOT NEW.tax_type) OR
-                (OLD.authority_name IS NOT NEW.authority_name) OR
-                (OLD.reference_number IS NOT NEW.reference_number) OR
-                (OLD.assessment_frequency IS NOT NEW.assessment_frequency) OR
-                (OLD.assessment_period_start IS NOT NEW.assessment_period_start) OR
-                (OLD.assessment_period_end IS NOT NEW.assessment_period_end) OR
-                (OLD.amount_paise IS NOT NEW.amount_paise) OR
-                (OLD.due_date IS NOT NEW.due_date) OR
-                (OLD.assessment_document_id IS NOT NEW.assessment_document_id) OR
-                (NEW.status != 'PAID') OR
-                (OLD.payment_receipt_document_id IS NOT NEW.payment_receipt_document_id) OR
-                (OLD.payment_reference IS NOT NEW.payment_reference) OR
-                (OLD.paid_at IS NOT NEW.paid_at) OR
-                (OLD.paid_by_user_id IS NOT NEW.paid_by_user_id) OR
-                (OLD.notes IS NOT NEW.notes)
-            ) THEN RAISE(ABORT, 'MUNICIPAL_TAX_PAID_IMMUTABLE')
-        END;
+    SELECT RAISE(ABORT, 'MUNICIPAL_TAX_PAID_IMMUTABLE');
 END;
 
 CREATE TRIGGER IF NOT EXISTS "trg_municipal_tax_doc_outlet_insert"
