@@ -108,6 +108,9 @@ export const UtilitiesOperationsPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Sub-meter detail refresh key to synchronize reading & master updates
+  const [subMeterDetailRefreshKey, setSubMeterDetailRefreshKey] = useState<number>(0);
+
   // Stale request guard
   const activeOutletReqRef = useRef<string>('');
 
@@ -231,21 +234,43 @@ export const UtilitiesOperationsPage: React.FC = () => {
     }
   }, [selectedOutletId, canRead, fetchWorkspaceData]);
 
-  // Handle Outlet Switch - immediately clear stale states
+  // Handle Outlet Switch - immediately invalidate in-flight request and clear all stale states
   const handleOutletChange = (newOutletId: string) => {
+    activeOutletReqRef.current = newOutletId;
     setSelectedOutletId(newOutletId);
+
+    // Clear datasets immediately
     setElectricitySummary(null);
     setAccounts([]);
     setBills([]);
     setSubMeters([]);
     setChargeSummary(null);
-    setSelectedBillId(null);
-    setSelectedSubMeterId(null);
-    setBillToEdit(null);
+
+    // Clear all filters immediately
+    setBillFilterStatus('');
+    setBillFilterFromDate('');
+    setBillFilterToDate('');
+    setSmFilterBeneficiaryType('');
+    setSmFilterStatus('');
+    setChargeFilterFromDate('');
+    setChargeFilterToDate('');
+    setChargeFilterSubMeterId('');
+
+    // Close all open modals & selection states
+    setIsAccountModalOpen(false);
+    setIsBillModalOpen(false);
+    setIsSubMeterModalOpen(false);
     setAccountToEdit(null);
+    setBillToEdit(null);
     setSubMeterToEdit(null);
+    setSelectedBillId(null);
     setBillForPayment(null);
+    setSelectedSubMeterId(null);
     setSubMeterForReading(null);
+
+    // Clear feedback messages
+    setErrorMessage(null);
+    setSuccessMessage(null);
   };
 
   // Specific refresh helpers
@@ -623,6 +648,7 @@ export const UtilitiesOperationsPage: React.FC = () => {
               subMeterToEdit ? 'Sub-meter master updated successfully.' : 'Sub-meter created successfully.'
             );
             refreshSubMetersAndCharges();
+            setSubMeterDetailRefreshKey(k => k + 1);
           }}
         />
       )}
@@ -631,6 +657,7 @@ export const UtilitiesOperationsPage: React.FC = () => {
       {selectedSubMeterId && (
         <SubMeterDetailPanel
           subMeterId={selectedSubMeterId}
+          refreshKey={subMeterDetailRefreshKey}
           canWriteSubMeters={canWriteSubMeters}
           canWriteReadings={canWriteReadings}
           onClose={() => setSelectedSubMeterId(null)}
@@ -654,10 +681,16 @@ export const UtilitiesOperationsPage: React.FC = () => {
           onClose={() => setSubMeterForReading(null)}
           onSuccess={() => {
             setSuccessMessage('Sub-meter reading recorded successfully.');
+            setSubMeterDetailRefreshKey(k => k + 1);
             refreshSubMetersAndCharges();
           }}
           onConflict={() => {
+            setSubMeterDetailRefreshKey(k => k + 1);
             refreshSubMetersAndCharges();
+            setSubMeterForReading(null);
+            setErrorMessage(
+              'This sub-meter received another reading while you were viewing it. The latest ledger has been reloaded. Please review it before submitting again.'
+            );
           }}
         />
       )}

@@ -13,6 +13,9 @@ import {
   canRecordReading,
   canEditAccount,
   canEditSubMeter,
+  canSubmitUtilityBill,
+  canSubmitUtilityPayment,
+  getResetUtilityFilters,
   filterDocumentsForOutlet,
   buildBillQueryParams,
   buildSubMeterQueryParams,
@@ -210,6 +213,60 @@ describe('Utility Frontend Logic & UI Helpers (Phase 4A-2)', () => {
     expect(formatFileSize(2048)).toBe('2.0 KB');
     expect(formatFileSize(1048576)).toBe('1.00 MB');
     expect(formatFileSize(5242880)).toBe('5.00 MB');
+  });
+
+  // 23. Bill submit requires billDocumentId
+  it('23. should reject bill submission if billDocumentId is missing or empty', () => {
+    const validBase = {
+      electricityAccountId: 'acc-1',
+      billingPeriodStart: '2026-09-01',
+      billingPeriodEnd: '2026-09-30',
+      billAmount: '84500.50',
+      dueDate: '2026-10-15',
+      hasAccounts: true,
+    };
+
+    expect(canSubmitUtilityBill({ ...validBase, billDocumentId: '' })).toBe(false);
+    expect(canSubmitUtilityBill({ ...validBase, billDocumentId: '   ' })).toBe(false);
+    expect(canSubmitUtilityBill({ ...validBase, billDocumentId: undefined })).toBe(false);
+    expect(canSubmitUtilityBill({ ...validBase, billDocumentId: 'doc-valid-123' })).toBe(true);
+  });
+
+  // 24. Payment submit requires paymentReceiptDocumentId
+  it('24. should reject payment submission if paymentReceiptDocumentId is missing or empty', () => {
+    expect(canSubmitUtilityPayment({ paymentReceiptDocumentId: '' })).toBe(false);
+    expect(canSubmitUtilityPayment({ paymentReceiptDocumentId: '   ' })).toBe(false);
+    expect(canSubmitUtilityPayment({ paymentReceiptDocumentId: undefined })).toBe(false);
+    expect(canSubmitUtilityPayment({ paymentReceiptDocumentId: 'doc-receipt-999' })).toBe(true);
+    expect(canSubmitUtilityPayment({ paymentReceiptDocumentId: 'doc-receipt-999' }, true)).toBe(false); // while submitting
+  });
+
+  // 25. Existing pending bill with existing document remains submittable
+  it('25. should permit existing pending bill with valid existing document to be submitted', () => {
+    const existingBillForm = {
+      electricityAccountId: 'acc-existing-1',
+      billingPeriodStart: '2026-08-01',
+      billingPeriodEnd: '2026-08-31',
+      billAmount: '72000.00',
+      dueDate: '2026-09-15',
+      billDocumentId: 'doc-already-attached-456',
+      hasAccounts: true,
+    };
+
+    expect(canSubmitUtilityBill(existingBillForm, false)).toBe(true);
+  });
+
+  // 26. all utility filters reset on outlet switch
+  it('26. should return clean empty filter state on outlet switch', () => {
+    const resetState = getResetUtilityFilters();
+    expect(resetState.billFilterStatus).toBe('');
+    expect(resetState.billFilterFromDate).toBe('');
+    expect(resetState.billFilterToDate).toBe('');
+    expect(resetState.smFilterBeneficiaryType).toBe('');
+    expect(resetState.smFilterStatus).toBe('');
+    expect(resetState.chargeFilterFromDate).toBe('');
+    expect(resetState.chargeFilterToDate).toBe('');
+    expect(resetState.chargeFilterSubMeterId).toBe('');
   });
 
   // Additional formatting helpers

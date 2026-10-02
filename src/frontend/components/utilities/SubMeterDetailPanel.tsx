@@ -26,6 +26,7 @@ import {
 
 interface SubMeterDetailPanelProps {
   subMeterId: string;
+  refreshKey?: number;
   canWriteSubMeters: boolean;
   canWriteReadings: boolean;
   onClose: () => void;
@@ -36,6 +37,7 @@ interface SubMeterDetailPanelProps {
 
 export const SubMeterDetailPanel: React.FC<SubMeterDetailPanelProps> = ({
   subMeterId,
+  refreshKey,
   canWriteSubMeters,
   canWriteReadings,
   onClose,
@@ -77,7 +79,7 @@ export const SubMeterDetailPanel: React.FC<SubMeterDetailPanelProps> = ({
     if (subMeterId) {
       fetchSubMeterData();
     }
-  }, [subMeterId]);
+  }, [subMeterId, refreshKey]);
 
   if (loading) {
     return (

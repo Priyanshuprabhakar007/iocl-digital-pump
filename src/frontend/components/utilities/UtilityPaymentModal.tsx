@@ -182,7 +182,7 @@ export const UtilityPaymentModal: React.FC<UtilityPaymentModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !paymentReceiptDocumentId.trim()}
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-sm font-semibold flex items-center gap-2 transition-colors shadow-lg shadow-emerald-600/20"
             >
               {submitting ? (

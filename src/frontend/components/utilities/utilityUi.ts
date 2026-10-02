@@ -199,6 +199,67 @@ export function canEditSubMeter(hasSubMeterPermission: boolean): boolean {
 }
 
 /**
+ * Pure helper: Check if utility bill form is submittable (requires valid billDocumentId)
+ */
+export function canSubmitUtilityBill(formData: {
+  electricityAccountId?: string;
+  billingPeriodStart?: string;
+  billingPeriodEnd?: string;
+  billAmount?: string;
+  dueDate?: string;
+  billDocumentId?: string;
+  hasAccounts?: boolean;
+}, isSubmitting: boolean = false): boolean {
+  if (isSubmitting) return false;
+  if (formData.hasAccounts === false) return false;
+  if (!formData.electricityAccountId || formData.electricityAccountId.trim() === '') return false;
+  if (!formData.billingPeriodStart || formData.billingPeriodStart.trim() === '') return false;
+  if (!formData.billingPeriodEnd || formData.billingPeriodEnd.trim() === '') return false;
+  if (!formData.billAmount || formData.billAmount.trim() === '') return false;
+  if (!formData.dueDate || formData.dueDate.trim() === '') return false;
+  if (!formData.billDocumentId || formData.billDocumentId.trim() === '') return false;
+  return true;
+}
+
+/**
+ * Pure helper: Check if utility payment form is submittable (requires valid paymentReceiptDocumentId)
+ */
+export function canSubmitUtilityPayment(formData: {
+  paymentReceiptDocumentId?: string;
+}, isSubmitting: boolean = false): boolean {
+  if (isSubmitting) return false;
+  if (!formData.paymentReceiptDocumentId || formData.paymentReceiptDocumentId.trim() === '') return false;
+  return true;
+}
+
+export interface UtilityFilterState {
+  billFilterStatus: string;
+  billFilterFromDate: string;
+  billFilterToDate: string;
+  smFilterBeneficiaryType: string;
+  smFilterStatus: string;
+  chargeFilterFromDate: string;
+  chargeFilterToDate: string;
+  chargeFilterSubMeterId: string;
+}
+
+/**
+ * Pure helper: Returns empty/reset filter state for outlet switch
+ */
+export function getResetUtilityFilters(): UtilityFilterState {
+  return {
+    billFilterStatus: '',
+    billFilterFromDate: '',
+    billFilterToDate: '',
+    smFilterBeneficiaryType: '',
+    smFilterStatus: '',
+    chargeFilterFromDate: '',
+    chargeFilterToDate: '',
+    chargeFilterSubMeterId: '',
+  };
+}
+
+/**
  * Pure helper: Filters documents by outlet ID
  */
 export function filterDocumentsForOutlet<T extends { outletId: string }>(docs: T[], outletId: string): T[] {
