@@ -678,3 +678,106 @@ export const EquipmentTicketFilterSchema = z.object({
   equipmentType: z.enum(['DISPENSER', 'ATG', 'AIR_COMPRESSOR', 'CNG_COMPRESSOR', 'DG_SET', 'OTHER']).optional(),
 }).strict();
 
+// ============================================================================
+// Phase 4A-1: Electricity & Sub-meter Validators
+// ============================================================================
+
+export const CreateUtilityElectricityAccountSchema = z.object({
+  consumerNumber: z.string().trim().min(1, 'consumerNumber is required'),
+  providerName: z.string().trim().optional().nullable(),
+  billingCycle: z.string().trim().min(1, 'billingCycle is required'),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional().default('ACTIVE'),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const UpdateUtilityElectricityAccountSchema = z.object({
+  providerName: z.string().trim().optional().nullable(),
+  billingCycle: z.string().trim().min(1, 'billingCycle cannot be empty').optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const CreateUtilityElectricityBillSchema = z.object({
+  electricityAccountId: z.string().trim().min(1, 'electricityAccountId is required'),
+  billingPeriodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'billingPeriodStart must be YYYY-MM-DD'),
+  billingPeriodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'billingPeriodEnd must be YYYY-MM-DD'),
+  billAmount: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'billAmount must be a non-negative decimal string (up to 2 decimal places)'),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dueDate must be YYYY-MM-DD'),
+  billDocumentId: z.string().trim().min(1, 'billDocumentId is required'),
+}).strict().refine(data => data.billingPeriodEnd >= data.billingPeriodStart, {
+  message: 'billingPeriodEnd must be on or after billingPeriodStart',
+});
+
+export const UpdateUtilityElectricityBillSchema = z.object({
+  billingPeriodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'billingPeriodStart must be YYYY-MM-DD').optional(),
+  billingPeriodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'billingPeriodEnd must be YYYY-MM-DD').optional(),
+  billAmount: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'billAmount must be a non-negative decimal string (up to 2 decimal places)').optional(),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dueDate must be YYYY-MM-DD').optional(),
+  billDocumentId: z.string().trim().min(1, 'billDocumentId cannot be empty').optional(),
+}).strict().refine(data => {
+  if (data.billingPeriodStart && data.billingPeriodEnd) {
+    return data.billingPeriodEnd >= data.billingPeriodStart;
+  }
+  return true;
+}, {
+  message: 'billingPeriodEnd must be on or after billingPeriodStart',
+});
+
+export const MarkUtilityElectricityBillPaidSchema = z.object({
+  paymentReceiptDocumentId: z.string().trim().min(1, 'paymentReceiptDocumentId is required'),
+  paymentReference: z.string().trim().optional().nullable(),
+  paidAt: z.string().datetime({ offset: true, message: 'paidAt must be a valid ISO-8601 timestamp with timezone' }).optional().nullable(),
+}).strict();
+
+export const CreateUtilitySubMeterSchema = z.object({
+  meterCode: z.string().trim().min(1, 'meterCode is required'),
+  name: z.string().trim().min(1, 'name is required'),
+  beneficiaryType: z.enum(['NFR_VENDOR', 'CNG_FACILITY', 'OTHER']),
+  beneficiaryName: z.string().trim().min(1, 'beneficiaryName is required'),
+  serialNumber: z.string().trim().optional().nullable(),
+  ratePaisePerKwh: z.number().int().min(0, 'ratePaisePerKwh must be non-negative').optional(),
+  ratePerKwh: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'ratePerKwh must be a non-negative decimal string (up to 2 decimal places)').optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'DECOMMISSIONED']).optional().default('ACTIVE'),
+  commissionedAt: z.string().datetime({ offset: true, message: 'commissionedAt must be a valid ISO-8601 timestamp with timezone' }).optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).strict().refine(data => data.ratePaisePerKwh !== undefined || data.ratePerKwh !== undefined, {
+  message: 'ratePaisePerKwh or ratePerKwh is required',
+  path: ['ratePaisePerKwh'],
+});
+
+export const UpdateUtilitySubMeterSchema = z.object({
+  name: z.string().trim().min(1, 'name cannot be empty').optional(),
+  beneficiaryType: z.enum(['NFR_VENDOR', 'CNG_FACILITY', 'OTHER']).optional(),
+  beneficiaryName: z.string().trim().min(1, 'beneficiaryName cannot be empty').optional(),
+  serialNumber: z.string().trim().optional().nullable(),
+  ratePaisePerKwh: z.number().int().min(0, 'ratePaisePerKwh must be non-negative').optional(),
+  ratePerKwh: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'ratePerKwh must be a non-negative decimal string (up to 2 decimal places)').optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'DECOMMISSIONED']).optional(),
+  commissionedAt: z.string().datetime({ offset: true, message: 'commissionedAt must be a valid ISO-8601 timestamp with timezone' }).optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const CreateUtilitySubMeterReadingSchema = z.object({
+  reading: z.string().trim().regex(/^\d+(\.\d{1,3})?$/, 'reading must be a non-negative decimal string (up to 3 decimal places)'),
+  readingAt: z.string().datetime({ offset: true, message: 'readingAt must be a valid ISO-8601 timestamp with timezone' }),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const UtilityBillFilterSchema = z.object({
+  status: z.enum(['PENDING', 'PAID']).optional(),
+  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fromDate must be YYYY-MM-DD').optional(),
+  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'toDate must be YYYY-MM-DD').optional(),
+}).strict();
+
+export const UtilitySubMeterFilterSchema = z.object({
+  beneficiaryType: z.enum(['NFR_VENDOR', 'CNG_FACILITY', 'OTHER']).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'DECOMMISSIONED']).optional(),
+}).strict();
+
+export const UtilityChargeSummaryFilterSchema = z.object({
+  fromDate: z.string().optional(),
+  toDate: z.string().optional(),
+  subMeterId: z.string().trim().optional(),
+}).strict();
+
+

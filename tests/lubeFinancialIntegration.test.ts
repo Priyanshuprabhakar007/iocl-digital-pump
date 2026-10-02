@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { app } from '../src/worker/app';
 import { createLocalD1Database } from '../src/db/localD1';
 import { getDb } from '../src/db';
@@ -18,6 +18,11 @@ describe('Phase 3B-2 Lube Financial Integration Suite', () => {
 
   beforeEach(async () => {
     if (fs.existsSync(TEST_DB_PATH)) { try { fs.unlinkSync(TEST_DB_PATH); } catch (e) {} }
+    const walPath = `${TEST_DB_PATH}-wal`;
+    const shmPath = `${TEST_DB_PATH}-shm`;
+    if (fs.existsSync(walPath)) { try { fs.unlinkSync(walPath); } catch (e) {} }
+    if (fs.existsSync(shmPath)) { try { fs.unlinkSync(shmPath); } catch (e) {} }
+
     localD1 = createLocalD1Database(TEST_DB_PATH);
     const db = getDb(localD1);
     await seedDatabase(db);
@@ -27,6 +32,17 @@ describe('Phase 3B-2 Lube Financial Integration Suite', () => {
       ENVIRONMENT: 'development',
       ALLOWED_ORIGINS: 'http://localhost:3000'
     };
+  });
+
+  afterEach(async () => {
+    if (localD1) {
+      try { localD1.close(); } catch (e) {}
+    }
+    if (fs.existsSync(TEST_DB_PATH)) { try { fs.unlinkSync(TEST_DB_PATH); } catch (e) {} }
+    const walPath = `${TEST_DB_PATH}-wal`;
+    const shmPath = `${TEST_DB_PATH}-shm`;
+    if (fs.existsSync(walPath)) { try { fs.unlinkSync(walPath); } catch (e) {} }
+    if (fs.existsSync(shmPath)) { try { fs.unlinkSync(shmPath); } catch (e) {} }
   });
 
   async function loginAs() {

@@ -114,9 +114,18 @@ export const PERMISSIONS = {
   EQUIPMENT_TICKETS_CREATE: 'equipment_tickets.create',
   EQUIPMENT_TICKETS_MANAGE: 'equipment_tickets.manage',
   EQUIPMENT_TICKETS_SIGNOFF: 'equipment_tickets.signoff',
+
+  // Phase 4A-1: Electricity & Sub-meters
+  UTILITIES_READ: 'utilities.read',
+  UTILITY_ACCOUNTS_WRITE: 'utilities.accounts.write',
+  UTILITY_BILLS_WRITE: 'utilities.bills.write',
+  UTILITY_PAYMENTS_WRITE: 'utilities.payments.write',
+  UTILITY_SUB_METERS_WRITE: 'utilities.sub_meters.write',
+  UTILITY_SUB_METER_READINGS_WRITE: 'utilities.sub_meter_readings.write',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
 
 export const COOKIE_NAME = 'iocl_session';
 export const SESSION_DURATION_HOURS = 24;
+

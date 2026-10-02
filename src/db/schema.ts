@@ -878,4 +878,116 @@ export const equipmentBreakdownEvents = sqliteTable('equipment_breakdown_events'
   check('eq_events_to_status_check', sql`${table.toStatus} IS NULL OR ${table.toStatus} IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED')`),
 ]);
 
+// ============================================================================
+// Phase 4A-1: Utilities (Electricity & Sub-meters)
+// ============================================================================
+
+export const utilityElectricityAccounts = sqliteTable('utility_electricity_accounts', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  consumerNumber: text('consumer_number').notNull(),
+  providerName: text('provider_name'),
+  billingCycle: text('billing_cycle').notNull(),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_util_elec_acc_outlet_consumer').on(table.outletId, table.consumerNumber),
+  index('idx_util_elec_acc_outlet_id').on(table.outletId),
+  index('idx_util_elec_acc_status').on(table.status),
+  check('util_elec_acc_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('util_elec_acc_consumer_check', sql`trim(${table.consumerNumber}) <> ''`),
+  check('util_elec_acc_cycle_check', sql`trim(${table.billingCycle}) <> ''`),
+]);
+
+export const utilityElectricityBills = sqliteTable('utility_electricity_bills', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  electricityAccountId: text('electricity_account_id').notNull().references(() => utilityElectricityAccounts.id),
+  billingPeriodStart: text('billing_period_start').notNull(),
+  billingPeriodEnd: text('billing_period_end').notNull(),
+  billAmountPaise: integer('bill_amount_paise').notNull(),
+  dueDate: text('due_date').notNull(),
+  billDocumentId: text('bill_document_id').notNull().references(() => documents.id),
+  status: text('status', { enum: ['PENDING', 'PAID'] }).notNull().default('PENDING'),
+  paymentReceiptDocumentId: text('payment_receipt_document_id').references(() => documents.id),
+  paymentReference: text('payment_reference'),
+  paidAt: text('paid_at'),
+  paidByUserId: text('paid_by_user_id').references(() => users.id),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_util_elec_bills_acc_period').on(table.electricityAccountId, table.billingPeriodStart, table.billingPeriodEnd),
+  index('idx_util_elec_bills_outlet_id').on(table.outletId),
+  index('idx_util_elec_bills_account_id').on(table.electricityAccountId),
+  index('idx_util_elec_bills_status').on(table.status),
+  index('idx_util_elec_bills_due_date').on(table.dueDate),
+  index('idx_util_elec_bills_period_start').on(table.billingPeriodStart),
+  check('util_elec_bills_amount_check', sql`${table.billAmountPaise} >= 0`),
+  check('util_elec_bills_start_check', sql`trim(${table.billingPeriodStart}) <> ''`),
+  check('util_elec_bills_end_check', sql`trim(${table.billingPeriodEnd}) <> ''`),
+  check('util_elec_bills_due_check', sql`trim(${table.dueDate}) <> ''`),
+  check('util_elec_bills_period_range_check', sql`${table.billingPeriodEnd} >= ${table.billingPeriodStart}`),
+  check('util_elec_bills_status_check', sql`${table.status} IN ('PENDING', 'PAID')`),
+  check('util_elec_bills_paid_check', sql`${table.status} != 'PAID' OR (${table.paymentReceiptDocumentId} IS NOT NULL AND ${table.paidAt} IS NOT NULL AND ${table.paidByUserId} IS NOT NULL)`),
+]);
+
+export const utilitySubMeters = sqliteTable('utility_sub_meters', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  meterCode: text('meter_code').notNull(),
+  name: text('name').notNull(),
+  beneficiaryType: text('beneficiary_type', { enum: ['NFR_VENDOR', 'CNG_FACILITY', 'OTHER'] }).notNull(),
+  beneficiaryName: text('beneficiary_name').notNull(),
+  serialNumber: text('serial_number'),
+  ratePaisePerKwh: integer('rate_paise_per_kwh').notNull(),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE', 'DECOMMISSIONED'] }).notNull().default('ACTIVE'),
+  commissionedAt: text('commissioned_at'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_util_sub_meters_outlet_code').on(table.outletId, table.meterCode),
+  uniqueIndex('idx_util_sub_meters_outlet_serial').on(table.outletId, table.serialNumber).where(sql`${table.serialNumber} IS NOT NULL AND trim(${table.serialNumber}) <> ''`),
+  index('idx_util_sub_meters_outlet_id').on(table.outletId),
+  index('idx_util_sub_meters_beneficiary_type').on(table.beneficiaryType),
+  index('idx_util_sub_meters_status').on(table.status),
+  check('util_sub_meters_type_check', sql`${table.beneficiaryType} IN ('NFR_VENDOR', 'CNG_FACILITY', 'OTHER')`),
+  check('util_sub_meters_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE', 'DECOMMISSIONED')`),
+  check('util_sub_meters_rate_check', sql`${table.ratePaisePerKwh} >= 0`),
+  check('util_sub_meters_code_check', sql`trim(${table.meterCode}) <> ''`),
+  check('util_sub_meters_name_check', sql`trim(${table.name}) <> ''`),
+  check('util_sub_meters_beneficiary_check', sql`trim(${table.beneficiaryName}) <> ''`),
+]);
+
+export const utilitySubMeterReadings = sqliteTable('utility_sub_meter_readings', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  subMeterId: text('sub_meter_id').notNull().references(() => utilitySubMeters.id, { onDelete: 'cascade' }),
+  previousReadingId: text('previous_reading_id'),
+  readingAt: text('reading_at').notNull(),
+  readingMilliKwh: integer('reading_millikwh').notNull(),
+  previousReadingMilliKwh: integer('previous_reading_millikwh'),
+  consumptionMilliKwh: integer('consumption_millikwh').notNull(),
+  ratePaisePerKwhSnapshot: integer('rate_paise_per_kwh_snapshot').notNull(),
+  chargePaise: integer('charge_paise').notNull(),
+  recordedByUserId: text('recorded_by_user_id').notNull().references(() => users.id),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_util_sub_meter_readings_prev').on(table.previousReadingId).where(sql`${table.previousReadingId} IS NOT NULL`),
+  index('idx_util_sub_meter_readings_meter_time').on(table.subMeterId, table.readingAt),
+  index('idx_util_sub_meter_readings_outlet_time').on(table.outletId, table.readingAt),
+  check('util_sub_readings_reading_check', sql`${table.readingMilliKwh} >= 0`),
+  check('util_sub_readings_consumption_check', sql`${table.consumptionMilliKwh} >= 0`),
+  check('util_sub_readings_rate_check', sql`${table.ratePaisePerKwhSnapshot} >= 0`),
+  check('util_sub_readings_charge_check', sql`${table.chargePaise} >= 0`),
+  check('util_sub_readings_chain_check', sql`(${table.previousReadingId} IS NULL AND ${table.previousReadingMilliKwh} IS NULL AND ${table.consumptionMilliKwh} = 0) OR (${table.previousReadingId} IS NOT NULL AND ${table.previousReadingMilliKwh} IS NOT NULL AND ${table.consumptionMilliKwh} = ${table.readingMilliKwh} - ${table.previousReadingMilliKwh})`),
+]);
+
+
 

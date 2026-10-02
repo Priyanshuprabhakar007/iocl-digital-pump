@@ -1174,3 +1174,121 @@ export interface EquipmentTarget {
   status: EquipmentAssetStatus;
 }
 
+// ============================================================================
+// Phase 4A-1: Electricity & Sub-meter Utilities
+// ============================================================================
+
+export type UtilityElectricityAccountStatus = 'ACTIVE' | 'INACTIVE';
+export type UtilityElectricityBillStatus = 'PENDING' | 'PAID';
+export type UtilitySubMeterBeneficiaryType = 'NFR_VENDOR' | 'CNG_FACILITY' | 'OTHER';
+export type UtilitySubMeterStatus = 'ACTIVE' | 'INACTIVE' | 'DECOMMISSIONED';
+
+export interface UtilityElectricityAccount {
+  id: string;
+  outletId: string;
+  consumerNumber: string;
+  providerName: string | null;
+  billingCycle: string;
+  status: UtilityElectricityAccountStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UtilityElectricityBill {
+  id: string;
+  outletId: string;
+  electricityAccountId: string;
+  billingPeriodStart: string;
+  billingPeriodEnd: string;
+  billAmountPaise: number;
+  billAmountStr?: string;
+  dueDate: string;
+  billDocumentId: string;
+  status: UtilityElectricityBillStatus;
+  paymentReceiptDocumentId: string | null;
+  paymentReference: string | null;
+  paidAt: string | null;
+  paidByUserId: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  isOverdue?: boolean;
+}
+
+export interface UtilitySubMeter {
+  id: string;
+  outletId: string;
+  meterCode: string;
+  name: string;
+  beneficiaryType: UtilitySubMeterBeneficiaryType;
+  beneficiaryName: string;
+  serialNumber: string | null;
+  ratePaisePerKwh: number;
+  ratePerKwhStr?: string;
+  status: UtilitySubMeterStatus;
+  commissionedAt: string | null;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UtilitySubMeterReading {
+  id: string;
+  outletId: string;
+  subMeterId: string;
+  previousReadingId: string | null;
+  readingAt: string;
+  readingMilliKwh: number;
+  readingStr?: string;
+  previousReadingMilliKwh: number | null;
+  previousReadingStr?: string | null;
+  consumptionMilliKwh: number;
+  consumptionStr?: string;
+  ratePaisePerKwhSnapshot: number;
+  ratePerKwhStr?: string;
+  chargePaise: number;
+  chargeStr?: string;
+  recordedByUserId: string;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface UtilityElectricitySummary {
+  accountCount: number;
+  activeAccountCount: number;
+  pendingBillCount: number;
+  overdueBillCount: number;
+  paidBillCount: number;
+  pendingAmountPaise: number;
+  pendingAmountStr: string;
+  overdueAmountPaise: number;
+  overdueAmountStr: string;
+  latestBillDueDate: string | null;
+}
+
+export interface UtilitySubMeterChargeSummaryItem {
+  subMeterId: string;
+  meterCode: string;
+  name: string;
+  beneficiaryType: UtilitySubMeterBeneficiaryType;
+  beneficiaryName: string;
+  consumptionMilliKwh: number;
+  consumptionStr: string;
+  chargePaise: number;
+  chargeStr: string;
+  readingCount: number;
+}
+
+export interface UtilitySubMeterChargeSummary {
+  totalConsumptionMilliKwh: number;
+  totalConsumptionStr: string;
+  totalChargePaise: number;
+  totalChargeStr: string;
+  readingCount: number;
+  bySubMeter: UtilitySubMeterChargeSummaryItem[];
+}
+
+
