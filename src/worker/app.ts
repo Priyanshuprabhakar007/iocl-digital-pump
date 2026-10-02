@@ -22,6 +22,7 @@ import { cngRoutes } from './routes/cngRoutes';
 import { lubeRoutes } from './routes/lubeRoutes';
 import { equipmentRoutes } from './routes/equipmentRoutes';
 import { utilityRoutes } from './routes/utilityRoutes';
+import { municipalTaxRoutes } from './routes/municipalTaxRoutes';
 
 export const app = new Hono<{ Bindings: EnvBindings }>();
 
@@ -142,6 +143,7 @@ app.route('/api/v1', cngRoutes);
 app.route('/api/v1', lubeRoutes);
 app.route('/api/v1', equipmentRoutes);
 app.route('/api/v1', utilityRoutes);
+app.route('/api/v1', municipalTaxRoutes);
 
 // Global Error Handler - Generic external response, detailed internal server log
 app.onError((err, c) => {

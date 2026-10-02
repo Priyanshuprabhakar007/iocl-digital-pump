@@ -813,5 +813,85 @@ export const UtilityChargeSummaryFilterSchema = z.object({
   message: 'fromDate must be on or before toDate',
 });
 
+// ============================================================================
+// Phase 4B-1: Municipal Taxes & Statutory Dues Validators
+// ============================================================================
+
+export const MunicipalTaxTypeEnum = z.enum([
+  'PROPERTY_TAX',
+  'TRADE_LICENSE_FEE',
+  'SIGNAGE_CHARGE',
+  'LOCAL_AUTHORITY_DUE',
+]);
+
+export const MunicipalTaxFrequencyEnum = z.enum([
+  'ANNUAL',
+  'QUARTERLY',
+]);
+
+export const MunicipalTaxStatusEnum = z.enum([
+  'PENDING',
+  'PAID',
+]);
+
+export const CreateMunicipalTaxDueSchema = z.object({
+  taxType: MunicipalTaxTypeEnum,
+  authorityName: z.string().trim().min(1, 'authorityName is required'),
+  referenceNumber: z.string().trim().min(1, 'referenceNumber is required'),
+  assessmentFrequency: MunicipalTaxFrequencyEnum,
+  assessmentPeriodStart: StrictDateOnlySchema,
+  assessmentPeriodEnd: StrictDateOnlySchema,
+  amount: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'amount must be a non-negative decimal string (up to 2 decimal places)').max(20, 'amount exceeds maximum length'),
+  dueDate: StrictDateOnlySchema,
+  assessmentDocumentId: z.string().trim().min(1, 'assessmentDocumentId cannot be empty').optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).strict().refine(data => data.assessmentPeriodEnd >= data.assessmentPeriodStart, {
+  message: 'assessmentPeriodEnd must be on or after assessmentPeriodStart',
+  path: ['assessmentPeriodEnd'],
+});
+
+export const UpdateMunicipalTaxDueSchema = z.object({
+  taxType: MunicipalTaxTypeEnum.optional(),
+  authorityName: z.string().trim().min(1, 'authorityName cannot be empty').optional(),
+  referenceNumber: z.string().trim().min(1, 'referenceNumber cannot be empty').optional(),
+  assessmentFrequency: MunicipalTaxFrequencyEnum.optional(),
+  assessmentPeriodStart: StrictDateOnlySchema.optional(),
+  assessmentPeriodEnd: StrictDateOnlySchema.optional(),
+  amount: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'amount must be a non-negative decimal string (up to 2 decimal places)').max(20, 'amount exceeds maximum length').optional(),
+  dueDate: StrictDateOnlySchema.optional(),
+  assessmentDocumentId: z.string().trim().min(1, 'assessmentDocumentId cannot be empty').optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).strict().refine(data => {
+  if (data.assessmentPeriodStart && data.assessmentPeriodEnd) {
+    return data.assessmentPeriodEnd >= data.assessmentPeriodStart;
+  }
+  return true;
+}, {
+  message: 'assessmentPeriodEnd must be on or after assessmentPeriodStart',
+  path: ['assessmentPeriodEnd'],
+});
+
+export const MarkMunicipalTaxPaidSchema = z.object({
+  paymentReceiptDocumentId: z.string().trim().min(1, 'paymentReceiptDocumentId is required'),
+  paymentReference: z.string().trim().optional().nullable(),
+  paidAt: z.string().datetime({ offset: true, message: 'paidAt must be a valid ISO-8601 timestamp with timezone' }).optional().nullable(),
+}).strict();
+
+export const MunicipalTaxFilterSchema = z.object({
+  taxType: MunicipalTaxTypeEnum.optional(),
+  status: MunicipalTaxStatusEnum.optional(),
+  assessmentFrequency: MunicipalTaxFrequencyEnum.optional(),
+  fromDate: StrictDateOnlySchema.optional(),
+  toDate: StrictDateOnlySchema.optional(),
+}).strict().refine(data => {
+  if (data.fromDate && data.toDate) {
+    return data.fromDate <= data.toDate;
+  }
+  return true;
+}, {
+  message: 'fromDate must be on or before toDate',
+  path: ['fromDate'],
+});
+
 
 

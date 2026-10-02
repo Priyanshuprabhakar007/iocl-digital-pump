@@ -122,6 +122,11 @@ export const PERMISSIONS = {
   UTILITY_PAYMENTS_WRITE: 'utilities.payments.write',
   UTILITY_SUB_METERS_WRITE: 'utilities.sub_meters.write',
   UTILITY_SUB_METER_READINGS_WRITE: 'utilities.sub_meter_readings.write',
+
+  // Phase 4B-1: Municipal Taxes & Statutory Dues
+  MUNICIPAL_TAXES_READ: 'municipal_taxes.read',
+  MUNICIPAL_TAXES_WRITE: 'municipal_taxes.write',
+  MUNICIPAL_TAX_PAYMENTS_WRITE: 'municipal_taxes.payments.write',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];

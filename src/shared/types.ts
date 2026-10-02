@@ -1291,4 +1291,65 @@ export interface UtilitySubMeterChargeSummary {
   bySubMeter: UtilitySubMeterChargeSummaryItem[];
 }
 
+// ============================================================================
+// Phase 4B-1: Municipal Taxes & Statutory Dues
+// ============================================================================
+
+export type MunicipalTaxType =
+  | 'PROPERTY_TAX'
+  | 'TRADE_LICENSE_FEE'
+  | 'SIGNAGE_CHARGE'
+  | 'LOCAL_AUTHORITY_DUE';
+
+export type MunicipalTaxFrequency =
+  | 'ANNUAL'
+  | 'QUARTERLY';
+
+export type MunicipalTaxStatus =
+  | 'PENDING'
+  | 'PAID';
+
+export interface MunicipalTaxDue {
+  id: string;
+  outletId: string;
+  taxType: MunicipalTaxType;
+  authorityName: string;
+  referenceNumber: string;
+  assessmentFrequency: MunicipalTaxFrequency;
+  assessmentPeriodStart: string;
+  assessmentPeriodEnd: string;
+  amountPaise: number;
+  amountStr?: string;
+  dueDate: string;
+  assessmentDocumentId: string | null;
+  status: MunicipalTaxStatus;
+  paymentReceiptDocumentId: string | null;
+  paymentReference: string | null;
+  paidAt: string | null;
+  paidByUserId: string | null;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  isOverdue?: boolean;
+}
+
+export interface MunicipalTaxSummary {
+  totalCount: number;
+  pendingCount: number;
+  overdueCount: number;
+  paidCount: number;
+
+  pendingAmountPaise: number;
+  pendingAmountStr: string;
+
+  overdueAmountPaise: number;
+  overdueAmountStr: string;
+
+  paidAmountPaise: number;
+  paidAmountStr: string;
+
+  nextDueDate: string | null;
+}
+
 

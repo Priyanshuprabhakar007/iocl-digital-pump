@@ -990,5 +990,59 @@ export const utilitySubMeterReadings = sqliteTable('utility_sub_meter_readings',
   check('util_sub_readings_chain_check', sql`(${table.previousReadingId} IS NULL AND ${table.previousReadingMilliKwh} IS NULL AND ${table.consumptionMilliKwh} = 0) OR (${table.previousReadingId} IS NOT NULL AND ${table.previousReadingMilliKwh} IS NOT NULL AND ${table.consumptionMilliKwh} = ${table.readingMilliKwh} - ${table.previousReadingMilliKwh})`),
 ]);
 
+// ============================================================================
+// Phase 4B-1: Municipal Taxes & Statutory Dues
+// ============================================================================
+
+export const municipalTaxDues = sqliteTable('municipal_tax_dues', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  taxType: text('tax_type', { enum: ['PROPERTY_TAX', 'TRADE_LICENSE_FEE', 'SIGNAGE_CHARGE', 'LOCAL_AUTHORITY_DUE'] }).notNull(),
+  authorityName: text('authority_name').notNull(),
+  referenceNumber: text('reference_number').notNull(),
+  assessmentFrequency: text('assessment_frequency', { enum: ['ANNUAL', 'QUARTERLY'] }).notNull(),
+  assessmentPeriodStart: text('assessment_period_start').notNull(),
+  assessmentPeriodEnd: text('assessment_period_end').notNull(),
+  amountPaise: integer('amount_paise').notNull(),
+  dueDate: text('due_date').notNull(),
+  assessmentDocumentId: text('assessment_document_id').references(() => documents.id),
+  status: text('status', { enum: ['PENDING', 'PAID'] }).notNull().default('PENDING'),
+  paymentReceiptDocumentId: text('payment_receipt_document_id').references(() => documents.id),
+  paymentReference: text('payment_reference'),
+  paidAt: text('paid_at'),
+  paidByUserId: text('paid_by_user_id').references(() => users.id),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_municipal_tax_statutory_identity').on(
+    table.outletId,
+    table.taxType,
+    table.authorityName,
+    table.referenceNumber,
+    table.assessmentPeriodStart,
+    table.assessmentPeriodEnd
+  ),
+  index('idx_municipal_tax_outlet_id').on(table.outletId),
+  index('idx_municipal_tax_outlet_status').on(table.outletId, table.status),
+  index('idx_municipal_tax_outlet_due_date').on(table.outletId, table.dueDate),
+  index('idx_municipal_tax_outlet_tax_type').on(table.outletId, table.taxType),
+  index('idx_municipal_tax_outlet_frequency').on(table.outletId, table.assessmentFrequency),
+  index('idx_municipal_tax_period_start').on(table.assessmentPeriodStart),
+  index('idx_municipal_tax_reference_number').on(table.referenceNumber),
+  check('municipal_tax_type_check', sql`${table.taxType} IN ('PROPERTY_TAX', 'TRADE_LICENSE_FEE', 'SIGNAGE_CHARGE', 'LOCAL_AUTHORITY_DUE')`),
+  check('municipal_tax_frequency_check', sql`${table.assessmentFrequency} IN ('ANNUAL', 'QUARTERLY')`),
+  check('municipal_tax_status_check', sql`${table.status} IN ('PENDING', 'PAID')`),
+  check('municipal_tax_authority_check', sql`trim(${table.authorityName}) <> ''`),
+  check('municipal_tax_ref_check', sql`trim(${table.referenceNumber}) <> ''`),
+  check('municipal_tax_start_check', sql`trim(${table.assessmentPeriodStart}) <> ''`),
+  check('municipal_tax_end_check', sql`trim(${table.assessmentPeriodEnd}) <> ''`),
+  check('municipal_tax_due_check', sql`trim(${table.dueDate}) <> ''`),
+  check('municipal_tax_period_range_check', sql`${table.assessmentPeriodEnd} >= ${table.assessmentPeriodStart}`),
+  check('municipal_tax_amount_check', sql`${table.amountPaise} > 0 AND ${table.amountPaise} <= 9000000000000000`),
+  check('municipal_tax_paid_check', sql`(${table.status} = 'PENDING' AND ${table.paymentReceiptDocumentId} IS NULL AND ${table.paidAt} IS NULL AND ${table.paidByUserId} IS NULL) OR (${table.status} = 'PAID' AND ${table.paymentReceiptDocumentId} IS NOT NULL AND ${table.paidAt} IS NOT NULL AND ${table.paidByUserId} IS NOT NULL)`),
+]);
+
 
 
