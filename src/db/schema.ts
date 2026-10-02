@@ -980,6 +980,7 @@ export const utilitySubMeterReadings = sqliteTable('utility_sub_meter_readings',
   createdAt: text('created_at').notNull(),
 }, (table) => [
   uniqueIndex('idx_util_sub_meter_readings_prev').on(table.previousReadingId).where(sql`${table.previousReadingId} IS NOT NULL`),
+  uniqueIndex('idx_util_sub_meter_readings_single_root').on(table.subMeterId).where(sql`${table.previousReadingId} IS NULL`),
   index('idx_util_sub_meter_readings_meter_time').on(table.subMeterId, table.readingAt),
   index('idx_util_sub_meter_readings_outlet_time').on(table.outletId, table.readingAt),
   check('util_sub_readings_reading_check', sql`${table.readingMilliKwh} >= 0`),

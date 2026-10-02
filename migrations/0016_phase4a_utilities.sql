@@ -165,6 +165,7 @@ CREATE TABLE IF NOT EXISTS "utility_sub_meter_readings" (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_util_sub_meter_readings_prev" ON "utility_sub_meter_readings" ("previous_reading_id") WHERE previous_reading_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_util_sub_meter_readings_single_root" ON "utility_sub_meter_readings" ("sub_meter_id") WHERE previous_reading_id IS NULL;
 CREATE INDEX IF NOT EXISTS "idx_util_sub_meter_readings_meter_time" ON "utility_sub_meter_readings" ("sub_meter_id", "reading_at");
 CREATE INDEX IF NOT EXISTS "idx_util_sub_meter_readings_outlet_time" ON "utility_sub_meter_readings" ("outlet_id", "reading_at");
 

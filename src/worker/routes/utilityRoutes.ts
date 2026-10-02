@@ -41,6 +41,32 @@ function handleUtilityError(c: AppContext, err: any) {
       error: { code: 'VALIDATION_ERROR', message: err.errors?.[0]?.message || 'Validation error', details: err.format?.() },
     }, 400);
   }
+  if (err.message && err.message.includes('UTILITY_CHARGE_OVERFLOW')) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'UTILITY_CHARGE_OVERFLOW', message: 'Calculated electricity charge exceeds safe limits' },
+    }, 400);
+  }
+  if (err.message && err.message.includes('UTILITY_SUMMARY_OVERFLOW')) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'UTILITY_SUMMARY_OVERFLOW', message: 'Total summary values exceed safe calculation limits' },
+    }, 400);
+  }
+  if (
+    err.message &&
+    (err.message.includes('OVERFLOW') ||
+      err.message.includes('INVALID_') ||
+      err.message.includes('EMPTY_'))
+  ) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'VALIDATION_ERROR', message: err.message },
+    }, 400);
+  }
   console.error('[Utility Operation Error]:', err);
   return c.json({
     success: false,

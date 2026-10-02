@@ -17,6 +17,7 @@ import {
   UtilitySubMeterBeneficiaryType,
   UtilitySubMeterStatus,
 } from '../../shared/types';
+import { checkedUtilityMoneyAdd } from '../../shared/utilityUtils';
 
 export class UtilityRepository {
   constructor(private db: AppDatabase) {}
@@ -334,7 +335,7 @@ export class UtilityRepository {
       .select()
       .from(utilitySubMeterReadings)
       .where(eq(utilitySubMeterReadings.subMeterId, subMeterId))
-      .orderBy(desc(utilitySubMeterReadings.readingAt), desc(utilitySubMeterReadings.createdAt))
+      .orderBy(asc(utilitySubMeterReadings.readingAt), asc(utilitySubMeterReadings.createdAt))
       .all();
     return rows as unknown as UtilitySubMeterReading[];
   }
@@ -388,11 +389,11 @@ export class UtilityRepository {
         paidBillCount += 1;
       } else if (b.status === 'PENDING') {
         pendingBillCount += 1;
-        pendingAmountPaise += b.billAmountPaise;
+        pendingAmountPaise = checkedUtilityMoneyAdd(pendingAmountPaise, b.billAmountPaise);
 
         if (b.dueDate < currentDateStr) {
           overdueBillCount += 1;
-          overdueAmountPaise += b.billAmountPaise;
+          overdueAmountPaise = checkedUtilityMoneyAdd(overdueAmountPaise, b.billAmountPaise);
         }
 
         if (!latestDueDate || b.dueDate > latestDueDate) {

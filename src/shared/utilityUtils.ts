@@ -171,3 +171,34 @@ export function calculateSubMeterChargePaise(
 
   return Number(resultBigInt);
 }
+
+/**
+ * Checked integer addition for monetary paise amounts.
+ * Throws UTILITY_SUMMARY_OVERFLOW if safe integer limits are exceeded or negative.
+ */
+export function checkedUtilityMoneyAdd(a: number, b: number): number {
+  if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || a < 0 || b < 0) {
+    throw new Error('UTILITY_SUMMARY_OVERFLOW');
+  }
+  const sum = a + b;
+  if (!Number.isSafeInteger(sum) || sum > MAX_SAFE_PAISE) {
+    throw new Error('UTILITY_SUMMARY_OVERFLOW');
+  }
+  return sum;
+}
+
+/**
+ * Checked integer addition for milli-kWh energy amounts.
+ * Throws UTILITY_SUMMARY_OVERFLOW if safe integer limits are exceeded or negative.
+ */
+export function checkedMilliKwhAdd(a: number, b: number): number {
+  if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || a < 0 || b < 0) {
+    throw new Error('UTILITY_SUMMARY_OVERFLOW');
+  }
+  const sum = a + b;
+  if (!Number.isSafeInteger(sum) || sum > MAX_SAFE_MILLIKWH) {
+    throw new Error('UTILITY_SUMMARY_OVERFLOW');
+  }
+  return sum;
+}
+

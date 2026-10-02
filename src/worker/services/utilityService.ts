@@ -33,12 +33,25 @@ import {
   parseMoneyToPaise,
   formatPaiseToMoney,
   calculateSubMeterChargePaise,
+  checkedUtilityMoneyAdd,
+  checkedMilliKwhAdd,
 } from '../../shared/utilityUtils';
 
 export class UtilityError extends Error {
   constructor(public code: string, message: string, public status: number = 400) {
     super(message);
     this.name = 'UtilityError';
+  }
+}
+
+function safeParseMoney(amount: string): number {
+  try {
+    return parseMoneyToPaise(amount);
+  } catch (err: any) {
+    if (err.message && err.message.includes('OVERFLOW')) {
+      throw new UtilityError('VALIDATION_ERROR', 'Money amount exceeds safe limits.', 400);
+    }
+    throw new UtilityError('VALIDATION_ERROR', 'Invalid money amount format.', 400);
   }
 }
 
@@ -227,7 +240,7 @@ export class UtilityService {
     }
 
     // 4. Safe money conversion
-    const billAmountPaise = parseMoneyToPaise(validated.billAmount);
+    const billAmountPaise = safeParseMoney(validated.billAmount);
 
     try {
       const bill = await repo.createElectricityBill({
@@ -328,7 +341,7 @@ export class UtilityService {
     const updates: Partial<Pick<UtilityElectricityBill, 'billingPeriodStart' | 'billingPeriodEnd' | 'billAmountPaise' | 'dueDate' | 'billDocumentId'>> = {};
     if (validated.billingPeriodStart !== undefined) updates.billingPeriodStart = validated.billingPeriodStart;
     if (validated.billingPeriodEnd !== undefined) updates.billingPeriodEnd = validated.billingPeriodEnd;
-    if (validated.billAmount !== undefined) updates.billAmountPaise = parseMoneyToPaise(validated.billAmount);
+    if (validated.billAmount !== undefined) updates.billAmountPaise = safeParseMoney(validated.billAmount);
     if (validated.dueDate !== undefined) updates.dueDate = validated.dueDate;
     if (validated.billDocumentId !== undefined) updates.billDocumentId = validated.billDocumentId;
 
@@ -485,13 +498,25 @@ export class UtilityService {
   async getElectricitySummary(outletId: string): Promise<UtilityElectricitySummary> {
     const repo = new UtilityRepository(this.db);
     const todayStr = new Date().toISOString().slice(0, 10);
-    const summary = await repo.getElectricitySummary(outletId, todayStr);
+    try {
+      const summary = await repo.getElectricitySummary(outletId, todayStr);
 
-    return {
-      ...summary,
-      pendingAmountStr: formatPaiseToMoney(summary.pendingAmountPaise),
-      overdueAmountStr: formatPaiseToMoney(summary.overdueAmountPaise),
-    };
+      return {
+        ...summary,
+        pendingAmountStr: formatPaiseToMoney(summary.pendingAmountPaise),
+        overdueAmountStr: formatPaiseToMoney(summary.overdueAmountPaise),
+      };
+    } catch (err: any) {
+      if (err instanceof UtilityError) throw err;
+      if (err.message && err.message.includes('UTILITY_SUMMARY_OVERFLOW')) {
+        throw new UtilityError(
+          'UTILITY_SUMMARY_OVERFLOW',
+          'Electricity summary exceeds safe monetary limits.',
+          400
+        );
+      }
+      throw err;
+    }
   }
 
   private formatBillDto(bill: UtilityElectricityBill): UtilityElectricityBill {
@@ -540,7 +565,7 @@ export class UtilityService {
     if (validated.ratePaisePerKwh !== undefined) {
       ratePaisePerKwh = validated.ratePaisePerKwh;
     } else if (validated.ratePerKwh !== undefined) {
-      ratePaisePerKwh = parseMoneyToPaise(validated.ratePerKwh);
+      ratePaisePerKwh = safeParseMoney(validated.ratePerKwh);
     } else {
       throw new UtilityError('VALIDATION_ERROR', 'ratePaisePerKwh or ratePerKwh is required', 400);
     }
@@ -631,7 +656,7 @@ export class UtilityService {
     if (validated.ratePaisePerKwh !== undefined) {
       updates.ratePaisePerKwh = validated.ratePaisePerKwh;
     } else if (validated.ratePerKwh !== undefined) {
-      updates.ratePaisePerKwh = parseMoneyToPaise(validated.ratePerKwh);
+      updates.ratePaisePerKwh = safeParseMoney(validated.ratePerKwh);
     }
     if (validated.status !== undefined) updates.status = validated.status as UtilitySubMeterStatus;
     if (validated.commissionedAt !== undefined) updates.commissionedAt = validated.commissionedAt ? new Date(validated.commissionedAt).toISOString() : null;
@@ -731,7 +756,16 @@ export class UtilityService {
       );
     }
 
-    const readingMilliKwh = parseMilliKwh(validated.reading);
+    let readingMilliKwh: number;
+    try {
+      readingMilliKwh = parseMilliKwh(validated.reading);
+    } catch (err: any) {
+      if (err.message && err.message.includes('OVERFLOW')) {
+        throw new UtilityError('VALIDATION_ERROR', 'Meter reading value exceeds safe limit.', 400);
+      }
+      throw new UtilityError('VALIDATION_ERROR', 'Invalid meter reading value.', 400);
+    }
+
     const readingAt = new Date(validated.readingAt).toISOString();
 
     const latest = await repo.getLatestSubMeterReading(subMeterId);
@@ -762,7 +796,14 @@ export class UtilityService {
       previousReadingId = latest.id;
       previousReadingMilliKwh = latest.readingMilliKwh;
       consumptionMilliKwh = readingMilliKwh - latest.readingMilliKwh;
-      chargePaise = calculateSubMeterChargePaise(consumptionMilliKwh, ratePaisePerKwhSnapshot);
+      try {
+        chargePaise = calculateSubMeterChargePaise(consumptionMilliKwh, ratePaisePerKwhSnapshot);
+      } catch (err: any) {
+        if (err.message && err.message.includes('UTILITY_CHARGE_OVERFLOW')) {
+          throw new UtilityError('UTILITY_CHARGE_OVERFLOW', 'Calculated electricity charge exceeds safe limits.', 400);
+        }
+        throw err;
+      }
     }
 
     try {
@@ -796,6 +837,7 @@ export class UtilityService {
       if (err instanceof UtilityError) throw err;
       if (
         (err.message && err.message.includes('idx_util_sub_meter_readings_prev')) ||
+        (err.message && err.message.includes('idx_util_sub_meter_readings_single_root')) ||
         (err.message && err.message.includes('SUB_METER_READING_INVALID_PREDECESSOR')) ||
         (err.message && err.message.includes('SUB_METER_READING_OUT_OF_ORDER'))
       ) {
@@ -852,8 +894,18 @@ export class UtilityService {
     const filters = UtilityChargeSummaryFilterSchema.parse(query || {});
     const repo = new UtilityRepository(this.db);
 
-    const fromDateIso = filters.fromDate ? new Date(filters.fromDate).toISOString() : undefined;
-    const toDateIso = filters.toDate ? new Date(filters.toDate).toISOString() : undefined;
+    if (filters.subMeterId) {
+      const subMeter = await repo.getSubMeterById(filters.subMeterId);
+      if (!subMeter) {
+        throw new UtilityError('UTILITY_SUB_METER_NOT_FOUND', 'Sub-meter not found.', 404);
+      }
+      if (subMeter.outletId !== outletId) {
+        throw new UtilityError('FORBIDDEN', 'Sub-meter belongs to another outlet.', 403);
+      }
+    }
+
+    const fromDateIso = filters.fromDate ? `${filters.fromDate}T00:00:00.000Z` : undefined;
+    const toDateIso = filters.toDate ? `${filters.toDate}T23:59:59.999Z` : undefined;
 
     const { subMeters, readings } = await repo.getSubMeterChargeSummary(outletId, {
       fromDate: fromDateIso,
@@ -869,48 +921,60 @@ export class UtilityService {
       readingsByMeter.set(r.subMeterId, list);
     }
 
-    let totalConsumptionMilliKwh = 0;
-    let totalChargePaise = 0;
-    let totalReadingCount = 0;
+    try {
+      let totalConsumptionMilliKwh = 0;
+      let totalChargePaise = 0;
+      let totalReadingCount = 0;
 
-    const bySubMeter: UtilitySubMeterChargeSummaryItem[] = [];
+      const bySubMeter: UtilitySubMeterChargeSummaryItem[] = [];
 
-    for (const sm of subMeters) {
-      const meterReadings = readingsByMeter.get(sm.id) || [];
-      let meterConsumption = 0;
-      let meterCharge = 0;
-      const count = meterReadings.length;
+      for (const sm of subMeters) {
+        const meterReadings = readingsByMeter.get(sm.id) || [];
+        let meterConsumption = 0;
+        let meterCharge = 0;
+        const count = meterReadings.length;
 
-      for (const r of meterReadings) {
-        meterConsumption += r.consumptionMilliKwh;
-        meterCharge += r.chargePaise;
+        for (const r of meterReadings) {
+          meterConsumption = checkedMilliKwhAdd(meterConsumption, r.consumptionMilliKwh);
+          meterCharge = checkedUtilityMoneyAdd(meterCharge, r.chargePaise);
+        }
+
+        totalConsumptionMilliKwh = checkedMilliKwhAdd(totalConsumptionMilliKwh, meterConsumption);
+        totalChargePaise = checkedUtilityMoneyAdd(totalChargePaise, meterCharge);
+        totalReadingCount += count;
+
+        bySubMeter.push({
+          subMeterId: sm.id,
+          meterCode: sm.meterCode,
+          name: sm.name,
+          beneficiaryType: sm.beneficiaryType,
+          beneficiaryName: sm.beneficiaryName,
+          consumptionMilliKwh: meterConsumption,
+          consumptionStr: formatMilliKwh(meterConsumption),
+          chargePaise: meterCharge,
+          chargeStr: formatPaiseToMoney(meterCharge),
+          readingCount: count,
+        });
       }
 
-      totalConsumptionMilliKwh += meterConsumption;
-      totalChargePaise += meterCharge;
-      totalReadingCount += count;
-
-      bySubMeter.push({
-        subMeterId: sm.id,
-        meterCode: sm.meterCode,
-        name: sm.name,
-        beneficiaryType: sm.beneficiaryType,
-        beneficiaryName: sm.beneficiaryName,
-        consumptionMilliKwh: meterConsumption,
-        consumptionStr: formatMilliKwh(meterConsumption),
-        chargePaise: meterCharge,
-        chargeStr: formatPaiseToMoney(meterCharge),
-        readingCount: count,
-      });
+      return {
+        totalConsumptionMilliKwh,
+        totalConsumptionStr: formatMilliKwh(totalConsumptionMilliKwh),
+        totalChargePaise,
+        totalChargeStr: formatPaiseToMoney(totalChargePaise),
+        readingCount: totalReadingCount,
+        bySubMeter,
+      };
+    } catch (err: any) {
+      if (err instanceof UtilityError) throw err;
+      if (err.message && err.message.includes('UTILITY_SUMMARY_OVERFLOW')) {
+        throw new UtilityError(
+          'UTILITY_SUMMARY_OVERFLOW',
+          'Sub-meter summary aggregate exceeds safe limits.',
+          400
+        );
+      }
+      throw err;
     }
-
-    return {
-      totalConsumptionMilliKwh,
-      totalConsumptionStr: formatMilliKwh(totalConsumptionMilliKwh),
-      totalChargePaise,
-      totalChargeStr: formatPaiseToMoney(totalChargePaise),
-      readingCount: totalReadingCount,
-      bySubMeter,
-    };
   }
 }
