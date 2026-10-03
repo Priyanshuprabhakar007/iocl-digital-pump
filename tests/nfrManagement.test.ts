@@ -19,6 +19,8 @@ import {
   roles,
 } from '../src/db/schema';
 import { PERMISSIONS, ROLES } from '../src/shared/constants';
+import { NfrRepository } from '../src/worker/repositories/nfrRepository';
+import { NfrService } from '../src/worker/services/nfrService';
 
 const SAFE_MONEY_LIMIT_PAISE = 9_000_000_000_000_000; // 9e15 paise
 
@@ -2180,7 +2182,7 @@ describe('Phase 4C-1 NFR / Vendor Lease & Rent Core Backend Suite', () => {
 
       const s2 = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/spaces`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
-        body: JSON.stringify({ spaceCode: 'FLT-S2', name: 'EV Charger', nfrType: 'EV_CHARGING', status: 'INACTIVE' }),
+        body: JSON.stringify({ spaceCode: 'FLT-S2', name: 'EV Charger', nfrType: 'EV_CHARGING', status: 'ACTIVE' }),
       }, env))).data;
       space2Id = s2.id;
 
@@ -2213,6 +2215,12 @@ describe('Phase 4C-1 NFR / Vendor Lease & Rent Core Backend Suite', () => {
       lease2Id = l2.id;
       await app.request(`/api/v1/nfr/leases/${lease2Id}/terminate`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+      }, env);
+
+      // Deactivate space2 for INACTIVE filter test
+      await app.request(`/api/v1/nfr/spaces/${space2Id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ status: 'INACTIVE' }),
       }, env);
 
       // Create rent dues for Lease 1: Jan, Feb, Mar 2026
@@ -2721,6 +2729,466 @@ describe('Phase 4C-1 NFR / Vendor Lease & Rent Core Backend Suite', () => {
       expect(data.payment.paidAt).toBe(customPaidAt);
       expect(data.payment.paymentReference).toBe('NEFT-AXIS-20260105');
       expect(data.payment.notes).toBe('Bank transfer confirmed by dealer');
+    });
+  });
+
+  // =========================================================================
+  // 20. PHASE 4C-1 FINAL HARDENING SUITE: ELIGIBILITY, LEDGER REFRESH & SANITIZATION
+  // =========================================================================
+  describe('20. Phase 4C-1 Final Hardening Suite: Eligibility, Ledger Refresh & Sanitization', () => {
+    it('20.1 should reject creating a new lease with an INACTIVE space (409 NFR_SPACE_NOT_ACTIVE)', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const s = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/spaces`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ spaceCode: 'INACT-S1', name: 'Inactive Space', nfrType: 'ATM', status: 'INACTIVE' }),
+      }, env))).data;
+      const v = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/vendors`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ vendorName: 'Active Vendor', ownerContactName: 'Contact', ownerContactPhone: '9830001234' }),
+      }, env))).data;
+
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/leases`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({
+          spaceId: s.id, vendorId: v.id, agreementNumber: 'AGR-INACT-S1',
+          leaseStartDate: '2026-01-01', leaseEndDate: '2026-12-31',
+          monthlyRent: '10000.00', monthlyDueDay: 1,
+        }),
+      }, env);
+
+      expect(res.status).toBe(409);
+      const err = (await jsonOf(res)).error;
+      expect(err.code).toBe('NFR_SPACE_NOT_ACTIVE');
+      expect(err.message).toBe('The selected NFR space is inactive and cannot be assigned to a new lease.');
+    });
+
+    it('20.2 should reject PUT lease switching to an INACTIVE space (409 NFR_SPACE_NOT_ACTIVE)', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const sActive = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/spaces`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ spaceCode: 'ACT-S2', name: 'Active Space 2', nfrType: 'ATM' }),
+      }, env))).data;
+      const sInactive = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/spaces`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ spaceCode: 'INACT-S2', name: 'Inactive Space 2', nfrType: 'ATM', status: 'INACTIVE' }),
+      }, env))).data;
+      const v = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/vendors`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ vendorName: 'Active Vendor 2', ownerContactName: 'Contact', ownerContactPhone: '9830001234' }),
+      }, env))).data;
+
+      const l = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/leases`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({
+          spaceId: sActive.id, vendorId: v.id, agreementNumber: 'AGR-SW-S1',
+          leaseStartDate: '2026-01-01', leaseEndDate: '2026-12-31',
+          monthlyRent: '10000.00', monthlyDueDay: 1,
+        }),
+      }, env))).data;
+
+      const res = await app.request(`/api/v1/nfr/leases/${l.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ spaceId: sInactive.id }),
+      }, env);
+
+      expect(res.status).toBe(409);
+      const err = (await jsonOf(res)).error;
+      expect(err.code).toBe('NFR_SPACE_NOT_ACTIVE');
+    });
+
+    it('20.3 should reject direct SQL INSERT lease with inactive same-outlet space via DB trigger', async () => {
+      const db = getDb(localD1);
+      const now = new Date().toISOString();
+      const sInactiveId = `sp-inact-${Date.now()}`;
+      const vActiveId = `vnd-act-${Date.now()}`;
+
+      await db.insert(nfrSpaces).values({
+        id: sInactiveId, outletId: OUTLET_1_ID, spaceCode: 'SQL-INACT-S',
+        name: 'Inactive Space SQL', nfrType: 'ATM', status: 'INACTIVE',
+        createdBy: 'user-admin', createdAt: now, updatedAt: now,
+      }).run();
+
+      await db.insert(nfrVendors).values({
+        id: vActiveId, outletId: OUTLET_1_ID, vendorName: 'Active Vendor SQL',
+        ownerContactName: 'Owner', ownerContactPhone: '9830001234', status: 'ACTIVE',
+        createdBy: 'user-admin', createdAt: now, updatedAt: now,
+      }).run();
+
+      let threw = false;
+      try {
+        await db.insert(nfrLeases).values({
+          id: `lease-sql-inact-${Date.now()}`,
+          outletId: OUTLET_1_ID,
+          spaceId: sInactiveId,
+          vendorId: vActiveId,
+          agreementNumber: 'AGR-SQL-INACT-S',
+          leaseStartDate: '2026-01-01',
+          leaseEndDate: '2026-12-31',
+          monthlyRentPaise: 1000000,
+          securityDepositPaise: 0,
+          monthlyDueDay: 1,
+          status: 'ACTIVE',
+          createdBy: 'user-admin',
+          createdAt: now,
+          updatedAt: now,
+        }).run();
+      } catch (err: any) {
+        threw = true;
+        const fullMsg = (err?.message || '') + ' ' + (err?.cause?.message || '');
+        expect(fullMsg).toContain('NFR_SPACE_NOT_ACTIVE');
+      }
+      expect(threw).toBe(true);
+    });
+
+    it('20.4 should allow updating unrelated fields on an existing lease even if its currently linked space is later made INACTIVE', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const s = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/spaces`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ spaceCode: 'LATER-INACT-S', name: 'Later Inactive Space', nfrType: 'ATM' }),
+      }, env))).data;
+      const v = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/vendors`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ vendorName: 'Vendor Later Inact', ownerContactName: 'Contact', ownerContactPhone: '9830001234' }),
+      }, env))).data;
+
+      const l = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/leases`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({
+          spaceId: s.id, vendorId: v.id, agreementNumber: 'AGR-LATER-INACT-S',
+          leaseStartDate: '2026-01-01', leaseEndDate: '2026-12-31',
+          monthlyRent: '10000.00', monthlyDueDay: 1,
+        }),
+      }, env))).data;
+
+      // Deactivate the space later
+      await app.request(`/api/v1/nfr/spaces/${s.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ status: 'INACTIVE' }),
+      }, env);
+
+      // Updating lease notes should succeed without changing spaceId
+      const updateRes = await app.request(`/api/v1/nfr/leases/${l.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ notes: 'Updated notes while space is inactive' }),
+      }, env);
+
+      expect(updateRes.status).toBe(200);
+      expect((await jsonOf(updateRes)).data.notes).toBe('Updated notes while space is inactive');
+    });
+
+    it('20.5 should reject creating a new lease with an INACTIVE vendor (409 NFR_VENDOR_NOT_ACTIVE)', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const s = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/spaces`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ spaceCode: 'ACT-S-VND', name: 'Active Space For Inact Vendor', nfrType: 'ATM' }),
+      }, env))).data;
+      const v = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/vendors`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ vendorName: 'Inactive Vendor', ownerContactName: 'Contact', ownerContactPhone: '9830001234', status: 'INACTIVE' }),
+      }, env))).data;
+
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/leases`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({
+          spaceId: s.id, vendorId: v.id, agreementNumber: 'AGR-INACT-V1',
+          leaseStartDate: '2026-01-01', leaseEndDate: '2026-12-31',
+          monthlyRent: '10000.00', monthlyDueDay: 1,
+        }),
+      }, env);
+
+      expect(res.status).toBe(409);
+      const err = (await jsonOf(res)).error;
+      expect(err.code).toBe('NFR_VENDOR_NOT_ACTIVE');
+      expect(err.message).toBe('The selected NFR vendor is inactive and cannot be assigned to a new lease.');
+    });
+
+    it('20.6 should reject PUT lease switching to an INACTIVE vendor (409 NFR_VENDOR_NOT_ACTIVE)', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const s = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/spaces`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ spaceCode: 'ACT-S-SWV', name: 'Active Space Switch Vendor', nfrType: 'ATM' }),
+      }, env))).data;
+      const vActive = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/vendors`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ vendorName: 'Active Vendor SW', ownerContactName: 'Contact', ownerContactPhone: '9830001234' }),
+      }, env))).data;
+      const vInactive = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/vendors`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ vendorName: 'Inactive Vendor SW', ownerContactName: 'Contact', ownerContactPhone: '9830001234', status: 'INACTIVE' }),
+      }, env))).data;
+
+      const l = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/leases`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({
+          spaceId: s.id, vendorId: vActive.id, agreementNumber: 'AGR-SW-V1',
+          leaseStartDate: '2026-01-01', leaseEndDate: '2026-12-31',
+          monthlyRent: '10000.00', monthlyDueDay: 1,
+        }),
+      }, env))).data;
+
+      const res = await app.request(`/api/v1/nfr/leases/${l.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ vendorId: vInactive.id }),
+      }, env);
+
+      expect(res.status).toBe(409);
+      const err = (await jsonOf(res)).error;
+      expect(err.code).toBe('NFR_VENDOR_NOT_ACTIVE');
+    });
+
+    it('20.7 should reject direct SQL INSERT lease with inactive same-outlet vendor via DB trigger', async () => {
+      const db = getDb(localD1);
+      const now = new Date().toISOString();
+      const sActiveId = `sp-act-${Date.now()}`;
+      const vInactiveId = `vnd-inact-${Date.now()}`;
+
+      await db.insert(nfrSpaces).values({
+        id: sActiveId, outletId: OUTLET_1_ID, spaceCode: 'SQL-ACT-S-V',
+        name: 'Active Space SQL', nfrType: 'ATM', status: 'ACTIVE',
+        createdBy: 'user-admin', createdAt: now, updatedAt: now,
+      }).run();
+
+      await db.insert(nfrVendors).values({
+        id: vInactiveId, outletId: OUTLET_1_ID, vendorName: 'Inactive Vendor SQL',
+        ownerContactName: 'Owner', ownerContactPhone: '9830001234', status: 'INACTIVE',
+        createdBy: 'user-admin', createdAt: now, updatedAt: now,
+      }).run();
+
+      let threw = false;
+      try {
+        await db.insert(nfrLeases).values({
+          id: `lease-sql-inact-v-${Date.now()}`,
+          outletId: OUTLET_1_ID,
+          spaceId: sActiveId,
+          vendorId: vInactiveId,
+          agreementNumber: 'AGR-SQL-INACT-V',
+          leaseStartDate: '2026-01-01',
+          leaseEndDate: '2026-12-31',
+          monthlyRentPaise: 1000000,
+          securityDepositPaise: 0,
+          monthlyDueDay: 1,
+          status: 'ACTIVE',
+          createdBy: 'user-admin',
+          createdAt: now,
+          updatedAt: now,
+        }).run();
+      } catch (err: any) {
+        threw = true;
+        const fullMsg = (err?.message || '') + ' ' + (err?.cause?.message || '');
+        expect(fullMsg).toContain('NFR_VENDOR_NOT_ACTIVE');
+      }
+      expect(threw).toBe(true);
+    });
+
+    it('20.8 should allow updating unrelated fields on an existing lease even if its currently linked vendor is later made INACTIVE', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const s = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/spaces`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ spaceCode: 'SP-LATER-V', name: 'Space Later Inact V', nfrType: 'ATM' }),
+      }, env))).data;
+      const v = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/vendors`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ vendorName: 'Vendor Later Inact V', ownerContactName: 'Contact', ownerContactPhone: '9830001234' }),
+      }, env))).data;
+
+      const l = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/leases`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({
+          spaceId: s.id, vendorId: v.id, agreementNumber: 'AGR-LATER-INACT-V',
+          leaseStartDate: '2026-01-01', leaseEndDate: '2026-12-31',
+          monthlyRent: '10000.00', monthlyDueDay: 1,
+        }),
+      }, env))).data;
+
+      // Deactivate vendor later
+      await app.request(`/api/v1/nfr/vendors/${v.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ status: 'INACTIVE' }),
+      }, env);
+
+      // Updating lease notes should succeed without changing vendorId
+      const updateRes = await app.request(`/api/v1/nfr/leases/${l.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ notes: 'Updated notes while vendor is inactive' }),
+      }, env);
+
+      expect(updateRes.status).toBe(200);
+      expect((await jsonOf(updateRes)).data.notes).toBe('Updated notes while vendor is inactive');
+    });
+
+    it('20.9 should re-read authoritative totals and reflect concurrent valid partial payment in response DTO', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const s = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/spaces`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ spaceCode: 'CONC-S1', name: 'Concurrent Space 1', nfrType: 'ATM' }),
+      }, env))).data;
+      const v = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/vendors`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ vendorName: 'Concurrent Vendor 1', ownerContactName: 'Contact', ownerContactPhone: '9830001234' }),
+      }, env))).data;
+      const l = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/leases`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({
+          spaceId: s.id, vendorId: v.id, agreementNumber: 'AGR-CONC-1',
+          leaseStartDate: '2026-01-01', leaseEndDate: '2026-12-31',
+          monthlyRent: '35000.00', monthlyDueDay: 1,
+        }),
+      }, env))).data;
+      const d = (await jsonOf(await app.request(`/api/v1/nfr/leases/${l.id}/rent-dues`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ billingMonth: '2026-01' }),
+      }, env))).data;
+
+      const doc1 = await createTestDocument(OUTLET_1_ID);
+      const doc2 = await createTestDocument(OUTLET_1_ID);
+
+      const originalCreateRentPayment = NfrRepository.prototype.createRentPayment;
+      let insertedCompeting = false;
+
+      // Patch repository prototype to deterministically insert a competing payment before the requested payment is created
+      NfrRepository.prototype.createRentPayment = async function (data) {
+        if (!insertedCompeting) {
+          insertedCompeting = true;
+          await originalCreateRentPayment.call(this, {
+            id: crypto.randomUUID(),
+            outletId: OUTLET_1_ID,
+            rentDueId: d.id,
+            amountPaise: 1000000, // ₹10,000 competing payment
+            receiptDocumentId: doc1,
+            paymentReference: 'COMPETING-10K',
+            paidAt: new Date().toISOString(),
+            recordedByUserId: 'user-admin',
+          });
+        }
+        return originalCreateRentPayment.call(this, data);
+      };
+
+      try {
+        // Request ₹20,000 payment
+        const res = await app.request(`/api/v1/nfr/rent-dues/${d.id}/payments`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+          body: JSON.stringify({
+            amount: '20000.00',
+            receiptDocumentId: doc2,
+            paymentReference: 'REQUESTED-20K',
+          }),
+        }, env);
+
+        expect(res.status).toBe(201);
+        const data = (await jsonOf(res)).data;
+
+        // Authoritative re-read: total paid must be ₹30,000 (10k + 20k), outstanding ₹5,000, paymentCount 2, PARTIAL
+        expect(data.due.totalPaidPaise).toBe(3000000);
+        expect(data.due.totalPaidStr).toBe('30000.00');
+        expect(data.due.outstandingPaise).toBe(500000);
+        expect(data.due.outstandingStr).toBe('5000.00');
+        expect(data.due.paymentStatus).toBe('PARTIAL');
+        expect(data.due.paymentCount).toBe(2);
+      } finally {
+        NfrRepository.prototype.createRentPayment = originalCreateRentPayment;
+      }
+    });
+
+    it('20.10 should re-read authoritative totals and transition status to PAID on concurrent exact-full payment', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const s = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/spaces`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ spaceCode: 'CONC-S2', name: 'Concurrent Space 2', nfrType: 'ATM' }),
+      }, env))).data;
+      const v = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/vendors`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ vendorName: 'Concurrent Vendor 2', ownerContactName: 'Contact', ownerContactPhone: '9830001234' }),
+      }, env))).data;
+      const l = (await jsonOf(await app.request(`/api/v1/outlets/${OUTLET_1_ID}/nfr/leases`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({
+          spaceId: s.id, vendorId: v.id, agreementNumber: 'AGR-CONC-2',
+          leaseStartDate: '2026-01-01', leaseEndDate: '2026-12-31',
+          monthlyRent: '35000.00', monthlyDueDay: 1,
+        }),
+      }, env))).data;
+      const d = (await jsonOf(await app.request(`/api/v1/nfr/leases/${l.id}/rent-dues`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+        body: JSON.stringify({ billingMonth: '2026-01' }),
+      }, env))).data;
+
+      const doc1 = await createTestDocument(OUTLET_1_ID);
+      const doc2 = await createTestDocument(OUTLET_1_ID);
+
+      const originalCreateRentPayment = NfrRepository.prototype.createRentPayment;
+      let insertedCompeting = false;
+
+      NfrRepository.prototype.createRentPayment = async function (data) {
+        if (!insertedCompeting) {
+          insertedCompeting = true;
+          await originalCreateRentPayment.call(this, {
+            id: crypto.randomUUID(),
+            outletId: OUTLET_1_ID,
+            rentDueId: d.id,
+            amountPaise: 1500000, // ₹15,000 competing payment
+            receiptDocumentId: doc1,
+            paymentReference: 'COMPETING-15K',
+            paidAt: new Date().toISOString(),
+            recordedByUserId: 'user-admin',
+          });
+        }
+        return originalCreateRentPayment.call(this, data);
+      };
+
+      try {
+        // Request ₹20,000 payment (15k + 20k = 35k exact full rent)
+        const res = await app.request(`/api/v1/nfr/rent-dues/${d.id}/payments`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': cookie },
+          body: JSON.stringify({
+            amount: '20000.00',
+            receiptDocumentId: doc2,
+            paymentReference: 'REQUESTED-20K-FULL',
+          }),
+        }, env);
+
+        expect(res.status).toBe(201);
+        const data = (await jsonOf(res)).data;
+
+        expect(data.due.totalPaidPaise).toBe(3500000);
+        expect(data.due.totalPaidStr).toBe('35000.00');
+        expect(data.due.outstandingPaise).toBe(0);
+        expect(data.due.outstandingStr).toBe('0.00');
+        expect(data.due.paymentStatus).toBe('PAID');
+        expect(data.due.paymentCount).toBe(2);
+      } finally {
+        NfrRepository.prototype.createRentPayment = originalCreateRentPayment;
+      }
+    });
+
+    it('20.11 should sanitize unknown/internal SQLite error strings and return controlled 500 INTERNAL_SERVER_ERROR without leaking details', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+
+      const originalGetSpaceById = NfrRepository.prototype.getSpaceById;
+      NfrRepository.prototype.getSpaceById = async function () {
+        throw new Error('SQLITE_CONSTRAINT: UNIQUE constraint failed: secret_internal_table.foo');
+      };
+
+      try {
+        const res = await app.request(`/api/v1/nfr/spaces/any-space-id`, {
+          headers: { 'Cookie': cookie },
+        }, env);
+
+        expect(res.status).toBe(500);
+        const bodyText = await res.text();
+        const json = JSON.parse(bodyText);
+
+        expect(json.success).toBe(false);
+        expect(json.data).toBeNull();
+        expect(json.error.code).toBe('INTERNAL_SERVER_ERROR');
+        expect(json.error.message).toBe('An unexpected server error occurred.');
+
+        // Verify response body does not leak raw SQLite or internal table names
+        expect(bodyText).not.toContain('SQLITE');
+        expect(bodyText).not.toContain('secret_internal_table');
+        expect(bodyText).not.toContain('constraint failed');
+      } finally {
+        NfrRepository.prototype.getSpaceById = originalGetSpaceById;
+      }
     });
   });
 });

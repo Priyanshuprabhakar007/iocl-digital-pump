@@ -188,11 +188,19 @@ BEGIN
                 WHERE "nfr_spaces"."id" = NEW.space_id
                   AND "nfr_spaces"."outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'NFR_LEASE_SPACE_OUTLET_MISMATCH')
+            WHEN (
+                SELECT "nfr_spaces"."status" FROM "nfr_spaces"
+                WHERE "nfr_spaces"."id" = NEW.space_id
+            ) != 'ACTIVE' THEN RAISE(ABORT, 'NFR_SPACE_NOT_ACTIVE')
             WHEN NOT EXISTS (
                 SELECT 1 FROM "nfr_vendors"
                 WHERE "nfr_vendors"."id" = NEW.vendor_id
                   AND "nfr_vendors"."outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'NFR_LEASE_VENDOR_OUTLET_MISMATCH')
+            WHEN (
+                SELECT "nfr_vendors"."status" FROM "nfr_vendors"
+                WHERE "nfr_vendors"."id" = NEW.vendor_id
+            ) != 'ACTIVE' THEN RAISE(ABORT, 'NFR_VENDOR_NOT_ACTIVE')
             WHEN NEW.agreement_document_id IS NOT NULL AND NOT EXISTS (
                 SELECT 1 FROM "documents"
                 WHERE "documents"."id" = NEW.agreement_document_id
@@ -230,11 +238,19 @@ BEGIN
                 WHERE "nfr_spaces"."id" = NEW.space_id
                   AND "nfr_spaces"."outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'NFR_LEASE_SPACE_OUTLET_MISMATCH')
+            WHEN (NEW.space_id IS NOT OLD.space_id) AND (
+                SELECT "nfr_spaces"."status" FROM "nfr_spaces"
+                WHERE "nfr_spaces"."id" = NEW.space_id
+            ) != 'ACTIVE' THEN RAISE(ABORT, 'NFR_SPACE_NOT_ACTIVE')
             WHEN NOT EXISTS (
                 SELECT 1 FROM "nfr_vendors"
                 WHERE "nfr_vendors"."id" = NEW.vendor_id
                   AND "nfr_vendors"."outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'NFR_LEASE_VENDOR_OUTLET_MISMATCH')
+            WHEN (NEW.vendor_id IS NOT OLD.vendor_id) AND (
+                SELECT "nfr_vendors"."status" FROM "nfr_vendors"
+                WHERE "nfr_vendors"."id" = NEW.vendor_id
+            ) != 'ACTIVE' THEN RAISE(ABORT, 'NFR_VENDOR_NOT_ACTIVE')
             WHEN NEW.agreement_document_id IS NOT NULL AND (OLD.agreement_document_id IS NULL OR OLD.agreement_document_id != NEW.agreement_document_id) AND NOT EXISTS (
                 SELECT 1 FROM "documents"
                 WHERE "documents"."id" = NEW.agreement_document_id

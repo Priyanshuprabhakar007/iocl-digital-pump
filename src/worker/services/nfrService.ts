@@ -84,8 +84,17 @@ function formatRentDueDto(
   paymentCount: number,
   currentDateStr?: string
 ): NfrRentDue {
-  const today = currentDateStr || new Date().toISOString().slice(0, 10);
   const rentAmount = due.monthlyRentPaiseSnapshot;
+
+  if (!Number.isSafeInteger(totalPaidPaise) || totalPaidPaise < 0 || totalPaidPaise > rentAmount) {
+    throw new NfrError(
+      'NFR_RENT_LEDGER_INTEGRITY_ERROR',
+      'Rent payment ledger integrity violation detected.',
+      409
+    );
+  }
+
+  const today = currentDateStr || new Date().toISOString().slice(0, 10);
   const outstandingPaise = Math.max(0, rentAmount - totalPaidPaise);
 
   let paymentStatus: NfrRentPaymentStatus = 'PENDING';
@@ -124,6 +133,12 @@ function mapDatabaseError(err: any): never {
   }
   if (msg.includes('NFR_VENDOR_IDENTITY_IMMUTABLE')) {
     throw new NfrError('NFR_VENDOR_IDENTITY_IMMUTABLE', 'Vendor identity and outlet cannot be modified.', 409);
+  }
+  if (msg.includes('NFR_SPACE_NOT_ACTIVE')) {
+    throw new NfrError('NFR_SPACE_NOT_ACTIVE', 'The selected NFR space is inactive and cannot be assigned to a new lease.', 409);
+  }
+  if (msg.includes('NFR_VENDOR_NOT_ACTIVE')) {
+    throw new NfrError('NFR_VENDOR_NOT_ACTIVE', 'The selected NFR vendor is inactive and cannot be assigned to a new lease.', 409);
   }
   if (msg.includes('NFR_LEASE_DELETE_FORBIDDEN')) {
     throw new NfrError('NFR_LEASE_DELETE_FORBIDDEN', 'NFR leases cannot be deleted. Terminate instead.', 409);
@@ -418,6 +433,9 @@ export class NfrService {
     if (space.outletId !== outletId) {
       throw new NfrError('NFR_LEASE_SPACE_OUTLET_MISMATCH', 'The selected space does not belong to this outlet.', 400);
     }
+    if (space.status !== 'ACTIVE') {
+      throw new NfrError('NFR_SPACE_NOT_ACTIVE', 'The selected NFR space is inactive and cannot be assigned to a new lease.', 409);
+    }
 
     // Validate vendor
     const vendor = await repo.getVendorById(validated.vendorId);
@@ -426,6 +444,9 @@ export class NfrService {
     }
     if (vendor.outletId !== outletId) {
       throw new NfrError('NFR_LEASE_VENDOR_OUTLET_MISMATCH', 'The selected vendor does not belong to this outlet.', 400);
+    }
+    if (vendor.status !== 'ACTIVE') {
+      throw new NfrError('NFR_VENDOR_NOT_ACTIVE', 'The selected NFR vendor is inactive and cannot be assigned to a new lease.', 409);
     }
 
     // Validate duplicate agreement number per outlet
@@ -577,6 +598,9 @@ export class NfrService {
       if (space.outletId !== outletId) {
         throw new NfrError('NFR_LEASE_SPACE_OUTLET_MISMATCH', 'The selected space does not belong to this outlet.', 400);
       }
+      if (space.status !== 'ACTIVE') {
+        throw new NfrError('NFR_SPACE_NOT_ACTIVE', 'The selected NFR space is inactive and cannot be assigned to a new lease.', 409);
+      }
     }
 
     // Validate vendor if changed
@@ -587,6 +611,9 @@ export class NfrService {
       }
       if (vendor.outletId !== outletId) {
         throw new NfrError('NFR_LEASE_VENDOR_OUTLET_MISMATCH', 'The selected vendor does not belong to this outlet.', 400);
+      }
+      if (vendor.status !== 'ACTIVE') {
+        throw new NfrError('NFR_VENDOR_NOT_ACTIVE', 'The selected NFR vendor is inactive and cannot be assigned to a new lease.', 409);
       }
     }
 
@@ -924,8 +951,12 @@ export class NfrService {
         createdAt: now,
       });
 
-      const newTotalPaid = currentPaid + amountPaise;
-      const updatedDueDto = formatRentDueDto(due, newTotalPaid, currentCount + 1);
+      const authoritative = await repo.sumRentPayments(due.id);
+      const updatedDueDto = formatRentDueDto(
+        due,
+        authoritative.totalPaidPaise,
+        authoritative.paymentCount
+      );
 
       return {
         payment: {
