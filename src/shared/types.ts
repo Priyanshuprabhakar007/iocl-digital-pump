@@ -1352,4 +1352,141 @@ export interface MunicipalTaxSummary {
   nextDueDate: string | null;
 }
 
+// ============================================================================
+// Phase 4C-1: NFR / Vendor Lease & Rent Management Types
+// ============================================================================
+
+export type NfrType =
+  | 'ATM'
+  | 'CONVENIENCE_STORE'
+  | 'QSR'
+  | 'CAR_WASH'
+  | 'EV_CHARGING'
+  | 'CANOPY_ADVERTISING';
+
+export type NfrSpaceStatus = 'ACTIVE' | 'INACTIVE';
+export type NfrVendorStatus = 'ACTIVE' | 'INACTIVE';
+export type NfrLeaseStatus = 'ACTIVE' | 'TERMINATED';
+export type NfrRentPaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID';
+
+export interface NfrSpace {
+  id: string;
+  outletId: string;
+  spaceCode: string;
+  name: string;
+  nfrType: NfrType;
+  locationDescription: string | null;
+  status: NfrSpaceStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  isCurrentlyLeased?: boolean;
+}
+
+export interface NfrVendor {
+  id: string;
+  outletId: string;
+  vendorName: string;
+  ownerContactName: string;
+  ownerContactPhone: string;
+  ownerContactEmail: string | null;
+  address: string | null;
+  status: NfrVendorStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NfrLease {
+  id: string;
+  outletId: string;
+  spaceId: string;
+  vendorId: string;
+  agreementNumber: string;
+  leaseStartDate: string;
+  leaseEndDate: string;
+  monthlyRentPaise: number;
+  monthlyRentStr: string;
+  securityDepositPaise: number;
+  securityDepositStr: string;
+  monthlyDueDay: number;
+  agreementDocumentId: string | null;
+  subMeterId: string | null;
+  status: NfrLeaseStatus;
+  terminatedAt: string | null;
+  terminationReason: string | null;
+  terminatedByUserId: string | null;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  isExpired: boolean;
+  space?: NfrSpace;
+  vendor?: NfrVendor;
+}
+
+export interface NfrRentDue {
+  id: string;
+  outletId: string;
+  leaseId: string;
+  billingMonth: string;
+  rentPeriodStart: string;
+  rentPeriodEnd: string;
+  dueDate: string;
+  monthlyRentPaiseSnapshot: number;
+  monthlyRentStr: string;
+  totalPaidPaise: number;
+  totalPaidStr: string;
+  outstandingPaise: number;
+  outstandingStr: string;
+  paymentStatus: NfrRentPaymentStatus;
+  isOverdue: boolean;
+  paymentCount: number;
+  createdBy: string;
+  createdAt: string;
+  lease?: NfrLease;
+}
+
+export interface NfrRentPayment {
+  id: string;
+  outletId: string;
+  rentDueId: string;
+  amountPaise: number;
+  amountStr: string;
+  receiptDocumentId: string;
+  paymentReference: string | null;
+  paidAt: string;
+  recordedByUserId: string;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface NfrSummary {
+  spaceCount: number;
+  activeSpaceCount: number;
+  vendorCount: number;
+  activeVendorCount: number;
+  leaseCount: number;
+  activeLeaseCount: number;
+  expiredLeaseCount: number;
+  terminatedLeaseCount: number;
+  rentDueCount: number;
+  pendingDueCount: number;
+  partialDueCount: number;
+  paidDueCount: number;
+  overdueDueCount: number;
+  totalRentDuePaise: number;
+  totalRentDueStr: string;
+  totalCollectedPaise: number;
+  totalCollectedStr: string;
+  totalOutstandingPaise: number;
+  totalOutstandingStr: string;
+  overdueOutstandingPaise: number;
+  overdueOutstandingStr: string;
+  nextDueDate: string | null;
+}
+
+
 

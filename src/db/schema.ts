@@ -1044,5 +1044,134 @@ export const municipalTaxDues = sqliteTable('municipal_tax_dues', {
   check('municipal_tax_paid_check', sql`(${table.status} = 'PENDING' AND ${table.paymentReceiptDocumentId} IS NULL AND ${table.paidAt} IS NULL AND ${table.paidByUserId} IS NULL) OR (${table.status} = 'PAID' AND ${table.paymentReceiptDocumentId} IS NOT NULL AND ${table.paidAt} IS NOT NULL AND ${table.paidByUserId} IS NOT NULL)`),
 ]);
 
+// ============================================================================
+// Phase 4C-1: NFR / Vendor Lease & Rent Management
+// ============================================================================
+
+export const nfrSpaces = sqliteTable('nfr_spaces', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  spaceCode: text('space_code').notNull(),
+  name: text('name').notNull(),
+  nfrType: text('nfr_type', { enum: ['ATM', 'CONVENIENCE_STORE', 'QSR', 'CAR_WASH', 'EV_CHARGING', 'CANOPY_ADVERTISING'] }).notNull(),
+  locationDescription: text('location_description'),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_nfr_spaces_outlet_code').on(table.outletId, table.spaceCode),
+  index('idx_nfr_spaces_outlet_id').on(table.outletId),
+  index('idx_nfr_spaces_outlet_type').on(table.outletId, table.nfrType),
+  index('idx_nfr_spaces_outlet_status').on(table.outletId, table.status),
+  check('nfr_spaces_type_check', sql`${table.nfrType} IN ('ATM', 'CONVENIENCE_STORE', 'QSR', 'CAR_WASH', 'EV_CHARGING', 'CANOPY_ADVERTISING')`),
+  check('nfr_spaces_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('nfr_spaces_code_check', sql`trim(${table.spaceCode}) <> ''`),
+  check('nfr_spaces_name_check', sql`trim(${table.name}) <> ''`),
+]);
+
+export const nfrVendors = sqliteTable('nfr_vendors', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  vendorName: text('vendor_name').notNull(),
+  ownerContactName: text('owner_contact_name').notNull(),
+  ownerContactPhone: text('owner_contact_phone').notNull(),
+  ownerContactEmail: text('owner_contact_email'),
+  address: text('address'),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_nfr_vendors_outlet_id').on(table.outletId),
+  index('idx_nfr_vendors_outlet_status').on(table.outletId, table.status),
+  check('nfr_vendors_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('nfr_vendors_name_check', sql`trim(${table.vendorName}) <> ''`),
+  check('nfr_vendors_contact_check', sql`trim(${table.ownerContactName}) <> ''`),
+  check('nfr_vendors_phone_check', sql`trim(${table.ownerContactPhone}) <> ''`),
+]);
+
+export const nfrLeases = sqliteTable('nfr_leases', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  spaceId: text('space_id').notNull().references(() => nfrSpaces.id),
+  vendorId: text('vendor_id').notNull().references(() => nfrVendors.id),
+  agreementNumber: text('agreement_number').notNull(),
+  leaseStartDate: text('lease_start_date').notNull(),
+  leaseEndDate: text('lease_end_date').notNull(),
+  monthlyRentPaise: integer('monthly_rent_paise').notNull(),
+  securityDepositPaise: integer('security_deposit_paise').notNull(),
+  monthlyDueDay: integer('monthly_due_day').notNull(),
+  agreementDocumentId: text('agreement_document_id').references(() => documents.id),
+  subMeterId: text('sub_meter_id').references(() => utilitySubMeters.id),
+  status: text('status', { enum: ['ACTIVE', 'TERMINATED'] }).notNull().default('ACTIVE'),
+  terminatedAt: text('terminated_at'),
+  terminationReason: text('termination_reason'),
+  terminatedByUserId: text('terminated_by_user_id').references(() => users.id),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_nfr_leases_outlet_agreement').on(table.outletId, table.agreementNumber),
+  index('idx_nfr_leases_outlet_id').on(table.outletId),
+  index('idx_nfr_leases_space_id').on(table.spaceId),
+  index('idx_nfr_leases_vendor_id').on(table.vendorId),
+  index('idx_nfr_leases_outlet_status').on(table.outletId, table.status),
+  index('idx_nfr_leases_dates').on(table.leaseStartDate, table.leaseEndDate),
+  check('nfr_leases_status_check', sql`${table.status} IN ('ACTIVE', 'TERMINATED')`),
+  check('nfr_leases_agreement_check', sql`trim(${table.agreementNumber}) <> ''`),
+  check('nfr_leases_period_range_check', sql`${table.leaseEndDate} >= ${table.leaseStartDate}`),
+  check('nfr_leases_rent_check', sql`${table.monthlyRentPaise} > 0 AND ${table.monthlyRentPaise} <= 9000000000000000`),
+  check('nfr_leases_deposit_check', sql`${table.securityDepositPaise} >= 0 AND ${table.securityDepositPaise} <= 9000000000000000`),
+  check('nfr_leases_due_day_check', sql`${table.monthlyDueDay} >= 1 AND ${table.monthlyDueDay} <= 31`),
+  check('nfr_leases_term_check', sql`(${table.status} = 'ACTIVE' AND ${table.terminatedAt} IS NULL AND ${table.terminatedByUserId} IS NULL) OR (${table.status} = 'TERMINATED' AND ${table.terminatedAt} IS NOT NULL AND ${table.terminatedByUserId} IS NOT NULL)`),
+]);
+
+export const nfrRentDues = sqliteTable('nfr_rent_dues', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  leaseId: text('lease_id').notNull().references(() => nfrLeases.id),
+  billingMonth: text('billing_month').notNull(),
+  rentPeriodStart: text('rent_period_start').notNull(),
+  rentPeriodEnd: text('rent_period_end').notNull(),
+  dueDate: text('due_date').notNull(),
+  monthlyRentPaiseSnapshot: integer('monthly_rent_paise_snapshot').notNull(),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_nfr_rent_dues_lease_month').on(table.leaseId, table.billingMonth),
+  index('idx_nfr_rent_dues_outlet_id').on(table.outletId),
+  index('idx_nfr_rent_dues_lease_id').on(table.leaseId),
+  index('idx_nfr_rent_dues_due_date').on(table.outletId, table.dueDate),
+  index('idx_nfr_rent_dues_billing_month').on(table.billingMonth),
+  check('nfr_rent_dues_period_check', sql`${table.rentPeriodEnd} >= ${table.rentPeriodStart}`),
+  check('nfr_rent_dues_snapshot_check', sql`${table.monthlyRentPaiseSnapshot} > 0 AND ${table.monthlyRentPaiseSnapshot} <= 9000000000000000`),
+  check('nfr_rent_dues_month_check', sql`trim(${table.billingMonth}) <> ''`),
+  check('nfr_rent_dues_due_check', sql`trim(${table.dueDate}) <> ''`),
+]);
+
+export const nfrRentPayments = sqliteTable('nfr_rent_payments', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  rentDueId: text('rent_due_id').notNull().references(() => nfrRentDues.id),
+  amountPaise: integer('amount_paise').notNull(),
+  receiptDocumentId: text('receipt_document_id').notNull().references(() => documents.id),
+  paymentReference: text('payment_reference'),
+  paidAt: text('paid_at').notNull(),
+  recordedByUserId: text('recorded_by_user_id').notNull().references(() => users.id),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  index('idx_nfr_rent_payments_outlet_id').on(table.outletId),
+  index('idx_nfr_rent_payments_due_id').on(table.rentDueId),
+  index('idx_nfr_rent_payments_paid_at').on(table.paidAt),
+  check('nfr_rent_payments_amount_check', sql`${table.amountPaise} > 0 AND ${table.amountPaise} <= 9000000000000000`),
+  check('nfr_rent_payments_paid_check', sql`trim(${table.paidAt}) <> ''`),
+]);
+
+
 
 

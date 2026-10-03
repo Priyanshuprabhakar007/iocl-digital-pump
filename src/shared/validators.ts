@@ -893,5 +893,177 @@ export const MunicipalTaxFilterSchema = z.object({
   path: ['fromDate'],
 });
 
+// ============================================================================
+// Phase 4C-1: NFR / Vendor Lease & Rent Management Validators
+// ============================================================================
+
+export const StrictYearMonthSchema = z.string().trim().refine((val) => {
+  if (!/^\d{4}-\d{2}$/.test(val)) return false;
+  const [yearStr, monthStr] = val.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  if (month < 1 || month > 12 || year < 1900 || year > 2100) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Must be a valid calendar year-month in YYYY-MM format',
+});
+
+export const NfrTypeEnum = z.enum([
+  'ATM',
+  'CONVENIENCE_STORE',
+  'QSR',
+  'CAR_WASH',
+  'EV_CHARGING',
+  'CANOPY_ADVERTISING',
+]);
+
+export const NfrSpaceStatusEnum = z.enum([
+  'ACTIVE',
+  'INACTIVE',
+]);
+
+export const CreateNfrSpaceSchema = z.object({
+  spaceCode: z.string().trim().min(1, 'spaceCode is required').max(50),
+  name: z.string().trim().min(1, 'name is required').max(100),
+  nfrType: NfrTypeEnum,
+  locationDescription: z.string().trim().optional().nullable(),
+  status: NfrSpaceStatusEnum.optional().default('ACTIVE'),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const UpdateNfrSpaceSchema = z.object({
+  name: z.string().trim().min(1, 'name cannot be empty').max(100).optional(),
+  nfrType: NfrTypeEnum.optional(),
+  locationDescription: z.string().trim().optional().nullable(),
+  status: NfrSpaceStatusEnum.optional(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const NfrVendorStatusEnum = z.enum([
+  'ACTIVE',
+  'INACTIVE',
+]);
+
+export const CreateNfrVendorSchema = z.object({
+  vendorName: z.string().trim().min(1, 'vendorName is required').max(150),
+  ownerContactName: z.string().trim().min(1, 'ownerContactName is required').max(100),
+  ownerContactPhone: z.string().trim().min(1, 'ownerContactPhone is required').max(30).regex(/^[0-9+\-\s()]+$/, 'Invalid phone number format'),
+  ownerContactEmail: z.string().trim().email('Invalid email address').optional().nullable(),
+  address: z.string().trim().optional().nullable(),
+  status: NfrVendorStatusEnum.optional().default('ACTIVE'),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const UpdateNfrVendorSchema = z.object({
+  vendorName: z.string().trim().min(1, 'vendorName cannot be empty').max(150).optional(),
+  ownerContactName: z.string().trim().min(1, 'ownerContactName cannot be empty').max(100).optional(),
+  ownerContactPhone: z.string().trim().min(1, 'ownerContactPhone cannot be empty').max(30).regex(/^[0-9+\-\s()]+$/, 'Invalid phone number format').optional(),
+  ownerContactEmail: z.string().trim().email('Invalid email address').optional().nullable(),
+  address: z.string().trim().optional().nullable(),
+  status: NfrVendorStatusEnum.optional(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const CreateNfrLeaseSchema = z.object({
+  spaceId: z.string().trim().min(1, 'spaceId is required'),
+  vendorId: z.string().trim().min(1, 'vendorId is required'),
+  agreementNumber: z.string().trim().min(1, 'agreementNumber is required').max(100),
+  leaseStartDate: StrictDateOnlySchema,
+  leaseEndDate: StrictDateOnlySchema,
+  monthlyRent: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'monthlyRent must be a positive decimal string (up to 2 decimal places)').max(20),
+  securityDeposit: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'securityDeposit must be a non-negative decimal string (up to 2 decimal places)').max(20).optional().default('0'),
+  monthlyDueDay: z.number().int().min(1, 'monthlyDueDay must be between 1 and 31').max(31, 'monthlyDueDay must be between 1 and 31'),
+  agreementDocumentId: z.string().trim().min(1).optional().nullable(),
+  subMeterId: z.string().trim().min(1).optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).strict().refine(data => data.leaseEndDate >= data.leaseStartDate, {
+  message: 'leaseEndDate must be on or after leaseStartDate',
+  path: ['leaseEndDate'],
+});
+
+export const UpdateNfrLeaseSchema = z.object({
+  spaceId: z.string().trim().min(1, 'spaceId cannot be empty').optional(),
+  vendorId: z.string().trim().min(1, 'vendorId cannot be empty').optional(),
+  agreementNumber: z.string().trim().min(1, 'agreementNumber cannot be empty').max(100).optional(),
+  leaseStartDate: StrictDateOnlySchema.optional(),
+  leaseEndDate: StrictDateOnlySchema.optional(),
+  monthlyRent: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'monthlyRent must be a positive decimal string (up to 2 decimal places)').max(20).optional(),
+  securityDeposit: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'securityDeposit must be a non-negative decimal string (up to 2 decimal places)').max(20).optional(),
+  monthlyDueDay: z.number().int().min(1, 'monthlyDueDay must be between 1 and 31').max(31, 'monthlyDueDay must be between 1 and 31').optional(),
+  agreementDocumentId: z.string().trim().min(1).optional().nullable(),
+  subMeterId: z.string().trim().min(1).optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).strict().refine(data => {
+  if (data.leaseStartDate && data.leaseEndDate) {
+    return data.leaseEndDate >= data.leaseStartDate;
+  }
+  return true;
+}, {
+  message: 'leaseEndDate must be on or after leaseStartDate',
+  path: ['leaseEndDate'],
+});
+
+export const TerminateNfrLeaseSchema = z.object({
+  terminationReason: z.string().trim().optional().nullable(),
+}).strict();
+
+export const GenerateNfrRentDueSchema = z.object({
+  billingMonth: StrictYearMonthSchema,
+}).strict();
+
+export const CreateNfrRentPaymentSchema = z.object({
+  amount: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'amount must be a positive decimal string (up to 2 decimal places)').max(20),
+  receiptDocumentId: z.string().trim().min(1, 'receiptDocumentId is required'),
+  paymentReference: z.string().trim().optional().nullable(),
+  paidAt: z.string().datetime({ offset: true, message: 'paidAt must be a valid ISO-8601 timestamp with timezone' }).optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const NfrSpaceFilterSchema = z.object({
+  nfrType: NfrTypeEnum.optional(),
+  status: NfrSpaceStatusEnum.optional(),
+}).strict();
+
+export const NfrVendorFilterSchema = z.object({
+  status: NfrVendorStatusEnum.optional(),
+  search: z.string().trim().optional(),
+}).strict();
+
+export const NfrLeaseFilterSchema = z.object({
+  spaceId: z.string().trim().min(1).optional(),
+  vendorId: z.string().trim().min(1).optional(),
+  status: z.enum(['ACTIVE', 'TERMINATED']).optional(),
+  nfrType: NfrTypeEnum.optional(),
+  expiredOnly: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
+}).strict();
+
+export const NfrRentPaymentStatusEnum = z.enum([
+  'PENDING',
+  'PARTIAL',
+  'PAID',
+]);
+
+export const NfrRentDueFilterSchema = z.object({
+  leaseId: z.string().trim().min(1).optional(),
+  vendorId: z.string().trim().min(1).optional(),
+  spaceId: z.string().trim().min(1).optional(),
+  billingMonth: StrictYearMonthSchema.optional(),
+  paymentStatus: NfrRentPaymentStatusEnum.optional(),
+  overdueOnly: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
+  fromDate: StrictDateOnlySchema.optional(),
+  toDate: StrictDateOnlySchema.optional(),
+}).strict().refine(data => {
+  if (data.fromDate && data.toDate) {
+    return data.fromDate <= data.toDate;
+  }
+  return true;
+}, {
+  message: 'fromDate must be on or before toDate',
+  path: ['fromDate'],
+});
+
+
 
 

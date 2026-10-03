@@ -127,10 +127,18 @@ export const PERMISSIONS = {
   MUNICIPAL_TAXES_READ: 'municipal_taxes.read',
   MUNICIPAL_TAXES_WRITE: 'municipal_taxes.write',
   MUNICIPAL_TAX_PAYMENTS_WRITE: 'municipal_taxes.payments.write',
+
+  // Phase 4C-1: NFR / Vendor Lease & Rent Management
+  NFR_READ: 'nfr.read',
+  NFR_MASTER_WRITE: 'nfr.master.write',
+  NFR_LEASES_WRITE: 'nfr.leases.write',
+  NFR_RENT_DUES_WRITE: 'nfr.rent_dues.write',
+  NFR_RENT_PAYMENTS_WRITE: 'nfr.rent_payments.write',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
 
 export const COOKIE_NAME = 'iocl_session';
 export const SESSION_DURATION_HOURS = 24;
+
 
