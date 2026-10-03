@@ -9,10 +9,44 @@ import {
   MunicipalTaxType,
   MunicipalTaxFrequency,
   MunicipalTaxStatus,
+  Document,
 } from '../../../shared/types';
 import { formatDisplayDate, formatDisplayDateTime, formatFileSize } from '../utilities/utilityUi';
 
 export { formatDisplayDate, formatDisplayDateTime, formatFileSize };
+
+export interface MunicipalTaxAttachments {
+  assessmentDoc: Document | null;
+  receiptDoc: Document | null;
+}
+
+/**
+ * Pure helper: Resolves assessment and payment receipt documents for a statutory due
+ * from an outlet's document list. Ignores documents from other outlets and safely
+ * returns null for missing lists or non-matching IDs.
+ */
+export function resolveMunicipalTaxAttachments(
+  documents: Document[] | null | undefined,
+  outletId: string,
+  assessmentDocumentId?: string | null,
+  paymentReceiptDocumentId?: string | null
+): MunicipalTaxAttachments {
+  if (!documents || !Array.isArray(documents) || !outletId) {
+    return { assessmentDoc: null, receiptDoc: null };
+  }
+
+  const outletDocs = documents.filter(doc => doc && doc.outletId === outletId);
+
+  const assessmentDoc = assessmentDocumentId
+    ? outletDocs.find(doc => doc.id === assessmentDocumentId) || null
+    : null;
+
+  const receiptDoc = paymentReceiptDocumentId
+    ? outletDocs.find(doc => doc.id === paymentReceiptDocumentId) || null
+    : null;
+
+  return { assessmentDoc, receiptDoc };
+}
 
 export interface MunicipalTaxStatusDisplay {
   label: string;

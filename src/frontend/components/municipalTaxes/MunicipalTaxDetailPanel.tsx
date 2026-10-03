@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../../shared/constants';
 import { MunicipalTaxDue, Document } from '../../../shared/types';
 import {
   formatTaxType,
@@ -11,6 +13,7 @@ import {
   formatDisplayDateTime,
   formatFileSize,
   getMunicipalTaxErrorMessage,
+  resolveMunicipalTaxAttachments,
 } from './municipalTaxUi';
 import {
   X,
@@ -22,7 +25,7 @@ import {
   CheckCircle2,
   Calendar,
   IndianRupee,
-  Download,
+  Paperclip,
   AlertCircle,
 } from 'lucide-react';
 
@@ -47,6 +50,9 @@ export const MunicipalTaxDetailPanel: React.FC<MunicipalTaxDetailPanelProps> = (
   onEditDue,
   onMarkPaid,
 }) => {
+  const { hasPermission } = useAuth();
+  const canReadDocuments = hasPermission(PERMISSIONS.DOCUMENTS_READ);
+
   const [due, setDue] = useState<MunicipalTaxDue | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -55,55 +61,77 @@ export const MunicipalTaxDetailPanel: React.FC<MunicipalTaxDetailPanelProps> = (
   const [receiptDoc, setReceiptDoc] = useState<Document | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!dueId) {
       setDue(null);
       setAssessmentDoc(null);
       setReceiptDoc(null);
+      setLoading(false);
+      setErrorMessage(null);
       return;
     }
 
+    // Clear old document metadata immediately before fetching to prevent Due A metadata under Due B
+    setAssessmentDoc(null);
+    setReceiptDoc(null);
+    setLoading(true);
+    setErrorMessage(null);
+
     const fetchDetail = async () => {
-      setLoading(true);
-      setErrorMessage(null);
       try {
         const res = await apiFetch<MunicipalTaxDue>(`/api/v1/municipal-taxes/${dueId}`);
+        if (cancelled) return;
+
         if (res.success && res.data) {
-          setDue(res.data);
+          const loadedDue = res.data;
+          setDue(loadedDue);
 
-          // Fetch attached document details if available
-          if (res.data.assessmentDocumentId) {
+          // Fetch attached document details through single list call if user has permission and doc IDs exist
+          if (
+            canReadDocuments &&
+            outletId &&
+            (loadedDue.assessmentDocumentId || loadedDue.paymentReceiptDocumentId)
+          ) {
             try {
-              const docRes = await apiFetch<Document>(`/api/v1/documents/${res.data.assessmentDocumentId}`);
-              if (docRes.success && docRes.data) setAssessmentDoc(docRes.data);
-            } catch {
-              // ignore doc fetch error
-            }
-          } else {
-            setAssessmentDoc(null);
-          }
+              const docRes = await apiFetch<Document[]>('/api/v1/documents');
+              if (cancelled) return;
 
-          if (res.data.paymentReceiptDocumentId) {
-            try {
-              const recRes = await apiFetch<Document>(`/api/v1/documents/${res.data.paymentReceiptDocumentId}`);
-              if (recRes.success && recRes.data) setReceiptDoc(recRes.data);
+              if (docRes.success && docRes.data) {
+                const { assessmentDoc: resolvedAssessment, receiptDoc: resolvedReceipt } =
+                  resolveMunicipalTaxAttachments(
+                    docRes.data,
+                    outletId,
+                    loadedDue.assessmentDocumentId,
+                    loadedDue.paymentReceiptDocumentId
+                  );
+                if (cancelled) return;
+                setAssessmentDoc(resolvedAssessment);
+                setReceiptDoc(resolvedReceipt);
+              }
             } catch {
-              // ignore doc fetch error
+              // Document list failure must not break statutory due detail
             }
-          } else {
-            setReceiptDoc(null);
           }
         } else {
           setErrorMessage(getMunicipalTaxErrorMessage(res.error || res));
         }
       } catch (err: any) {
+        if (cancelled) return;
         setErrorMessage(getMunicipalTaxErrorMessage(err));
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     fetchDetail();
-  }, [dueId, refreshKey]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dueId, outletId, refreshKey, canReadDocuments]);
 
   if (!dueId) return null;
 
@@ -218,30 +246,35 @@ export const MunicipalTaxDetailPanel: React.FC<MunicipalTaxDetailPanelProps> = (
                   Assessment Document
                 </h3>
                 {due.assessmentDocumentId ? (
-                  <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-2.5 truncate">
-                      <FileText className="w-4 h-4 text-orange-400 shrink-0" />
-                      <div className="truncate">
-                        <div className="font-medium text-slate-200 truncate">
-                          {assessmentDoc ? assessmentDoc.name : `Document #${due.assessmentDocumentId}`}
-                        </div>
-                        {assessmentDoc && (
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            {formatFileSize(assessmentDoc.sizeBytes)} • {formatDisplayDate(assessmentDoc.createdAt)}
+                  canReadDocuments ? (
+                    <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 truncate">
+                        <FileText className="w-4 h-4 text-orange-400 shrink-0" />
+                        <div className="truncate">
+                          <div className="font-medium text-slate-200 truncate">
+                            {assessmentDoc ? assessmentDoc.name : `Document #${due.assessmentDocumentId}`}
                           </div>
-                        )}
+                          {assessmentDoc ? (
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {formatFileSize(assessmentDoc.sizeBytes)} • {formatDisplayDate(assessmentDoc.createdAt)}
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              Assessment document attached
+                            </div>
+                          )}
+                        </div>
                       </div>
+                      <span className="text-[10px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-2 py-1 rounded-lg shrink-0">
+                        Stored in Document Vault
+                      </span>
                     </div>
-                    <a
-                      href={`/api/v1/documents/${due.assessmentDocumentId}/download`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-                      title="Download document"
-                    >
-                      <Download className="w-4 h-4" />
-                    </a>
-                  </div>
+                  ) : (
+                    <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center gap-2.5 text-slate-300">
+                      <Paperclip className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span className="font-medium text-xs">Assessment document attached</span>
+                    </div>
+                  )
                 ) : (
                   <div className="p-3 bg-slate-950/30 border border-slate-800/60 rounded-xl text-slate-500 font-mono text-center">
                     No assessment document attached.
@@ -274,29 +307,36 @@ export const MunicipalTaxDetailPanel: React.FC<MunicipalTaxDetailPanelProps> = (
                     </div>
 
                     {due.paymentReceiptDocumentId && (
-                      <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between">
-                        <div className="flex items-center gap-2 truncate">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <div className="truncate">
-                            <span className="font-semibold text-slate-200 truncate block">
-                              {receiptDoc ? receiptDoc.name : `Receipt #${due.paymentReceiptDocumentId}`}
+                      <div className="pt-2 border-t border-emerald-500/20">
+                        {canReadDocuments ? (
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 truncate">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                              <div className="truncate">
+                                <span className="font-semibold text-slate-200 truncate block">
+                                  {receiptDoc ? receiptDoc.name : `Receipt #${due.paymentReceiptDocumentId}`}
+                                </span>
+                                {receiptDoc ? (
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {formatFileSize(receiptDoc.sizeBytes)} • {formatDisplayDate(receiptDoc.createdAt)}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    Payment receipt attached
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono text-emerald-400/80 bg-emerald-950/40 border border-emerald-500/20 px-2 py-1 rounded-lg shrink-0">
+                              Stored in Document Vault
                             </span>
-                            {receiptDoc && (
-                              <span className="text-[10px] text-slate-400">
-                                {formatFileSize(receiptDoc.sizeBytes)}
-                              </span>
-                            )}
                           </div>
-                        </div>
-                        <a
-                          href={`/api/v1/documents/${due.paymentReceiptDocumentId}/download`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-                          title="Download receipt"
-                        >
-                          <Download className="w-4 h-4" />
-                        </a>
+                        ) : (
+                          <div className="flex items-center gap-2 text-slate-300">
+                            <Paperclip className="w-4 h-4 text-slate-400 shrink-0" />
+                            <span className="font-medium text-xs">Payment receipt attached</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

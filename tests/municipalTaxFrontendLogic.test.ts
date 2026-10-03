@@ -14,6 +14,7 @@ import {
   formatDisplayDate,
   formatDisplayDateTime,
   formatFileSize,
+  resolveMunicipalTaxAttachments,
 } from '../src/frontend/components/municipalTaxes/municipalTaxUi';
 
 describe('Municipal Taxes Frontend Logic & UI Helpers (Phase 4B-2)', () => {
@@ -292,5 +293,80 @@ describe('Municipal Taxes Frontend Logic & UI Helpers (Phase 4B-2)', () => {
     expect(formatFileSize(1024)).toBe('1.0 KB');
     expect(formatFileSize(1048576)).toBe('1.00 MB');
     expect(formatFileSize(500)).toBe('500 B');
+  });
+
+  // 33. attachment resolver ignores documents belonging to another outlet
+  it('33. should ignore documents belonging to another outlet in attachment resolver', () => {
+    const docs = [
+      { id: 'doc-1', outletId: 'outlet-B', name: 'Other Outlet Doc.pdf', sizeBytes: 1024, createdAt: '2026-01-01' } as any,
+      { id: 'doc-2', outletId: 'outlet-B', name: 'Other Outlet Receipt.pdf', sizeBytes: 2048, createdAt: '2026-01-01' } as any,
+    ];
+    const res = resolveMunicipalTaxAttachments(docs, 'outlet-A', 'doc-1', 'doc-2');
+    expect(res.assessmentDoc).toBeNull();
+    expect(res.receiptDoc).toBeNull();
+  });
+
+  // 34. attachment resolver finds correct assessment document
+  it('34. should find correct assessment document matching outlet and ID', () => {
+    const docs = [
+      { id: 'doc-assess', outletId: 'outlet-A', name: 'Assessment Demand MCD.pdf', sizeBytes: 5120, createdAt: '2026-01-01' } as any,
+      { id: 'doc-other', outletId: 'outlet-A', name: 'Unrelated.pdf', sizeBytes: 1024, createdAt: '2026-01-01' } as any,
+    ];
+    const res = resolveMunicipalTaxAttachments(docs, 'outlet-A', 'doc-assess', null);
+    expect(res.assessmentDoc).not.toBeNull();
+    expect(res.assessmentDoc?.id).toBe('doc-assess');
+    expect(res.assessmentDoc?.name).toBe('Assessment Demand MCD.pdf');
+    expect(res.receiptDoc).toBeNull();
+  });
+
+  // 35. attachment resolver finds correct payment receipt
+  it('35. should find correct payment receipt document matching outlet and ID', () => {
+    const docs = [
+      { id: 'doc-assess', outletId: 'outlet-A', name: 'Assessment Demand.pdf', sizeBytes: 5120, createdAt: '2026-01-01' } as any,
+      { id: 'doc-receipt', outletId: 'outlet-A', name: 'MCD Tax Challan Paid.pdf', sizeBytes: 3072, createdAt: '2026-01-02' } as any,
+    ];
+    const res = resolveMunicipalTaxAttachments(docs, 'outlet-A', 'doc-assess', 'doc-receipt');
+    expect(res.assessmentDoc?.id).toBe('doc-assess');
+    expect(res.receiptDoc).not.toBeNull();
+    expect(res.receiptDoc?.id).toBe('doc-receipt');
+    expect(res.receiptDoc?.name).toBe('MCD Tax Challan Paid.pdf');
+  });
+
+  // 36. missing attachment ID returns null
+  it('36. should return null when attachment IDs are missing or null/undefined', () => {
+    const docs = [
+      { id: 'doc-1', outletId: 'outlet-A', name: 'Assessment.pdf', sizeBytes: 1024, createdAt: '2026-01-01' } as any,
+    ];
+    const res1 = resolveMunicipalTaxAttachments(docs, 'outlet-A', null, null);
+    expect(res1.assessmentDoc).toBeNull();
+    expect(res1.receiptDoc).toBeNull();
+
+    const res2 = resolveMunicipalTaxAttachments(docs, 'outlet-A', undefined, undefined);
+    expect(res2.assessmentDoc).toBeNull();
+    expect(res2.receiptDoc).toBeNull();
+
+    const res3 = resolveMunicipalTaxAttachments(docs, 'outlet-A', 'non-existent-id', 'non-existent-receipt');
+    expect(res3.assessmentDoc).toBeNull();
+    expect(res3.receiptDoc).toBeNull();
+  });
+
+  // 37. absent document list safely returns null attachments
+  it('37. should safely return null attachments when document list is null, undefined, or empty', () => {
+    expect(resolveMunicipalTaxAttachments(null, 'outlet-A', 'doc-1', 'doc-2')).toEqual({
+      assessmentDoc: null,
+      receiptDoc: null,
+    });
+    expect(resolveMunicipalTaxAttachments(undefined, 'outlet-A', 'doc-1', 'doc-2')).toEqual({
+      assessmentDoc: null,
+      receiptDoc: null,
+    });
+    expect(resolveMunicipalTaxAttachments([], 'outlet-A', 'doc-1', 'doc-2')).toEqual({
+      assessmentDoc: null,
+      receiptDoc: null,
+    });
+    expect(resolveMunicipalTaxAttachments([] as any, '', 'doc-1', 'doc-2')).toEqual({
+      assessmentDoc: null,
+      receiptDoc: null,
+    });
   });
 });
