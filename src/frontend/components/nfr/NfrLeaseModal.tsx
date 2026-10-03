@@ -13,6 +13,7 @@ import {
   canSubmitNfrLease,
   getNfrErrorMessage,
   formatNfrType,
+  getEligibleNfrSubMeters,
 } from './nfrUi';
 import {
   X,
@@ -80,16 +81,12 @@ export const NfrLeaseModal: React.FC<NfrLeaseModalProps> = ({
     let isMounted = true;
     setLoadingSubMeters(true);
 
-    apiFetch<{ success: boolean; data: UtilitySubMeter[] }>(
+    apiFetch<UtilitySubMeter[]>(
       `/api/v1/outlets/${outletId}/utilities/sub-meters`
     )
       .then(res => {
         if (isMounted && res.success && Array.isArray(res.data)) {
-          // Filter to NFR_VENDOR only and matching outlet
-          const nfrMeters = res.data.filter(
-            m => m.outletId === outletId && m.beneficiaryType === 'NFR_VENDOR'
-          );
-          setSubMeters(nfrMeters);
+          setSubMeters(res.data);
         }
       })
       .catch(() => {
@@ -145,6 +142,14 @@ export const NfrLeaseModal: React.FC<NfrLeaseModalProps> = ({
   // Vendor options: on create, show ACTIVE; on edit, ensure currently selected vendor remains visible even if inactive
   const vendorOptions = vendors.filter(
     v => v.status === 'ACTIVE' || (isEdit && v.id === leaseToEdit?.vendorId)
+  );
+
+  // Sub-meter options: eligible NFR sub-meters
+  const eligibleSubMeters = getEligibleNfrSubMeters(
+    subMeters,
+    outletId,
+    isEdit,
+    leaseToEdit?.subMeterId
   );
 
   // Client-side date check
@@ -440,7 +445,7 @@ export const NfrLeaseModal: React.FC<NfrLeaseModalProps> = ({
                 className="w-full px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 disabled:opacity-50"
               >
                 <option value="">No sub-meter linked</option>
-                {subMeters.map(sm => (
+                {eligibleSubMeters.map(sm => (
                   <option key={sm.id} value={sm.id}>
                     {sm.meterCode} - {sm.name} ({sm.status})
                   </option>

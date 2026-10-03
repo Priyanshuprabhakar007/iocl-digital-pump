@@ -9,6 +9,7 @@ import {
   buildNfrRentDueQueryParams,
   validateNfrDateRange,
   getResetNfrFilters,
+  getNfrTabResetTargets,
   canEditNfrLease,
   canTerminateNfrLease,
   canGenerateNfrRentDue,
@@ -17,11 +18,12 @@ import {
   canSubmitNfrVendor,
   canSubmitNfrLease,
   canSubmitNfrRentPayment,
+  getEligibleNfrSubMeters,
   resolveNfrDocument,
   getNfrErrorMessage,
 } from '../src/frontend/components/nfr/nfrUi';
 import { PERMISSIONS } from '../src/shared/constants';
-import type { NfrLease, NfrRentDue, Document } from '../src/shared/types';
+import type { NfrLease, NfrRentDue, Document, UtilitySubMeter } from '../src/shared/types';
 
 describe('Phase 4C-2 NFR Frontend Logic Suite', () => {
   // -------------------------------------------------------------
@@ -341,6 +343,7 @@ describe('Phase 4C-2 NFR Frontend Logic Suite', () => {
         expect(
           canSubmitNfrVendor({
             vendorName: 'HDFC Bank Ltd',
+            ownerContactName: 'Rajesh Sharma',
             ownerContactPhone: '+91 (022) 1234-5678',
           })
         ).toBe(true);
@@ -350,7 +353,62 @@ describe('Phase 4C-2 NFR Frontend Logic Suite', () => {
         expect(
           canSubmitNfrVendor({
             vendorName: '   ',
+            ownerContactName: 'Rajesh Sharma',
+            ownerContactPhone: '+91 9876543210',
           })
+        ).toBe(false);
+      });
+
+      it('rejects missing ownerContactName', () => {
+        expect(
+          canSubmitNfrVendor({
+            vendorName: 'HDFC Bank Ltd',
+            ownerContactName: '',
+            ownerContactPhone: '+91 9876543210',
+          })
+        ).toBe(false);
+      });
+
+      it('rejects missing ownerContactPhone', () => {
+        expect(
+          canSubmitNfrVendor({
+            vendorName: 'HDFC Bank Ltd',
+            ownerContactName: 'Rajesh Sharma',
+            ownerContactPhone: '   ',
+          })
+        ).toBe(false);
+      });
+
+      it('rejects invalid characters in phone', () => {
+        expect(
+          canSubmitNfrVendor({
+            vendorName: 'HDFC Bank Ltd',
+            ownerContactName: 'Rajesh Sharma',
+            ownerContactPhone: '98765-ABC-210',
+          })
+        ).toBe(false);
+      });
+
+      it('accepts phone containing +, -, spaces, parentheses', () => {
+        expect(
+          canSubmitNfrVendor({
+            vendorName: 'HDFC Bank Ltd',
+            ownerContactName: 'Rajesh Sharma',
+            ownerContactPhone: '+91 (011) 2345-6789',
+          })
+        ).toBe(true);
+      });
+
+      it('rejects if isSubmitting is true', () => {
+        expect(
+          canSubmitNfrVendor(
+            {
+              vendorName: 'HDFC Bank Ltd',
+              ownerContactName: 'Rajesh Sharma',
+              ownerContactPhone: '+91 9876543210',
+            },
+            true
+          )
         ).toBe(false);
       });
     });
@@ -723,6 +781,185 @@ describe('Phase 4C-2 NFR Frontend Logic Suite', () => {
         fromDate: '',
         toDate: '',
       });
+    });
+  });
+
+  // -------------------------------------------------------------
+  // 11. Tab Switch Reset Targets Tests
+  // -------------------------------------------------------------
+  describe('getNfrTabResetTargets', () => {
+    it('switching to spaces closes vendor, lease, and rent dues UI', () => {
+      const targets = getNfrTabResetTargets('spaces');
+      expect(targets).toEqual({
+        closeSpaceModal: false,
+        closeVendorModal: true,
+        closeLeaseUi: true,
+        closeRentDueUi: true,
+      });
+    });
+
+    it('switching to vendors closes spaces, lease, and rent dues UI', () => {
+      const targets = getNfrTabResetTargets('vendors');
+      expect(targets).toEqual({
+        closeSpaceModal: true,
+        closeVendorModal: false,
+        closeLeaseUi: true,
+        closeRentDueUi: true,
+      });
+    });
+
+    it('switching to leases closes spaces, vendors, and rent dues UI', () => {
+      const targets = getNfrTabResetTargets('leases');
+      expect(targets).toEqual({
+        closeSpaceModal: true,
+        closeVendorModal: true,
+        closeLeaseUi: false,
+        closeRentDueUi: true,
+      });
+    });
+
+    it('switching to rent-dues closes spaces, vendors, and lease UI', () => {
+      const targets = getNfrTabResetTargets('rent-dues');
+      expect(targets).toEqual({
+        closeSpaceModal: true,
+        closeVendorModal: true,
+        closeLeaseUi: true,
+        closeRentDueUi: false,
+      });
+    });
+  });
+
+  // -------------------------------------------------------------
+  // 12. Sub-Meter Eligibility Tests
+  // -------------------------------------------------------------
+  describe('getEligibleNfrSubMeters', () => {
+    const mockMeters: UtilitySubMeter[] = [
+      {
+        id: 'sm-1',
+        outletId: 'out-1',
+        meterCode: 'SM-NFR-01',
+        name: 'ATM Sub-meter',
+        beneficiaryType: 'NFR_VENDOR',
+        beneficiaryName: 'HDFC Bank',
+        serialNumber: 'SN-001',
+        ratePaisePerKwh: 850,
+        status: 'ACTIVE',
+        commissionedAt: '2026-01-01',
+        notes: null,
+        createdBy: 'usr-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 'sm-2',
+        outletId: 'out-1',
+        meterCode: 'SM-NFR-02',
+        name: 'Inactive NFR Meter',
+        beneficiaryType: 'NFR_VENDOR',
+        beneficiaryName: 'Old Vendor',
+        serialNumber: 'SN-002',
+        ratePaisePerKwh: 850,
+        status: 'INACTIVE',
+        commissionedAt: '2026-01-01',
+        notes: null,
+        createdBy: 'usr-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 'sm-3',
+        outletId: 'out-1',
+        meterCode: 'SM-CNG-01',
+        name: 'CNG Booster Meter',
+        beneficiaryType: 'CNG_FACILITY',
+        beneficiaryName: 'CNG Compressor',
+        serialNumber: 'SN-003',
+        ratePaisePerKwh: 850,
+        status: 'ACTIVE',
+        commissionedAt: '2026-01-01',
+        notes: null,
+        createdBy: 'usr-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 'sm-4',
+        outletId: 'out-1',
+        meterCode: 'SM-OTH-01',
+        name: 'Staff Quarter Meter',
+        beneficiaryType: 'OTHER',
+        beneficiaryName: 'Staff Quarters',
+        serialNumber: 'SN-004',
+        ratePaisePerKwh: 850,
+        status: 'ACTIVE',
+        commissionedAt: '2026-01-01',
+        notes: null,
+        createdBy: 'usr-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 'sm-5',
+        outletId: 'out-2',
+        meterCode: 'SM-NFR-OUT2',
+        name: 'Foreign Outlet NFR Meter',
+        beneficiaryType: 'NFR_VENDOR',
+        beneficiaryName: 'Foreign Vendor',
+        serialNumber: 'SN-005',
+        ratePaisePerKwh: 850,
+        status: 'ACTIVE',
+        commissionedAt: '2026-01-01',
+        notes: null,
+        createdBy: 'usr-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ];
+
+    it('A. ACTIVE NFR_VENDOR is included on create', () => {
+      const eligible = getEligibleNfrSubMeters(mockMeters, 'out-1', false);
+      expect(eligible.some((m) => m.id === 'sm-1')).toBe(true);
+    });
+
+    it('B. INACTIVE NFR_VENDOR is excluded on create', () => {
+      const eligible = getEligibleNfrSubMeters(mockMeters, 'out-1', false);
+      expect(eligible.some((m) => m.id === 'sm-2')).toBe(false);
+    });
+
+    it('C. Currently linked INACTIVE NFR_VENDOR is included on edit', () => {
+      const eligible = getEligibleNfrSubMeters(mockMeters, 'out-1', true, 'sm-2');
+      expect(eligible.some((m) => m.id === 'sm-2')).toBe(true);
+      expect(eligible.some((m) => m.id === 'sm-1')).toBe(true);
+    });
+
+    it('D. CNG_FACILITY is excluded even if ACTIVE and matching outlet', () => {
+      const eligibleCreate = getEligibleNfrSubMeters(mockMeters, 'out-1', false);
+      const eligibleEdit = getEligibleNfrSubMeters(mockMeters, 'out-1', true, 'sm-3');
+      expect(eligibleCreate.some((m) => m.id === 'sm-3')).toBe(false);
+      expect(eligibleEdit.some((m) => m.id === 'sm-3')).toBe(false);
+    });
+
+    it('E. OTHER beneficiary type is excluded even if ACTIVE', () => {
+      const eligibleCreate = getEligibleNfrSubMeters(mockMeters, 'out-1', false);
+      const eligibleEdit = getEligibleNfrSubMeters(mockMeters, 'out-1', true, 'sm-4');
+      expect(eligibleCreate.some((m) => m.id === 'sm-4')).toBe(false);
+      expect(eligibleEdit.some((m) => m.id === 'sm-4')).toBe(false);
+    });
+
+    it('F. Foreign-outlet meter is excluded even if ACTIVE NFR_VENDOR', () => {
+      const eligible = getEligibleNfrSubMeters(mockMeters, 'out-1', false);
+      expect(eligible.some((m) => m.id === 'sm-5')).toBe(false);
+    });
+
+    it('excludes unlinked INACTIVE NFR_VENDOR on edit', () => {
+      const eligible = getEligibleNfrSubMeters(mockMeters, 'out-1', true, 'sm-1');
+      expect(eligible.some((m) => m.id === 'sm-2')).toBe(false);
+    });
+
+    it('returns empty array when input is null or undefined or empty', () => {
+      expect(getEligibleNfrSubMeters(null, 'out-1')).toEqual([]);
+      expect(getEligibleNfrSubMeters(undefined, 'out-1')).toEqual([]);
+      expect(getEligibleNfrSubMeters([], 'out-1')).toEqual([]);
     });
   });
 });

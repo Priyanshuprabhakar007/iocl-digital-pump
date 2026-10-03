@@ -25,6 +25,7 @@ import {
   NfrWorkspaceTab,
   NfrFilterState,
   getResetNfrFilters,
+  getNfrTabResetTargets,
   buildNfrSpaceQueryParams,
   buildNfrVendorQueryParams,
   buildNfrLeaseQueryParams,
@@ -105,6 +106,31 @@ export const NfrOperationsPage: React.FC = () => {
       setFeedback((prev) => (prev?.message === message ? null : prev));
     }, 4500);
   }, []);
+
+  // Internal tab switch handler with state isolation
+  const handleTabChange = (nextTab: NfrWorkspaceTab) => {
+    const targets = getNfrTabResetTargets(nextTab);
+    if (targets.closeLeaseUi) {
+      setSelectedLeaseId(null);
+      setEditingLease(null);
+      setIsLeaseModalOpen(false);
+      setTerminatingLease(null);
+      setGeneratingDueLease(null);
+    }
+    if (targets.closeRentDueUi) {
+      setSelectedDueId(null);
+      setPayingDue(null);
+    }
+    if (targets.closeSpaceModal) {
+      setIsSpaceModalOpen(false);
+      setEditingSpace(null);
+    }
+    if (targets.closeVendorModal) {
+      setIsVendorModalOpen(false);
+      setEditingVendor(null);
+    }
+    setActiveTab(nextTab);
+  };
 
   // 1. Load accessible outlets on mount
   useEffect(() => {
@@ -343,7 +369,7 @@ export const NfrOperationsPage: React.FC = () => {
         <div className="flex items-center gap-1 overflow-x-auto">
           <button
             type="button"
-            onClick={() => setActiveTab('spaces')}
+            onClick={() => handleTabChange('spaces')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
               activeTab === 'spaces'
                 ? 'bg-amber-500 text-slate-950 shadow-sm'
@@ -356,7 +382,7 @@ export const NfrOperationsPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setActiveTab('vendors')}
+            onClick={() => handleTabChange('vendors')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
               activeTab === 'vendors'
                 ? 'bg-amber-500 text-slate-950 shadow-sm'
@@ -369,7 +395,7 @@ export const NfrOperationsPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setActiveTab('leases')}
+            onClick={() => handleTabChange('leases')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
               activeTab === 'leases'
                 ? 'bg-amber-500 text-slate-950 shadow-sm'
@@ -382,7 +408,7 @@ export const NfrOperationsPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setActiveTab('rent-dues')}
+            onClick={() => handleTabChange('rent-dues')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
               activeTab === 'rent-dues'
                 ? 'bg-amber-500 text-slate-950 shadow-sm'

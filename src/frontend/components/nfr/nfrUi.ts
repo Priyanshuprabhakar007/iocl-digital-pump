@@ -10,6 +10,7 @@ import {
   NfrLeaseStatus,
   NfrRentPaymentStatus,
   Document,
+  UtilitySubMeter,
 } from '../../../shared/types';
 import { formatDisplayDate, formatDisplayDateTime, formatFileSize } from '../utilities/utilityUi';
 import { PERMISSIONS } from '../../../shared/constants';
@@ -76,6 +77,18 @@ export function getResetNfrFilters(): NfrFilterState {
       fromDate: '',
       toDate: '',
     },
+  };
+}
+
+/**
+ * Pure helper returning reset targets when switching internal workspace tabs
+ */
+export function getNfrTabResetTargets(nextTab: NfrWorkspaceTab) {
+  return {
+    closeSpaceModal: nextTab !== 'spaces',
+    closeVendorModal: nextTab !== 'vendors',
+    closeLeaseUi: nextTab !== 'leases',
+    closeRentDueUi: nextTab !== 'rent-dues',
   };
 }
 
@@ -428,6 +441,15 @@ export function canSubmitNfrVendor(
 ): boolean {
   if (isSubmitting) return false;
   if (!formData.vendorName || formData.vendorName.trim() === '') return false;
+  if (!formData.ownerContactName || formData.ownerContactName.trim() === '') return false;
+  if (!formData.ownerContactPhone || formData.ownerContactPhone.trim() === '') return false;
+
+  // Permissive phone validation: digits, spaces, +, -, parentheses
+  const phonePattern = /^[0-9+\-\s()]+$/;
+  if (!phonePattern.test(formData.ownerContactPhone.trim())) {
+    return false;
+  }
+
   return true;
 }
 
@@ -501,6 +523,37 @@ export function canSubmitNfrRentPayment(
 
   if (!formData.receiptDocumentId || formData.receiptDocumentId.trim() === '') return false;
   return true;
+}
+
+/**
+ * Filter utility sub-meters eligible for NFR lease linkage
+ */
+export function getEligibleNfrSubMeters(
+  subMeters: UtilitySubMeter[] | null | undefined,
+  outletId?: string | null,
+  isEdit: boolean = false,
+  currentSubMeterId?: string | null
+): UtilitySubMeter[] {
+  if (!subMeters || !Array.isArray(subMeters)) return [];
+
+  return subMeters.filter((meter) => {
+    // Beneficiary must be NFR_VENDOR
+    if (meter.beneficiaryType !== 'NFR_VENDOR') return false;
+
+    // Must match outletId if provided
+    if (outletId && meter.outletId !== outletId) return false;
+
+    // For create: only ACTIVE meters
+    if (!isEdit) {
+      return meter.status === 'ACTIVE';
+    }
+
+    // For edit: ACTIVE or currently linked meter even if inactive
+    if (meter.status === 'ACTIVE') return true;
+    if (currentSubMeterId && meter.id === currentSubMeterId) return true;
+
+    return false;
+  });
 }
 
 /**

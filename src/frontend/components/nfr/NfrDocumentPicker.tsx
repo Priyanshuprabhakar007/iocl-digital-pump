@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../services/api';
 import { PERMISSIONS } from '../../../shared/constants';
 import { Document } from '../../../shared/types';
-import { formatFileSize, formatDisplayDate } from './nfrUi';
+import { formatFileSize, formatDisplayDate, getNfrErrorMessage } from './nfrUi';
 import {
   FileText,
   Upload,
@@ -66,7 +66,7 @@ export const NfrDocumentPicker: React.FC<NfrDocumentPickerProps> = ({
     let isMounted = true;
     setLoadingDocs(true);
 
-    apiFetch<{ success: boolean; data: Document[] }>('/api/v1/documents')
+    apiFetch<Document[]>('/api/v1/documents')
       .then(res => {
         if (isMounted && res.success && Array.isArray(res.data)) {
           // Filter to current outlet documents
@@ -115,23 +115,27 @@ export const NfrDocumentPicker: React.FC<NfrDocumentPickerProps> = ({
       formData.append('file', file);
       formData.append('outletId', outletId);
 
-      // Raw fetch for multipart FormData upload
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/v1/documents', {
+      const res = await apiFetch<Document>('/api/v1/documents', {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
 
-      const data = (await res.json()) as { success: boolean; data?: Document; error?: string };
-      if (data.success && data.data?.id) {
-        setVaultDocs(prev => [data.data!, ...prev]);
-        handleSelect(data.data.id);
+      if (res.success && res.data?.id) {
+        setVaultDocs(prev => [res.data!, ...prev]);
+        handleSelect(res.data.id);
       } else {
-        setUploadError(data.error || 'Failed to upload document to vault.');
+        const errMsg =
+          getNfrErrorMessage(res.error) ||
+          (typeof res.error === 'object' ? res.error?.message : res.error) ||
+          'Failed to upload document to vault.';
+        setUploadError(errMsg);
       }
     } catch (err: any) {
-      setUploadError(err.message || 'Error communicating with document vault.');
+      const errMsg =
+        getNfrErrorMessage(err) ||
+        (typeof err === 'object' ? err?.message : err) ||
+        'Error communicating with document vault.';
+      setUploadError(errMsg);
     } finally {
       setUploading(false);
     }
@@ -149,7 +153,9 @@ export const NfrDocumentPicker: React.FC<NfrDocumentPickerProps> = ({
         <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-center gap-2.5 text-xs text-slate-400">
           <Lock className="w-4 h-4 text-slate-500 shrink-0" />
           <span>
-            Document Vault access is not available for your role. The lease may be saved without an agreement attachment.
+            {isMandatory
+              ? 'A document is required for this action, but Document Vault access is not available for your current role.'
+              : 'Document Vault access is not available for your role. This optional attachment may be left blank.'}
           </span>
         </div>
       </div>
