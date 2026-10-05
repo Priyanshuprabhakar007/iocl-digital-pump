@@ -72,6 +72,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       perm: PERMISSIONS.SHIFTS_READ,
     },
     {
+      id: 'hr-workforce',
+      label: 'Workforce & Roster',
+      icon: Users,
+      perm: PERMISSIONS.HR_READ,
+    },
+    {
       id: 'stock-ops',
       label: 'Stock & Decantation',
       icon: Droplets,
