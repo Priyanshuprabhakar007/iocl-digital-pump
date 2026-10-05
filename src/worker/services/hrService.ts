@@ -35,6 +35,9 @@ function handleDbError(err: any): never {
   }
   const msg = String(err?.message || err);
 
+  if (msg.includes('HR_DESIGNATION_NOT_FOUND')) {
+    throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Designation not found', 404);
+  }
   if (msg.includes('HR_DESIGNATION_CODE_EXISTS') || msg.includes('idx_hr_designations_outlet_code') || (msg.includes('UNIQUE constraint') && msg.includes('hr_designations'))) {
     throw new HrError('HR_DESIGNATION_CODE_EXISTS', 'A designation with this code already exists for this outlet', 409);
   }
@@ -48,6 +51,9 @@ function handleDbError(err: any): never {
     throw new HrError('HR_DESIGNATION_IDENTITY_IMMUTABLE', 'Designation code and identity fields cannot be modified', 400);
   }
 
+  if (msg.includes('HR_STAFF_NOT_FOUND')) {
+    throw new HrError('HR_STAFF_NOT_FOUND', 'Staff member not found', 404);
+  }
   if (msg.includes('HR_STAFF_CODE_EXISTS') || msg.includes('idx_hr_staff_outlet_employee_code') || (msg.includes('UNIQUE constraint') && msg.includes('hr_staff'))) {
     throw new HrError('HR_STAFF_CODE_EXISTS', 'Staff member with this employee code already exists for this outlet', 409);
   }
@@ -256,8 +262,11 @@ export class HrService {
     }
 
     const designation = await this.hrRepo.getDesignationById(validated.designationId);
-    if (!designation || designation.outletId !== outletId) {
-      throw new HrError('HR_STAFF_DESIGNATION_OUTLET_MISMATCH', 'Designation belongs to another outlet or does not exist', 400);
+    if (!designation) {
+      throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Designation could not be found', 404);
+    }
+    if (designation.outletId !== outletId) {
+      throw new HrError('HR_STAFF_DESIGNATION_OUTLET_MISMATCH', 'Designation belongs to another outlet', 400);
     }
     if (designation.status !== 'ACTIVE') {
       throw new HrError('HR_DESIGNATION_NOT_ACTIVE', 'Designation is not active', 409);
@@ -342,8 +351,11 @@ export class HrService {
 
     if (validated.designationId && validated.designationId !== existing.designationId) {
       const designation = await this.hrRepo.getDesignationById(validated.designationId);
-      if (!designation || designation.outletId !== outletId) {
-        throw new HrError('HR_STAFF_DESIGNATION_OUTLET_MISMATCH', 'Designation belongs to another outlet or does not exist', 400);
+      if (!designation) {
+        throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Designation could not be found', 404);
+      }
+      if (designation.outletId !== outletId) {
+        throw new HrError('HR_STAFF_DESIGNATION_OUTLET_MISMATCH', 'Designation belongs to another outlet', 400);
       }
       if (designation.status !== 'ACTIVE') {
         throw new HrError('HR_DESIGNATION_NOT_ACTIVE', 'New designation is not active', 409);
@@ -468,8 +480,11 @@ export class HrService {
     const validated = CreateHrManpowerSanctionSchema.parse(payload);
 
     const designation = await this.hrRepo.getDesignationById(validated.designationId);
-    if (!designation || designation.outletId !== outletId) {
-      throw new HrError('HR_MANPOWER_DESIGNATION_OUTLET_MISMATCH', 'Designation belongs to another outlet or does not exist', 400);
+    if (!designation) {
+      throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Designation could not be found', 404);
+    }
+    if (designation.outletId !== outletId) {
+      throw new HrError('HR_MANPOWER_DESIGNATION_OUTLET_MISMATCH', 'Designation belongs to another outlet', 400);
     }
 
     const existing = await this.hrRepo.findSanctionByDesignation(outletId, validated.designationId);
@@ -637,7 +652,10 @@ export class HrService {
     const validated = CreateHrRosterAssignmentSchema.parse(payload);
 
     const staff = await this.hrRepo.getStaffById(validated.staffId);
-    if (!staff || staff.outletId !== outletId) {
+    if (!staff) {
+      throw new HrError('HR_STAFF_NOT_FOUND', 'Staff member could not be found', 404);
+    }
+    if (staff.outletId !== outletId) {
       throw new HrError('HR_ROSTER_STAFF_OUTLET_MISMATCH', 'Staff member does not belong to this outlet', 400);
     }
     if (staff.employmentStatus !== 'ACTIVE') {
@@ -645,7 +663,10 @@ export class HrService {
     }
 
     const template = await this.hrRepo.getShiftTemplateById(validated.shiftTemplateId);
-    if (!template || template.outletId !== outletId) {
+    if (!template) {
+      throw new HrError('HR_SHIFT_TEMPLATE_NOT_FOUND', 'Shift template could not be found', 404);
+    }
+    if (template.outletId !== outletId) {
       throw new HrError('HR_ROSTER_SHIFT_OUTLET_MISMATCH', 'Shift template does not belong to this outlet', 400);
     }
     if (template.status !== 'ACTIVE') {
@@ -706,7 +727,10 @@ export class HrService {
 
     if (validated.staffId && validated.staffId !== existing.staffId) {
       const staff = await this.hrRepo.getStaffById(validated.staffId);
-      if (!staff || staff.outletId !== outletId) {
+      if (!staff) {
+        throw new HrError('HR_STAFF_NOT_FOUND', 'Staff member could not be found', 404);
+      }
+      if (staff.outletId !== outletId) {
         throw new HrError('HR_ROSTER_STAFF_OUTLET_MISMATCH', 'Staff member does not belong to this outlet', 400);
       }
       if (staff.employmentStatus !== 'ACTIVE') {
@@ -716,7 +740,10 @@ export class HrService {
 
     if (validated.shiftTemplateId && validated.shiftTemplateId !== existing.shiftTemplateId) {
       const template = await this.hrRepo.getShiftTemplateById(validated.shiftTemplateId);
-      if (!template || template.outletId !== outletId) {
+      if (!template) {
+        throw new HrError('HR_SHIFT_TEMPLATE_NOT_FOUND', 'Shift template could not be found', 404);
+      }
+      if (template.outletId !== outletId) {
         throw new HrError('HR_ROSTER_SHIFT_OUTLET_MISMATCH', 'Shift template does not belong to this outlet', 400);
       }
       if (template.status !== 'ACTIVE') {

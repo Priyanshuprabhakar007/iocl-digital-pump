@@ -124,6 +124,9 @@ BEGIN
     SELECT
         CASE
             WHEN NOT EXISTS (
+                SELECT 1 FROM "hr_designations" WHERE "id" = NEW.designation_id
+            ) THEN RAISE(ABORT, 'HR_DESIGNATION_NOT_FOUND')
+            WHEN NOT EXISTS (
                 SELECT 1 FROM "hr_designations" WHERE "id" = NEW.designation_id AND "outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'HR_STAFF_DESIGNATION_OUTLET_MISMATCH')
             WHEN NOT EXISTS (
@@ -149,6 +152,9 @@ BEFORE UPDATE ON "hr_staff"
 BEGIN
     SELECT
         CASE
+            WHEN (NEW.designation_id IS NOT OLD.designation_id) AND NOT EXISTS (
+                SELECT 1 FROM "hr_designations" WHERE "id" = NEW.designation_id
+            ) THEN RAISE(ABORT, 'HR_DESIGNATION_NOT_FOUND')
             WHEN (NEW.designation_id IS NOT OLD.designation_id) AND NOT EXISTS (
                 SELECT 1 FROM "hr_designations" WHERE "id" = NEW.designation_id AND "outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'HR_STAFF_DESIGNATION_OUTLET_MISMATCH')
@@ -217,6 +223,9 @@ BEGIN
     SELECT
         CASE
             WHEN NOT EXISTS (
+                SELECT 1 FROM "hr_designations" WHERE "id" = NEW.designation_id
+            ) THEN RAISE(ABORT, 'HR_DESIGNATION_NOT_FOUND')
+            WHEN NOT EXISTS (
                 SELECT 1 FROM "hr_designations" WHERE "id" = NEW.designation_id AND "outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'HR_MANPOWER_DESIGNATION_OUTLET_MISMATCH')
         END;
@@ -271,11 +280,17 @@ BEGIN
     SELECT
         CASE
             WHEN NOT EXISTS (
+                SELECT 1 FROM "hr_staff" WHERE "id" = NEW.staff_id
+            ) THEN RAISE(ABORT, 'HR_STAFF_NOT_FOUND')
+            WHEN NOT EXISTS (
                 SELECT 1 FROM "hr_staff" WHERE "id" = NEW.staff_id AND "outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'HR_ROSTER_STAFF_OUTLET_MISMATCH')
             WHEN NOT EXISTS (
                 SELECT 1 FROM "hr_staff" WHERE "id" = NEW.staff_id AND "employment_status" = 'ACTIVE'
             ) THEN RAISE(ABORT, 'HR_STAFF_NOT_ACTIVE')
+            WHEN NOT EXISTS (
+                SELECT 1 FROM "shift_templates" WHERE "id" = NEW.shift_template_id
+            ) THEN RAISE(ABORT, 'HR_SHIFT_TEMPLATE_NOT_FOUND')
             WHEN NOT EXISTS (
                 SELECT 1 FROM "shift_templates" WHERE "id" = NEW.shift_template_id AND "outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'HR_ROSTER_SHIFT_OUTLET_MISMATCH')
@@ -291,11 +306,17 @@ BEGIN
     SELECT
         CASE
             WHEN (NEW.staff_id IS NOT OLD.staff_id) AND NOT EXISTS (
+                SELECT 1 FROM "hr_staff" WHERE "id" = NEW.staff_id
+            ) THEN RAISE(ABORT, 'HR_STAFF_NOT_FOUND')
+            WHEN (NEW.staff_id IS NOT OLD.staff_id) AND NOT EXISTS (
                 SELECT 1 FROM "hr_staff" WHERE "id" = NEW.staff_id AND "outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'HR_ROSTER_STAFF_OUTLET_MISMATCH')
             WHEN (NEW.staff_id IS NOT OLD.staff_id) AND NOT EXISTS (
                 SELECT 1 FROM "hr_staff" WHERE "id" = NEW.staff_id AND "employment_status" = 'ACTIVE'
             ) THEN RAISE(ABORT, 'HR_STAFF_NOT_ACTIVE')
+            WHEN (NEW.shift_template_id IS NOT OLD.shift_template_id) AND NOT EXISTS (
+                SELECT 1 FROM "shift_templates" WHERE "id" = NEW.shift_template_id
+            ) THEN RAISE(ABORT, 'HR_SHIFT_TEMPLATE_NOT_FOUND')
             WHEN (NEW.shift_template_id IS NOT OLD.shift_template_id) AND NOT EXISTS (
                 SELECT 1 FROM "shift_templates" WHERE "id" = NEW.shift_template_id AND "outlet_id" = NEW.outlet_id
             ) THEN RAISE(ABORT, 'HR_ROSTER_SHIFT_OUTLET_MISMATCH')

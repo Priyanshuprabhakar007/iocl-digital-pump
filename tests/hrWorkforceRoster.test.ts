@@ -539,6 +539,80 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
         }).run()
       ).rejects.toThrow();
     });
+
+    it('1.21 direct SQL insert on hr_staff with nonexistent designation rejected with HR_DESIGNATION_NOT_FOUND', async () => {
+      const db = getDb(localD1);
+      await expect(
+        db.insert(hrStaff).values({
+          id: 'staff-nonexistent-desig-fail',
+          outletId: OUTLET_1_ID,
+          employeeCode: 'EMP_NONEXIST_D',
+          fullName: 'Staff Nonexistent',
+          designationId: 'desig-does-not-exist-999',
+          aadhaarLast4: '1234',
+          emergencyContactName: 'Contact',
+          emergencyContactPhone: '9876543210',
+          joiningDate: '2026-01-01',
+          employmentStatus: 'ACTIVE',
+          createdBy: 'user-admin',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }).run()
+      ).rejects.toThrow();
+    });
+
+    it('1.22 direct SQL insert on hr_manpower_sanctions with nonexistent designation rejected with HR_DESIGNATION_NOT_FOUND', async () => {
+      const db = getDb(localD1);
+      await expect(
+        db.insert(hrManpowerSanctions).values({
+          id: 'sanc-nonexistent-desig-fail',
+          outletId: OUTLET_1_ID,
+          designationId: 'desig-does-not-exist-888',
+          sanctionedCount: 5,
+          effectiveFrom: '2026-01-01',
+          createdBy: 'user-admin',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }).run()
+      ).rejects.toThrow();
+    });
+
+    it('1.23 direct SQL insert on hr_roster_assignments with nonexistent staff rejected with HR_STAFF_NOT_FOUND', async () => {
+      const db = getDb(localD1);
+      await expect(
+        db.insert(hrRosterAssignments).values({
+          id: 'roster-nonexistent-staff-fail',
+          outletId: OUTLET_1_ID,
+          staffId: 'staff-does-not-exist-777',
+          rosterDate: '2026-03-01',
+          shiftTemplateId: 'st-ro1-1',
+          status: 'SCHEDULED',
+          createdBy: 'user-admin',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }).run()
+      ).rejects.toThrow();
+    });
+
+    it('1.24 direct SQL insert on hr_roster_assignments with nonexistent shift template rejected with HR_SHIFT_TEMPLATE_NOT_FOUND', async () => {
+      const desig = await seedDesignation(OUTLET_1_ID, 'D_NONEXIST_TMPL', 'Desig');
+      const staff = await seedStaff(OUTLET_1_ID, 'S_NONEXIST_TMPL', 'Staff', desig);
+      const db = getDb(localD1);
+
+      await expect(
+        db.insert(hrRosterAssignments).values({
+          id: 'roster-nonexistent-tmpl-fail',
+          outletId: OUTLET_1_ID,
+          staffId: staff,
+          rosterDate: '2026-03-01',
+          shiftTemplateId: 'st-does-not-exist-666',
+          status: 'SCHEDULED',
+          createdBy: 'user-admin',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }).run()
+      ).rejects.toThrow();
+    });
   });
 
   // ==========================================================================
@@ -1253,6 +1327,87 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
       expect(json.data.emergencyContactPhone).toBe('+91 9999988888');
       expect(json.data.notes).toBe('Updated emergency phone');
     });
+
+    it('6.5 rejects creating staff with nonexistent designationId with 404 HR_DESIGNATION_NOT_FOUND', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/staff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          employeeCode: 'EMP_NONEXIST_DESIG',
+          fullName: 'Person Nonexist',
+          designationId: 'non-existent-desig-id',
+          aadhaarLast4: '3333',
+          emergencyContactName: 'Contact',
+          emergencyContactPhone: '9876543210',
+          joiningDate: '2026-01-01',
+        }),
+      }, env);
+
+      expect(res.status).toBe(404);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_DESIGNATION_NOT_FOUND');
+    });
+
+    it('6.6 rejects creating staff with foreign outlet designationId with 400 HR_STAFF_DESIGNATION_OUTLET_MISMATCH', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const foreignDesigId = await seedDesignation(OUTLET_2_ID, 'O2_REF_DESIG', 'O2 Ref Desig');
+
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/staff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          employeeCode: 'EMP_FOR_REF_DESIG',
+          fullName: 'Person Foreign Desig',
+          designationId: foreignDesigId,
+          aadhaarLast4: '4444',
+          emergencyContactName: 'Contact',
+          emergencyContactPhone: '9876543210',
+          joiningDate: '2026-01-01',
+        }),
+      }, env);
+
+      expect(res.status).toBe(400);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_STAFF_DESIGNATION_OUTLET_MISMATCH');
+    });
+
+    it('6.7 rejects updating staff designationId to nonexistent with 404 HR_DESIGNATION_NOT_FOUND', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const desigId = await seedDesignation(OUTLET_1_ID, 'ACT_DESIG_INIT', 'Active Desig');
+      const staffId = await seedStaff(OUTLET_1_ID, 'EMP_UPD_NONEXIST_D', 'Person', desigId);
+
+      const res = await app.request(`/api/v1/hr/staff/${staffId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          designationId: 'non-existent-desig-id-999',
+        }),
+      }, env);
+
+      expect(res.status).toBe(404);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_DESIGNATION_NOT_FOUND');
+    });
+
+    it('6.8 rejects updating staff designationId to foreign outlet with 400 HR_STAFF_DESIGNATION_OUTLET_MISMATCH', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const desigId = await seedDesignation(OUTLET_1_ID, 'ACT_DESIG_INIT2', 'Active Desig 2');
+      const foreignDesigId = await seedDesignation(OUTLET_2_ID, 'FOR_DESIG_SWITCH', 'Foreign Desig');
+      const staffId = await seedStaff(OUTLET_1_ID, 'EMP_UPD_FOR_D', 'Person', desigId);
+
+      const res = await app.request(`/api/v1/hr/staff/${staffId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          designationId: foreignDesigId,
+        }),
+      }, env);
+
+      expect(res.status).toBe(400);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_STAFF_DESIGNATION_OUTLET_MISMATCH');
+    });
   });
 
   // ==========================================================================
@@ -1563,6 +1718,42 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
       expect(res.status).toBe(200);
       const json = await jsonOf(res);
       expect(json.data.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('8.8 rejects creating manpower sanction with nonexistent designationId with 404 HR_DESIGNATION_NOT_FOUND', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/manpower-sanctions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          designationId: 'non-existent-sanc-desig',
+          sanctionedCount: 5,
+          effectiveFrom: '2026-01-01',
+        }),
+      }, env);
+
+      expect(res.status).toBe(404);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_DESIGNATION_NOT_FOUND');
+    });
+
+    it('8.9 rejects creating manpower sanction with foreign outlet designationId with 400 HR_MANPOWER_DESIGNATION_OUTLET_MISMATCH', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const foreignDesigId = await seedDesignation(OUTLET_2_ID, 'O2_SANC_REF_DESIG', 'O2 Sanc Desig');
+
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/manpower-sanctions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          designationId: foreignDesigId,
+          sanctionedCount: 5,
+          effectiveFrom: '2026-01-01',
+        }),
+      }, env);
+
+      expect(res.status).toBe(400);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_MANPOWER_DESIGNATION_OUTLET_MISMATCH');
     });
   });
 
@@ -1964,6 +2155,260 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
       expect(res.status).toBe(200);
       const json = await jsonOf(res);
       expect(json.data.notes).toBe('Historical note on exited employee shift');
+    });
+
+    it('10.13 rejects creating roster with nonexistent staffId with 404 HR_STAFF_NOT_FOUND', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/roster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          staffId: 'nonexistent-staff-id-123',
+          rosterDate: '2026-03-22',
+          shiftTemplateId: 'st-ro1-1',
+        }),
+      }, env);
+
+      expect(res.status).toBe(404);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_STAFF_NOT_FOUND');
+    });
+
+    it('10.14 rejects creating roster with foreign outlet staffId with 400 HR_ROSTER_STAFF_OUTLET_MISMATCH', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const foreignDesig = await seedDesignation(OUTLET_2_ID, 'O2_ROST_DESIG', 'O2 Desig');
+      const foreignStaff = await seedStaff(OUTLET_2_ID, 'O2_ROST_STAFF', 'Foreign Staff', foreignDesig);
+
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/roster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          staffId: foreignStaff,
+          rosterDate: '2026-03-22',
+          shiftTemplateId: 'st-ro1-1',
+        }),
+      }, env);
+
+      expect(res.status).toBe(400);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_ROSTER_STAFF_OUTLET_MISMATCH');
+    });
+
+    it('10.15 rejects creating roster with nonexistent shiftTemplateId with 404 HR_SHIFT_TEMPLATE_NOT_FOUND', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const desigId = await seedDesignation(OUTLET_1_ID, 'ROST_S15_D', 'Desig 15');
+      const staffId = await seedStaff(OUTLET_1_ID, 'ROST_S15', 'Staff 15', desigId);
+
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/roster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          staffId,
+          rosterDate: '2026-03-23',
+          shiftTemplateId: 'nonexistent-shift-template-999',
+        }),
+      }, env);
+
+      expect(res.status).toBe(404);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_SHIFT_TEMPLATE_NOT_FOUND');
+    });
+
+    it('10.16 rejects creating roster with foreign outlet shiftTemplateId with 400 HR_ROSTER_SHIFT_OUTLET_MISMATCH', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const desigId = await seedDesignation(OUTLET_1_ID, 'ROST_S16_D', 'Desig 16');
+      const staffId = await seedStaff(OUTLET_1_ID, 'ROST_S16', 'Staff 16', desigId);
+
+      const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/roster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          staffId,
+          rosterDate: '2026-03-24',
+          shiftTemplateId: 'st-ro2-1',
+        }),
+      }, env);
+
+      expect(res.status).toBe(400);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_ROSTER_SHIFT_OUTLET_MISMATCH');
+    });
+
+    it('10.17 rejects updating roster staffId to nonexistent with 404 HR_STAFF_NOT_FOUND', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const desigId = await seedDesignation(OUTLET_1_ID, 'ROST_S17_D', 'Desig 17');
+      const staffId = await seedStaff(OUTLET_1_ID, 'ROST_S17', 'Staff 17', desigId);
+
+      const createRes = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/roster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ staffId, rosterDate: '2026-03-25', shiftTemplateId: 'st-ro1-1' }),
+      }, env);
+      const rosterId = (await jsonOf(createRes)).data.id;
+
+      const res = await app.request(`/api/v1/hr/roster/${rosterId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ staffId: 'nonexistent-staff-id-888' }),
+      }, env);
+
+      expect(res.status).toBe(404);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_STAFF_NOT_FOUND');
+    });
+
+    it('10.18 rejects updating roster staffId to foreign outlet with 400 HR_ROSTER_STAFF_OUTLET_MISMATCH', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const desigId = await seedDesignation(OUTLET_1_ID, 'ROST_S18_D', 'Desig 18');
+      const staffId = await seedStaff(OUTLET_1_ID, 'ROST_S18', 'Staff 18', desigId);
+      const foreignDesig = await seedDesignation(OUTLET_2_ID, 'O2_ROST_D18', 'O2 Desig 18');
+      const foreignStaff = await seedStaff(OUTLET_2_ID, 'O2_ROST_S18', 'O2 Staff 18', foreignDesig);
+
+      const createRes = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/roster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ staffId, rosterDate: '2026-03-26', shiftTemplateId: 'st-ro1-1' }),
+      }, env);
+      const rosterId = (await jsonOf(createRes)).data.id;
+
+      const res = await app.request(`/api/v1/hr/roster/${rosterId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ staffId: foreignStaff }),
+      }, env);
+
+      expect(res.status).toBe(400);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_ROSTER_STAFF_OUTLET_MISMATCH');
+    });
+
+    it('10.19 rejects updating roster shiftTemplateId to nonexistent with 404 HR_SHIFT_TEMPLATE_NOT_FOUND', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const desigId = await seedDesignation(OUTLET_1_ID, 'ROST_S19_D', 'Desig 19');
+      const staffId = await seedStaff(OUTLET_1_ID, 'ROST_S19', 'Staff 19', desigId);
+
+      const createRes = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/roster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ staffId, rosterDate: '2026-03-27', shiftTemplateId: 'st-ro1-1' }),
+      }, env);
+      const rosterId = (await jsonOf(createRes)).data.id;
+
+      const res = await app.request(`/api/v1/hr/roster/${rosterId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'nonexistent-tmpl-777' }),
+      }, env);
+
+      expect(res.status).toBe(404);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_SHIFT_TEMPLATE_NOT_FOUND');
+    });
+
+    it('10.20 rejects updating roster shiftTemplateId to foreign outlet with 400 HR_ROSTER_SHIFT_OUTLET_MISMATCH', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const desigId = await seedDesignation(OUTLET_1_ID, 'ROST_S20_D', 'Desig 20');
+      const staffId = await seedStaff(OUTLET_1_ID, 'ROST_S20', 'Staff 20', desigId);
+
+      const createRes = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/roster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ staffId, rosterDate: '2026-03-28', shiftTemplateId: 'st-ro1-1' }),
+      }, env);
+      const rosterId = (await jsonOf(createRes)).data.id;
+
+      const res = await app.request(`/api/v1/hr/roster/${rosterId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro2-1' }),
+      }, env);
+
+      expect(res.status).toBe(400);
+      const json = await jsonOf(res);
+      expect(json.error.code).toBe('HR_ROSTER_SHIFT_OUTLET_MISMATCH');
+    });
+
+    it('10.21 true concurrent roster assignment for same staff and same date allows exactly one 201 and one 409 HR_ROSTER_EXISTS with 1 DB row', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const desigId = await seedDesignation(OUTLET_1_ID, 'RACE_DESIG', 'Race Desig');
+      const staffId = await seedStaff(OUTLET_1_ID, 'RACE_STAFF_1', 'Race Staff', desigId);
+      const rosterDate = '2026-04-15';
+
+      const [resA, resB] = await Promise.all([
+        app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/roster`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+          body: JSON.stringify({ staffId, rosterDate, shiftTemplateId: 'st-ro1-1' }),
+        }, env),
+        app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/roster`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+          body: JSON.stringify({ staffId, rosterDate, shiftTemplateId: 'st-ro1-2' }),
+        }, env),
+      ]);
+
+      const statuses = [resA.status, resB.status].sort();
+      expect(statuses).toEqual([201, 409]);
+
+      const failedRes = resA.status === 409 ? resA : resB;
+      const jsonFail = await jsonOf(failedRes);
+      expect(jsonFail.success).toBe(false);
+      expect(jsonFail.error.code).toBe('HR_ROSTER_EXISTS');
+
+      const db = getDb(localD1);
+      const rows = await db.select().from(hrRosterAssignments).where(
+        and(eq(hrRosterAssignments.staffId, staffId), eq(hrRosterAssignments.rosterDate, rosterDate))
+      ).all();
+      expect(rows.length).toBe(1);
+    });
+
+    it('10.22 true concurrent staff creation for same outlet and employeeCode allows exactly one 201 and one 409 HR_STAFF_CODE_EXISTS with 1 DB row', async () => {
+      const cookie = await loginAs('admin@iocl.in');
+      const desigId = await seedDesignation(OUTLET_1_ID, 'STAFF_RACE_D', 'Desig');
+      const employeeCode = 'EMP_RACE_CONCURRENT';
+
+      const [resA, resB] = await Promise.all([
+        app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/staff`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+          body: JSON.stringify({
+            employeeCode,
+            fullName: 'Candidate Alpha',
+            designationId: desigId,
+            aadhaarLast4: '1111',
+            emergencyContactName: 'Contact',
+            emergencyContactPhone: '9876543210',
+            joiningDate: '2026-01-01',
+          }),
+        }, env),
+        app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/staff`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+          body: JSON.stringify({
+            employeeCode,
+            fullName: 'Candidate Beta',
+            designationId: desigId,
+            aadhaarLast4: '2222',
+            emergencyContactName: 'Contact',
+            emergencyContactPhone: '9876543210',
+            joiningDate: '2026-01-01',
+          }),
+        }, env),
+      ]);
+
+      const statuses = [resA.status, resB.status].sort();
+      expect(statuses).toEqual([201, 409]);
+
+      const failedRes = resA.status === 409 ? resA : resB;
+      const jsonFail = await jsonOf(failedRes);
+      expect(jsonFail.success).toBe(false);
+      expect(jsonFail.error.code).toBe('HR_STAFF_CODE_EXISTS');
+
+      const db = getDb(localD1);
+      const rows = await db.select().from(hrStaff).where(
+        and(eq(hrStaff.outletId, OUTLET_1_ID), eq(hrStaff.employeeCode, employeeCode))
+      ).all();
+      expect(rows.length).toBe(1);
     });
   });
 
