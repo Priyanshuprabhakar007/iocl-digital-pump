@@ -1064,6 +1064,133 @@ export const NfrRentDueFilterSchema = z.object({
   path: ['fromDate'],
 });
 
+// ============================================================================
+// Phase 5A-1: Workforce Master, Manpower Allocation & Shift Roster Validators
+// ============================================================================
+
+export const HrDesignationStatusEnum = z.enum(['ACTIVE', 'INACTIVE']);
+export const HrEmploymentStatusEnum = z.enum(['ACTIVE', 'INACTIVE', 'EXITED']);
+export const HrRosterStatusEnum = z.enum(['SCHEDULED', 'CANCELLED']);
+
+export const CreateHrDesignationSchema = z.object({
+  code: z.string().trim().min(1, 'code is required'),
+  name: z.string().trim().min(1, 'name is required'),
+  status: HrDesignationStatusEnum.optional().default('ACTIVE'),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const UpdateHrDesignationSchema = z.object({
+  name: z.string().trim().min(1, 'name cannot be empty').optional(),
+  status: HrDesignationStatusEnum.optional(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const CreateHrStaffSchema = z.object({
+  employeeCode: z.string().trim().min(1, 'employeeCode is required'),
+  fullName: z.string().trim().min(1, 'fullName is required'),
+  designationId: z.string().trim().min(1, 'designationId is required'),
+  aadhaarLast4: z.string().trim().regex(/^\d{4}$/, 'aadhaarLast4 must be exactly 4 numeric digits'),
+  aadhaarDocumentId: z.string().trim().min(1).optional().nullable(),
+  photoDocumentId: z.string().trim().min(1).optional().nullable(),
+  emergencyContactName: z.string().trim().min(1, 'emergencyContactName is required'),
+  emergencyContactPhone: z.string().trim().min(1, 'emergencyContactPhone is required').regex(/^[0-9+\-\s()]+$/, 'emergencyContactPhone contains invalid characters'),
+  joiningDate: StrictDateOnlySchema,
+  employmentStatus: HrEmploymentStatusEnum.optional().default('ACTIVE'),
+  exitDate: StrictDateOnlySchema.optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).strict().refine(data => {
+  if (data.employmentStatus === 'EXITED') {
+    return !!data.exitDate && data.exitDate >= data.joiningDate;
+  }
+  return !data.exitDate;
+}, {
+  message: 'exitDate is required and must be on or after joiningDate when employmentStatus is EXITED, and must be null/omitted otherwise',
+  path: ['exitDate'],
+});
+
+export const UpdateHrStaffSchema = z.object({
+  fullName: z.string().trim().min(1, 'fullName cannot be empty').optional(),
+  designationId: z.string().trim().min(1, 'designationId cannot be empty').optional(),
+  aadhaarLast4: z.string().trim().regex(/^\d{4}$/, 'aadhaarLast4 must be exactly 4 numeric digits').optional(),
+  aadhaarDocumentId: z.string().trim().min(1).optional().nullable(),
+  photoDocumentId: z.string().trim().min(1).optional().nullable(),
+  emergencyContactName: z.string().trim().min(1, 'emergencyContactName cannot be empty').optional(),
+  emergencyContactPhone: z.string().trim().min(1, 'emergencyContactPhone cannot be empty').regex(/^[0-9+\-\s()]+$/, 'emergencyContactPhone contains invalid characters').optional(),
+  joiningDate: StrictDateOnlySchema.optional(),
+  employmentStatus: HrEmploymentStatusEnum.optional(),
+  exitDate: StrictDateOnlySchema.optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const CreateHrManpowerSanctionSchema = z.object({
+  designationId: z.string().trim().min(1, 'designationId is required'),
+  sanctionedCount: z.number().int('sanctionedCount must be an integer').min(0, 'sanctionedCount cannot be negative').max(10000, 'sanctionedCount cannot exceed 10000'),
+  effectiveFrom: StrictDateOnlySchema,
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const UpdateHrManpowerSanctionSchema = z.object({
+  sanctionedCount: z.number().int('sanctionedCount must be an integer').min(0, 'sanctionedCount cannot be negative').max(10000, 'sanctionedCount cannot exceed 10000').optional(),
+  effectiveFrom: StrictDateOnlySchema.optional(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const UpsertHrManpowerSanctionSchema = CreateHrManpowerSanctionSchema;
+
+export const CreateHrRosterAssignmentSchema = z.object({
+  staffId: z.string().trim().min(1, 'staffId is required'),
+  rosterDate: StrictDateOnlySchema,
+  shiftTemplateId: z.string().trim().min(1, 'shiftTemplateId is required'),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const UpdateHrRosterAssignmentSchema = z.object({
+  staffId: z.string().trim().min(1).optional(),
+  rosterDate: StrictDateOnlySchema.optional(),
+  shiftTemplateId: z.string().trim().min(1).optional(),
+  status: HrRosterStatusEnum.optional(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const HrDesignationFilterSchema = z.object({
+  status: HrDesignationStatusEnum.optional(),
+  search: z.string().trim().optional(),
+}).strict();
+
+export const HrStaffFilterSchema = z.object({
+  designationId: z.string().trim().min(1).optional(),
+  employmentStatus: HrEmploymentStatusEnum.optional(),
+  search: z.string().trim().optional(),
+  joinedFrom: StrictDateOnlySchema.optional(),
+  joinedTo: StrictDateOnlySchema.optional(),
+}).strict().refine(data => {
+  if (data.joinedFrom && data.joinedTo) {
+    return data.joinedFrom <= data.joinedTo;
+  }
+  return true;
+}, {
+  message: 'joinedFrom must be on or before joinedTo',
+  path: ['joinedFrom'],
+});
+
+export const HrRosterFilterSchema = z.object({
+  staffId: z.string().trim().min(1).optional(),
+  designationId: z.string().trim().min(1).optional(),
+  shiftTemplateId: z.string().trim().min(1).optional(),
+  status: HrRosterStatusEnum.optional(),
+  fromDate: StrictDateOnlySchema.optional(),
+  toDate: StrictDateOnlySchema.optional(),
+}).strict().refine(data => {
+  if (data.fromDate && data.toDate) {
+    return data.fromDate <= data.toDate;
+  }
+  return true;
+}, {
+  message: 'fromDate must be on or before toDate',
+  path: ['fromDate'],
+});
+
+
 
 
 

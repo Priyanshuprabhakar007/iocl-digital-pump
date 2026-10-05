@@ -134,6 +134,12 @@ export const PERMISSIONS = {
   NFR_LEASES_WRITE: 'nfr.leases.write',
   NFR_RENT_DUES_WRITE: 'nfr.rent_dues.write',
   NFR_RENT_PAYMENTS_WRITE: 'nfr.rent_payments.write',
+
+  // Phase 5A-1: Workforce Master, Manpower Allocation & Shift Roster
+  HR_READ: 'hr.read',
+  HR_STAFF_WRITE: 'hr.staff.write',
+  HR_MANPOWER_WRITE: 'hr.manpower.write',
+  HR_ROSTER_WRITE: 'hr.roster.write',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];

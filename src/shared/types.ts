@@ -1488,5 +1488,102 @@ export interface NfrSummary {
   nextDueDate: string | null;
 }
 
+// ============================================================================
+// Phase 5A-1: Workforce Master, Manpower Allocation & Shift Roster Types
+// ============================================================================
+
+export type HrDesignationStatus = 'ACTIVE' | 'INACTIVE';
+export type HrEmploymentStatus = 'ACTIVE' | 'INACTIVE' | 'EXITED';
+export type HrRosterStatus = 'SCHEDULED' | 'CANCELLED';
+
+export interface HrDesignation {
+  id: string;
+  outletId: string;
+  code: string;
+  name: string;
+  status: HrDesignationStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HrStaff {
+  id: string;
+  outletId: string;
+  employeeCode: string;
+  fullName: string;
+  designationId: string;
+  aadhaarLast4: string;
+  maskedAadhaar: string;
+  aadhaarDocumentId: string | null;
+  photoDocumentId: string | null;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  joiningDate: string;
+  employmentStatus: HrEmploymentStatus;
+  exitDate: string | null;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  designationName?: string;
+  designationCode?: string;
+}
+
+export interface HrManpowerSanction {
+  id: string;
+  outletId: string;
+  designationId: string;
+  sanctionedCount: number;
+  effectiveFrom: string;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  designationName?: string;
+  designationCode?: string;
+}
+
+export interface HrManpowerDesignationSummary {
+  designationId: string;
+  designationCode: string;
+  designationName: string;
+  sanctionedCount: number;
+  actualCount: number;
+  varianceCount: number;
+  shortageCount: number;
+  excessCount: number;
+}
+
+export interface HrManpowerSummary {
+  totalSanctionedCount: number;
+  totalActualCount: number;
+  totalShortageCount: number;
+  totalExcessCount: number;
+  byDesignation: HrManpowerDesignationSummary[];
+}
+
+export interface HrRosterAssignment {
+  id: string;
+  outletId: string;
+  staffId: string;
+  rosterDate: string;
+  shiftTemplateId: string;
+  status: HrRosterStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  staffName?: string;
+  employeeCode?: string;
+  designationName?: string;
+  shiftTemplateCode?: string;
+  shiftTemplateName?: string;
+  shiftStartTime?: string;
+  shiftEndTime?: string;
+}
+
+
 
 

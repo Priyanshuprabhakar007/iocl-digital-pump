@@ -1172,6 +1172,101 @@ export const nfrRentPayments = sqliteTable('nfr_rent_payments', {
   check('nfr_rent_payments_paid_check', sql`trim(${table.paidAt}) <> ''`),
 ]);
 
+// ============================================================================
+// Phase 5A-1: Workforce Master, Manpower Allocation & Shift Roster
+// ============================================================================
+
+export const hrDesignations = sqliteTable('hr_designations', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  code: text('code').notNull(),
+  name: text('name').notNull(),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_hr_designations_outlet_code').on(table.outletId, table.code),
+  index('idx_hr_designations_outlet_id').on(table.outletId),
+  index('idx_hr_designations_outlet_status').on(table.outletId, table.status),
+  check('hr_designations_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('hr_designations_code_check', sql`trim(${table.code}) <> ''`),
+  check('hr_designations_name_check', sql`trim(${table.name}) <> ''`),
+]);
+
+export const hrStaff = sqliteTable('hr_staff', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  employeeCode: text('employee_code').notNull(),
+  fullName: text('full_name').notNull(),
+  designationId: text('designation_id').notNull().references(() => hrDesignations.id),
+  aadhaarLast4: text('aadhaar_last4').notNull(),
+  aadhaarDocumentId: text('aadhaar_document_id').references(() => documents.id),
+  photoDocumentId: text('photo_document_id').references(() => documents.id),
+  emergencyContactName: text('emergency_contact_name').notNull(),
+  emergencyContactPhone: text('emergency_contact_phone').notNull(),
+  joiningDate: text('joining_date').notNull(),
+  employmentStatus: text('employment_status', { enum: ['ACTIVE', 'INACTIVE', 'EXITED'] }).notNull().default('ACTIVE'),
+  exitDate: text('exit_date'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_hr_staff_outlet_employee_code').on(table.outletId, table.employeeCode),
+  index('idx_hr_staff_outlet_id').on(table.outletId),
+  index('idx_hr_staff_outlet_designation').on(table.outletId, table.designationId),
+  index('idx_hr_staff_outlet_status').on(table.outletId, table.employmentStatus),
+  check('hr_staff_status_check', sql`${table.employmentStatus} IN ('ACTIVE', 'INACTIVE', 'EXITED')`),
+  check('hr_staff_code_check', sql`trim(${table.employeeCode}) <> ''`),
+  check('hr_staff_name_check', sql`trim(${table.fullName}) <> ''`),
+  check('hr_staff_aadhaar_check', sql`length(${table.aadhaarLast4}) = 4 AND ${table.aadhaarLast4} GLOB '[0-9][0-9][0-9][0-9]'`),
+  check('hr_staff_em_name_check', sql`trim(${table.emergencyContactName}) <> ''`),
+  check('hr_staff_em_phone_check', sql`trim(${table.emergencyContactPhone}) <> ''`),
+  check('hr_staff_join_date_check', sql`${table.joiningDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+  check('hr_staff_exit_date_check', sql`(${table.employmentStatus} = 'EXITED' AND ${table.exitDate} IS NOT NULL AND ${table.exitDate} >= ${table.joiningDate} AND ${table.exitDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]') OR (${table.employmentStatus} IN ('ACTIVE', 'INACTIVE') AND ${table.exitDate} IS NULL)`),
+]);
+
+export const hrManpowerSanctions = sqliteTable('hr_manpower_sanctions', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  designationId: text('designation_id').notNull().references(() => hrDesignations.id),
+  sanctionedCount: integer('sanctioned_count').notNull(),
+  effectiveFrom: text('effective_from').notNull(),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_hr_manpower_outlet_designation').on(table.outletId, table.designationId),
+  index('idx_hr_manpower_outlet_id').on(table.outletId),
+  index('idx_hr_manpower_designation_id').on(table.designationId),
+  check('hr_manpower_count_check', sql`${table.sanctionedCount} >= 0 AND ${table.sanctionedCount} <= 10000`),
+  check('hr_manpower_date_check', sql`${table.effectiveFrom} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+]);
+
+export const hrRosterAssignments = sqliteTable('hr_roster_assignments', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  staffId: text('staff_id').notNull().references(() => hrStaff.id),
+  rosterDate: text('roster_date').notNull(),
+  shiftTemplateId: text('shift_template_id').notNull().references(() => shiftTemplates.id),
+  status: text('status', { enum: ['SCHEDULED', 'CANCELLED'] }).notNull().default('SCHEDULED'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_hr_roster_staff_date').on(table.staffId, table.rosterDate),
+  index('idx_hr_roster_outlet_id').on(table.outletId),
+  index('idx_hr_roster_outlet_date').on(table.outletId, table.rosterDate),
+  index('idx_hr_roster_shift').on(table.outletId, table.shiftTemplateId),
+  check('hr_roster_status_check', sql`${table.status} IN ('SCHEDULED', 'CANCELLED')`),
+  check('hr_roster_date_check', sql`${table.rosterDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+]);
+
+
 
 
 
