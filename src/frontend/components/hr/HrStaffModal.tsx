@@ -9,6 +9,7 @@ import {
   canSubmitHrStaff,
   getHrErrorMessage,
   getEligibleStaffDesignations,
+  getLocalDateInputValue,
 } from './hrUi';
 import { HrDocumentPicker } from './HrDocumentPicker';
 import { X, UserPlus, Edit, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
@@ -76,7 +77,7 @@ export const HrStaffModal: React.FC<HrStaffModalProps> = ({
         setPhotoDocumentId(null);
         setEmergencyContactName('');
         setEmergencyContactPhone('');
-        setJoiningDate(new Date().toISOString().slice(0, 10));
+        setJoiningDate(getLocalDateInputValue());
         setEmploymentStatus('ACTIVE');
         setExitDate('');
         setNotes('');

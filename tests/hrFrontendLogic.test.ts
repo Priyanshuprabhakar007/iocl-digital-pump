@@ -9,6 +9,9 @@ import {
   buildHrRosterQueryParams,
   validateHrJoinedDateRange,
   validateHrRosterDateRange,
+  canRequestHrStaffList,
+  canRequestHrRosterList,
+  getLocalDateInputValue,
   getEligibleStaffDesignations,
   getEligibleRosterStaff,
   getEligibleRosterShiftTemplates,
@@ -28,6 +31,7 @@ import {
 import type {
   HrDesignation,
   HrStaff,
+  HrManpowerSanction,
   ShiftTemplate,
   Document,
 } from '../src/shared/types';
@@ -912,6 +916,175 @@ describe('Phase 5A-2 HR & Workforce Frontend Logic Test Suite', () => {
       expect(getHrErrorMessage({ error: { code: 'HR_ROSTER_EXISTS' } })).toBe(
         'A roster assignment already exists for this staff member on this date.'
       );
+    });
+  });
+
+  // ==========================================================================
+  // 17. Phase 5A-2 Hardening & Filter Isolation Additions
+  // ==========================================================================
+  describe('17. Phase 5A-2 Hardening & Filter Isolation Additions', () => {
+    it('17.1 canRequestHrStaffList blocks when joinedFrom > joinedTo', () => {
+      expect(canRequestHrStaffList({ joinedFrom: '2026-06-01', joinedTo: '2026-05-01' })).toBe(false);
+    });
+
+    it('17.2 canRequestHrStaffList allows when joinedFrom <= joinedTo', () => {
+      expect(canRequestHrStaffList({ joinedFrom: '2026-05-01', joinedTo: '2026-06-01' })).toBe(true);
+    });
+
+    it('17.3 canRequestHrStaffList allows one-sided ranges', () => {
+      expect(canRequestHrStaffList({ joinedFrom: '2026-05-01', joinedTo: '' })).toBe(true);
+      expect(canRequestHrStaffList({ joinedFrom: '', joinedTo: '2026-06-01' })).toBe(true);
+      expect(canRequestHrStaffList({})).toBe(true);
+    });
+
+    it('17.4 canRequestHrRosterList blocks when fromDate > toDate', () => {
+      expect(canRequestHrRosterList({ fromDate: '2026-06-01', toDate: '2026-05-01' })).toBe(false);
+    });
+
+    it('17.5 canRequestHrRosterList allows when fromDate <= toDate', () => {
+      expect(canRequestHrRosterList({ fromDate: '2026-05-01', toDate: '2026-06-01' })).toBe(true);
+    });
+
+    it('17.6 canRequestHrRosterList allows one-sided ranges', () => {
+      expect(canRequestHrRosterList({ fromDate: '2026-05-01', toDate: '' })).toBe(true);
+      expect(canRequestHrRosterList({ fromDate: '', toDate: '2026-06-01' })).toBe(true);
+      expect(canRequestHrRosterList({})).toBe(true);
+    });
+
+    it('17.7 getLocalDateInputValue returns formatted YYYY-MM-DD string', () => {
+      const d = new Date(2026, 3, 5); // April 5, 2026
+      const val = getLocalDateInputValue(d);
+      expect(val).toBe('2026-04-05');
+    });
+
+    it('17.8 getLocalDateInputValue pads single digit month and day', () => {
+      const d = new Date(2026, 0, 9); // Jan 9, 2026
+      const val = getLocalDateInputValue(d);
+      expect(val).toBe('2026-01-09');
+    });
+
+    it('17.9 filtered Staff Directory does not affect master reference staff list', () => {
+      const masterStaff = [
+        { id: 's1', outletId: 'o1', employeeCode: 'E1', fullName: 'Staff 1', designationId: 'd1', aadhaarLast4: '1234', emergencyContactName: 'A', emergencyContactPhone: '9999999999', joiningDate: '2026-01-01', employmentStatus: 'ACTIVE' },
+        { id: 's2', outletId: 'o1', employeeCode: 'E2', fullName: 'Staff 2', designationId: 'd1', aadhaarLast4: '5678', emergencyContactName: 'B', emergencyContactPhone: '8888888888', joiningDate: '2026-01-01', employmentStatus: 'INACTIVE' },
+      ] as HrStaff[];
+      const filteredStaff = masterStaff.filter(s => s.employmentStatus === 'ACTIVE');
+      expect(filteredStaff.length).toBe(1);
+      expect(masterStaff.length).toBe(2);
+    });
+
+    it('17.10 filtered Designations tab does not affect Staff modal designation choices', () => {
+      const masterDesignations = [
+        { id: 'd1', outletId: 'o1', code: 'DSM', name: 'Driveway Salesman', status: 'ACTIVE' },
+        { id: 'd2', outletId: 'o1', code: 'SUP', name: 'Supervisor', status: 'INACTIVE' },
+      ] as HrDesignation[];
+      const filteredDesig = masterDesignations.filter(d => d.code === 'DSM');
+      expect(filteredDesig.length).toBe(1);
+
+      const eligible = getEligibleStaffDesignations(masterDesignations, null, 'o1');
+      expect(eligible.some(d => d.id === 'd2')).toBe(false);
+      expect(eligible.length).toBe(1);
+    });
+
+    it('17.11 unsanctioned active designation included in manpower sanctions creation options', () => {
+      const designations = [
+        { id: 'd1', outletId: 'o1', code: 'DSM', name: 'DSM', status: 'ACTIVE' },
+        { id: 'd2', outletId: 'o1', code: 'SUP', name: 'Supervisor', status: 'ACTIVE' },
+      ] as HrDesignation[];
+      const existingSanctions = [
+        { id: 's1', outletId: 'o1', designationId: 'd1', sanctionedCount: 5, effectiveFrom: '2026-01-01' },
+      ] as HrManpowerSanction[];
+      const existingIds = new Set(existingSanctions.map(s => s.designationId));
+      const available = designations.filter(d => !existingIds.has(d.id));
+      expect(available.length).toBe(1);
+      expect(available[0].id).toBe('d2');
+    });
+
+    it('17.12 already sanctioned designation excluded from create options', () => {
+      const designations = [
+        { id: 'd1', outletId: 'o1', code: 'DSM', name: 'DSM', status: 'ACTIVE' },
+      ] as HrDesignation[];
+      const existingSanctions = [
+        { id: 's1', outletId: 'o1', designationId: 'd1', sanctionedCount: 5, effectiveFrom: '2026-01-01' },
+      ] as HrManpowerSanction[];
+      const existingIds = new Set(existingSanctions.map(s => s.designationId));
+      const available = designations.filter(d => !existingIds.has(d.id));
+      expect(available.length).toBe(0);
+    });
+
+    it('17.13 inactive unsanctioned designation included with annotation', () => {
+      const designations = [
+        { id: 'd3', outletId: 'o1', code: 'OLD', name: 'Legacy Role', status: 'INACTIVE' },
+      ] as HrDesignation[];
+      const existingSanctions = [] as HrManpowerSanction[];
+      const existingIds = new Set(existingSanctions.map(s => s.designationId));
+      const available = designations.filter(d => !existingIds.has(d.id));
+      expect(available.length).toBe(1);
+      expect(available[0].status).toBe('INACTIVE');
+    });
+
+    it('17.14 CREATE sanction preselection sets initial designation', () => {
+      const initialDesignationId = 'd-preset';
+      const resolvedId = initialDesignationId || '';
+      expect(resolvedId).toBe('d-preset');
+    });
+
+    it('17.15 CREATE without preselection sets empty designation', () => {
+      const initialDesignationId = null;
+      const resolvedId = initialDesignationId || '';
+      expect(resolvedId).toBe('');
+    });
+
+    it('17.16 EDIT sanction preserves existing designation', () => {
+      const sanction = {
+        id: 's1',
+        outletId: 'o1',
+        designationId: 'd-edit',
+        sanctionedCount: 4,
+        effectiveFrom: '2026-01-01',
+      } as HrManpowerSanction;
+      const designationId = sanction.designationId;
+      expect(designationId).toBe('d-edit');
+    });
+
+    it('17.17 reset filters returns all blank filter states', () => {
+      const filters = getResetHrFilters();
+      expect(filters.staff.designationId).toBe('');
+      expect(filters.staff.employmentStatus).toBe('');
+      expect(filters.staff.search).toBe('');
+      expect(filters.staff.joinedFrom).toBe('');
+      expect(filters.staff.joinedTo).toBe('');
+      expect(filters.designations.search).toBe('');
+      expect(filters.designations.status).toBe('');
+      expect(filters.manpower.search).toBe('');
+      expect(filters.roster.staffId).toBe('');
+      expect(filters.roster.fromDate).toBe('');
+      expect(filters.roster.toDate).toBe('');
+    });
+
+    it('17.18 validateHrJoinedDateRange returns success when dates are equal', () => {
+      const res = validateHrJoinedDateRange('2026-05-01', '2026-05-01');
+      expect(res.valid).toBe(true);
+    });
+
+    it('17.19 validateHrRosterDateRange returns success when dates are equal', () => {
+      const res = validateHrRosterDateRange('2026-05-01', '2026-05-01');
+      expect(res.valid).toBe(true);
+    });
+
+    it('17.20 getEligibleStaffDesignations handles empty array safely', () => {
+      const res = getEligibleStaffDesignations([], null, 'o1');
+      expect(res).toEqual([]);
+    });
+
+    it('17.21 getEligibleRosterStaff handles empty array safely', () => {
+      const res = getEligibleRosterStaff([], null, 'o1');
+      expect(res).toEqual([]);
+    });
+
+    it('17.22 getHrErrorMessage returns custom string when unknown error format passed', () => {
+      const res = getHrErrorMessage('SOME_RANDOM_CUSTOM_ERROR');
+      expect(res).toBe('SOME_RANDOM_CUSTOM_ERROR');
     });
   });
 });

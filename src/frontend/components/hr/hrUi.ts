@@ -301,6 +301,40 @@ export function validateHrRosterDateRange(
 }
 
 /**
+ * Request guard helper for staff list queries
+ */
+export function canRequestHrStaffList(filters?: {
+  joinedFrom?: string;
+  joinedTo?: string;
+}): boolean {
+  if (!filters) return true;
+  const validation = validateHrJoinedDateRange(filters.joinedFrom, filters.joinedTo);
+  return validation.valid;
+}
+
+/**
+ * Request guard helper for roster list queries
+ */
+export function canRequestHrRosterList(filters?: {
+  fromDate?: string;
+  toDate?: string;
+}): boolean {
+  if (!filters) return true;
+  const validation = validateHrRosterDateRange(filters.fromDate, filters.toDate);
+  return validation.valid;
+}
+
+/**
+ * Returns local calendar date input string (YYYY-MM-DD) based on local timezone
+ */
+export function getLocalDateInputValue(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Filters and sorts eligible designations for staff create/edit
  */
 export function getEligibleStaffDesignations(

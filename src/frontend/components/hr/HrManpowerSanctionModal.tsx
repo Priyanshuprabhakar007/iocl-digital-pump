@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HrManpowerSanction, HrDesignation } from '../../../shared/types';
 import { apiFetch } from '../../services/api';
-import { canSubmitHrManpowerSanction, getHrErrorMessage } from './hrUi';
+import { canSubmitHrManpowerSanction, getHrErrorMessage, getLocalDateInputValue } from './hrUi';
 import { X, Layers, Edit, AlertCircle, Loader2 } from 'lucide-react';
 
 export interface HrManpowerSanctionModalProps {
@@ -11,6 +11,7 @@ export interface HrManpowerSanctionModalProps {
   sanction: HrManpowerSanction | null;
   designations: HrDesignation[];
   existingSanctions: HrManpowerSanction[];
+  initialDesignationId?: string | null;
   onClose: () => void;
   onSuccess: (saved: HrManpowerSanction) => void;
 }
@@ -22,6 +23,7 @@ export const HrManpowerSanctionModal: React.FC<HrManpowerSanctionModalProps> = (
   sanction,
   designations,
   existingSanctions,
+  initialDesignationId,
   onClose,
   onSuccess,
 }) => {
@@ -44,20 +46,21 @@ export const HrManpowerSanctionModal: React.FC<HrManpowerSanctionModalProps> = (
         setEffectiveFrom(sanction.effectiveFrom ? sanction.effectiveFrom.slice(0, 10) : '');
         setNotes(sanction.notes || '');
       } else {
-        setDesignationId('');
+        setDesignationId(initialDesignationId || '');
         setSanctionedCount('');
-        setEffectiveFrom(new Date().toISOString().slice(0, 10));
+        setEffectiveFrom(getLocalDateInputValue());
         setNotes('');
       }
     }
-  }, [isOpen, isEdit, sanction]);
+  }, [isOpen, isEdit, sanction, initialDesignationId]);
 
   if (!isOpen) return null;
 
-  // Filter available designations for CREATE (show designations without existing sanction first or all outlet designations)
+  // Filter available designations for CREATE (exclude already sanctioned; include active & inactive unsanctioned)
+  const existingSanctionedIds = new Set(existingSanctions.map(s => s.designationId));
   const availableDesignations = designations.filter(d => {
     if (isEdit) return d.id === sanction?.designationId;
-    return true;
+    return !existingSanctionedIds.has(d.id);
   });
 
   const canSubmit = canSubmitHrManpowerSanction(

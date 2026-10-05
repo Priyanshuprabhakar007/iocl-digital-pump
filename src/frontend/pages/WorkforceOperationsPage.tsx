@@ -9,7 +9,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ShieldAlert,
-  Loader2,
 } from 'lucide-react';
 import type {
   RetailOutlet,
@@ -33,6 +32,8 @@ import {
   buildHrRosterQueryParams,
   validateHrJoinedDateRange,
   validateHrRosterDateRange,
+  canRequestHrStaffList,
+  canRequestHrRosterList,
   getHrErrorMessage,
 } from '../components/hr/hrUi';
 import { HrManpowerSummaryPanel } from '../components/hr/HrManpowerSummaryPanel';
@@ -69,19 +70,24 @@ export const WorkforceOperationsPage: React.FC = () => {
   // Active Tab
   const [activeTab, setActiveTab] = useState<HrWorkspaceTab>('staff');
 
+  // Master Reference Data (Unfiltered)
+  const [staffReferenceList, setStaffReferenceList] = useState<HrStaff[]>([]);
+  const [designationReferenceList, setDesignationReferenceList] = useState<HrDesignation[]>([]);
+
+  // Filtered Display Data
+  const [staffList, setStaffList] = useState<HrStaff[]>([]);
+  const [designationList, setDesignationList] = useState<HrDesignation[]>([]);
+  const [rosterList, setRosterList] = useState<HrRosterAssignment[]>([]);
+
   // Core Data
   const [summary, setSummary] = useState<HrManpowerSummary | null>(null);
-  const [staffList, setStaffList] = useState<HrStaff[]>([]);
-  const [designations, setDesignations] = useState<HrDesignation[]>([]);
   const [sanctions, setSanctions] = useState<HrManpowerSanction[]>([]);
-  const [rosterList, setRosterList] = useState<HrRosterAssignment[]>([]);
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
 
   // Loading States
-  const [isLoadingSummary, setIsLoadingSummary] = useState<boolean>(false);
+  const [isLoadingCore, setIsLoadingCore] = useState<boolean>(false);
   const [isLoadingStaff, setIsLoadingStaff] = useState<boolean>(false);
   const [isLoadingDesignations, setIsLoadingDesignations] = useState<boolean>(false);
-  const [isLoadingSanctions, setIsLoadingSanctions] = useState<boolean>(false);
   const [isLoadingRoster, setIsLoadingRoster] = useState<boolean>(false);
   const [isRefreshingAll, setIsRefreshingAll] = useState<boolean>(false);
 
@@ -110,6 +116,7 @@ export const WorkforceOperationsPage: React.FC = () => {
   const [isSanctionModalOpen, setIsSanctionModalOpen] = useState(false);
   const [sanctionModalMode, setSanctionModalMode] = useState<'create' | 'edit'>('create');
   const [editingSanction, setEditingSanction] = useState<HrManpowerSanction | null>(null);
+  const [initialSanctionDesignationId, setInitialSanctionDesignationId] = useState<string | null>(null);
 
   // Roster
   const [isRosterModalOpen, setIsRosterModalOpen] = useState(false);
@@ -141,6 +148,7 @@ export const WorkforceOperationsPage: React.FC = () => {
     }
     if (targets.closeManpowerUi) {
       setEditingSanction(null);
+      setInitialSanctionDesignationId(null);
       setIsSanctionModalOpen(false);
     }
     if (targets.closeRosterUi) {
@@ -185,37 +193,21 @@ export const WorkforceOperationsPage: React.FC = () => {
     };
   }, [canReadHr, showFeedback]);
 
-  // 2. Fetch full workspace data for current outlet
-  const loadWorkspaceData = useCallback(
+  // 2. Focused Loaders (Instruction 11 & 12)
+  const loadHrCoreData = useCallback(
     async (outletId: string) => {
       if (!outletId || !canReadHr) return;
 
       activeOutletReqRef.current = outletId;
-      setIsRefreshingAll(true);
-      setIsLoadingSummary(true);
-      setIsLoadingStaff(true);
-      setIsLoadingDesignations(true);
-      setIsLoadingSanctions(true);
-      setIsLoadingRoster(true);
-
-      const staffQuery = buildHrStaffQueryParams(filters.staff);
-      const designationQuery = buildHrDesignationQueryParams(filters.designations);
-      const rosterQuery = buildHrRosterQueryParams(filters.roster);
+      setIsLoadingCore(true);
 
       const summaryPromise = apiFetch<HrManpowerSummary>(
         `/api/v1/outlets/${outletId}/hr/manpower-summary`
       );
-      const designationsPromise = apiFetch<HrDesignation[]>(
-        `/api/v1/outlets/${outletId}/hr/designations${designationQuery}`
-      );
-      const staffPromise = apiFetch<HrStaff[]>(
-        `/api/v1/outlets/${outletId}/hr/staff${staffQuery}`
-      );
+      const staffRefPromise = apiFetch<HrStaff[]>(`/api/v1/outlets/${outletId}/hr/staff`);
+      const desigRefPromise = apiFetch<HrDesignation[]>(`/api/v1/outlets/${outletId}/hr/designations`);
       const sanctionsPromise = apiFetch<HrManpowerSanction[]>(
         `/api/v1/outlets/${outletId}/hr/manpower-sanctions`
-      );
-      const rosterPromise = apiFetch<HrRosterAssignment[]>(
-        `/api/v1/outlets/${outletId}/hr/roster${rosterQuery}`
       );
       const shiftTemplatesPromise = canReadShiftTemplates
         ? apiFetch<ShiftTemplate[]>(`/api/v1/outlets/${outletId}/shift-templates`)
@@ -224,53 +216,46 @@ export const WorkforceOperationsPage: React.FC = () => {
       try {
         const [
           summaryRes,
-          designationsRes,
-          staffRes,
+          staffRefRes,
+          desigRefRes,
           sanctionsRes,
-          rosterRes,
           shiftTemplatesRes,
         ] = await Promise.allSettled([
           summaryPromise,
-          designationsPromise,
-          staffPromise,
+          staffRefPromise,
+          desigRefPromise,
           sanctionsPromise,
-          rosterPromise,
           shiftTemplatesPromise,
         ]);
 
-        // Stale-response guard: ensure responses belong to the current selected outlet
         if (activeOutletReqRef.current !== outletId) return;
 
-        // Process summary
         if (summaryRes.status === 'fulfilled' && summaryRes.value.success && summaryRes.value.data) {
           setSummary(summaryRes.value.data);
         } else {
           setSummary(null);
         }
 
-        // Process designations
         if (
-          designationsRes.status === 'fulfilled' &&
-          designationsRes.value.success &&
-          Array.isArray(designationsRes.value.data)
+          staffRefRes.status === 'fulfilled' &&
+          staffRefRes.value.success &&
+          Array.isArray(staffRefRes.value.data)
         ) {
-          setDesignations(designationsRes.value.data);
+          setStaffReferenceList(staffRefRes.value.data);
         } else {
-          setDesignations([]);
+          setStaffReferenceList([]);
         }
 
-        // Process staff
         if (
-          staffRes.status === 'fulfilled' &&
-          staffRes.value.success &&
-          Array.isArray(staffRes.value.data)
+          desigRefRes.status === 'fulfilled' &&
+          desigRefRes.value.success &&
+          Array.isArray(desigRefRes.value.data)
         ) {
-          setStaffList(staffRes.value.data);
+          setDesignationReferenceList(desigRefRes.value.data);
         } else {
-          setStaffList([]);
+          setDesignationReferenceList([]);
         }
 
-        // Process sanctions
         if (
           sanctionsRes.status === 'fulfilled' &&
           sanctionsRes.value.success &&
@@ -281,18 +266,6 @@ export const WorkforceOperationsPage: React.FC = () => {
           setSanctions([]);
         }
 
-        // Process roster
-        if (
-          rosterRes.status === 'fulfilled' &&
-          rosterRes.value.success &&
-          Array.isArray(rosterRes.value.data)
-        ) {
-          setRosterList(rosterRes.value.data);
-        } else {
-          setRosterList([]);
-        }
-
-        // Process shift templates
         if (
           shiftTemplatesRes.status === 'fulfilled' &&
           shiftTemplatesRes.value.success &&
@@ -308,35 +281,156 @@ export const WorkforceOperationsPage: React.FC = () => {
         }
       } finally {
         if (activeOutletReqRef.current === outletId) {
-          setIsLoadingSummary(false);
-          setIsLoadingStaff(false);
-          setIsLoadingDesignations(false);
-          setIsLoadingSanctions(false);
-          setIsLoadingRoster(false);
-          setIsRefreshingAll(false);
+          setIsLoadingCore(false);
         }
       }
     },
-    [canReadHr, canReadShiftTemplates, filters, showFeedback]
+    [canReadHr, canReadShiftTemplates, showFeedback]
   );
 
-  // 3. Trigger full load whenever outlet changes or refreshed
+  const loadFilteredStaff = useCallback(
+    async (outletId: string, staffFilters: HrFilterState['staff']) => {
+      if (!outletId || !canReadHr) return;
+
+      if (!canRequestHrStaffList(staffFilters)) {
+        showFeedback('error', 'Joined From date cannot be after Joined To date.');
+        return;
+      }
+
+      activeOutletReqRef.current = outletId;
+      setIsLoadingStaff(true);
+      const query = buildHrStaffQueryParams(staffFilters);
+
+      try {
+        const res = await apiFetch<HrStaff[]>(`/api/v1/outlets/${outletId}/hr/staff${query}`);
+        if (activeOutletReqRef.current !== outletId) return;
+        if (res.success && Array.isArray(res.data)) {
+          setStaffList(res.data);
+        } else {
+          setStaffList([]);
+        }
+      } catch (err: any) {
+        if (activeOutletReqRef.current === outletId) {
+          showFeedback('error', getHrErrorMessage(err));
+        }
+      } finally {
+        if (activeOutletReqRef.current === outletId) {
+          setIsLoadingStaff(false);
+        }
+      }
+    },
+    [canReadHr, showFeedback]
+  );
+
+  const loadFilteredDesignations = useCallback(
+    async (outletId: string, desigFilters: HrFilterState['designations']) => {
+      if (!outletId || !canReadHr) return;
+
+      activeOutletReqRef.current = outletId;
+      setIsLoadingDesignations(true);
+      const query = buildHrDesignationQueryParams(desigFilters);
+
+      try {
+        const res = await apiFetch<HrDesignation[]>(
+          `/api/v1/outlets/${outletId}/hr/designations${query}`
+        );
+        if (activeOutletReqRef.current !== outletId) return;
+        if (res.success && Array.isArray(res.data)) {
+          setDesignationList(res.data);
+        } else {
+          setDesignationList([]);
+        }
+      } catch (err: any) {
+        if (activeOutletReqRef.current === outletId) {
+          showFeedback('error', getHrErrorMessage(err));
+        }
+      } finally {
+        if (activeOutletReqRef.current === outletId) {
+          setIsLoadingDesignations(false);
+        }
+      }
+    },
+    [canReadHr, showFeedback]
+  );
+
+  const loadFilteredRoster = useCallback(
+    async (outletId: string, rosterFilters: HrFilterState['roster']) => {
+      if (!outletId || !canReadHr) return;
+
+      if (!canRequestHrRosterList(rosterFilters)) {
+        showFeedback('error', 'From date cannot be after To date.');
+        return;
+      }
+
+      activeOutletReqRef.current = outletId;
+      setIsLoadingRoster(true);
+      const query = buildHrRosterQueryParams(rosterFilters);
+
+      try {
+        const res = await apiFetch<HrRosterAssignment[]>(
+          `/api/v1/outlets/${outletId}/hr/roster${query}`
+        );
+        if (activeOutletReqRef.current !== outletId) return;
+        if (res.success && Array.isArray(res.data)) {
+          setRosterList(res.data);
+        } else {
+          setRosterList([]);
+        }
+      } catch (err: any) {
+        if (activeOutletReqRef.current === outletId) {
+          showFeedback('error', getHrErrorMessage(err));
+        }
+      } finally {
+        if (activeOutletReqRef.current === outletId) {
+          setIsLoadingRoster(false);
+        }
+      }
+    },
+    [canReadHr, showFeedback]
+  );
+
+  // 3. Trigger initial core and filtered data load on outlet change
   useEffect(() => {
     if (selectedOutletId) {
-      loadWorkspaceData(selectedOutletId);
+      loadHrCoreData(selectedOutletId);
+      loadFilteredStaff(selectedOutletId, filters.staff);
+      loadFilteredDesignations(selectedOutletId, filters.designations);
+      loadFilteredRoster(selectedOutletId, filters.roster);
     }
-  }, [selectedOutletId, loadWorkspaceData]);
+  }, [selectedOutletId, loadHrCoreData, loadFilteredStaff, loadFilteredDesignations, loadFilteredRoster]);
 
-  // Handle Outlet Change with complete state reset (Instruction 12)
+  // Effect for staff filter changes
+  useEffect(() => {
+    if (selectedOutletId) {
+      loadFilteredStaff(selectedOutletId, filters.staff);
+    }
+  }, [selectedOutletId, filters.staff, loadFilteredStaff]);
+
+  // Effect for designation filter changes
+  useEffect(() => {
+    if (selectedOutletId) {
+      loadFilteredDesignations(selectedOutletId, filters.designations);
+    }
+  }, [selectedOutletId, filters.designations, loadFilteredDesignations]);
+
+  // Effect for roster filter changes
+  useEffect(() => {
+    if (selectedOutletId) {
+      loadFilteredRoster(selectedOutletId, filters.roster);
+    }
+  }, [selectedOutletId, filters.roster, loadFilteredRoster]);
+
+  // Handle Outlet Change with complete state reset (Instruction 17)
   const handleOutletChange = (newOutletId: string) => {
     if (newOutletId === selectedOutletId) return;
 
     activeOutletReqRef.current = newOutletId;
 
-    // Immediately clear all lists, details, summaries, filters, and modals
     setSummary(null);
+    setStaffReferenceList([]);
     setStaffList([]);
-    setDesignations([]);
+    setDesignationReferenceList([]);
+    setDesignationList([]);
     setSanctions([]);
     setRosterList([]);
     setShiftTemplates([]);
@@ -349,6 +443,7 @@ export const WorkforceOperationsPage: React.FC = () => {
     setIsDesignationModalOpen(false);
 
     setEditingSanction(null);
+    setInitialSanctionDesignationId(null);
     setIsSanctionModalOpen(false);
 
     setSelectedRosterId(null);
@@ -412,7 +507,10 @@ export const WorkforceOperationsPage: React.FC = () => {
       `Staff member ${saved.fullName} (${saved.employeeCode}) saved successfully.`
     );
     setStaffDetailRefreshKey(k => k + 1);
-    loadWorkspaceData(selectedOutletId);
+    if (selectedOutletId) {
+      loadHrCoreData(selectedOutletId);
+      loadFilteredStaff(selectedOutletId, filters.staff);
+    }
   };
 
   const handleDesignationSaved = (saved: HrDesignation) => {
@@ -420,27 +518,37 @@ export const WorkforceOperationsPage: React.FC = () => {
       'success',
       `Designation ${saved.name} (${saved.code}) saved successfully.`
     );
-    loadWorkspaceData(selectedOutletId);
+    if (selectedOutletId) {
+      loadHrCoreData(selectedOutletId);
+      loadFilteredDesignations(selectedOutletId, filters.designations);
+    }
   };
 
   const handleSanctionSaved = (saved: HrManpowerSanction) => {
     showFeedback('success', 'Manpower sanction saved successfully.');
-    loadWorkspaceData(selectedOutletId);
+    setInitialSanctionDesignationId(null);
+    if (selectedOutletId) {
+      loadHrCoreData(selectedOutletId);
+    }
   };
 
   const handleRosterSaved = (saved: HrRosterAssignment) => {
     showFeedback('success', 'Shift roster assignment saved successfully.');
     setRosterDetailRefreshKey(k => k + 1);
-    loadWorkspaceData(selectedOutletId);
+    if (selectedOutletId) {
+      loadFilteredRoster(selectedOutletId, filters.roster);
+    }
   };
 
   const handleRosterCancelled = (cancelled: HrRosterAssignment) => {
     showFeedback('success', 'Shift roster assignment cancelled.');
     setRosterDetailRefreshKey(k => k + 1);
-    loadWorkspaceData(selectedOutletId);
+    if (selectedOutletId) {
+      loadFilteredRoster(selectedOutletId, filters.roster);
+    }
   };
 
-  // Access restricted guard (Instruction 10)
+  // Access restricted guard
   if (!canReadHr) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
@@ -469,7 +577,7 @@ export const WorkforceOperationsPage: React.FC = () => {
                 Workforce & Shift Roster
               </h1>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                Phase 5A
+                Phase 5A-2
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -497,7 +605,14 @@ export const WorkforceOperationsPage: React.FC = () => {
           </div>
 
           <button
-            onClick={() => selectedOutletId && loadWorkspaceData(selectedOutletId)}
+            onClick={() => {
+              if (selectedOutletId) {
+                loadHrCoreData(selectedOutletId);
+                loadFilteredStaff(selectedOutletId, filters.staff);
+                loadFilteredDesignations(selectedOutletId, filters.designations);
+                loadFilteredRoster(selectedOutletId, filters.roster);
+              }
+            }}
             disabled={isRefreshingAll || !selectedOutletId}
             className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition disabled:opacity-50 shadow-sm"
             title="Refresh Workspace Data"
@@ -525,8 +640,8 @@ export const WorkforceOperationsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Authoritative Manpower Summary Panel (Visible above all internal tabs) */}
-      <HrManpowerSummaryPanel summary={summary} isLoading={isLoadingSummary} />
+      {/* Authoritative Manpower Summary Panel */}
+      <HrManpowerSummaryPanel summary={summary} isLoading={isLoadingCore} />
 
       {/* Internal Navigation Tabs */}
       <div className="flex items-center gap-1.5 border-b border-slate-800 pb-2 overflow-x-auto">
@@ -561,7 +676,7 @@ export const WorkforceOperationsPage: React.FC = () => {
         >
           <Tag className="w-4 h-4" />
           <span>Designations</span>
-          {designations.length > 0 && (
+          {designationList.length > 0 && (
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                 activeTab === 'designations'
@@ -569,7 +684,7 @@ export const WorkforceOperationsPage: React.FC = () => {
                   : 'bg-slate-800 text-slate-400'
               }`}
             >
-              {designations.length}
+              {designationList.length}
             </span>
           )}
         </button>
@@ -610,7 +725,6 @@ export const WorkforceOperationsPage: React.FC = () => {
 
       {/* Main Tab Panels Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left / Main Workspace Area */}
         <div
           className={
             (activeTab === 'staff' && selectedStaffId) || (activeTab === 'roster' && selectedRosterId)
@@ -622,7 +736,7 @@ export const WorkforceOperationsPage: React.FC = () => {
           {activeTab === 'staff' && (
             <HrStaffPanel
               staffList={staffList}
-              designations={designations}
+              designations={designationReferenceList}
               isLoading={isLoadingStaff}
               canWriteStaff={canWriteStaff}
               filters={filters.staff}
@@ -649,7 +763,7 @@ export const WorkforceOperationsPage: React.FC = () => {
           {/* TAB 2: DESIGNATIONS */}
           {activeTab === 'designations' && (
             <HrDesignationsPanel
-              designations={designations}
+              designations={designationList}
               isLoading={isLoadingDesignations}
               canWriteDesignation={canWriteStaff}
               filters={filters.designations}
@@ -678,22 +792,25 @@ export const WorkforceOperationsPage: React.FC = () => {
             <HrManpowerPanel
               summary={summary}
               sanctions={sanctions}
-              designations={designations}
-              isLoading={isLoadingSanctions}
+              designations={designationReferenceList}
+              isLoading={isLoadingCore}
               canWriteManpower={canWriteManpower}
               onAddSanction={() => {
                 setSanctionModalMode('create');
                 setEditingSanction(null);
+                setInitialSanctionDesignationId(null);
                 setIsSanctionModalOpen(true);
               }}
               onEditSanction={s => {
                 setSanctionModalMode('edit');
                 setEditingSanction(s);
+                setInitialSanctionDesignationId(null);
                 setIsSanctionModalOpen(true);
               }}
               onSetSanctionForDesignation={designationId => {
                 setSanctionModalMode('create');
-                setEditingSanction({ designationId } as HrManpowerSanction);
+                setEditingSanction(null);
+                setInitialSanctionDesignationId(designationId);
                 setIsSanctionModalOpen(true);
               }}
             />
@@ -703,8 +820,8 @@ export const WorkforceOperationsPage: React.FC = () => {
           {activeTab === 'roster' && (
             <HrRosterPanel
               rosterList={rosterList}
-              staffList={staffList}
-              designations={designations}
+              staffList={staffReferenceList}
+              designations={designationReferenceList}
               shiftTemplates={shiftTemplates}
               isLoading={isLoadingRoster}
               canWriteRoster={canWriteRoster}
@@ -770,18 +887,16 @@ export const WorkforceOperationsPage: React.FC = () => {
       </div>
 
       {/* Modals */}
-      {/* 1. Staff Modal (Create / Edit) */}
       <HrStaffModal
         isOpen={isStaffModalOpen}
         mode={staffModalMode}
         outletId={selectedOutletId}
         staff={editingStaff}
-        designations={designations}
+        designations={designationReferenceList}
         onClose={() => setIsStaffModalOpen(false)}
         onSuccess={handleStaffSaved}
       />
 
-      {/* 2. Designation Modal (Create / Edit) */}
       <HrDesignationModal
         isOpen={isDesignationModalOpen}
         mode={designationModalMode}
@@ -791,25 +906,27 @@ export const WorkforceOperationsPage: React.FC = () => {
         onSuccess={handleDesignationSaved}
       />
 
-      {/* 3. Manpower Sanction Modal (Create / Edit) */}
       <HrManpowerSanctionModal
         isOpen={isSanctionModalOpen}
         mode={sanctionModalMode}
         outletId={selectedOutletId}
         sanction={editingSanction}
-        designations={designations}
+        designations={designationReferenceList}
         existingSanctions={sanctions}
-        onClose={() => setIsSanctionModalOpen(false)}
+        initialDesignationId={initialSanctionDesignationId}
+        onClose={() => {
+          setIsSanctionModalOpen(false);
+          setInitialSanctionDesignationId(null);
+        }}
         onSuccess={handleSanctionSaved}
       />
 
-      {/* 4. Roster Modal (Create / Edit) */}
       <HrRosterModal
         isOpen={isRosterModalOpen}
         mode={rosterModalMode}
         outletId={selectedOutletId}
         roster={editingRoster}
-        staffList={staffList}
+        staffList={staffReferenceList}
         shiftTemplates={shiftTemplates}
         canReadShiftTemplates={canReadShiftTemplates}
         existingRosterList={rosterList}
@@ -817,7 +934,6 @@ export const WorkforceOperationsPage: React.FC = () => {
         onSuccess={handleRosterSaved}
       />
 
-      {/* 5. Roster Cancel Confirmation Modal */}
       <HrRosterCancelModal
         isOpen={!!cancellingRoster}
         roster={cancellingRoster}
