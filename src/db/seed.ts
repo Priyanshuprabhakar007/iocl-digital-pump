@@ -123,8 +123,8 @@ export async function seedDatabase(db: AppDatabase) {
   await db.insert(schema.permissions).values(permissionsList).onConflictDoNothing();
 
   // 3. Role Permissions Mapping
-  const allPermIds = permissionsList.map(p => p.id);
-  const adminRolePerms = allPermIds.map(pId => ({ roleId: 'role-admin', permissionId: pId }));
+  const allPermissionsInDb = await db.select().from(schema.permissions);
+  const adminRolePerms = allPermissionsInDb.map(p => ({ roleId: 'role-admin', permissionId: p.id }));
 
   const stateOfficePerms = [
     'perm-u-r', 'perm-u-c', 'perm-u-u',

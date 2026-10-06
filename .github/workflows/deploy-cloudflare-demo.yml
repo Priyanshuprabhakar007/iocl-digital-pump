@@ -136,6 +136,44 @@ jobs:
             --file=demo-seed.sql \
             --yes
 
+      - name: Verify Remote Demo Seed
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          ADMIN_RESULT=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM users WHERE email = 'admin@iocl.in';" \
+            --json \
+            --yes)
+
+          ADMIN_COUNT=$(echo "$ADMIN_RESULT" | jq -r '.[0].results[0].count // 0')
+
+          echo "Demo admin count: $ADMIN_COUNT"
+
+          if [ "$ADMIN_COUNT" != "1" ]; then
+            echo "ERROR: Demo admin was not seeded correctly."
+            exit 1
+          fi
+
+          FK_RESULT=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "PRAGMA foreign_key_check;" \
+            --json \
+            --yes)
+
+          FK_COUNT=$(echo "$FK_RESULT" | jq '.[0].results | length')
+
+          echo "Foreign key violations: $FK_COUNT"
+
+          if [ "$FK_COUNT" != "0" ]; then
+            echo "$FK_RESULT"
+            echo "ERROR: Remote demo database contains foreign-key violations."
+            exit 1
+          fi
+
       - name: Deploy Worker to Cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
