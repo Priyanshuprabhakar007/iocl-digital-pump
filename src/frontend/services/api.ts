@@ -24,6 +24,9 @@ export function getAuthToken(): string | null {
   return authToken;
 }
 
+const API_BASE_URL =
+  (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
 export async function apiFetch<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
@@ -47,8 +50,12 @@ export async function apiFetch<T = unknown>(
     },
   };
 
+  const requestUrl = API_BASE_URL
+    ? `${API_BASE_URL}${endpoint}`
+    : endpoint;
+
   try {
-    const res = await fetch(endpoint, config);
+    const res = await fetch(requestUrl, config);
     const json = (await res.json()) as ApiResponse<T>;
     return json;
   } catch (err: any) {

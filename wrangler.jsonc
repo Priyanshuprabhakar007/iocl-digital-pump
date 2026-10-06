@@ -16,5 +16,9 @@
       "binding": "DOCUMENTS_BUCKET",
       "bucket_name": "iocl-pump-manager-docs"
     }
-  ]
+  ],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "ALLOWED_ORIGINS": "https://iocl-digital-pump.vercel.app"
+  }
 }
