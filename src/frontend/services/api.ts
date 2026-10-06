@@ -50,9 +50,10 @@ export async function apiFetch<T = unknown>(
     },
   };
 
-  const requestUrl = API_BASE_URL
-    ? `${API_BASE_URL}${endpoint}`
-    : endpoint;
+  const requestUrl =
+    API_BASE_URL && endpoint.startsWith('/')
+      ? `${API_BASE_URL}${endpoint}`
+      : endpoint;
 
   try {
     const res = await fetch(requestUrl, config);

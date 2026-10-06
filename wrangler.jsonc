@@ -4,21 +4,24 @@
   "main": "src/worker/index.ts",
   "compatibility_date": "2024-11-01",
   "compatibility_flags": ["nodejs_compat"],
+
+  "vars": {
+    "ENVIRONMENT": "production",
+    "ALLOWED_ORIGINS": "https://iocl-digital-pump.vercel.app"
+  },
+
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "iocl-pump-manager-d1",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "305f76c6-c940-443f-86a9-33c309a55578"
     }
   ],
+
   "r2_buckets": [
     {
       "binding": "DOCUMENTS_BUCKET",
       "bucket_name": "iocl-pump-manager-docs"
     }
-  ],
-  "vars": {
-    "ENVIRONMENT": "production",
-    "ALLOWED_ORIGINS": "https://iocl-digital-pump.vercel.app"
-  }
+  ]
 }
