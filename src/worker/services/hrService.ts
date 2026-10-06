@@ -229,6 +229,45 @@ function handleDbError(err: any): never {
   if (msg.includes('HR_NOZZLE_ASSIGNMENT_ALREADY_CANCELLED')) {
     throw new HrError('HR_NOZZLE_ASSIGNMENT_ALREADY_CANCELLED', 'Nozzle assignment is already cancelled', 409);
   }
+  if (msg.includes('HR_ROSTER_OUTLET_MISMATCH')) {
+    throw new HrError('HR_ROSTER_OUTLET_MISMATCH', 'Roster assignment belongs to another outlet', 400);
+  }
+  if (msg.includes('HR_ATTENDANCE_ROSTER_STAFF_MISMATCH')) {
+    throw new HrError('HR_ATTENDANCE_ROSTER_STAFF_MISMATCH', 'Staff member does not match roster assignment', 400);
+  }
+  if (msg.includes('HR_ATTENDANCE_ROSTER_DATE_MISMATCH')) {
+    throw new HrError('HR_ATTENDANCE_ROSTER_DATE_MISMATCH', 'Attendance date does not match roster date', 400);
+  }
+  if (msg.includes('HR_ATTENDANCE_ROSTER_SHIFT_MISMATCH')) {
+    throw new HrError('HR_ATTENDANCE_ROSTER_SHIFT_MISMATCH', 'Shift template does not match roster shift', 400);
+  }
+  if (msg.includes('HR_STAFF_OUTLET_MISMATCH')) {
+    throw new HrError('HR_STAFF_OUTLET_MISMATCH', 'Staff member belongs to another outlet', 400);
+  }
+  if (msg.includes('HR_STAFF_NOT_ACTIVE')) {
+    throw new HrError('HR_STAFF_NOT_ACTIVE', 'Staff member is not active', 409);
+  }
+  if (msg.includes('HR_SHIFT_OUTLET_MISMATCH')) {
+    throw new HrError('HR_SHIFT_OUTLET_MISMATCH', 'Shift template belongs to another outlet', 400);
+  }
+  if (msg.includes('HR_NOZZLE_ROSTER_STAFF_MISMATCH')) {
+    throw new HrError('HR_NOZZLE_ROSTER_STAFF_MISMATCH', 'Staff member does not match roster assignment', 400);
+  }
+  if (msg.includes('HR_NOZZLE_ROSTER_DATE_MISMATCH')) {
+    throw new HrError('HR_NOZZLE_ROSTER_DATE_MISMATCH', 'Assignment date does not match roster date', 400);
+  }
+  if (msg.includes('HR_NOZZLE_ROSTER_SHIFT_MISMATCH')) {
+    throw new HrError('HR_NOZZLE_ROSTER_SHIFT_MISMATCH', 'Shift template does not match roster shift', 400);
+  }
+  if (msg.includes('HR_NOZZLE_NOT_FOUND')) {
+    throw new HrError('HR_NOZZLE_NOT_FOUND', 'Nozzle not found', 404);
+  }
+  if (msg.includes('HR_ATTENDANCE_CHECKOUT_INVALID')) {
+    throw new HrError('HR_ATTENDANCE_CHECKOUT_INVALID', 'Checkout time must be strictly after check-in time', 400);
+  }
+  if (msg.includes('HR_ATTENDANCE_CHECKED_IN_HAS_CHECKOUT')) {
+    throw new HrError('HR_ATTENDANCE_CHECKED_IN_HAS_CHECKOUT', 'Cannot update check-out while checked in', 400);
+  }
 
   throw err;
 }

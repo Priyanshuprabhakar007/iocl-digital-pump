@@ -1316,6 +1316,12 @@ export const hrAttendanceRecords = sqliteTable('hr_attendance_records', {
   check('hr_attendance_checkin_geofence_check', sql`${table.checkInInsideGeofence} IN (0, 1)`),
   check('hr_attendance_checkout_geofence_check', sql`${table.checkOutInsideGeofence} IS NULL OR ${table.checkOutInsideGeofence} IN (0, 1)`),
   check('hr_attendance_date_check', sql`${table.attendanceDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+  check('hr_attendance_checkin_lat_check', sql`${table.checkInLatitude} BETWEEN -90 AND 90`),
+  check('hr_attendance_checkin_lon_check', sql`${table.checkInLongitude} BETWEEN -180 AND 180`),
+  check('hr_attendance_checkin_acc_check', sql`${table.checkInAccuracyMetres} >= 0`),
+  check('hr_attendance_checkout_lat_check', sql`${table.checkOutLatitude} IS NULL OR (${table.checkOutLatitude} BETWEEN -90 AND 90)`),
+  check('hr_attendance_checkout_lon_check', sql`${table.checkOutLongitude} IS NULL OR (${table.checkOutLongitude} BETWEEN -180 AND 180)`),
+  check('hr_attendance_checkout_acc_check', sql`${table.checkOutAccuracyMetres} IS NULL OR ${table.checkOutAccuracyMetres} >= 0`),
 ]);
 
 export const hrNozzleAssignments = sqliteTable('hr_nozzle_assignments', {

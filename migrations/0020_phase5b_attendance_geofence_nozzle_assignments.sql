@@ -132,6 +132,34 @@ BEGIN
         END;
 END;
 
+CREATE TRIGGER IF NOT EXISTS "trg_hr_attendance_records_cross_ref_insert"
+BEFORE INSERT ON "hr_attendance_records"
+BEGIN
+    SELECT
+        CASE
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id)
+            THEN RAISE(ABORT, 'HR_ROSTER_NOT_FOUND')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id AND outlet_id = NEW.outlet_id)
+            THEN RAISE(ABORT, 'HR_ROSTER_OUTLET_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id AND staff_id = NEW.staff_id)
+            THEN RAISE(ABORT, 'HR_ATTENDANCE_ROSTER_STAFF_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id AND roster_date = NEW.attendance_date)
+            THEN RAISE(ABORT, 'HR_ATTENDANCE_ROSTER_DATE_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id AND shift_template_id = NEW.shift_template_id)
+            THEN RAISE(ABORT, 'HR_ATTENDANCE_ROSTER_SHIFT_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id AND status = 'SCHEDULED')
+            THEN RAISE(ABORT, 'HR_ROSTER_NOT_SCHEDULED')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_staff" WHERE id = NEW.staff_id)
+            THEN RAISE(ABORT, 'HR_STAFF_NOT_FOUND')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_staff" WHERE id = NEW.staff_id AND outlet_id = NEW.outlet_id)
+            THEN RAISE(ABORT, 'HR_STAFF_OUTLET_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_staff" WHERE id = NEW.staff_id AND employment_status = 'ACTIVE')
+            THEN RAISE(ABORT, 'HR_STAFF_NOT_ACTIVE')
+            WHEN NOT EXISTS (SELECT 1 FROM "shift_templates" WHERE id = NEW.shift_template_id AND outlet_id = NEW.outlet_id)
+            THEN RAISE(ABORT, 'HR_SHIFT_OUTLET_MISMATCH')
+        END;
+END;
+
 CREATE TRIGGER IF NOT EXISTS "trg_hr_attendance_records_checkout_check"
 BEFORE UPDATE ON "hr_attendance_records"
 BEGIN
@@ -195,3 +223,38 @@ BEGIN
             THEN RAISE(ABORT, 'HR_NOZZLE_ASSIGNMENT_IDENTITY_IMMUTABLE')
         END;
 END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_hr_nozzle_assignments_cross_ref_insert"
+BEFORE INSERT ON "hr_nozzle_assignments"
+BEGIN
+    SELECT
+        CASE
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id)
+            THEN RAISE(ABORT, 'HR_ROSTER_NOT_FOUND')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id AND outlet_id = NEW.outlet_id)
+            THEN RAISE(ABORT, 'HR_ROSTER_OUTLET_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id AND staff_id = NEW.staff_id)
+            THEN RAISE(ABORT, 'HR_NOZZLE_ROSTER_STAFF_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id AND roster_date = NEW.assignment_date)
+            THEN RAISE(ABORT, 'HR_NOZZLE_ROSTER_DATE_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id AND shift_template_id = NEW.shift_template_id)
+            THEN RAISE(ABORT, 'HR_NOZZLE_ROSTER_SHIFT_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_roster_assignments" WHERE id = NEW.roster_assignment_id AND status = 'SCHEDULED')
+            THEN RAISE(ABORT, 'HR_ROSTER_NOT_SCHEDULED')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_staff" WHERE id = NEW.staff_id)
+            THEN RAISE(ABORT, 'HR_STAFF_NOT_FOUND')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_staff" WHERE id = NEW.staff_id AND outlet_id = NEW.outlet_id)
+            THEN RAISE(ABORT, 'HR_STAFF_OUTLET_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "hr_staff" WHERE id = NEW.staff_id AND employment_status = 'ACTIVE')
+            THEN RAISE(ABORT, 'HR_STAFF_NOT_ACTIVE')
+            WHEN NOT EXISTS (SELECT 1 FROM "nozzles" WHERE id = NEW.nozzle_id)
+            THEN RAISE(ABORT, 'HR_NOZZLE_NOT_FOUND')
+            WHEN NOT EXISTS (SELECT 1 FROM "nozzles" WHERE id = NEW.nozzle_id AND outlet_id = NEW.outlet_id)
+            THEN RAISE(ABORT, 'HR_NOZZLE_OUTLET_MISMATCH')
+            WHEN NOT EXISTS (SELECT 1 FROM "nozzles" WHERE id = NEW.nozzle_id AND status = 'ACTIVE')
+            THEN RAISE(ABORT, 'HR_NOZZLE_NOT_ACTIVE')
+            WHEN NOT EXISTS (SELECT 1 FROM "shift_templates" WHERE id = NEW.shift_template_id AND outlet_id = NEW.outlet_id)
+            THEN RAISE(ABORT, 'HR_SHIFT_OUTLET_MISMATCH')
+        END;
+END;
+

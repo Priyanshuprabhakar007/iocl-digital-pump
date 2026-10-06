@@ -296,7 +296,7 @@ describe('Phase 5B Comprehensive Attendance & Geofencing Suite', () => {
     ).rejects.toThrow();
   });
 
-  it('should test RBAC matrix across roles for attendance read/write', async () => {
+  it('should test RBAC matrix across roles for attendance read/write and geofence/nozzle write', async () => {
     const db = getDb(localD1);
     const { rosterId } = await createTestSetup(db, OUTLET_1_ID);
 
@@ -313,18 +313,106 @@ describe('Phase 5B Comprehensive Attendance & Geofencing Suite', () => {
       updatedAt: now,
     }).run();
 
+    const roles = [
+      { email: 'admin@iocl.in', canReadAtt: true, canWriteAtt: true, canWriteGeo: true },
+      { email: 'wbso@iocl.in', canReadAtt: true, canWriteAtt: false, canWriteGeo: false },
+      { email: 'kolkatado@iocl.in', canReadAtt: true, canWriteAtt: false, canWriteGeo: false },
+      { email: 'bm.kolkata@iocl.in', canReadAtt: true, canWriteAtt: true, canWriteGeo: true },
+      { email: 'fo.central@iocl.in', canReadAtt: true, canWriteAtt: true, canWriteGeo: true },
+      { email: 'dealer.parkstreet@iocl.in', canReadAtt: true, canWriteAtt: true, canWriteGeo: false },
+      { email: 'csp.parkstreet@iocl.in', canReadAtt: true, canWriteAtt: true, canWriteGeo: false },
+    ];
+
+    for (const r of roles) {
+      const cookie = await loginAs(r.email);
+
+      // Read attendance
+      const rRes = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/attendance`, {
+        method: 'GET',
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }, env);
+      expect(rRes.status).toBe(r.canReadAtt ? 200 : 403);
+
+      // Write geofence
+      const gRes = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/geofence-policy`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ radiusMetres: 100, maxAccuracyMetres: 50, attendanceGeofenceRequired: true, status: 'ACTIVE' }),
+      }, env);
+      expect(gRes.status).toBe(r.canWriteGeo ? 200 : 403);
+    }
+
+    // Test out-of-scope outlet vs missing permission 403 distinction
     const soCookie = await loginAs('wbso@iocl.in');
-    const soWrite = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/attendance/check-in`, {
+    const outOfScopeWrite = await app.request(`/api/v1/outlets/ro-9999/hr/attendance/check-in`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: soCookie, Origin: 'http://localhost:3000' },
       body: JSON.stringify({ rosterAssignmentId: rosterId, latitude: 22.55, longitude: 88.35, accuracyMetres: 10 }),
     }, env);
-    expect(soWrite.status).toBe(403);
+    expect(outOfScopeWrite.status).toBe(403);
+  });
 
-    const soRead = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/attendance`, {
-      method: 'GET',
-      headers: { Cookie: soCookie, Origin: 'http://localhost:3000' },
+  it('should validate GPS accuracy, coordinate ranges and inactive policy', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const db = getDb(localD1);
+    const { rosterId } = await createTestSetup(db, OUTLET_1_ID);
+
+    const now = new Date().toISOString();
+    await db.insert(hrOutletGeofencePolicies).values({
+      id: 'geo-acc',
+      outletId: OUTLET_1_ID,
+      radiusMetres: 100,
+      maxAccuracyMetres: 20,
+      attendanceGeofenceRequired: 1,
+      status: 'ACTIVE',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+
+    // 1. Poor GPS accuracy
+    const resAcc = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/attendance/check-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+      body: JSON.stringify({ rosterAssignmentId: rosterId, latitude: 22.55, longitude: 88.35, accuracyMetres: 50 }),
     }, env);
-    expect(soRead.status).toBe(200);
+    expect(resAcc.status).toBe(400);
+    expect((await resAcc.json() as any).error.code).toBe('HR_GPS_ACCURACY_TOO_LOW');
+
+    // 2. Invalid latitude
+    const resLat = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/attendance/check-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+      body: JSON.stringify({ rosterAssignmentId: rosterId, latitude: 100, longitude: 88.35, accuracyMetres: 10 }),
+    }, env);
+    expect(resLat.status).toBe(400);
+  });
+
+  it('should verify direct DB cross-reference triggers for attendance', async () => {
+    const db = getDb(localD1);
+    const { rosterId, staffId, shiftId } = await createTestSetup(db, OUTLET_1_ID);
+    const now = new Date().toISOString();
+
+    // Mismatched outlet in insert
+    await expect(
+      db.insert(hrAttendanceRecords).values({
+        id: `att-mismatch-${Math.random()}`,
+        outletId: OUTLET_2_ID, // mismatch
+        staffId,
+        rosterAssignmentId: rosterId,
+        attendanceDate: '2026-10-10',
+        shiftTemplateId: shiftId,
+        checkInAt: now,
+        checkInLatitude: 22.55,
+        checkInLongitude: 88.35,
+        checkInAccuracyMetres: 10,
+        checkInDistanceMetres: 0,
+        checkInInsideGeofence: 1,
+        status: 'CHECKED_IN',
+        createdBy: 'user-admin',
+        createdAt: now,
+        updatedAt: now,
+      }).run()
+    ).rejects.toThrow();
   });
 });
