@@ -19,7 +19,15 @@ import { formatDisplayDate, formatDisplayDateTime, formatFileSize } from '../uti
 
 export { formatDisplayDate, formatDisplayDateTime, formatFileSize };
 
-export type HrWorkspaceTab = 'staff' | 'designations' | 'manpower' | 'roster';
+export type HrWorkspaceTab =
+  | 'staff'
+  | 'designations'
+  | 'manpower'
+  | 'roster'
+  | 'attendance'
+  | 'geofence'
+  | 'nozzle-assignment'
+  | 'nozzleAssignment';
 
 export interface HrFilterState {
   staff: {
@@ -43,6 +51,23 @@ export interface HrFilterState {
     status: string;
     fromDate: string;
     toDate: string;
+  };
+  attendance: {
+    date: string;
+    fromDate: string;
+    toDate: string;
+    staffId: string;
+    shiftTemplateId: string;
+    status: string;
+  };
+  nozzleAssignment: {
+    date: string;
+    fromDate: string;
+    toDate: string;
+    staffId: string;
+    nozzleId: string;
+    shiftTemplateId: string;
+    status: string;
   };
 }
 
@@ -73,6 +98,23 @@ export function getResetHrFilters(): HrFilterState {
       fromDate: '',
       toDate: '',
     },
+    attendance: {
+      date: '',
+      fromDate: '',
+      toDate: '',
+      staffId: '',
+      shiftTemplateId: '',
+      status: '',
+    },
+    nozzleAssignment: {
+      date: '',
+      fromDate: '',
+      toDate: '',
+      staffId: '',
+      nozzleId: '',
+      shiftTemplateId: '',
+      status: '',
+    },
   };
 }
 
@@ -85,6 +127,9 @@ export function getHrTabResetTargets(nextTab: HrWorkspaceTab) {
     closeDesignationUi: nextTab !== 'designations',
     closeManpowerUi: nextTab !== 'manpower',
     closeRosterUi: nextTab !== 'roster',
+    closeAttendanceUi: nextTab !== 'attendance',
+    closeGeofenceUi: nextTab !== 'geofence',
+    closeNozzleAssignmentUi: nextTab !== 'nozzle-assignment' && nextTab !== 'nozzleAssignment',
   };
 }
 
@@ -266,6 +311,119 @@ export function buildHrRosterQueryParams(filters?: {
   }
   const str = params.toString();
   return str ? `?${str}` : '';
+}
+
+/**
+ * Builds query params for Attendance listing
+ */
+export function buildHrAttendanceQueryParams(filters?: {
+  date?: string;
+  fromDate?: string;
+  toDate?: string;
+  staffId?: string;
+  shiftTemplateId?: string;
+  status?: string;
+}): string {
+  if (!filters) return '';
+  const params = new URLSearchParams();
+  if (filters.date && filters.date.trim()) {
+    params.set('date', filters.date.trim());
+  }
+  if (filters.fromDate && filters.fromDate.trim()) {
+    params.set('fromDate', filters.fromDate.trim());
+  }
+  if (filters.toDate && filters.toDate.trim()) {
+    params.set('toDate', filters.toDate.trim());
+  }
+  if (filters.staffId && filters.staffId.trim()) {
+    params.set('staffId', filters.staffId.trim());
+  }
+  if (filters.shiftTemplateId && filters.shiftTemplateId.trim()) {
+    params.set('shiftTemplateId', filters.shiftTemplateId.trim());
+  }
+  if (filters.status && filters.status.trim()) {
+    params.set('status', filters.status.trim());
+  }
+  const str = params.toString();
+  return str ? `?${str}` : '';
+}
+
+/**
+ * Builds query params for Nozzle Assignment listing
+ */
+export function buildHrNozzleAssignmentQueryParams(filters?: {
+  date?: string;
+  fromDate?: string;
+  toDate?: string;
+  staffId?: string;
+  nozzleId?: string;
+  shiftTemplateId?: string;
+  status?: string;
+}): string {
+  if (!filters) return '';
+  const params = new URLSearchParams();
+  if (filters.date && filters.date.trim()) {
+    params.set('date', filters.date.trim());
+  }
+  if (filters.fromDate && filters.fromDate.trim()) {
+    params.set('fromDate', filters.fromDate.trim());
+  }
+  if (filters.toDate && filters.toDate.trim()) {
+    params.set('toDate', filters.toDate.trim());
+  }
+  if (filters.staffId && filters.staffId.trim()) {
+    params.set('staffId', filters.staffId.trim());
+  }
+  if (filters.nozzleId && filters.nozzleId.trim()) {
+    params.set('nozzleId', filters.nozzleId.trim());
+  }
+  if (filters.shiftTemplateId && filters.shiftTemplateId.trim()) {
+    params.set('shiftTemplateId', filters.shiftTemplateId.trim());
+  }
+  if (filters.status && filters.status.trim()) {
+    params.set('status', filters.status.trim());
+  }
+  const str = params.toString();
+  return str ? `?${str}` : '';
+}
+
+export function formatHrAttendanceStatus(status?: string | null): { label: string; badgeClass: string } {
+  switch (status) {
+    case 'CHECKED_IN':
+      return { label: 'Checked In', badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
+    case 'CHECKED_OUT':
+      return { label: 'Checked Out', badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
+    case 'CANCELLED':
+      return { label: 'Cancelled', badgeClass: 'bg-slate-500/10 text-slate-400 border-slate-500/20' };
+    default:
+      return { label: status || '—', badgeClass: 'bg-slate-500/10 text-slate-400 border-slate-500/20' };
+  }
+}
+
+export function formatHrNozzleStatus(status?: string | null): { label: string; badgeClass: string } {
+  switch (status) {
+    case 'ASSIGNED':
+      return { label: 'Assigned', badgeClass: 'bg-sky-500/10 text-sky-400 border-sky-500/20' };
+    case 'CANCELLED':
+      return { label: 'Cancelled', badgeClass: 'bg-slate-500/10 text-slate-400 border-slate-500/20' };
+    default:
+      return { label: status || '—', badgeClass: 'bg-slate-500/10 text-slate-400 border-slate-500/20' };
+  }
+}
+
+export function formatGeolocationError(error: any): string {
+  if (!error) return 'An unknown geolocation error occurred.';
+  if (typeof error === 'string') return error;
+  if (error.code === 1 || error.message?.includes('PERMISSION_DENIED')) {
+    return 'Location permission was denied. Please allow location access to continue.';
+  }
+  if (error.code === 2 || error.message?.includes('POSITION_UNAVAILABLE')) {
+    return 'Your current location could not be determined.';
+  }
+  if (error.code === 3 || error.message?.includes('TIMEOUT')) {
+    return 'Location request timed out. Please try again.';
+  }
+  return error.message || 'Unable to retrieve your location.';
 }
 
 /**
@@ -620,6 +778,36 @@ export function getHrErrorMessage(error: any): string {
         return 'Shift template not found.';
       case 'HR_SHIFT_TEMPLATE_NOT_ACTIVE':
         return 'Shift template is not active.';
+      case 'HR_GEOFENCE_POLICY_NOT_FOUND':
+        return 'Geofence policy not configured.';
+      case 'HR_OUTLET_LOCATION_NOT_CONFIGURED':
+        return 'Outlet location has not been configured.';
+      case 'HR_GPS_ACCURACY_TOO_LOW':
+        return 'GPS accuracy is too low. Move to an open area and try again.';
+      case 'HR_OUTSIDE_GEOFENCE':
+        return 'You are outside the permitted attendance area.';
+      case 'HR_ROSTER_NOT_SCHEDULED':
+        return 'Roster assignment is not scheduled.';
+      case 'HR_ATTENDANCE_ALREADY_EXISTS':
+        return 'Attendance already exists for this roster assignment.';
+      case 'HR_ATTENDANCE_NOT_FOUND':
+        return 'Attendance record not found.';
+      case 'HR_ATTENDANCE_NOT_CHECKED_IN':
+        return 'Attendance is not checked in.';
+      case 'HR_ATTENDANCE_ALREADY_CHECKED_OUT':
+        return 'Attendance already checked out.';
+      case 'HR_ATTENDANCE_CHECKOUT_INVALID':
+        return 'Checkout time must be strictly after check-in time.';
+      case 'HR_NOZZLE_ASSIGNMENT_NOT_FOUND':
+        return 'Nozzle assignment not found.';
+      case 'HR_NOZZLE_ASSIGNMENT_ALREADY_CANCELLED':
+        return 'Nozzle assignment is already cancelled.';
+      case 'HR_NOZZLE_ALREADY_ASSIGNED':
+        return 'This nozzle is already assigned for the selected shift and date.';
+      case 'HR_NOZZLE_NOT_ACTIVE':
+        return 'The selected nozzle is not active.';
+      case 'HR_NOZZLE_OUTLET_MISMATCH':
+        return 'Nozzle belongs to a different outlet.';
       case 'VALIDATION_ERROR':
         return 'Please correct the highlighted validation errors.';
       case 'FORBIDDEN':
