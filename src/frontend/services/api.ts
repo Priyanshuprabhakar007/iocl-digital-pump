@@ -25,7 +25,7 @@ export function getAuthToken(): string | null {
 }
 
 const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+  (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
 export async function apiFetch<T = unknown>(
   endpoint: string,
@@ -50,15 +50,27 @@ export async function apiFetch<T = unknown>(
     },
   };
 
-  const requestUrl =
-    API_BASE_URL && endpoint.startsWith('/')
-      ? `${API_BASE_URL}${endpoint}`
-      : endpoint;
+  const requestUrl = endpoint.startsWith('http')
+    ? endpoint
+    : `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
   try {
     const res = await fetch(requestUrl, config);
-    const json = (await res.json()) as ApiResponse<T>;
-    return json;
+    const contentType = res.headers.get('content-type') || '';
+
+    if (contentType.includes('application/json')) {
+      const json = (await res.json()) as ApiResponse<T>;
+      return json;
+    }
+
+    return {
+      success: false,
+      data: null,
+      error: {
+        code: 'HTTP_ERROR',
+        message: `Backend returned HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`,
+      },
+    };
   } catch (err: any) {
     return {
       success: false,
