@@ -1,4 +1,4 @@
--- Migration 0020: Phase 5B-1 Attendance, Geofencing & Nozzle Assignments
+-- Migration 0020: Phase 5B-1 Attendance, Geofencing & Nozzle Assignments (Hardened)
 
 -- 1. Permissions & Role Permissions
 INSERT OR IGNORE INTO "permissions" ("id", "code", "name", "description") VALUES
@@ -95,7 +95,13 @@ CREATE TABLE IF NOT EXISTS "hr_attendance_records" (
 	CHECK (status IN ('CHECKED_IN', 'CHECKED_OUT', 'CANCELLED')),
 	CHECK (check_in_inside_geofence IN (0, 1)),
 	CHECK (check_out_inside_geofence IS NULL OR check_out_inside_geofence IN (0, 1)),
-	CHECK (attendance_date GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]')
+	CHECK (attendance_date GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'),
+	CHECK (check_in_latitude BETWEEN -90 AND 90),
+	CHECK (check_in_longitude BETWEEN -180 AND 180),
+	CHECK (check_in_accuracy_metres >= 0),
+	CHECK (check_out_latitude IS NULL OR (check_out_latitude BETWEEN -90 AND 90)),
+	CHECK (check_out_longitude IS NULL OR (check_out_longitude BETWEEN -180 AND 180)),
+	CHECK (check_out_accuracy_metres IS NULL OR check_out_accuracy_metres >= 0)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_hr_attendance_active_roster" ON "hr_attendance_records" ("roster_assignment_id") WHERE status != 'CANCELLED';
@@ -107,6 +113,35 @@ CREATE TRIGGER IF NOT EXISTS "trg_hr_attendance_records_delete_forbidden"
 BEFORE DELETE ON "hr_attendance_records"
 BEGIN
     SELECT RAISE(ABORT, 'HR_ATTENDANCE_DELETE_FORBIDDEN');
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_hr_attendance_records_identity_immutable"
+BEFORE UPDATE ON "hr_attendance_records"
+BEGIN
+    SELECT
+        CASE
+            WHEN (OLD.outlet_id IS NOT NEW.outlet_id) OR
+                 (OLD.staff_id IS NOT NEW.staff_id) OR
+                 (OLD.roster_assignment_id IS NOT NEW.roster_assignment_id) OR
+                 (OLD.attendance_date IS NOT NEW.attendance_date) OR
+                 (OLD.shift_template_id IS NOT NEW.shift_template_id) OR
+                 (OLD.created_by IS NOT NEW.created_by) OR
+                 (OLD.created_at IS NOT NEW.created_at) OR
+                 (OLD.check_in_at IS NOT NEW.check_in_at)
+            THEN RAISE(ABORT, 'HR_ATTENDANCE_IDENTITY_IMMUTABLE')
+        END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_hr_attendance_records_checkout_check"
+BEFORE UPDATE ON "hr_attendance_records"
+BEGIN
+    SELECT
+        CASE
+            WHEN NEW.status = 'CHECKED_OUT' AND (NEW.check_out_at IS NULL OR NEW.check_out_at <= NEW.check_in_at)
+            THEN RAISE(ABORT, 'HR_ATTENDANCE_CHECKOUT_INVALID')
+            WHEN NEW.status = 'CHECKED_IN' AND NEW.check_out_at IS NOT NULL
+            THEN RAISE(ABORT, 'HR_ATTENDANCE_CHECKED_IN_HAS_CHECKOUT')
+        END;
 END;
 
 -- 4. Nozzle Assignments
@@ -142,4 +177,21 @@ CREATE TRIGGER IF NOT EXISTS "trg_hr_nozzle_assignments_delete_forbidden"
 BEFORE DELETE ON "hr_nozzle_assignments"
 BEGIN
     SELECT RAISE(ABORT, 'HR_NOZZLE_ASSIGNMENT_DELETE_FORBIDDEN');
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_hr_nozzle_assignments_identity_immutable"
+BEFORE UPDATE ON "hr_nozzle_assignments"
+BEGIN
+    SELECT
+        CASE
+            WHEN (OLD.outlet_id IS NOT NEW.outlet_id) OR
+                 (OLD.roster_assignment_id IS NOT NEW.roster_assignment_id) OR
+                 (OLD.staff_id IS NOT NEW.staff_id) OR
+                 (OLD.nozzle_id IS NOT NEW.nozzle_id) OR
+                 (OLD.assignment_date IS NOT NEW.assignment_date) OR
+                 (OLD.shift_template_id IS NOT NEW.shift_template_id) OR
+                 (OLD.created_by IS NOT NEW.created_by) OR
+                 (OLD.created_at IS NOT NEW.created_at)
+            THEN RAISE(ABORT, 'HR_NOZZLE_ASSIGNMENT_IDENTITY_IMMUTABLE')
+        END;
 END;

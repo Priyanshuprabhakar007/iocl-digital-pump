@@ -585,18 +585,18 @@ hrRoutes.post(
     const user = c.var.user!.user;
     const { hrService, hrRepo, outletRepo } = getServices(c);
 
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
     try {
       const existing = await hrRepo.getAttendanceById(attendanceId);
-      if (!existing) {
+      if (!existing || existing.outletId !== outletId) {
         return c.json({ success: false, data: null, error: { code: 'HR_ATTENDANCE_NOT_FOUND', message: 'Attendance record not found' } }, 404);
       }
 
-      if (!(await verifyOutletAuthority(c, existing.outletId, outletRepo))) {
-        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
-      }
-
       const body = await c.req.json();
-      const record = await hrService.checkOutAttendance(existing.outletId, attendanceId, user.id, body);
+      const record = await hrService.checkOutAttendance(outletId, attendanceId, user.id, body);
       return c.json({ success: true, data: record, error: null });
     } catch (err) {
       return handleHrError(c, err);
@@ -687,17 +687,17 @@ hrRoutes.patch(
     const user = c.var.user!.user;
     const { hrService, hrRepo, outletRepo } = getServices(c);
 
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
     try {
       const existing = await hrRepo.getNozzleAssignmentById(assignmentId);
-      if (!existing) {
+      if (!existing || existing.outletId !== outletId) {
         return c.json({ success: false, data: null, error: { code: 'HR_NOZZLE_ASSIGNMENT_NOT_FOUND', message: 'Nozzle assignment not found' } }, 404);
       }
 
-      if (!(await verifyOutletAuthority(c, existing.outletId, outletRepo))) {
-        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
-      }
-
-      const cancelled = await hrService.cancelNozzleAssignment(assignmentId, existing.outletId, user.id);
+      const cancelled = await hrService.cancelNozzleAssignment(assignmentId, outletId, user.id);
       return c.json({ success: true, data: cancelled, error: null });
     } catch (err) {
       return handleHrError(c, err);

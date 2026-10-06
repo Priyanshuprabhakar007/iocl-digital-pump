@@ -226,6 +226,9 @@ function handleDbError(err: any): never {
   if (msg.includes('HR_NOZZLE_OUTLET_MISMATCH')) {
     throw new HrError('HR_NOZZLE_OUTLET_MISMATCH', 'Nozzle belongs to another outlet', 400);
   }
+  if (msg.includes('HR_NOZZLE_ASSIGNMENT_ALREADY_CANCELLED')) {
+    throw new HrError('HR_NOZZLE_ASSIGNMENT_ALREADY_CANCELLED', 'Nozzle assignment is already cancelled', 409);
+  }
 
   throw err;
 }
@@ -1082,7 +1085,12 @@ export class HrService {
       validated.accuracyMetres
     );
 
-    const now = new Date().toISOString();
+    let now = new Date().toISOString();
+    const checkInTime = new Date(attendance.checkInAt).getTime();
+    const nowTime = new Date(now).getTime();
+    if (nowTime <= checkInTime) {
+      now = new Date(checkInTime + 1000).toISOString();
+    }
 
     try {
       const updated = await this.hrRepo.updateAttendanceRecord(attendanceId, {
@@ -1226,6 +1234,9 @@ export class HrService {
     const assignment = await this.hrRepo.getNozzleAssignmentById(assignmentId);
     if (!assignment || assignment.outletId !== outletId) {
       throw new HrError('HR_NOZZLE_ASSIGNMENT_NOT_FOUND', 'Nozzle assignment not found', 404);
+    }
+    if (assignment.status === 'CANCELLED') {
+      throw new HrError('HR_NOZZLE_ASSIGNMENT_ALREADY_CANCELLED', 'Nozzle assignment is already cancelled', 409);
     }
 
     const now = new Date().toISOString();
