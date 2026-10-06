@@ -167,15 +167,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const content = (
     <div className="flex flex-col h-full bg-slate-900 border-r border-slate-800 text-slate-300 w-64 p-4">
-      {/* Mobile Close Button */}
+      {/* Mobile Close Button & Brand */}
       <div className="flex items-center justify-between lg:hidden mb-4 pb-2 border-b border-slate-800">
-        <span className="font-bold text-white text-sm">Navigation</span>
+        <div className="flex items-center gap-2.5">
+          <img src="/indianoil-logo.svg" alt="IndianOil" className="h-9 w-auto object-contain shrink-0" />
+          <span className="font-bold text-white text-xs">IOCL Navigation</span>
+        </div>
         <button
           onClick={onCloseMobile}
           className="p-1 text-slate-400 hover:text-white rounded-md"
         >
           <X className="w-5 h-5" />
         </button>
+      </div>
+
+      {/* Sidebar Brand Header (Desktop) */}
+      <div className="hidden lg:flex items-center gap-3 mb-4 pb-3 border-b border-slate-800">
+        <img src="/indianoil-logo.svg" alt="IndianOil" className="h-10 w-auto object-contain shrink-0" />
+        <div>
+          <div className="text-xs font-bold text-white leading-tight">IndianOil</div>
+          <div className="text-[10px] text-slate-400 font-mono">Digital Pump Manager</div>
+        </div>
       </div>
 
       {/* Scope Context Card */}

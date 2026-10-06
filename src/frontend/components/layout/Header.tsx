@@ -53,16 +53,18 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
             <Menu className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white font-bold text-lg shadow-md shadow-orange-500/20">
-              IOC
-            </div>
+          <div className="flex items-center gap-4">
+            <img
+              src="/indianoil-logo.svg"
+              alt="IndianOil"
+              className="h-11 sm:h-12 md:h-14 w-auto object-contain shrink-0"
+            />
             <div>
               <div className="flex items-center gap-1.5 font-bold text-white tracking-wide text-sm sm:text-base">
                 IOCL <span className="text-orange-500">Digital Pump Manager</span>
               </div>
               <div className="text-[11px] text-slate-400 font-mono hidden sm:block">
-                Indian Oil Corporation Limited • Retail Operations
+                Indian Oil Corporation Limited • Enterprise Gateway
               </div>
             </div>
           </div>

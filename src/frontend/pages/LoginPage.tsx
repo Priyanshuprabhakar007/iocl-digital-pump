@@ -50,15 +50,17 @@ export const LoginPage: React.FC = () => {
         
         {/* Left Column: IOCL Enterprise Branding & Form */}
         <div className="lg:col-span-6 space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white font-extrabold text-2xl shadow-lg shadow-orange-500/20">
-              IOC
-            </div>
+          <div className="flex items-center gap-4">
+            <img
+              src="/indianoil-logo.svg"
+              alt="IndianOil"
+              className="h-14 sm:h-16 md:h-18 w-auto object-contain shrink-0"
+            />
             <div>
-              <h1 className="text-xl font-bold text-white tracking-wide">
+              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-wide">
                 IOCL <span className="text-orange-500">Digital Pump Manager</span>
               </h1>
-              <p className="text-xs text-slate-400 font-mono">
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
                 Indian Oil Corporation Limited • Enterprise Gateway
               </p>
             </div>
