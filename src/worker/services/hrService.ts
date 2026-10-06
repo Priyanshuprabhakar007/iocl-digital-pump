@@ -13,6 +13,12 @@ import {
   HrDesignationFilterSchema,
   HrStaffFilterSchema,
   HrRosterFilterSchema,
+  GeofencePolicySchema,
+  AttendanceCheckInSchema,
+  AttendanceCheckOutSchema,
+  AttendanceListQuerySchema,
+  NozzleAssignmentCreateSchema,
+  NozzleAssignmentListQuerySchema,
 } from '../../shared/validators';
 import {
   HrDesignation,
@@ -20,7 +26,69 @@ import {
   HrManpowerSanction,
   HrManpowerSummary,
   HrRosterAssignment,
+  HrGeofencePolicy,
+  HrAttendanceRecord,
+  HrNozzleAssignment,
 } from '../../shared/types';
+
+export function calculateHaversineDistanceMetres(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+async function evaluateGeofence(
+  hrRepo: HrRepository,
+  outletId: string,
+  latitude: number,
+  longitude: number,
+  accuracyMetres: number
+): Promise<{ distanceMetres: number; insideGeofence: number }> {
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    throw new HrError('VALIDATION_ERROR', 'Invalid latitude or longitude coordinates', 400);
+  }
+
+  const outletLoc = await hrRepo.getRetailOutletLocation(outletId);
+  if (!outletLoc || outletLoc.latitude === null || outletLoc.longitude === null) {
+    throw new HrError('HR_OUTLET_LOCATION_NOT_CONFIGURED', 'Outlet location coordinates not configured', 400);
+  }
+
+  const policy = await hrRepo.getGeofencePolicy(outletId);
+  if (!policy || policy.status !== 'ACTIVE') {
+    throw new HrError('HR_GEOFENCE_POLICY_NOT_FOUND', 'Active geofence policy not found for outlet', 404);
+  }
+
+  if (accuracyMetres > policy.maxAccuracyMetres) {
+    throw new HrError('HR_GPS_ACCURACY_TOO_LOW', 'GPS accuracy is too low', 400);
+  }
+
+  const distanceMetres = calculateHaversineDistanceMetres(
+    outletLoc.latitude,
+    outletLoc.longitude,
+    latitude,
+    longitude
+  );
+
+  const insideGeofence = distanceMetres <= policy.radiusMetres ? 1 : 0;
+
+  if (policy.attendanceGeofenceRequired === 1 && !insideGeofence) {
+    throw new HrError('HR_OUTSIDE_GEOFENCE', 'Device is outside the allowed geofence radius', 400);
+  }
+
+  return { distanceMetres, insideGeofence };
+}
 
 export class HrError extends Error {
   constructor(public code: string, message: string, public status: number = 400) {
@@ -115,6 +183,48 @@ function handleDbError(err: any): never {
   }
   if (msg.includes('HR_ROSTER_IDENTITY_IMMUTABLE')) {
     throw new HrError('HR_ROSTER_IDENTITY_IMMUTABLE', 'Roster assignment identity fields cannot be modified', 400);
+  }
+  if (msg.includes('HR_GEOFENCE_POLICY_NOT_FOUND')) {
+    throw new HrError('HR_GEOFENCE_POLICY_NOT_FOUND', 'Geofence policy not found', 404);
+  }
+  if (msg.includes('HR_OUTLET_LOCATION_NOT_CONFIGURED')) {
+    throw new HrError('HR_OUTLET_LOCATION_NOT_CONFIGURED', 'Outlet location coordinates not configured', 400);
+  }
+  if (msg.includes('HR_GPS_ACCURACY_TOO_LOW')) {
+    throw new HrError('HR_GPS_ACCURACY_TOO_LOW', 'GPS accuracy is too low', 400);
+  }
+  if (msg.includes('HR_OUTSIDE_GEOFENCE')) {
+    throw new HrError('HR_OUTSIDE_GEOFENCE', 'Device is outside the allowed geofence radius', 400);
+  }
+  if (msg.includes('HR_ROSTER_NOT_FOUND')) {
+    throw new HrError('HR_ROSTER_NOT_FOUND', 'Roster assignment not found', 404);
+  }
+  if (msg.includes('HR_ROSTER_NOT_SCHEDULED')) {
+    throw new HrError('HR_ROSTER_NOT_SCHEDULED', 'Roster assignment is not scheduled', 400);
+  }
+  if (msg.includes('HR_ATTENDANCE_ALREADY_EXISTS') || msg.includes('idx_hr_attendance_active_roster') || (msg.includes('UNIQUE constraint') && msg.includes('hr_attendance_records'))) {
+    throw new HrError('HR_ATTENDANCE_ALREADY_EXISTS', 'Attendance already exists for this roster assignment', 409);
+  }
+  if (msg.includes('HR_ATTENDANCE_NOT_FOUND')) {
+    throw new HrError('HR_ATTENDANCE_NOT_FOUND', 'Attendance record not found', 404);
+  }
+  if (msg.includes('HR_ATTENDANCE_NOT_CHECKED_IN')) {
+    throw new HrError('HR_ATTENDANCE_NOT_CHECKED_IN', 'Attendance is not checked in', 400);
+  }
+  if (msg.includes('HR_ATTENDANCE_ALREADY_CHECKED_OUT')) {
+    throw new HrError('HR_ATTENDANCE_ALREADY_CHECKED_OUT', 'Attendance already checked out', 409);
+  }
+  if (msg.includes('HR_NOZZLE_ASSIGNMENT_NOT_FOUND')) {
+    throw new HrError('HR_NOZZLE_ASSIGNMENT_NOT_FOUND', 'Nozzle assignment not found', 404);
+  }
+  if (msg.includes('HR_NOZZLE_ALREADY_ASSIGNED') || msg.includes('idx_hr_nozzle_active_assignment') || (msg.includes('UNIQUE constraint') && msg.includes('hr_nozzle_assignments'))) {
+    throw new HrError('HR_NOZZLE_ALREADY_ASSIGNED', 'Nozzle is already assigned for this shift and date', 409);
+  }
+  if (msg.includes('HR_NOZZLE_NOT_ACTIVE')) {
+    throw new HrError('HR_NOZZLE_NOT_ACTIVE', 'Nozzle is not active', 409);
+  }
+  if (msg.includes('HR_NOZZLE_OUTLET_MISMATCH')) {
+    throw new HrError('HR_NOZZLE_OUTLET_MISMATCH', 'Nozzle belongs to another outlet', 400);
   }
 
   throw err;
@@ -795,6 +905,349 @@ export class HrService {
           rosterDate: updated.rosterDate,
           shiftTemplateId: updated.shiftTemplateId,
         },
+        createdAt: now,
+      });
+
+      return updated;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  // ==========================================================================
+  // PHASE 5B: GEOFENCE, ATTENDANCE & NOZZLE ASSIGNMENTS
+  // ==========================================================================
+
+  async getGeofencePolicy(outletId: string): Promise<HrGeofencePolicy> {
+    const policy = await this.hrRepo.getGeofencePolicy(outletId);
+    if (!policy) {
+      throw new HrError('HR_GEOFENCE_POLICY_NOT_FOUND', 'Geofence policy not found for outlet', 404);
+    }
+    return policy;
+  }
+
+  async upsertGeofencePolicy(
+    outletId: string,
+    actorUserId: string,
+    payload: any
+  ): Promise<HrGeofencePolicy> {
+    const validated = GeofencePolicySchema.parse(payload);
+    const id = `geo-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+
+    try {
+      const updated = await this.hrRepo.upsertGeofencePolicy({
+        id,
+        outletId,
+        radiusMetres: validated.radiusMetres,
+        maxAccuracyMetres: validated.maxAccuracyMetres,
+        attendanceGeofenceRequired: validated.attendanceGeofenceRequired ? 1 : 0,
+        status: validated.status,
+        createdBy: actorUserId,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_GEOFENCE_POLICY_UPDATED',
+        entityType: 'HR_OUTLET_GEOFENCE_POLICY',
+        entityId: updated.id,
+        newValue: {
+          radiusMetres: updated.radiusMetres,
+          maxAccuracyMetres: updated.maxAccuracyMetres,
+          attendanceGeofenceRequired: updated.attendanceGeofenceRequired,
+          status: updated.status,
+        },
+        createdAt: now,
+      });
+
+      return updated;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  async checkInAttendance(
+    outletId: string,
+    actorUserId: string,
+    payload: any
+  ): Promise<HrAttendanceRecord> {
+    const validated = AttendanceCheckInSchema.parse(payload);
+
+    const roster = await this.hrRepo.getRosterById(validated.rosterAssignmentId);
+    if (!roster) {
+      throw new HrError('HR_ROSTER_NOT_FOUND', 'Roster assignment not found', 404);
+    }
+    if (roster.outletId !== outletId) {
+      throw new HrError('HR_ROSTER_OUTLET_MISMATCH', 'Roster assignment belongs to another outlet', 400);
+    }
+    if (roster.status !== 'SCHEDULED') {
+      throw new HrError('HR_ROSTER_NOT_SCHEDULED', 'Roster assignment is not scheduled', 400);
+    }
+
+    const staff = await this.hrRepo.getStaffById(roster.staffId);
+    if (!staff || staff.outletId !== outletId) {
+      throw new HrError('HR_STAFF_NOT_FOUND', 'Staff member not found', 404);
+    }
+    if (staff.employmentStatus !== 'ACTIVE') {
+      throw new HrError('HR_STAFF_NOT_ACTIVE', 'Staff member is not active', 409);
+    }
+
+    const existingAttendance = await this.hrRepo.getActiveAttendanceByRosterAssignment(roster.id);
+    if (existingAttendance) {
+      throw new HrError('HR_ATTENDANCE_ALREADY_EXISTS', 'Attendance already exists for this roster assignment', 409);
+    }
+
+    const { distanceMetres, insideGeofence } = await evaluateGeofence(
+      this.hrRepo,
+      outletId,
+      validated.latitude,
+      validated.longitude,
+      validated.accuracyMetres
+    );
+
+    const id = `att-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+
+    try {
+      const record = await this.hrRepo.createAttendanceRecord({
+        id,
+        outletId,
+        staffId: roster.staffId,
+        rosterAssignmentId: roster.id,
+        attendanceDate: roster.rosterDate,
+        shiftTemplateId: roster.shiftTemplateId,
+        checkInAt: now,
+        checkInLatitude: validated.latitude,
+        checkInLongitude: validated.longitude,
+        checkInAccuracyMetres: validated.accuracyMetres,
+        checkInDistanceMetres: distanceMetres,
+        checkInInsideGeofence: insideGeofence,
+        status: 'CHECKED_IN',
+        notes: validated.notes,
+        createdBy: actorUserId,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_ATTENDANCE_CHECKED_IN',
+        entityType: 'HR_ATTENDANCE_RECORD',
+        entityId: id,
+        newValue: {
+          rosterAssignmentId: roster.id,
+          staffId: roster.staffId,
+          attendanceDate: roster.rosterDate,
+          checkInAt: now,
+          distanceMetres,
+          insideGeofence,
+        },
+        createdAt: now,
+      });
+
+      return record;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  async checkOutAttendance(
+    outletId: string,
+    attendanceId: string,
+    actorUserId: string,
+    payload: any
+  ): Promise<HrAttendanceRecord> {
+    const validated = AttendanceCheckOutSchema.parse(payload);
+
+    const attendance = await this.hrRepo.getAttendanceById(attendanceId);
+    if (!attendance || attendance.outletId !== outletId) {
+      throw new HrError('HR_ATTENDANCE_NOT_FOUND', 'Attendance record not found', 404);
+    }
+    if (attendance.status === 'CHECKED_OUT') {
+      throw new HrError('HR_ATTENDANCE_ALREADY_CHECKED_OUT', 'Attendance already checked out', 409);
+    }
+    if (attendance.status !== 'CHECKED_IN') {
+      throw new HrError('HR_ATTENDANCE_NOT_CHECKED_IN', 'Attendance is not checked in', 400);
+    }
+
+    const { distanceMetres, insideGeofence } = await evaluateGeofence(
+      this.hrRepo,
+      outletId,
+      validated.latitude,
+      validated.longitude,
+      validated.accuracyMetres
+    );
+
+    const now = new Date().toISOString();
+
+    try {
+      const updated = await this.hrRepo.updateAttendanceRecord(attendanceId, {
+        checkOutAt: now,
+        checkOutLatitude: validated.latitude,
+        checkOutLongitude: validated.longitude,
+        checkOutAccuracyMetres: validated.accuracyMetres,
+        checkOutDistanceMetres: distanceMetres,
+        checkOutInsideGeofence: insideGeofence,
+        status: 'CHECKED_OUT',
+        notes: validated.notes ?? attendance.notes,
+        updatedAt: now,
+      });
+
+      if (!updated) {
+        throw new HrError('HR_ATTENDANCE_NOT_FOUND', 'Attendance record not found', 404);
+      }
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_ATTENDANCE_CHECKED_OUT',
+        entityType: 'HR_ATTENDANCE_RECORD',
+        entityId: attendanceId,
+        newValue: {
+          checkOutAt: now,
+          distanceMetres,
+          insideGeofence,
+        },
+        createdAt: now,
+      });
+
+      return updated;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  async listAttendance(outletId: string, rawQuery?: any): Promise<HrAttendanceRecord[]> {
+    const filters = rawQuery ? AttendanceListQuerySchema.parse(rawQuery) : undefined;
+    return this.hrRepo.listAttendanceRecords(outletId, filters);
+  }
+
+  async createNozzleAssignment(
+    outletId: string,
+    actorUserId: string,
+    payload: any
+  ): Promise<HrNozzleAssignment> {
+    const validated = NozzleAssignmentCreateSchema.parse(payload);
+
+    const roster = await this.hrRepo.getRosterById(validated.rosterAssignmentId);
+    if (!roster) {
+      throw new HrError('HR_ROSTER_NOT_FOUND', 'Roster assignment not found', 404);
+    }
+    if (roster.outletId !== outletId) {
+      throw new HrError('HR_ROSTER_OUTLET_MISMATCH', 'Roster assignment belongs to another outlet', 400);
+    }
+    if (roster.status !== 'SCHEDULED') {
+      throw new HrError('HR_ROSTER_NOT_SCHEDULED', 'Roster assignment is not scheduled', 400);
+    }
+
+    const staff = await this.hrRepo.getStaffById(roster.staffId);
+    if (!staff || staff.outletId !== outletId) {
+      throw new HrError('HR_STAFF_NOT_FOUND', 'Staff member not found', 404);
+    }
+    if (staff.employmentStatus !== 'ACTIVE') {
+      throw new HrError('HR_STAFF_NOT_ACTIVE', 'Staff member is not active', 409);
+    }
+
+    const nozzle = await this.hrRepo.getNozzleById(validated.nozzleId);
+    if (!nozzle) {
+      throw new HrError('HR_NOZZLE_ASSIGNMENT_NOT_FOUND', 'Nozzle not found', 404);
+    }
+    if (nozzle.outletId !== outletId) {
+      throw new HrError('HR_NOZZLE_OUTLET_MISMATCH', 'Nozzle belongs to another outlet', 400);
+    }
+    if (nozzle.status !== 'ACTIVE') {
+      throw new HrError('HR_NOZZLE_NOT_ACTIVE', 'Nozzle is not active', 409);
+    }
+
+    const existingConflict = await this.hrRepo.getActiveNozzleAssignmentForNozzleDateShift(
+      validated.nozzleId,
+      roster.rosterDate,
+      roster.shiftTemplateId
+    );
+    if (existingConflict) {
+      throw new HrError('HR_NOZZLE_ALREADY_ASSIGNED', 'Nozzle is already assigned for this shift and date', 409);
+    }
+
+    const id = `nozz-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+
+    try {
+      const created = await this.hrRepo.createNozzleAssignment({
+        id,
+        outletId,
+        rosterAssignmentId: roster.id,
+        staffId: roster.staffId,
+        nozzleId: validated.nozzleId,
+        assignmentDate: roster.rosterDate,
+        shiftTemplateId: roster.shiftTemplateId,
+        status: 'ASSIGNED',
+        notes: validated.notes,
+        createdBy: actorUserId,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_NOZZLE_ASSIGNED',
+        entityType: 'HR_NOZZLE_ASSIGNMENT',
+        entityId: id,
+        newValue: {
+          rosterAssignmentId: roster.id,
+          staffId: roster.staffId,
+          nozzleId: validated.nozzleId,
+          assignmentDate: roster.rosterDate,
+          shiftTemplateId: roster.shiftTemplateId,
+        },
+        createdAt: now,
+      });
+
+      return created;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  async listNozzleAssignments(outletId: string, rawQuery?: any): Promise<HrNozzleAssignment[]> {
+    const filters = rawQuery ? NozzleAssignmentListQuerySchema.parse(rawQuery) : undefined;
+    return this.hrRepo.listNozzleAssignments(outletId, filters);
+  }
+
+  async cancelNozzleAssignment(
+    assignmentId: string,
+    outletId: string,
+    actorUserId: string
+  ): Promise<HrNozzleAssignment> {
+    const assignment = await this.hrRepo.getNozzleAssignmentById(assignmentId);
+    if (!assignment || assignment.outletId !== outletId) {
+      throw new HrError('HR_NOZZLE_ASSIGNMENT_NOT_FOUND', 'Nozzle assignment not found', 404);
+    }
+
+    const now = new Date().toISOString();
+
+    try {
+      const updated = await this.hrRepo.updateNozzleAssignment(assignmentId, {
+        status: 'CANCELLED',
+        updatedAt: now,
+      });
+
+      if (!updated) {
+        throw new HrError('HR_NOZZLE_ASSIGNMENT_NOT_FOUND', 'Nozzle assignment not found', 404);
+      }
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_NOZZLE_ASSIGNMENT_CANCELLED',
+        entityType: 'HR_NOZZLE_ASSIGNMENT',
+        entityId: assignmentId,
+        oldValue: { status: assignment.status },
+        newValue: { status: 'CANCELLED' },
         createdAt: now,
       });
 

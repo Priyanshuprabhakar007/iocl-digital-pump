@@ -503,3 +503,204 @@ hrRoutes.put(
     }
   }
 );
+
+// ============================================================================
+// GEOFENCE POLICY ROUTES
+// ============================================================================
+
+hrRoutes.get(
+  '/outlets/:outletId/hr/geofence-policy',
+  requirePermission(PERMISSIONS.HR_ATTENDANCE_READ) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const { hrService, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const policy = await hrService.getGeofencePolicy(outletId);
+      return c.json({ success: true, data: policy, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.put(
+  '/outlets/:outletId/hr/geofence-policy',
+  requirePermission(PERMISSIONS.HR_GEOFENCE_WRITE) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const user = c.var.user!.user;
+    const { hrService, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const body = await c.req.json();
+      const policy = await hrService.upsertGeofencePolicy(outletId, user.id, body);
+      return c.json({ success: true, data: policy, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+// ============================================================================
+// ATTENDANCE ROUTES
+// ============================================================================
+
+hrRoutes.post(
+  '/outlets/:outletId/hr/attendance/check-in',
+  requirePermission(PERMISSIONS.HR_ATTENDANCE_WRITE) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const user = c.var.user!.user;
+    const { hrService, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const body = await c.req.json();
+      const record = await hrService.checkInAttendance(outletId, user.id, body);
+      return c.json({ success: true, data: record, error: null }, 201);
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.post(
+  '/outlets/:outletId/hr/attendance/:attendanceId/check-out',
+  requirePermission(PERMISSIONS.HR_ATTENDANCE_WRITE) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const attendanceId = c.req.param('attendanceId')!;
+    const user = c.var.user!.user;
+    const { hrService, hrRepo, outletRepo } = getServices(c);
+
+    try {
+      const existing = await hrRepo.getAttendanceById(attendanceId);
+      if (!existing) {
+        return c.json({ success: false, data: null, error: { code: 'HR_ATTENDANCE_NOT_FOUND', message: 'Attendance record not found' } }, 404);
+      }
+
+      if (!(await verifyOutletAuthority(c, existing.outletId, outletRepo))) {
+        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+      }
+
+      const body = await c.req.json();
+      const record = await hrService.checkOutAttendance(existing.outletId, attendanceId, user.id, body);
+      return c.json({ success: true, data: record, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.get(
+  '/outlets/:outletId/hr/attendance',
+  requirePermission(PERMISSIONS.HR_ATTENDANCE_READ) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const { hrService, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const query = c.req.query();
+      const records = await hrService.listAttendance(
+        outletId,
+        Object.keys(query).length > 0 ? query : undefined
+      );
+      return c.json({ success: true, data: records, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+// ============================================================================
+// NOZZLE ASSIGNMENT ROUTES
+// ============================================================================
+
+hrRoutes.get(
+  '/outlets/:outletId/hr/nozzle-assignments',
+  requirePermission(PERMISSIONS.HR_ATTENDANCE_READ) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const { hrService, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const query = c.req.query();
+      const assignments = await hrService.listNozzleAssignments(
+        outletId,
+        Object.keys(query).length > 0 ? query : undefined
+      );
+      return c.json({ success: true, data: assignments, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.post(
+  '/outlets/:outletId/hr/nozzle-assignments',
+  requirePermission(PERMISSIONS.HR_NOZZLE_ASSIGNMENT_WRITE) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const user = c.var.user!.user;
+    const { hrService, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const body = await c.req.json();
+      const assignment = await hrService.createNozzleAssignment(outletId, user.id, body);
+      return c.json({ success: true, data: assignment, error: null }, 201);
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.patch(
+  '/outlets/:outletId/hr/nozzle-assignments/:assignmentId/cancel',
+  requirePermission(PERMISSIONS.HR_NOZZLE_ASSIGNMENT_WRITE) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const assignmentId = c.req.param('assignmentId')!;
+    const user = c.var.user!.user;
+    const { hrService, hrRepo, outletRepo } = getServices(c);
+
+    try {
+      const existing = await hrRepo.getNozzleAssignmentById(assignmentId);
+      if (!existing) {
+        return c.json({ success: false, data: null, error: { code: 'HR_NOZZLE_ASSIGNMENT_NOT_FOUND', message: 'Nozzle assignment not found' } }, 404);
+      }
+
+      if (!(await verifyOutletAuthority(c, existing.outletId, outletRepo))) {
+        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+      }
+
+      const cancelled = await hrService.cancelNozzleAssignment(assignmentId, existing.outletId, user.id);
+      return c.json({ success: true, data: cancelled, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
