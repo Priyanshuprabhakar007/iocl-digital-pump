@@ -1266,6 +1266,79 @@ export const hrRosterAssignments = sqliteTable('hr_roster_assignments', {
   check('hr_roster_date_check', sql`${table.rosterDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
 ]);
 
+export const hrOutletGeofencePolicies = sqliteTable('hr_outlet_geofence_policies', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().unique().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  radiusMetres: integer('radius_metres').notNull().default(100),
+  maxAccuracyMetres: integer('max_accuracy_metres').notNull().default(50),
+  attendanceGeofenceRequired: integer('attendance_geofence_required').notNull().default(1),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_hr_outlet_geofence_policies_outlet_id').on(table.outletId),
+  check('hr_geofence_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('hr_geofence_radius_check', sql`${table.radiusMetres} BETWEEN 10 AND 10000`),
+  check('hr_geofence_accuracy_check', sql`${table.maxAccuracyMetres} BETWEEN 1 AND 1000`),
+  check('hr_geofence_required_check', sql`${table.attendanceGeofenceRequired} IN (0, 1)`),
+]);
+
+export const hrAttendanceRecords = sqliteTable('hr_attendance_records', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  staffId: text('staff_id').notNull().references(() => hrStaff.id, { onDelete: 'cascade' }),
+  rosterAssignmentId: text('roster_assignment_id').notNull().references(() => hrRosterAssignments.id, { onDelete: 'cascade' }),
+  attendanceDate: text('attendance_date').notNull(),
+  shiftTemplateId: text('shift_template_id').notNull().references(() => shiftTemplates.id),
+  checkInAt: text('check_in_at').notNull(),
+  checkInLatitude: real('check_in_latitude').notNull(),
+  checkInLongitude: real('check_in_longitude').notNull(),
+  checkInAccuracyMetres: real('check_in_accuracy_metres').notNull(),
+  checkInDistanceMetres: real('check_in_distance_metres').notNull(),
+  checkInInsideGeofence: integer('check_in_inside_geofence').notNull(),
+  checkOutAt: text('check_out_at'),
+  checkOutLatitude: real('check_out_latitude'),
+  checkOutLongitude: real('check_out_longitude'),
+  checkOutAccuracyMetres: real('check_out_accuracy_metres'),
+  checkOutDistanceMetres: real('check_out_distance_metres'),
+  checkOutInsideGeofence: integer('check_out_inside_geofence'),
+  status: text('status', { enum: ['CHECKED_IN', 'CHECKED_OUT', 'CANCELLED'] }).notNull().default('CHECKED_IN'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_hr_attendance_outlet_date').on(table.outletId, table.attendanceDate),
+  index('idx_hr_attendance_staff_date').on(table.staffId, table.attendanceDate),
+  index('idx_hr_attendance_outlet_status').on(table.outletId, table.status),
+  check('hr_attendance_status_check', sql`${table.status} IN ('CHECKED_IN', 'CHECKED_OUT', 'CANCELLED')`),
+  check('hr_attendance_checkin_geofence_check', sql`${table.checkInInsideGeofence} IN (0, 1)`),
+  check('hr_attendance_checkout_geofence_check', sql`${table.checkOutInsideGeofence} IS NULL OR ${table.checkOutInsideGeofence} IN (0, 1)`),
+  check('hr_attendance_date_check', sql`${table.attendanceDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+]);
+
+export const hrNozzleAssignments = sqliteTable('hr_nozzle_assignments', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  rosterAssignmentId: text('roster_assignment_id').notNull().references(() => hrRosterAssignments.id, { onDelete: 'cascade' }),
+  staffId: text('staff_id').notNull().references(() => hrStaff.id, { onDelete: 'cascade' }),
+  nozzleId: text('nozzle_id').notNull().references(() => nozzles.id, { onDelete: 'cascade' }),
+  assignmentDate: text('assignment_date').notNull(),
+  shiftTemplateId: text('shift_template_id').notNull().references(() => shiftTemplates.id),
+  status: text('status', { enum: ['ASSIGNED', 'CANCELLED'] }).notNull().default('ASSIGNED'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_hr_nozzle_outlet_date').on(table.outletId, table.assignmentDate),
+  index('idx_hr_nozzle_staff_date').on(table.staffId, table.assignmentDate),
+  index('idx_hr_nozzle_outlet_status').on(table.outletId, table.status),
+  check('hr_nozzle_assignment_status_check', sql`${table.status} IN ('ASSIGNED', 'CANCELLED')`),
+  check('hr_nozzle_assignment_date_check', sql`${table.assignmentDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+]);
+
 
 
 

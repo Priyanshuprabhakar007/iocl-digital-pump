@@ -5,14 +5,24 @@ import {
   hrStaff,
   hrManpowerSanctions,
   hrRosterAssignments,
+  hrOutletGeofencePolicies,
+  hrAttendanceRecords,
+  hrNozzleAssignments,
   shiftTemplates,
   documents,
+  retailOutlets,
+  nozzles,
+  products,
+  dispensers,
 } from '../../db/schema';
 import {
   HrDesignation,
   HrStaff,
   HrManpowerSanction,
   HrRosterAssignment,
+  HrGeofencePolicy,
+  HrAttendanceRecord,
+  HrNozzleAssignment,
   HrDesignationStatus,
   HrEmploymentStatus,
   HrRosterStatus,
@@ -685,6 +695,314 @@ export class HrRepository {
       })
       .from(shiftTemplates)
       .where(eq(shiftTemplates.id, id))
+      .get();
+    return row ?? null;
+  }
+
+  // ==========================================================================
+  // PHASE 5B: GEOFENCE, ATTENDANCE & NOZZLE ASSIGNMENTS
+  // ==========================================================================
+
+  async getGeofencePolicy(outletId: string): Promise<HrGeofencePolicy | null> {
+    const row = await this.db
+      .select()
+      .from(hrOutletGeofencePolicies)
+      .where(eq(hrOutletGeofencePolicies.outletId, outletId))
+      .get();
+    return row ? (row as HrGeofencePolicy) : null;
+  }
+
+  async upsertGeofencePolicy(data: {
+    id: string;
+    outletId: string;
+    radiusMetres: number;
+    maxAccuracyMetres: number;
+    attendanceGeofenceRequired: number;
+    status: 'ACTIVE' | 'INACTIVE';
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
+  }): Promise<HrGeofencePolicy> {
+    const existing = await this.getGeofencePolicy(data.outletId);
+    if (existing) {
+      await this.db
+        .update(hrOutletGeofencePolicies)
+        .set({
+          radiusMetres: data.radiusMetres,
+          maxAccuracyMetres: data.maxAccuracyMetres,
+          attendanceGeofenceRequired: data.attendanceGeofenceRequired,
+          status: data.status,
+          updatedAt: data.updatedAt,
+        })
+        .where(eq(hrOutletGeofencePolicies.outletId, data.outletId))
+        .run();
+    } else {
+      await this.db.insert(hrOutletGeofencePolicies).values({
+        id: data.id,
+        outletId: data.outletId,
+        radiusMetres: data.radiusMetres,
+        maxAccuracyMetres: data.maxAccuracyMetres,
+        attendanceGeofenceRequired: data.attendanceGeofenceRequired,
+        status: data.status,
+        createdBy: data.createdBy,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      }).run();
+    }
+    return (await this.getGeofencePolicy(data.outletId))!;
+  }
+
+  async getAttendanceById(id: string): Promise<HrAttendanceRecord | null> {
+    const row = await this.db
+      .select({
+        record: hrAttendanceRecords,
+        staffName: hrStaff.fullName,
+        employeeCode: hrStaff.employeeCode,
+        designationName: hrDesignations.name,
+        shiftTemplateCode: shiftTemplates.code,
+        shiftTemplateName: shiftTemplates.name,
+      })
+      .from(hrAttendanceRecords)
+      .innerJoin(hrStaff, eq(hrAttendanceRecords.staffId, hrStaff.id))
+      .innerJoin(hrDesignations, eq(hrStaff.designationId, hrDesignations.id))
+      .innerJoin(shiftTemplates, eq(hrAttendanceRecords.shiftTemplateId, shiftTemplates.id))
+      .where(eq(hrAttendanceRecords.id, id))
+      .get();
+
+    if (!row) return null;
+    return {
+      ...row.record,
+      staffName: row.staffName,
+      employeeCode: row.employeeCode,
+      designationName: row.designationName,
+      shiftTemplateCode: row.shiftTemplateCode,
+      shiftTemplateName: row.shiftTemplateName,
+    } as HrAttendanceRecord;
+  }
+
+  async getActiveAttendanceByRosterAssignment(rosterAssignmentId: string): Promise<HrAttendanceRecord | null> {
+    const row = await this.db
+      .select()
+      .from(hrAttendanceRecords)
+      .where(and(eq(hrAttendanceRecords.rosterAssignmentId, rosterAssignmentId), sql`${hrAttendanceRecords.status} != 'CANCELLED'`))
+      .get();
+    return row ? (row as HrAttendanceRecord) : null;
+  }
+
+  async createAttendanceRecord(data: any): Promise<HrAttendanceRecord> {
+    await this.db.insert(hrAttendanceRecords).values(data).run();
+    return (await this.getAttendanceById(data.id))!;
+  }
+
+  async updateAttendanceRecord(id: string, data: any): Promise<HrAttendanceRecord> {
+    await this.db
+      .update(hrAttendanceRecords)
+      .set(data)
+      .where(eq(hrAttendanceRecords.id, id))
+      .run();
+    return (await this.getAttendanceById(id))!;
+  }
+
+  async listAttendanceRecords(outletId: string, filters?: {
+    date?: string;
+    fromDate?: string;
+    toDate?: string;
+    staffId?: string;
+    shiftTemplateId?: string;
+    status?: string;
+  }): Promise<HrAttendanceRecord[]> {
+    const conditions = [eq(hrAttendanceRecords.outletId, outletId)];
+
+    if (filters?.date) {
+      conditions.push(eq(hrAttendanceRecords.attendanceDate, filters.date));
+    }
+    if (filters?.fromDate) {
+      conditions.push(gte(hrAttendanceRecords.attendanceDate, filters.fromDate));
+    }
+    if (filters?.toDate) {
+      conditions.push(lte(hrAttendanceRecords.attendanceDate, filters.toDate));
+    }
+    if (filters?.staffId) {
+      conditions.push(eq(hrAttendanceRecords.staffId, filters.staffId));
+    }
+    if (filters?.shiftTemplateId) {
+      conditions.push(eq(hrAttendanceRecords.shiftTemplateId, filters.shiftTemplateId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(hrAttendanceRecords.status, filters.status as any));
+    }
+
+    const rows = await this.db
+      .select({
+        record: hrAttendanceRecords,
+        staffName: hrStaff.fullName,
+        employeeCode: hrStaff.employeeCode,
+        designationName: hrDesignations.name,
+        shiftTemplateCode: shiftTemplates.code,
+        shiftTemplateName: shiftTemplates.name,
+      })
+      .from(hrAttendanceRecords)
+      .innerJoin(hrStaff, eq(hrAttendanceRecords.staffId, hrStaff.id))
+      .innerJoin(hrDesignations, eq(hrStaff.designationId, hrDesignations.id))
+      .innerJoin(shiftTemplates, eq(hrAttendanceRecords.shiftTemplateId, shiftTemplates.id))
+      .where(and(...conditions))
+      .orderBy(desc(hrAttendanceRecords.createdAt))
+      .all();
+
+    return rows.map(row => ({
+      ...row.record,
+      staffName: row.staffName,
+      employeeCode: row.employeeCode,
+      designationName: row.designationName,
+      shiftTemplateCode: row.shiftTemplateCode,
+      shiftTemplateName: row.shiftTemplateName,
+    })) as HrAttendanceRecord[];
+  }
+
+  async getNozzleAssignmentById(id: string): Promise<HrNozzleAssignment | null> {
+    const row = await this.db
+      .select({
+        record: hrNozzleAssignments,
+        staffName: hrStaff.fullName,
+        employeeCode: hrStaff.employeeCode,
+        nozzleNumber: nozzles.nozzleNumber,
+        productName: products.name,
+        dispenserName: dispensers.name,
+        shiftTemplateName: shiftTemplates.name,
+      })
+      .from(hrNozzleAssignments)
+      .innerJoin(hrStaff, eq(hrNozzleAssignments.staffId, hrStaff.id))
+      .innerJoin(nozzles, eq(hrNozzleAssignments.nozzleId, nozzles.id))
+      .innerJoin(products, eq(nozzles.productId, products.id))
+      .innerJoin(dispensers, eq(nozzles.dispenserId, dispensers.id))
+      .innerJoin(shiftTemplates, eq(hrNozzleAssignments.shiftTemplateId, shiftTemplates.id))
+      .where(eq(hrNozzleAssignments.id, id))
+      .get();
+
+    if (!row) return null;
+    return {
+      ...row.record,
+      staffName: row.staffName,
+      employeeCode: row.employeeCode,
+      nozzleNumber: row.nozzleNumber,
+      productName: row.productName,
+      dispenserName: row.dispenserName,
+      shiftTemplateName: row.shiftTemplateName,
+    } as HrNozzleAssignment;
+  }
+
+  async getActiveNozzleAssignmentForNozzleDateShift(
+    nozzleId: string,
+    assignmentDate: string,
+    shiftTemplateId: string
+  ): Promise<HrNozzleAssignment | null> {
+    const row = await this.db
+      .select()
+      .from(hrNozzleAssignments)
+      .where(
+        and(
+          eq(hrNozzleAssignments.nozzleId, nozzleId),
+          eq(hrNozzleAssignments.assignmentDate, assignmentDate),
+          eq(hrNozzleAssignments.shiftTemplateId, shiftTemplateId),
+          sql`${hrNozzleAssignments.status} != 'CANCELLED'`
+        )
+      )
+      .get();
+    return row ? (row as HrNozzleAssignment) : null;
+  }
+
+  async createNozzleAssignment(data: any): Promise<HrNozzleAssignment> {
+    await this.db.insert(hrNozzleAssignments).values(data).run();
+    return (await this.getNozzleAssignmentById(data.id))!;
+  }
+
+  async updateNozzleAssignment(id: string, data: any): Promise<HrNozzleAssignment> {
+    await this.db
+      .update(hrNozzleAssignments)
+      .set(data)
+      .where(eq(hrNozzleAssignments.id, id))
+      .run();
+    return (await this.getNozzleAssignmentById(id))!;
+  }
+
+  async listNozzleAssignments(outletId: string, filters?: {
+    date?: string;
+    fromDate?: string;
+    toDate?: string;
+    staffId?: string;
+    nozzleId?: string;
+    shiftTemplateId?: string;
+    status?: string;
+  }): Promise<HrNozzleAssignment[]> {
+    const conditions = [eq(hrNozzleAssignments.outletId, outletId)];
+
+    if (filters?.date) {
+      conditions.push(eq(hrNozzleAssignments.assignmentDate, filters.date));
+    }
+    if (filters?.fromDate) {
+      conditions.push(gte(hrNozzleAssignments.assignmentDate, filters.fromDate));
+    }
+    if (filters?.toDate) {
+      conditions.push(lte(hrNozzleAssignments.assignmentDate, filters.toDate));
+    }
+    if (filters?.staffId) {
+      conditions.push(eq(hrNozzleAssignments.staffId, filters.staffId));
+    }
+    if (filters?.nozzleId) {
+      conditions.push(eq(hrNozzleAssignments.nozzleId, filters.nozzleId));
+    }
+    if (filters?.shiftTemplateId) {
+      conditions.push(eq(hrNozzleAssignments.shiftTemplateId, filters.shiftTemplateId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(hrNozzleAssignments.status, filters.status as any));
+    }
+
+    const rows = await this.db
+      .select({
+        record: hrNozzleAssignments,
+        staffName: hrStaff.fullName,
+        employeeCode: hrStaff.employeeCode,
+        nozzleNumber: nozzles.nozzleNumber,
+        productName: products.name,
+        dispenserName: dispensers.name,
+        shiftTemplateName: shiftTemplates.name,
+      })
+      .from(hrNozzleAssignments)
+      .innerJoin(hrStaff, eq(hrNozzleAssignments.staffId, hrStaff.id))
+      .innerJoin(nozzles, eq(hrNozzleAssignments.nozzleId, nozzles.id))
+      .innerJoin(products, eq(nozzles.productId, products.id))
+      .innerJoin(dispensers, eq(nozzles.dispenserId, dispensers.id))
+      .innerJoin(shiftTemplates, eq(hrNozzleAssignments.shiftTemplateId, shiftTemplates.id))
+      .where(and(...conditions))
+      .orderBy(desc(hrNozzleAssignments.createdAt))
+      .all();
+
+    return rows.map(row => ({
+      ...row.record,
+      staffName: row.staffName,
+      employeeCode: row.employeeCode,
+      nozzleNumber: row.nozzleNumber,
+      productName: row.productName,
+      dispenserName: row.dispenserName,
+      shiftTemplateName: row.shiftTemplateName,
+    })) as HrNozzleAssignment[];
+  }
+
+  async getRetailOutletLocation(outletId: string): Promise<{ latitude: number | null; longitude: number | null } | null> {
+    const row = await this.db
+      .select({ latitude: retailOutlets.latitude, longitude: retailOutlets.longitude })
+      .from(retailOutlets)
+      .where(eq(retailOutlets.id, outletId))
+      .get();
+    return row ?? null;
+  }
+
+  async getNozzleById(nozzleId: string): Promise<{ id: string; outletId: string; status: string } | null> {
+    const row = await this.db
+      .select({ id: nozzles.id, outletId: nozzles.outletId, status: nozzles.status })
+      .from(nozzles)
+      .where(eq(nozzles.id, nozzleId))
       .get();
     return row ?? null;
   }

@@ -121,6 +121,7 @@ async function exportDemoSeed() {
   sqlOutput += `-- IOCL Digital Pump Manager - Remote Demo Seed SQL (FK Sorted)\n`;
   sqlOutput += `-- Generated automatically by scripts/exportDemoSeedSql.ts\n`;
   sqlOutput += `-- ======================================================================\n\n`;
+  sqlOutput += `PRAGMA defer_foreign_keys = ON;\n\n`;
 
   let totalRowsExported = 0;
   let totalTablesExported = 0;
@@ -141,6 +142,8 @@ async function exportDemoSeed() {
     }
     sqlOutput += `\n`;
   }
+
+  sqlOutput += `PRAGMA defer_foreign_keys = OFF;\n`;
 
   const outputPath = path.resolve(process.cwd(), 'demo-seed.sql');
   fs.writeFileSync(outputPath, sqlOutput, 'utf8');

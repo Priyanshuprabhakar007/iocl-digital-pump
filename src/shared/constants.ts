@@ -140,6 +140,12 @@ export const PERMISSIONS = {
   HR_STAFF_WRITE: 'hr.staff.write',
   HR_MANPOWER_WRITE: 'hr.manpower.write',
   HR_ROSTER_WRITE: 'hr.roster.write',
+
+  // Phase 5B-1: Attendance + Geofencing + Nozzle Assignment
+  HR_ATTENDANCE_READ: 'hr.attendance.read',
+  HR_ATTENDANCE_WRITE: 'hr.attendance.write',
+  HR_GEOFENCE_WRITE: 'hr.geofence.write',
+  HR_NOZZLE_ASSIGNMENT_WRITE: 'hr.nozzle_assignment.write',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];

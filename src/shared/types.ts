@@ -1584,6 +1584,74 @@ export interface HrRosterAssignment {
   shiftEndTime?: string;
 }
 
+export interface HrGeofencePolicy {
+  id: string;
+  outletId: string;
+  radiusMetres: number;
+  maxAccuracyMetres: number;
+  attendanceGeofenceRequired: number;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type HrAttendanceStatus = 'CHECKED_IN' | 'CHECKED_OUT' | 'CANCELLED';
+
+export interface HrAttendanceRecord {
+  id: string;
+  outletId: string;
+  staffId: string;
+  rosterAssignmentId: string;
+  attendanceDate: string;
+  shiftTemplateId: string;
+  checkInAt: string;
+  checkInLatitude: number;
+  checkInLongitude: number;
+  checkInAccuracyMetres: number;
+  checkInDistanceMetres: number;
+  checkInInsideGeofence: number;
+  checkOutAt: string | null;
+  checkOutLatitude: number | null;
+  checkOutLongitude: number | null;
+  checkOutAccuracyMetres: number | null;
+  checkOutDistanceMetres: number | null;
+  checkOutInsideGeofence: number | null;
+  status: HrAttendanceStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  staffName?: string;
+  employeeCode?: string;
+  designationName?: string;
+  shiftTemplateCode?: string;
+  shiftTemplateName?: string;
+}
+
+export type HrNozzleAssignmentStatus = 'ASSIGNED' | 'CANCELLED';
+
+export interface HrNozzleAssignment {
+  id: string;
+  outletId: string;
+  rosterAssignmentId: string;
+  staffId: string;
+  nozzleId: string;
+  assignmentDate: string;
+  shiftTemplateId: string;
+  status: HrNozzleAssignmentStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  staffName?: string;
+  employeeCode?: string;
+  nozzleNumber?: number;
+  productName?: string;
+  dispenserName?: string;
+  shiftTemplateName?: string;
+}
+
 
 
 

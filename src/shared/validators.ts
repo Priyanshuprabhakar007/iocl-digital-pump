@@ -1190,6 +1190,69 @@ export const HrRosterFilterSchema = z.object({
   path: ['fromDate'],
 });
 
+export const GeofencePolicySchema = z.object({
+  radiusMetres: z.number().int().min(10).max(10000),
+  maxAccuracyMetres: z.number().int().min(1).max(1000),
+  attendanceGeofenceRequired: z.boolean(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+}).strict();
+
+export const AttendanceCheckInSchema = z.object({
+  rosterAssignmentId: z.string().trim().min(1, 'Roster assignment ID required'),
+  latitude: z.number().min(-90).max(90, 'Invalid latitude'),
+  longitude: z.number().min(-180).max(180, 'Invalid longitude'),
+  accuracyMetres: z.number().positive('Accuracy must be positive').max(10000),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const AttendanceCheckOutSchema = z.object({
+  latitude: z.number().min(-90).max(90, 'Invalid latitude'),
+  longitude: z.number().min(-180).max(180, 'Invalid longitude'),
+  accuracyMetres: z.number().positive('Accuracy must be positive').max(10000),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const AttendanceListQuerySchema = z.object({
+  date: StrictDateOnlySchema.optional(),
+  fromDate: StrictDateOnlySchema.optional(),
+  toDate: StrictDateOnlySchema.optional(),
+  staffId: z.string().trim().min(1).optional(),
+  shiftTemplateId: z.string().trim().min(1).optional(),
+  status: z.enum(['CHECKED_IN', 'CHECKED_OUT', 'CANCELLED']).optional(),
+}).strict().refine(data => {
+  if (data.fromDate && data.toDate) {
+    return data.fromDate <= data.toDate;
+  }
+  return true;
+}, {
+  message: 'fromDate must be on or before toDate',
+  path: ['fromDate'],
+});
+
+export const NozzleAssignmentCreateSchema = z.object({
+  rosterAssignmentId: z.string().trim().min(1, 'Roster assignment ID required'),
+  nozzleId: z.string().trim().min(1, 'Nozzle ID required'),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const NozzleAssignmentListQuerySchema = z.object({
+  date: StrictDateOnlySchema.optional(),
+  fromDate: StrictDateOnlySchema.optional(),
+  toDate: StrictDateOnlySchema.optional(),
+  staffId: z.string().trim().min(1).optional(),
+  nozzleId: z.string().trim().min(1).optional(),
+  shiftTemplateId: z.string().trim().min(1).optional(),
+  status: z.enum(['ASSIGNED', 'CANCELLED']).optional(),
+}).strict().refine(data => {
+  if (data.fromDate && data.toDate) {
+    return data.fromDate <= data.toDate;
+  }
+  return true;
+}, {
+  message: 'fromDate must be on or before toDate',
+  path: ['fromDate'],
+});
+
 
 
 

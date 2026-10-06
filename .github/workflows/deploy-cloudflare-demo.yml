@@ -64,6 +64,7 @@ jobs:
             "migrations/0017_phase4b_municipal_taxes.sql"
             "migrations/0018_phase4c_nfr_leases_rent.sql"
             "migrations/0019_phase5a_workforce_roster.sql"
+            "migrations/0020_phase5b_attendance_geofence_nozzle_assignments.sql"
           )
 
           for FILE in "${MIGRATIONS[@]}"; do
@@ -121,8 +122,8 @@ jobs:
 
           echo "Recorded migrations: $COUNT"
 
-          if [ "$COUNT" -lt "19" ]; then
-            echo "ERROR: Expected all 19 migrations to be recorded."
+          if [ "$COUNT" -lt "20" ]; then
+            echo "ERROR: Expected all 20 migrations to be recorded."
             exit 1
           fi
 
