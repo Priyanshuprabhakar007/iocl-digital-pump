@@ -1345,6 +1345,98 @@ export const hrNozzleAssignments = sqliteTable('hr_nozzle_assignments', {
   check('hr_nozzle_assignment_date_check', sql`${table.assignmentDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
 ]);
 
+export const hrUniformItems = sqliteTable('hr_uniform_items', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  itemCode: text('item_code').notNull(),
+  itemName: text('item_name').notNull(),
+  category: text('category').notNull(),
+  description: text('description'),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_hr_uniform_items_outlet_code').on(table.outletId, table.itemCode),
+  index('idx_hr_uniform_items_outlet_id').on(table.outletId),
+  index('idx_hr_uniform_items_category').on(table.outletId, table.category),
+  check('hr_uniform_item_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('hr_uniform_item_code_check', sql`trim(${table.itemCode}) <> ''`),
+  check('hr_uniform_item_name_check', sql`trim(${table.itemName}) <> ''`),
+]);
+
+export const hrUniformVariants = sqliteTable('hr_uniform_variants', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  uniformItemId: text('uniform_item_id').notNull().references(() => hrUniformItems.id, { onDelete: 'cascade' }),
+  sizeLabel: text('size_label').notNull(),
+  sizeSortOrder: integer('size_sort_order').notNull().default(0),
+  reorderLevel: integer('reorder_level').notNull().default(5),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_hr_uniform_variants_item_size').on(table.uniformItemId, table.sizeLabel),
+  index('idx_hr_uniform_variants_outlet_id').on(table.outletId),
+  index('idx_hr_uniform_variants_item_id').on(table.uniformItemId),
+  check('hr_uniform_variant_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('hr_uniform_variant_size_check', sql`trim(${table.sizeLabel}) <> ''`),
+  check('hr_uniform_variant_reorder_check', sql`${table.reorderLevel} >= 0`),
+]);
+
+export const hrUniformStockTransactions = sqliteTable('hr_uniform_stock_transactions', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  variantId: text('variant_id').notNull().references(() => hrUniformVariants.id, { onDelete: 'cascade' }),
+  transactionType: text('transaction_type', {
+    enum: ['OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'ISSUE_OUT', 'RETURN_IN'],
+  }).notNull(),
+  quantity: integer('quantity').notNull(),
+  referenceType: text('reference_type'),
+  referenceId: text('reference_id'),
+  notes: text('notes'),
+  occurredAt: text('occurred_at').notNull(),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  index('idx_hr_uniform_stock_tx_outlet_id').on(table.outletId),
+  index('idx_hr_uniform_stock_tx_variant_id').on(table.variantId),
+  check('hr_uniform_stock_tx_type_check', sql`${table.transactionType} IN ('OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'ISSUE_OUT', 'RETURN_IN')`),
+  check('hr_uniform_stock_tx_qty_check', sql`${table.quantity} > 0`),
+  check('hr_uniform_stock_tx_adj_notes_check', sql`${table.transactionType} NOT IN ('ADJUSTMENT_IN', 'ADJUSTMENT_OUT') OR (${table.notes} IS NOT NULL AND trim(${table.notes}) <> '')`),
+]);
+
+export const hrUniformIssues = sqliteTable('hr_uniform_issues', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  staffId: text('staff_id').notNull().references(() => hrStaff.id, { onDelete: 'cascade' }),
+  variantId: text('variant_id').notNull().references(() => hrUniformVariants.id, { onDelete: 'cascade' }),
+  quantity: integer('quantity').notNull(),
+  issuedAt: text('issued_at').notNull(),
+  issuedBy: text('issued_by').notNull().references(() => users.id),
+  conditionAtIssue: text('condition_at_issue', { enum: ['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST'] }).notNull().default('NEW'),
+  status: text('status', { enum: ['ISSUED', 'RETURNED', 'REPLACED'] }).notNull().default('ISSUED'),
+  closedAt: text('closed_at'),
+  closedBy: text('closed_by').references(() => users.id),
+  conditionOnClose: text('condition_on_close', { enum: ['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST'] }),
+  replacementReason: text('replacement_reason', { enum: ['WORN_OUT', 'DAMAGED', 'SIZE_CHANGE', 'LOST', 'OTHER'] }),
+  replacesIssueId: text('replaces_issue_id'),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_hr_uniform_issues_outlet_id').on(table.outletId),
+  index('idx_hr_uniform_issues_staff_id').on(table.staffId),
+  index('idx_hr_uniform_issues_variant_id').on(table.variantId),
+  index('idx_hr_uniform_issues_status').on(table.outletId, table.status),
+  check('hr_uniform_issue_status_check', sql`${table.status} IN ('ISSUED', 'RETURNED', 'REPLACED')`),
+  check('hr_uniform_issue_cond_init_check', sql`${table.conditionAtIssue} IN ('NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST')`),
+  check('hr_uniform_issue_cond_close_check', sql`${table.conditionOnClose} IS NULL OR ${table.conditionOnClose} IN ('NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST')`),
+  check('hr_uniform_issue_repl_reason_check', sql`${table.replacementReason} IS NULL OR ${table.replacementReason} IN ('WORN_OUT', 'DAMAGED', 'SIZE_CHANGE', 'LOST', 'OTHER')`),
+  check('hr_uniform_issue_qty_check', sql`${table.quantity} > 0`),
+]);
+
 
 
 

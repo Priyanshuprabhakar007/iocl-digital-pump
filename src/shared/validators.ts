@@ -1253,6 +1253,141 @@ export const NozzleAssignmentListQuerySchema = z.object({
   path: ['fromDate'],
 });
 
+// ==========================================
+// Phase 5C: Uniform Management Validators
+// ==========================================
+
+export const UniformItemCreateSchema = z.object({
+  itemCode: z.string().min(1, 'Item code required').trim().toUpperCase(),
+  itemName: z.string().min(1, 'Item name required').trim(),
+  category: z.string().min(1, 'Category required').trim(),
+  description: z.string().trim().optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+}).strict();
+
+export const UniformItemUpdateSchema = z.object({
+  itemName: z.string().min(1, 'Item name required').trim().optional(),
+  category: z.string().min(1, 'Category required').trim().optional(),
+  description: z.string().trim().optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+}).strict();
+
+export const UniformVariantCreateSchema = z.object({
+  uniformItemId: z.string().min(1, 'Uniform item ID required').trim(),
+  sizeLabel: z.string().min(1, 'Size label required').trim(),
+  sizeSortOrder: z.number().int().default(0),
+  reorderLevel: z.number().int().nonnegative('Reorder level cannot be negative').default(5),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+}).strict();
+
+export const UniformVariantUpdateSchema = z.object({
+  sizeSortOrder: z.number().int().optional(),
+  reorderLevel: z.number().int().nonnegative('Reorder level cannot be negative').optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+}).strict();
+
+export const UniformStockTransactionCreateSchema = z.object({
+  variantId: z.string().min(1, 'Variant ID required').trim(),
+  transactionType: z.enum(['OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT']),
+  quantity: z.number().int().positive('Quantity must be positive'),
+  referenceType: z.string().trim().optional().nullable(),
+  referenceId: z.string().trim().optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+}).strict().refine(data => {
+  if (['ADJUSTMENT_IN', 'ADJUSTMENT_OUT'].includes(data.transactionType)) {
+    return Boolean(data.notes && data.notes.trim().length > 0);
+  }
+  return true;
+}, {
+  message: 'Notes are required for inventory adjustments.',
+  path: ['notes'],
+});
+
+export const UniformIssueCreateSchema = z.object({
+  staffId: z.string().min(1, 'Staff ID required').trim(),
+  variantId: z.string().min(1, 'Variant ID required').trim(),
+  quantity: z.number().int().positive('Quantity must be positive').default(1),
+  conditionAtIssue: z.enum(['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST']).default('NEW'),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const UniformReturnSchema = z.object({
+  condition: z.enum(['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST']),
+  returnToStock: z.boolean(),
+  notes: z.string().trim().optional().nullable(),
+}).strict().refine(data => {
+  if (data.returnToStock && ['DAMAGED', 'LOST'].includes(data.condition)) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Damaged or lost items cannot be returned to usable stock.',
+  path: ['returnToStock'],
+});
+
+export const UniformReplacementSchema = z.object({
+  replacementVariantId: z.string().min(1, 'Replacement variant ID required').trim(),
+  quantity: z.number().int().positive('Quantity must be positive').default(1),
+  oldCondition: z.enum(['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST']),
+  replacementReason: z.enum(['WORN_OUT', 'DAMAGED', 'SIZE_CHANGE', 'LOST', 'OTHER']),
+  returnOldToStock: z.boolean(),
+  notes: z.string().trim().optional().nullable(),
+}).strict().refine(data => {
+  if (data.returnOldToStock && ['DAMAGED', 'LOST'].includes(data.oldCondition)) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Damaged or lost items cannot be returned to usable stock during replacement.',
+  path: ['returnOldToStock'],
+});
+
+export const UniformIssueListQuerySchema = z.object({
+  staffId: z.string().trim().min(1).optional(),
+  itemId: z.string().trim().min(1).optional(),
+  variantId: z.string().trim().min(1).optional(),
+  status: z.enum(['ISSUED', 'RETURNED', 'REPLACED']).optional(),
+  fromDate: StrictDateOnlySchema.optional(),
+  toDate: StrictDateOnlySchema.optional(),
+}).strict().refine(data => {
+  if (data.fromDate && data.toDate) {
+    return data.fromDate <= data.toDate;
+  }
+  return true;
+}, {
+  message: 'fromDate must be on or before toDate',
+  path: ['fromDate'],
+});
+
+export const UniformStockTransactionListQuerySchema = z.object({
+  variantId: z.string().trim().min(1).optional(),
+  transactionType: z.enum(['OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'ISSUE_OUT', 'RETURN_IN']).optional(),
+  fromDate: StrictDateOnlySchema.optional(),
+  toDate: StrictDateOnlySchema.optional(),
+}).strict().refine(data => {
+  if (data.fromDate && data.toDate) {
+    return data.fromDate <= data.toDate;
+  }
+  return true;
+}, {
+  message: 'fromDate must be on or before toDate',
+  path: ['fromDate'],
+});
+
+export const UniformReportQuerySchema = z.object({
+  staffId: z.string().trim().min(1).optional(),
+  fromDate: StrictDateOnlySchema.optional(),
+  toDate: StrictDateOnlySchema.optional(),
+}).strict().refine(data => {
+  if (data.fromDate && data.toDate) {
+    return data.fromDate <= data.toDate;
+  }
+  return true;
+}, {
+  message: 'fromDate must be on or before toDate',
+  path: ['fromDate'],
+});
+
 
 
 

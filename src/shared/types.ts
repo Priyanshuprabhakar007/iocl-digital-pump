@@ -1652,6 +1652,114 @@ export interface HrNozzleAssignment {
   shiftTemplateName?: string;
 }
 
+// ==========================================
+// Phase 5C: Uniform Management
+// ==========================================
+
+export type HrUniformCategory = 'SHIRT' | 'TROUSER' | 'JACKET' | 'T_SHIRT' | 'CAP' | 'SHOES' | 'BELT' | 'OTHER' | string;
+export type HrUniformStatus = 'ACTIVE' | 'INACTIVE';
+export type HrUniformStockTransactionType = 'OPENING_BALANCE' | 'RECEIPT' | 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT' | 'ISSUE_OUT' | 'RETURN_IN';
+export type HrUniformIssueStatus = 'ISSUED' | 'RETURNED' | 'REPLACED';
+export type HrUniformCondition = 'NEW' | 'GOOD' | 'FAIR' | 'DAMAGED' | 'LOST';
+export type HrUniformReplacementReason = 'WORN_OUT' | 'DAMAGED' | 'SIZE_CHANGE' | 'LOST' | 'OTHER';
+
+export interface HrUniformItem {
+  id: string;
+  outletId: string;
+  itemCode: string;
+  itemName: string;
+  category: HrUniformCategory;
+  description: string | null;
+  status: HrUniformStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HrUniformVariant {
+  id: string;
+  outletId: string;
+  uniformItemId: string;
+  sizeLabel: string;
+  sizeSortOrder: number;
+  reorderLevel: number;
+  status: HrUniformStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  itemCode?: string;
+  itemName?: string;
+  category?: HrUniformCategory;
+}
+
+export interface HrUniformStockTransaction {
+  id: string;
+  outletId: string;
+  variantId: string;
+  transactionType: HrUniformStockTransactionType;
+  quantity: number;
+  referenceType: string | null;
+  referenceId: string | null;
+  notes: string | null;
+  occurredAt: string;
+  createdBy: string;
+  createdAt: string;
+  itemCode?: string;
+  itemName?: string;
+  sizeLabel?: string;
+}
+
+export interface HrUniformStockSummary {
+  variantId: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  category: HrUniformCategory;
+  sizeLabel: string;
+  sizeSortOrder: number;
+  reorderLevel: number;
+  status: HrUniformStatus;
+  currentStock: number;
+  isLowStock: boolean;
+}
+
+export interface HrUniformIssue {
+  id: string;
+  outletId: string;
+  staffId: string;
+  variantId: string;
+  quantity: number;
+  issuedAt: string;
+  issuedBy: string;
+  conditionAtIssue: HrUniformCondition;
+  status: HrUniformIssueStatus;
+  closedAt: string | null;
+  closedBy: string | null;
+  conditionOnClose: HrUniformCondition | null;
+  replacementReason: HrUniformReplacementReason | null;
+  replacesIssueId: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  staffName?: string;
+  employeeCode?: string;
+  itemCode?: string;
+  itemName?: string;
+  sizeLabel?: string;
+  category?: HrUniformCategory;
+}
+
+export interface HrUniformReportSummary {
+  totalActiveItems: number;
+  totalActiveVariants: number;
+  totalAvailableStock: number;
+  lowStockVariantCount: number;
+  totalIssued: number;
+  totalReturned: number;
+  totalReplaced: number;
+}
+
+
 
 
 

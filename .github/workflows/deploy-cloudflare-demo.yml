@@ -65,6 +65,7 @@ jobs:
             "migrations/0018_phase4c_nfr_leases_rent.sql"
             "migrations/0019_phase5a_workforce_roster.sql"
             "migrations/0020_phase5b_attendance_geofence_nozzle_assignments.sql"
+            "migrations/0021_phase5c_uniform_management.sql"
           )
 
           for FILE in "${MIGRATIONS[@]}"; do

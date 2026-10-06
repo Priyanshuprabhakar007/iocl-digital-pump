@@ -146,6 +146,11 @@ export const PERMISSIONS = {
   HR_ATTENDANCE_WRITE: 'hr.attendance.write',
   HR_GEOFENCE_WRITE: 'hr.geofence.write',
   HR_NOZZLE_ASSIGNMENT_WRITE: 'hr.nozzle_assignment.write',
+
+  // Phase 5C-1: Uniform Management
+  HR_UNIFORM_READ: 'hr.uniform.read',
+  HR_UNIFORM_INVENTORY_WRITE: 'hr.uniform.inventory.write',
+  HR_UNIFORM_ISSUE_WRITE: 'hr.uniform.issue.write',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
