@@ -9,6 +9,9 @@ import {
   AlertCircle,
   CheckCircle2,
   ShieldAlert,
+  ClipboardCheck,
+  Fuel,
+  MapPin,
 } from 'lucide-react';
 import type {
   RetailOutlet,
@@ -48,6 +51,9 @@ import { HrRosterPanel } from '../components/hr/HrRosterPanel';
 import { HrRosterModal } from '../components/hr/HrRosterModal';
 import { HrRosterDetailPanel } from '../components/hr/HrRosterDetailPanel';
 import { HrRosterCancelModal } from '../components/hr/HrRosterCancelModal';
+import { HrAttendancePanel } from '../components/hr/HrAttendancePanel';
+import { HrGeofencePanel } from '../components/hr/HrGeofencePanel';
+import { HrNozzleAssignmentsPanel } from '../components/hr/HrNozzleAssignmentsPanel';
 
 export const WorkforceOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
@@ -58,6 +64,11 @@ export const WorkforceOperationsPage: React.FC = () => {
   const canWriteManpower = hasPermission(PERMISSIONS.HR_MANPOWER_WRITE as PermissionCode);
   const canWriteRoster = hasPermission(PERMISSIONS.HR_ROSTER_WRITE as PermissionCode);
   const canReadShiftTemplates = hasPermission(PERMISSIONS.SHIFT_TEMPLATES_READ as PermissionCode);
+  const canReadAttendance = hasPermission(PERMISSIONS.HR_ATTENDANCE_READ as PermissionCode);
+  const canWriteAttendance = hasPermission(PERMISSIONS.HR_ATTENDANCE_WRITE as PermissionCode);
+  const canWriteGeofence = hasPermission(PERMISSIONS.HR_GEOFENCE_WRITE as PermissionCode);
+  const canWriteNozzleAssignment = hasPermission(PERMISSIONS.HR_NOZZLE_ASSIGNMENT_WRITE as PermissionCode);
+  const canReadNozzles = hasPermission(PERMISSIONS.NOZZLES_READ as PermissionCode);
 
   // Outlets
   const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
@@ -721,6 +732,46 @@ export const WorkforceOperationsPage: React.FC = () => {
             </span>
           )}
         </button>
+
+        {canReadAttendance && (
+          <>
+            <button
+              onClick={() => handleTabChange('attendance')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                activeTab === 'attendance'
+                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                  : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              <span>Attendance</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('geofence')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                activeTab === 'geofence'
+                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                  : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <MapPin className="w-4 h-4" />
+              <span>Geofence</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('nozzle-assignment')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                activeTab === 'nozzle-assignment'
+                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                  : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Fuel className="w-4 h-4" />
+              <span>Nozzle Assignment</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* Main Tab Panels Grid */}
@@ -845,6 +896,35 @@ export const WorkforceOperationsPage: React.FC = () => {
               }}
               onCancelRoster={r => setCancellingRoster(r)}
               selectedRosterId={selectedRosterId}
+            />
+          )}
+
+          {activeTab === 'attendance' && canReadAttendance && (
+            <HrAttendancePanel
+              outletId={selectedOutletId}
+              canWriteAttendance={canWriteAttendance}
+              staffList={staffReferenceList}
+              shiftTemplates={shiftTemplates}
+              showFeedback={showFeedback}
+            />
+          )}
+
+          {activeTab === 'geofence' && canReadAttendance && (
+            <HrGeofencePanel
+              outletId={selectedOutletId}
+              canWriteGeofence={canWriteGeofence}
+              selectedOutlet={outlets.find(o => o.id === selectedOutletId)}
+              showFeedback={showFeedback}
+            />
+          )}
+
+          {activeTab === 'nozzle-assignment' && canReadAttendance && (
+            <HrNozzleAssignmentsPanel
+              outletId={selectedOutletId}
+              canWriteNozzleAssignment={canWriteNozzleAssignment}
+              staffList={staffReferenceList}
+              shiftTemplates={shiftTemplates}
+              showFeedback={showFeedback}
             />
           )}
         </div>

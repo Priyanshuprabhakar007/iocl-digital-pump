@@ -14,6 +14,7 @@ import {
   HrRosterAssignment,
   ShiftTemplate,
   Document,
+  Nozzle,
 } from '../../../shared/types';
 import { formatDisplayDate, formatDisplayDateTime, formatFileSize } from '../utilities/utilityUi';
 
@@ -26,8 +27,7 @@ export type HrWorkspaceTab =
   | 'roster'
   | 'attendance'
   | 'geofence'
-  | 'nozzle-assignment'
-  | 'nozzleAssignment';
+  | 'nozzle-assignment';
 
 export interface HrFilterState {
   staff: {
@@ -129,7 +129,7 @@ export function getHrTabResetTargets(nextTab: HrWorkspaceTab) {
     closeRosterUi: nextTab !== 'roster',
     closeAttendanceUi: nextTab !== 'attendance',
     closeGeofenceUi: nextTab !== 'geofence',
-    closeNozzleAssignmentUi: nextTab !== 'nozzle-assignment' && nextTab !== 'nozzleAssignment',
+    closeNozzleAssignmentUi: nextTab !== 'nozzle-assignment',
   };
 }
 
@@ -719,6 +719,34 @@ export function resolveHrDocument(
   if (!match) return null;
   if (outletId && match.outletId !== outletId) return null;
   return match;
+}
+
+export function formatGeofenceInside(inside?: boolean | number | null): { label: string; badgeClass: string } {
+  const val = inside === true || inside === 1;
+  return val
+    ? { label: 'Inside Geofence', badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25' }
+    : { label: 'Outside Geofence', badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/25' };
+}
+
+export function formatDistanceMetres(metres?: number | null): string {
+  if (metres == null || isNaN(metres)) return '— m';
+  if (metres < 1000) return `${Math.round(metres)} m`;
+  return `${(metres / 1000).toFixed(2)} km`;
+}
+
+export function formatGpsAccuracy(accuracy?: number | null): string {
+  if (accuracy == null || isNaN(accuracy)) return '— m accuracy';
+  return `±${Math.round(accuracy)} m accuracy`;
+}
+
+export function getEligibleScheduledRosters(rosters: HrRosterAssignment[]): HrRosterAssignment[] {
+  if (!Array.isArray(rosters)) return [];
+  return rosters.filter(r => r.status === 'SCHEDULED');
+}
+
+export function getEligibleActiveNozzles(nozzles: Nozzle[]): Nozzle[] {
+  if (!Array.isArray(nozzles)) return [];
+  return nozzles.filter(n => n.status === 'ACTIVE');
 }
 
 /**
