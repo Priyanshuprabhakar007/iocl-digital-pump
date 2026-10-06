@@ -19,6 +19,7 @@ interface HrGeofencePanelProps {
   canWriteGeofence: boolean;
   selectedOutlet?: RetailOutlet | null;
   showFeedback: (type: 'success' | 'error', message: string) => void;
+  geofenceRefreshKey?: number;
 }
 
 export const HrGeofencePanel: React.FC<HrGeofencePanelProps> = ({
@@ -26,6 +27,7 @@ export const HrGeofencePanel: React.FC<HrGeofencePanelProps> = ({
   canWriteGeofence,
   selectedOutlet,
   showFeedback,
+  geofenceRefreshKey,
 }) => {
   const [policy, setPolicy] = useState<HrGeofencePolicy | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -39,6 +41,17 @@ export const HrGeofencePanel: React.FC<HrGeofencePanelProps> = ({
   const [status, setStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Outlet switch reset
+  useEffect(() => {
+    setIsEditing(false);
+    setError(null);
+    setPolicy(null);
+    setRadiusMetres(100);
+    setMaxAccuracyMetres(50);
+    setAttendanceGeofenceRequired(true);
+    setStatus('ACTIVE');
+  }, [outletId]);
 
   const fetchPolicy = useCallback(async (isRefresh = false) => {
     if (!outletId) return;
@@ -55,19 +68,32 @@ export const HrGeofencePanel: React.FC<HrGeofencePanelProps> = ({
         setStatus(res.data.status);
       } else {
         setPolicy(null);
+        const code = res.error?.code || res.error;
+        if (code === 'HR_GEOFENCE_POLICY_NOT_FOUND') {
+          // Policy not configured - normal
+        } else {
+          showFeedback('error', getHrErrorMessage(res.error));
+        }
       }
     } catch (err: any) {
-      // If 404 / policy not found, policy is null
       setPolicy(null);
+      showFeedback('error', getHrErrorMessage(err));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [outletId]);
+  }, [outletId, showFeedback]);
 
   useEffect(() => {
     fetchPolicy();
   }, [fetchPolicy]);
+
+  // Refresh key effect
+  useEffect(() => {
+    if (geofenceRefreshKey && geofenceRefreshKey > 0 && outletId) {
+      fetchPolicy(true);
+    }
+  }, [geofenceRefreshKey, outletId, fetchPolicy]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

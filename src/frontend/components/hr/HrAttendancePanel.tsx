@@ -20,6 +20,7 @@ import {
   buildHrAttendanceQueryParams,
   formatHrAttendanceStatus,
   getHrErrorMessage,
+  validateHrAttendanceDateRange,
 } from './hrUi';
 import { HrAttendanceCheckInModal } from './HrAttendanceCheckInModal';
 
@@ -29,6 +30,7 @@ interface HrAttendancePanelProps {
   staffList: HrStaff[];
   shiftTemplates: ShiftTemplate[];
   showFeedback: (type: 'success' | 'error', message: string) => void;
+  attendanceRefreshKey?: number;
 }
 
 export const HrAttendancePanel: React.FC<HrAttendancePanelProps> = ({
@@ -37,6 +39,7 @@ export const HrAttendancePanel: React.FC<HrAttendancePanelProps> = ({
   staffList,
   shiftTemplates,
   showFeedback,
+  attendanceRefreshKey,
 }) => {
   const [attendanceRecords, setAttendanceRecords] = useState<HrAttendanceRecord[]>([]);
   const [scheduledRosters, setScheduledRosters] = useState<HrRosterAssignment[]>([]);
@@ -56,8 +59,30 @@ export const HrAttendancePanel: React.FC<HrAttendancePanelProps> = ({
   const [checkOutModalOpen, setCheckOutModalOpen] = useState<boolean>(false);
   const [selectedRecordForCheckout, setSelectedRecordForCheckout] = useState<HrAttendanceRecord | null>(null);
 
+  // Outlet switch reset
+  useEffect(() => {
+    setCheckInModalOpen(false);
+    setCheckOutModalOpen(false);
+    setSelectedRecordForCheckout(null);
+    setDateFilter('');
+    setFromDateFilter('');
+    setToDateFilter('');
+    setStaffFilter('');
+    setShiftFilter('');
+    setStatusFilter('');
+    setAttendanceRecords([]);
+    setScheduledRosters([]);
+  }, [outletId]);
+
   const fetchData = useCallback(async (isRefresh = false) => {
     if (!outletId) return;
+
+    const dateVal = validateHrAttendanceDateRange(fromDateFilter, toDateFilter);
+    if (!dateVal.valid) {
+      showFeedback('error', dateVal.error || 'Invalid date range.');
+      return;
+    }
+
     if (isRefresh) setIsRefreshing(true);
     else setIsLoading(true);
 
@@ -80,12 +105,18 @@ export const HrAttendancePanel: React.FC<HrAttendancePanelProps> = ({
         setAttendanceRecords(attRes.data);
       } else {
         setAttendanceRecords([]);
+        if (attRes.error) {
+          showFeedback('error', getHrErrorMessage(attRes.error));
+        }
       }
 
       if (rosterRes.success && Array.isArray(rosterRes.data)) {
         setScheduledRosters(rosterRes.data);
       } else {
         setScheduledRosters([]);
+        if (rosterRes.error && !attRes.error) {
+          showFeedback('error', getHrErrorMessage(rosterRes.error));
+        }
       }
     } catch (err: any) {
       showFeedback('error', getHrErrorMessage(err));
@@ -98,6 +129,13 @@ export const HrAttendancePanel: React.FC<HrAttendancePanelProps> = ({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Refresh key effect
+  useEffect(() => {
+    if (attendanceRefreshKey && attendanceRefreshKey > 0 && outletId) {
+      fetchData(true);
+    }
+  }, [attendanceRefreshKey, outletId, fetchData]);
 
   const handleClearFilters = () => {
     setDateFilter('');

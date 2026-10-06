@@ -137,6 +137,11 @@ export const WorkforceOperationsPage: React.FC = () => {
   const [rosterDetailRefreshKey, setRosterDetailRefreshKey] = useState<number>(0);
   const [cancellingRoster, setCancellingRoster] = useState<HrRosterAssignment | null>(null);
 
+  // Phase 5B Refresh Keys
+  const [attendanceRefreshKey, setAttendanceRefreshKey] = useState<number>(0);
+  const [geofenceRefreshKey, setGeofenceRefreshKey] = useState<number>(0);
+  const [nozzleAssignmentRefreshKey, setNozzleAssignmentRefreshKey] = useState<number>(0);
+
   // Helper to show auto-dismissing notifications
   const showFeedback = useCallback((type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });
@@ -588,11 +593,11 @@ export const WorkforceOperationsPage: React.FC = () => {
                 Workforce & Shift Roster
               </h1>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                Phase 5A-2
+                Phase 5B-2
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Staff enrollment, designations, sanctioned vs actual headcount & daily shift scheduling
+              Staff enrollment, manpower, shift roster, attendance, geofencing & nozzle assignments
             </p>
           </div>
         </div>
@@ -616,12 +621,20 @@ export const WorkforceOperationsPage: React.FC = () => {
           </div>
 
           <button
-            onClick={() => {
+            onClick={async () => {
               if (selectedOutletId) {
-                loadHrCoreData(selectedOutletId);
-                loadFilteredStaff(selectedOutletId, filters.staff);
-                loadFilteredDesignations(selectedOutletId, filters.designations);
-                loadFilteredRoster(selectedOutletId, filters.roster);
+                setIsRefreshingAll(true);
+                await Promise.all([
+                  loadHrCoreData(selectedOutletId),
+                  loadFilteredStaff(selectedOutletId, filters.staff),
+                  loadFilteredDesignations(selectedOutletId, filters.designations),
+                  loadFilteredRoster(selectedOutletId, filters.roster),
+                ]);
+                if (activeTab === 'attendance') setAttendanceRefreshKey(k => k + 1);
+                if (activeTab === 'geofence') setGeofenceRefreshKey(k => k + 1);
+                if (activeTab === 'nozzle-assignment') setNozzleAssignmentRefreshKey(k => k + 1);
+                setIsRefreshingAll(false);
+                showFeedback('success', 'Workspace refreshed successfully.');
               }
             }}
             disabled={isRefreshingAll || !selectedOutletId}
@@ -906,6 +919,7 @@ export const WorkforceOperationsPage: React.FC = () => {
               staffList={staffReferenceList}
               shiftTemplates={shiftTemplates}
               showFeedback={showFeedback}
+              attendanceRefreshKey={attendanceRefreshKey}
             />
           )}
 
@@ -915,6 +929,7 @@ export const WorkforceOperationsPage: React.FC = () => {
               canWriteGeofence={canWriteGeofence}
               selectedOutlet={outlets.find(o => o.id === selectedOutletId)}
               showFeedback={showFeedback}
+              geofenceRefreshKey={geofenceRefreshKey}
             />
           )}
 
@@ -925,6 +940,7 @@ export const WorkforceOperationsPage: React.FC = () => {
               staffList={staffReferenceList}
               shiftTemplates={shiftTemplates}
               showFeedback={showFeedback}
+              nozzleAssignmentRefreshKey={nozzleAssignmentRefreshKey}
             />
           )}
         </div>

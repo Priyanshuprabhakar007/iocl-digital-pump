@@ -13,6 +13,9 @@ import {
   getHrErrorMessage,
   getResetHrFilters,
   getHrTabResetTargets,
+  validateHrAttendanceDateRange,
+  validateHrNozzleDateRange,
+  isGeofencePolicyNotFound,
 } from '../src/frontend/components/hr/hrUi';
 
 describe('Phase 5B Frontend Logic & Formatting Suite', () => {
@@ -23,6 +26,36 @@ describe('Phase 5B Frontend Logic & Formatting Suite', () => {
 
     const targetsStaff = getHrTabResetTargets('staff');
     expect(targetsStaff.closeNozzleAssignmentUi).toBe(true);
+
+    const targetsAttendance = getHrTabResetTargets('attendance');
+    expect(targetsAttendance.closeAttendanceUi).toBe(false);
+    expect(targetsAttendance.closeStaffUi).toBe(true);
+  });
+
+  it('validates attendance date range correctly', () => {
+    const valid = validateHrAttendanceDateRange('2026-04-01', '2026-04-05');
+    expect(valid.valid).toBe(true);
+
+    const invalid = validateHrAttendanceDateRange('2026-04-06', '2026-04-01');
+    expect(invalid.valid).toBe(false);
+    expect(invalid.error).toBeDefined();
+  });
+
+  it('validates nozzle assignment date range correctly', () => {
+    const valid = validateHrNozzleDateRange('2026-04-01', '2026-04-05');
+    expect(valid.valid).toBe(true);
+
+    const invalid = validateHrNozzleDateRange('2026-04-06', '2026-04-01');
+    expect(invalid.valid).toBe(false);
+    expect(invalid.error).toBeDefined();
+  });
+
+  it('distinguishes geofence policy NOT_FOUND from other errors', () => {
+    expect(isGeofencePolicyNotFound('HR_GEOFENCE_POLICY_NOT_FOUND')).toBe(true);
+    expect(isGeofencePolicyNotFound({ code: 'HR_GEOFENCE_POLICY_NOT_FOUND' })).toBe(true);
+    expect(isGeofencePolicyNotFound('NETWORK_ERROR')).toBe(false);
+    expect(isGeofencePolicyNotFound('FORBIDDEN')).toBe(false);
+    expect(isGeofencePolicyNotFound(null)).toBe(false);
   });
 
   it('builds attendance query params correctly', () => {

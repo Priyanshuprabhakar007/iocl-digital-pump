@@ -749,6 +749,38 @@ export function getEligibleActiveNozzles(nozzles: Nozzle[]): Nozzle[] {
   return nozzles.filter(n => n.status === 'ACTIVE');
 }
 
+export function validateHrAttendanceDateRange(
+  fromDate?: string | null,
+  toDate?: string | null
+): { valid: boolean; error?: string } {
+  if (fromDate && toDate && fromDate > toDate) {
+    return {
+      valid: false,
+      error: 'From date cannot be after To date.',
+    };
+  }
+  return { valid: true };
+}
+
+export function validateHrNozzleDateRange(
+  fromDate?: string | null,
+  toDate?: string | null
+): { valid: boolean; error?: string } {
+  if (fromDate && toDate && fromDate > toDate) {
+    return {
+      valid: false,
+      error: 'From date cannot be after To date.',
+    };
+  }
+  return { valid: true };
+}
+
+export function isGeofencePolicyNotFound(error: any): boolean {
+  if (!error) return false;
+  const code = typeof error === 'string' ? error : error.code || error.error?.code || error.message;
+  return code === 'HR_GEOFENCE_POLICY_NOT_FOUND';
+}
+
 /**
  * Maps HR backend error codes to human-readable error messages
  */

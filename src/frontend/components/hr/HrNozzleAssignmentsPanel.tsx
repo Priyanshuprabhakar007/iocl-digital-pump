@@ -16,6 +16,7 @@ import {
   buildHrNozzleAssignmentQueryParams,
   formatHrNozzleStatus,
   getHrErrorMessage,
+  validateHrNozzleDateRange,
 } from './hrUi';
 import { HrNozzleAssignmentModal } from './HrNozzleAssignmentModal';
 
@@ -25,6 +26,7 @@ interface HrNozzleAssignmentsPanelProps {
   staffList: HrStaff[];
   shiftTemplates: ShiftTemplate[];
   showFeedback: (type: 'success' | 'error', message: string) => void;
+  nozzleAssignmentRefreshKey?: number;
 }
 
 export const HrNozzleAssignmentsPanel: React.FC<HrNozzleAssignmentsPanelProps> = ({
@@ -33,6 +35,7 @@ export const HrNozzleAssignmentsPanel: React.FC<HrNozzleAssignmentsPanelProps> =
   staffList,
   shiftTemplates,
   showFeedback,
+  nozzleAssignmentRefreshKey,
 }) => {
   const [assignments, setAssignments] = useState<HrNozzleAssignment[]>([]);
   const [scheduledRosters, setScheduledRosters] = useState<HrRosterAssignment[]>([]);
@@ -52,8 +55,30 @@ export const HrNozzleAssignmentsPanel: React.FC<HrNozzleAssignmentsPanelProps> =
   // Modal
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
+  // Outlet switch reset
+  useEffect(() => {
+    setIsModalOpen(false);
+    setDateFilter('');
+    setFromDateFilter('');
+    setToDateFilter('');
+    setStaffFilter('');
+    setNozzleFilter('');
+    setShiftFilter('');
+    setStatusFilter('');
+    setAssignments([]);
+    setScheduledRosters([]);
+    setNozzles([]);
+  }, [outletId]);
+
   const fetchData = useCallback(async (isRefresh = false) => {
     if (!outletId) return;
+
+    const dateVal = validateHrNozzleDateRange(fromDateFilter, toDateFilter);
+    if (!dateVal.valid) {
+      showFeedback('error', dateVal.error || 'Invalid date range.');
+      return;
+    }
+
     if (isRefresh) setIsRefreshing(true);
     else setIsLoading(true);
 
@@ -78,18 +103,27 @@ export const HrNozzleAssignmentsPanel: React.FC<HrNozzleAssignmentsPanelProps> =
         setAssignments(assignRes.data);
       } else {
         setAssignments([]);
+        if (assignRes.error) {
+          showFeedback('error', getHrErrorMessage(assignRes.error));
+        }
       }
 
       if (rosterRes.success && Array.isArray(rosterRes.data)) {
         setScheduledRosters(rosterRes.data);
       } else {
         setScheduledRosters([]);
+        if (rosterRes.error && !assignRes.error) {
+          showFeedback('error', getHrErrorMessage(rosterRes.error));
+        }
       }
 
       if (nozzleRes.success && Array.isArray(nozzleRes.data)) {
         setNozzles(nozzleRes.data);
       } else {
         setNozzles([]);
+        if (nozzleRes.error && !assignRes.error && !rosterRes.error) {
+          showFeedback('error', getHrErrorMessage(nozzleRes.error));
+        }
       }
     } catch (err: any) {
       showFeedback('error', getHrErrorMessage(err));
@@ -102,6 +136,13 @@ export const HrNozzleAssignmentsPanel: React.FC<HrNozzleAssignmentsPanelProps> =
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Refresh key effect
+  useEffect(() => {
+    if (nozzleAssignmentRefreshKey && nozzleAssignmentRefreshKey > 0 && outletId) {
+      fetchData(true);
+    }
+  }, [nozzleAssignmentRefreshKey, outletId, fetchData]);
 
   const handleCancelAssignment = async (assignmentId: string) => {
     if (!confirm('Are you sure you want to cancel this nozzle assignment?')) return;
