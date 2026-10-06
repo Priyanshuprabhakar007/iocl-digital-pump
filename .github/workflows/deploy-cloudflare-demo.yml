@@ -30,17 +30,111 @@ jobs:
       - name: Export Demo Seed SQL
         run: bun run db:export-demo-seed
 
-      - name: Apply Remote D1 Migrations
+      - name: Verify Base D1 Migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler d1 migrations apply iocl-pump-manager-d1 --remote
+        run: |
+          RESULT=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '0013_cng_financial_integration.sql';" \
+            --json \
+            --yes)
+
+          COUNT=$(echo "$RESULT" | jq -r '.[0].results[0].count // 0')
+
+          echo "0013 migration recorded: $COUNT"
+
+          if [ "$COUNT" != "1" ]; then
+            echo "ERROR: Expected migration 0013 to be applied before the trigger migration compatibility path."
+            exit 1
+          fi
+
+      - name: Apply Trigger Migrations via D1 Import
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          MIGRATIONS=(
+            "migrations/0014_phase3b_lube_operations.sql"
+            "migrations/0015_phase3c_equipment_breakdowns.sql"
+            "migrations/0016_phase4a_utilities.sql"
+            "migrations/0017_phase4b_municipal_taxes.sql"
+            "migrations/0018_phase4c_nfr_leases_rent.sql"
+            "migrations/0019_phase5a_workforce_roster.sql"
+          )
+
+          for FILE in "${MIGRATIONS[@]}"; do
+            NAME=$(basename "$FILE")
+
+            echo "Checking migration: $NAME"
+
+            RESULT=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+              --remote \
+              --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$NAME';" \
+              --json \
+              --yes)
+
+            COUNT=$(echo "$RESULT" | jq -r '.[0].results[0].count // 0')
+
+            if [ "$COUNT" = "1" ]; then
+              echo "Already applied: $NAME"
+              continue
+            fi
+
+            echo "Applying through D1 file import: $NAME"
+
+            npx wrangler d1 execute iocl-pump-manager-d1 \
+              --remote \
+              --file="$FILE" \
+              --yes
+
+            echo "Recording migration: $NAME"
+
+            npx wrangler d1 execute iocl-pump-manager-d1 \
+              --remote \
+              --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('$NAME');" \
+              --yes
+
+            echo "Completed: $NAME"
+          done
+
+      - name: Verify D1 Migration Completion
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT id, name, applied_at FROM d1_migrations ORDER BY id;" \
+            --yes
+
+          RESULT=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM d1_migrations;" \
+            --json \
+            --yes)
+
+          COUNT=$(echo "$RESULT" | jq -r '.[0].results[0].count // 0')
+
+          echo "Recorded migrations: $COUNT"
+
+          if [ "$COUNT" -lt "19" ]; then
+            echo "ERROR: Expected all 19 migrations to be recorded."
+            exit 1
+          fi
 
       - name: Execute Demo Seed on Remote D1
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler d1 execute iocl-pump-manager-d1 --remote --file=demo-seed.sql --yes
+        run: |
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --file=demo-seed.sql \
+            --yes
 
       - name: Deploy Worker to Cloudflare
         env:
