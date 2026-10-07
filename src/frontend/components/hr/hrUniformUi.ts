@@ -289,6 +289,21 @@ export function buildUniformItemQueryParams(filters: {
 }
 
 /**
+ * Builds query params string for Uniform variants endpoint
+ * Supported: itemId
+ */
+export function buildUniformVariantQueryParams(filters: {
+  itemId?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (filters.itemId && filters.itemId.trim()) {
+    params.set('itemId', filters.itemId.trim());
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/**
  * Builds query params string for Uniform stock transactions endpoint
  * Supported: variantId, transactionType, fromDate, toDate
  */

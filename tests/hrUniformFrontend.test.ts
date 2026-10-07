@@ -8,6 +8,7 @@ import {
   formatUniformCategory,
   validateUniformDateRange,
   buildUniformItemQueryParams,
+  buildUniformVariantQueryParams,
   buildUniformTransactionQueryParams,
   buildUniformIssueQueryParams,
   buildUniformHistoryQueryParams,
@@ -64,6 +65,29 @@ describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
       expect(parsed.has('limit')).toBe(false);
       expect(res).not.toContain('undefined');
       expect(res).not.toContain('null');
+    });
+  });
+
+  // ==========================================================================
+  // 1b. buildUniformVariantQueryParams
+  // ==========================================================================
+  describe('buildUniformVariantQueryParams', () => {
+    it('returns empty string when itemId is empty or whitespace', () => {
+      expect(buildUniformVariantQueryParams({})).toBe('');
+      expect(buildUniformVariantQueryParams({ itemId: '' })).toBe('');
+      expect(buildUniformVariantQueryParams({ itemId: '   ' })).toBe('');
+    });
+
+    it('builds query with itemId and trims whitespace', () => {
+      const res = buildUniformVariantQueryParams({ itemId: '  item-uniform-42  ' });
+      expect(res).toBe('?itemId=item-uniform-42');
+      expect(res).not.toContain('undefined');
+      expect(res).not.toContain('null');
+    });
+
+    it('properly encodes special characters in itemId', () => {
+      const res = buildUniformVariantQueryParams({ itemId: 'item/special 123' });
+      expect(res).toBe('?itemId=item%2Fspecial+123');
     });
   });
 

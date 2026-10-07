@@ -55,16 +55,14 @@ export const HrUniformInventoryView: React.FC<HrUniformInventoryViewProps> = ({
   const stockMap = new Map<string, HrUniformStockSummary>();
   stockSummary.forEach(s => stockMap.set(s.variantId, s));
 
-  // Count variants per item
+  // Count variants per item (using authoritative stockSummary so counts remain stable across item filter)
   const variantCountMap = new Map<string, number>();
-  variants.forEach(v => {
-    variantCountMap.set(v.uniformItemId, (variantCountMap.get(v.uniformItemId) || 0) + 1);
+  stockSummary.forEach(s => {
+    variantCountMap.set(s.itemId, (variantCountMap.get(s.itemId) || 0) + 1);
   });
 
-  // Filtered variants based on selected item
-  const displayVariants = filters.selectedItemId
-    ? variants.filter(v => v.uniformItemId === filters.selectedItemId)
-    : variants;
+  // Backend already filters variants by selectedItemId when provided
+  const displayVariants = variants;
 
   return (
     <div className="space-y-6">
