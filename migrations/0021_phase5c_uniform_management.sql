@@ -176,7 +176,7 @@ BEGIN
             -- Reference existence check for ISSUE_OUT / RETURN_IN
             WHEN NEW.transaction_type = 'ISSUE_OUT' AND NOT EXISTS (SELECT 1 FROM hr_uniform_issues WHERE id = NEW.reference_id AND status = 'ISSUED' AND outlet_id = NEW.outlet_id AND variant_id = NEW.variant_id AND quantity = NEW.quantity)
             THEN RAISE(ABORT, 'HR_UNIFORM_ISSUE_NOT_FOUND')
-            WHEN NEW.transaction_type = 'RETURN_IN' AND NOT EXISTS (SELECT 1 FROM hr_uniform_issues WHERE id = NEW.reference_id AND outlet_id = NEW.outlet_id AND variant_id = NEW.variant_id AND status IN ('RETURNED', 'REPLACED') AND condition_on_close IN ('GOOD', 'FAIR'))
+            WHEN NEW.transaction_type = 'RETURN_IN' AND NOT EXISTS (SELECT 1 FROM hr_uniform_issues WHERE id = NEW.reference_id AND outlet_id = NEW.outlet_id AND variant_id = NEW.variant_id AND status IN ('RETURNED', 'REPLACED') AND condition_on_close IN ('GOOD', 'FAIR') AND quantity = NEW.quantity)
             THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_RESTOCK')
 
             -- Prevent duplicate ISSUE_OUT
@@ -276,6 +276,14 @@ BEGIN
             THEN RAISE(ABORT, 'HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')
             WHEN NEW.replaces_issue_id IS NOT NULL AND (SELECT status FROM hr_uniform_issues WHERE id = NEW.replaces_issue_id) != 'REPLACED'
             THEN RAISE(ABORT, 'HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')
+            
+            -- Lifecycle State Rules
+            WHEN NEW.status = 'ISSUED' AND (NEW.closed_at IS NOT NULL OR NEW.closed_by IS NOT NULL OR NEW.condition_on_close IS NOT NULL OR NEW.replacement_reason IS NOT NULL)
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_RETURN_CONDITION')
+            WHEN NEW.status = 'RETURNED' AND (NEW.closed_at IS NULL OR NEW.closed_by IS NULL OR NEW.condition_on_close IS NULL OR NEW.replacement_reason IS NOT NULL)
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_RETURN_CONDITION')
+            WHEN NEW.status = 'REPLACED' AND (NEW.closed_at IS NULL OR NEW.closed_by IS NULL OR NEW.condition_on_close IS NULL OR NEW.replacement_reason IS NULL)
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_RETURN_CONDITION')
         END;
 END;
 
@@ -303,6 +311,16 @@ BEGIN
             -- When REPLACED, require replacement reason
             WHEN NEW.status = 'REPLACED' AND NEW.replacement_reason IS NULL
             THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_RETURN_CONDITION')
+
+            -- Prevent setting replacement_reason for RETURNED
+            WHEN NEW.status = 'RETURNED' AND NEW.replacement_reason IS NOT NULL
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_RETURN_CONDITION')
+
+            -- STRICT LIFECYCLE RULES (Prevent transitioning closed states)
+            WHEN OLD.status = 'RETURNED' AND NEW.status = 'REPLACED'
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_TRANSITION')
+            WHEN OLD.status = 'REPLACED' AND NEW.status = 'RETURNED'
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_TRANSITION')
         END;
 END;
 

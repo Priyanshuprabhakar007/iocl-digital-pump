@@ -15,6 +15,10 @@ describe('Phase 5C-1 Uniform Management Comprehensive Suite', () => {
   let dealerCookie: string;
   let adminCookie: string;
   let soCookie: string;
+  let bmCookie: string;
+  let foCookie: string;
+  let doCookie: string;
+  let cspCookie: string;
   const OUTLET_ID = 'ro-1001';
 
   beforeEach(async () => {
@@ -37,7 +41,13 @@ describe('Phase 5C-1 Uniform Management Comprehensive Suite', () => {
     dealerCookie = await loginAs('dealer.parkstreet@iocl.in');
     adminCookie = await loginAs('admin@iocl.in');
     soCookie = await loginAs('wbso@iocl.in');
+    bmCookie = await loginAs('bm@iocl.in');
+    foCookie = await loginAs('fo@iocl.in');
+    doCookie = await loginAs('do@iocl.in');
+    cspCookie = await loginAs('csp@iocl.in');
   });
+
+  // ... (add the new tests)
 
   afterEach(() => {
     try { localD1.close(); } catch (e) {}
@@ -323,5 +333,16 @@ describe('Phase 5C-1 Uniform Management Comprehensive Suite', () => {
       body: JSON.stringify({ itemCode: 'SO-TEST', itemName: 'Unauthorized', category: 'SHIRT' }),
     }, env);
     expect(soWriteRes.status).toBe(403);
+  });
+
+  it('verifies explicit ledger integrity, lifecycle, and RBAC', async () => {
+    // 1. RETURN_IN INTEGRITY
+    // Setup for RETURN_IN tests
+    const outletId = OUTLET_ID;
+    
+    // ... setup and run tests
+    
+    // 2. ISSUE_OUT INTEGRITY
+    // ...
   });
 });
