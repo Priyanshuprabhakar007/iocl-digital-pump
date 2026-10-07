@@ -90,7 +90,7 @@ export function handleUniformDbError(err: any): never {
     throw new UniformError('HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH', 'Replacement source issue mismatch', 400);
   }
 
-  throw new UniformError('INTERNAL_SERVER_ERROR', msg, 500);
+  throw new UniformError('INTERNAL_SERVER_ERROR', 'An unexpected server error occurred.', 500);
 }
 
 export class UniformService {
@@ -401,20 +401,7 @@ export class UniformService {
     const txId = `ustx-${crypto.randomUUID()}`;
 
     try {
-      const stockTxData = {
-        id: txId,
-        outletId,
-        variantId: parsed.variantId,
-        transactionType: 'ISSUE_OUT',
-        quantity: parsed.quantity,
-        referenceType: 'hr_uniform_issues',
-        referenceId: issueId,
-        notes: parsed.notes || `Issued to staff ${staff.employeeCode}`,
-        occurredAt: now,
-        createdBy: userId,
-        createdAt: now,
-      };
-
+      // Create issue record first (so transaction can reference it)
       const issueData = {
         id: issueId,
         outletId,
@@ -428,6 +415,20 @@ export class UniformService {
         notes: parsed.notes || null,
         createdAt: now,
         updatedAt: now,
+      };
+
+      const stockTxData = {
+        id: txId,
+        outletId,
+        variantId: parsed.variantId,
+        transactionType: 'ISSUE_OUT',
+        quantity: parsed.quantity,
+        referenceType: 'hr_uniform_issues',
+        referenceId: issueId,
+        notes: parsed.notes || `Issued to staff ${staff.employeeCode}`,
+        occurredAt: now,
+        createdBy: userId,
+        createdAt: now,
       };
 
       const issue = await this.uniformRepo.issueUniformAtomic(issueData, stockTxData);
