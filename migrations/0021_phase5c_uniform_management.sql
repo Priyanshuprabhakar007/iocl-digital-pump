@@ -176,8 +176,8 @@ BEGIN
             -- Reference existence check for ISSUE_OUT / RETURN_IN
             WHEN NEW.transaction_type = 'ISSUE_OUT' AND NOT EXISTS (SELECT 1 FROM hr_uniform_issues WHERE id = NEW.reference_id AND status = 'ISSUED' AND outlet_id = NEW.outlet_id AND variant_id = NEW.variant_id AND quantity = NEW.quantity)
             THEN RAISE(ABORT, 'HR_UNIFORM_ISSUE_NOT_FOUND')
-            WHEN NEW.transaction_type = 'RETURN_IN' AND NOT EXISTS (SELECT 1 FROM hr_uniform_issues WHERE id = NEW.reference_id AND outlet_id = NEW.outlet_id AND variant_id = NEW.variant_id)
-            THEN RAISE(ABORT, 'HR_UNIFORM_ISSUE_NOT_FOUND')
+            WHEN NEW.transaction_type = 'RETURN_IN' AND NOT EXISTS (SELECT 1 FROM hr_uniform_issues WHERE id = NEW.reference_id AND outlet_id = NEW.outlet_id AND variant_id = NEW.variant_id AND status IN ('RETURNED', 'REPLACED') AND condition_on_close IN ('GOOD', 'FAIR'))
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_RESTOCK')
 
             -- Prevent duplicate ISSUE_OUT
             WHEN NEW.transaction_type = 'ISSUE_OUT' AND EXISTS (SELECT 1 FROM hr_uniform_stock_transactions WHERE transaction_type = 'ISSUE_OUT' AND reference_type = 'hr_uniform_issues' AND reference_id = NEW.reference_id)
@@ -274,6 +274,8 @@ BEGIN
             THEN RAISE(ABORT, 'HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')
             WHEN NEW.replaces_issue_id IS NOT NULL AND NEW.staff_id != (SELECT staff_id FROM hr_uniform_issues WHERE id = NEW.replaces_issue_id)
             THEN RAISE(ABORT, 'HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')
+            WHEN NEW.replaces_issue_id IS NOT NULL AND (SELECT status FROM hr_uniform_issues WHERE id = NEW.replaces_issue_id) != 'REPLACED'
+            THEN RAISE(ABORT, 'HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')
         END;
 END;
 
@@ -286,8 +288,12 @@ BEGIN
             WHEN OLD.status IN ('RETURNED', 'REPLACED')
             THEN RAISE(ABORT, 'HR_UNIFORM_ISSUE_ALREADY_CLOSED')
             
-            -- ISSUED state must NOT have close fields
-            WHEN NEW.status = 'ISSUED' AND (NEW.closed_at IS NOT NULL OR NEW.closed_by IS NOT NULL OR NEW.condition_on_close IS NOT NULL)
+            -- Prevent invalid state transitions
+            WHEN OLD.status = 'ISSUED' AND NEW.status NOT IN ('ISSUED', 'RETURNED', 'REPLACED')
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_TRANSITION')
+
+            -- Prevent updating ISSUED row while keeping status ISSUED but populating close/replacement fields
+            WHEN OLD.status = 'ISSUED' AND NEW.status = 'ISSUED' AND (NEW.closed_at IS NOT NULL OR NEW.closed_by IS NOT NULL OR NEW.condition_on_close IS NOT NULL OR NEW.replacement_reason IS NOT NULL)
             THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_RETURN_CONDITION')
             
             -- When closing to RETURNED or REPLACED, require close fields

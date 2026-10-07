@@ -553,12 +553,13 @@ export class UniformRepository {
   ): Promise<{ oldIssue: HrUniformIssue; newIssue: HrUniformIssue }> {
     const ops: any[] = [
       this.db.update(hrUniformIssues).set(updateData).where(eq(hrUniformIssues.id, issueId)),
-      this.db.insert(hrUniformStockTransactions).values(stockTxDataOut),
-      this.db.insert(hrUniformIssues).values(newIssueData),
     ];
     if (stockTxDataIn) {
       ops.push(this.db.insert(hrUniformStockTransactions).values(stockTxDataIn));
     }
+    ops.push(this.db.insert(hrUniformIssues).values(newIssueData));
+    ops.push(this.db.insert(hrUniformStockTransactions).values(stockTxDataOut));
+
     await this.db.batch(ops as any);
 
     const oldIssue = await this.getIssueById(issueId);

@@ -77,17 +77,26 @@ export function handleUniformDbError(err: any): never {
   if (msg.includes('HR_UNIFORM_STAFF_NOT_ACTIVE')) {
     throw new UniformError('HR_UNIFORM_STAFF_NOT_ACTIVE', 'Staff member is not active', 400);
   }
-  if (msg.includes('HR_UNIFORM_INVALID_RETURN_CONDITION') || msg.includes('HR_UNIFORM_INVALID_RESTOCK')) {
-    throw new UniformError('HR_UNIFORM_INVALID_RETURN_CONDITION', 'Invalid return condition or restock eligibility', 400);
+  if (msg.includes('HR_UNIFORM_DUPLICATE_ISSUE_OUT')) {
+    throw new UniformError('HR_UNIFORM_DUPLICATE_ISSUE_OUT', 'Duplicate issue transaction', 409);
+  }
+  if (msg.includes('HR_UNIFORM_DUPLICATE_RETURN_IN')) {
+    throw new UniformError('HR_UNIFORM_DUPLICATE_RETURN_IN', 'Duplicate return transaction', 409);
+  }
+  if (msg.includes('HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')) {
+    throw new UniformError('HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH', 'Replacement source issue mismatch', 400);
+  }
+  if (msg.includes('HR_UNIFORM_INVALID_RESTOCK')) {
+    throw new UniformError('HR_UNIFORM_INVALID_RESTOCK', 'Invalid restock condition', 400);
+  }
+  if (msg.includes('HR_UNIFORM_ISSUE_ALREADY_CLOSED')) {
+    throw new UniformError('HR_UNIFORM_ISSUE_ALREADY_CLOSED', 'Issue already closed', 400);
   }
   if (msg.includes('HR_UNIFORM_REPLACEMENT_STOCK_UNAVAILABLE')) {
     throw new UniformError('HR_UNIFORM_REPLACEMENT_STOCK_UNAVAILABLE', 'Insufficient stock for replacement variant', 400);
   }
   if (msg.includes('HR_UNIFORM_REPLACEMENT_SELF_REFERENCE')) {
     throw new UniformError('HR_UNIFORM_REPLACEMENT_SELF_REFERENCE', 'Replacement cannot reference itself', 400);
-  }
-  if (msg.includes('HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')) {
-    throw new UniformError('HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH', 'Replacement source issue mismatch', 400);
   }
 
   throw new UniformError('INTERNAL_SERVER_ERROR', 'An unexpected server error occurred.', 500);

@@ -56,7 +56,7 @@ function handleUniformError(c: AppContext, err: any) {
     data: null,
     error: {
       code: 'INTERNAL_SERVER_ERROR',
-      message: err.message || 'An unexpected server error occurred.',
+      message: 'An unexpected server error occurred.',
     },
   }, 500);
 }
