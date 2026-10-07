@@ -125,6 +125,11 @@ export async function seedDatabase(db: AppDatabase) {
     { id: 'perm-hr-att-w', code: PERMISSIONS.HR_ATTENDANCE_WRITE, name: 'Write Attendance', description: 'Perform staff check-in and check-out operations' },
     { id: 'perm-hr-geo-w', code: PERMISSIONS.HR_GEOFENCE_WRITE, name: 'Write Geofence Policy', description: 'Configure outlet geofence policies and radius rules' },
     { id: 'perm-hr-nozz-w', code: PERMISSIONS.HR_NOZZLE_ASSIGNMENT_WRITE, name: 'Write Nozzle Assignments', description: 'Assign scheduled staff to operational nozzles' },
+
+    // Phase 5C-1: Uniform Management
+    { id: 'perm-hr-uniform-r', code: PERMISSIONS.HR_UNIFORM_READ, name: 'Read Uniforms', description: 'View uniform items, variants, stock ledger and issue history' },
+    { id: 'perm-hr-uniform-inv-w', code: PERMISSIONS.HR_UNIFORM_INVENTORY_WRITE, name: 'Write Uniform Inventory', description: 'Manage uniform items, variants and stock transactions' },
+    { id: 'perm-hr-uniform-issue-w', code: PERMISSIONS.HR_UNIFORM_ISSUE_WRITE, name: 'Write Uniform Issues', description: 'Issue, return and replace staff uniforms' },
   ];
   await db.insert(schema.permissions).values(permissionsList).onConflictDoNothing();
 
@@ -142,6 +147,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-lube-read',
     'perm-eq-r',
     'perm-hr-att-r',
+    'perm-hr-uniform-r',
   ].map(pId => ({ roleId: 'role-so', permissionId: pId }));
 
   const divOfficePerms = [
@@ -154,6 +160,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-lube-read',
     'perm-eq-r', 'perm-eq-t-m', 'perm-eq-t-s',
     'perm-hr-att-r',
+    'perm-hr-uniform-r',
   ].map(pId => ({ roleId: 'role-do', permissionId: pId }));
 
   const bmPerms = [
@@ -164,6 +171,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-lube-read',
     'perm-eq-r', 'perm-eq-as-w', 'perm-eq-t-m', 'perm-eq-t-s',
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-geo-w', 'perm-hr-nozz-w',
+    'perm-hr-uniform-r', 'perm-hr-uniform-inv-w', 'perm-hr-uniform-issue-w',
   ].map(pId => ({ roleId: 'role-bm', permissionId: pId }));
 
   const fieldOfficerPerms = [
@@ -174,6 +182,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-lube-read',
     'perm-eq-r', 'perm-eq-as-w', 'perm-eq-t-m', 'perm-eq-t-s',
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-geo-w', 'perm-hr-nozz-w',
+    'perm-hr-uniform-r', 'perm-hr-uniform-inv-w', 'perm-hr-uniform-issue-w',
   ].map(pId => ({ roleId: 'role-fo', permissionId: pId }));
 
   const dealerPerms = [
@@ -194,6 +203,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-lube-read', 'perm-lube-inv-write', 'perm-lube-sales-write',
     'perm-eq-r', 'perm-eq-as-w', 'perm-eq-t-c',
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-nozz-w',
+    'perm-hr-uniform-r', 'perm-hr-uniform-inv-w', 'perm-hr-uniform-issue-w',
   ].map(pId => ({ roleId: 'role-dealer', permissionId: pId }));
 
   const cspPerms = [
@@ -214,6 +224,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-lube-read', 'perm-lube-inv-write', 'perm-lube-sales-write',
     'perm-eq-r', 'perm-eq-as-w', 'perm-eq-t-c',
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-nozz-w',
+    'perm-hr-uniform-r',
   ].map(pId => ({ roleId: 'role-csp', permissionId: pId }));
 
   await db.insert(schema.rolePermissions).values([

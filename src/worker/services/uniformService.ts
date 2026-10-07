@@ -41,6 +41,9 @@ export function handleUniformDbError(err: any): never {
   if (msg.includes('idx_hr_uniform_items_outlet_code') || (msg.includes('UNIQUE constraint') && msg.includes('hr_uniform_items'))) {
     throw new UniformError('HR_UNIFORM_ITEM_CODE_EXISTS', 'A uniform item with this code already exists for this outlet', 409);
   }
+  if (msg.includes('HR_UNIFORM_ITEM_INACTIVE')) {
+    throw new UniformError('HR_UNIFORM_ITEM_INACTIVE', 'Uniform item is inactive', 400);
+  }
   if (msg.includes('HR_UNIFORM_VARIANT_NOT_FOUND')) {
     throw new UniformError('HR_UNIFORM_VARIANT_NOT_FOUND', 'Uniform variant not found', 404);
   }
@@ -48,13 +51,43 @@ export function handleUniformDbError(err: any): never {
     throw new UniformError('HR_UNIFORM_VARIANT_EXISTS', 'A variant with this size already exists for this uniform item', 409);
   }
   if (msg.includes('HR_UNIFORM_VARIANT_OUTLET_MISMATCH')) {
-    throw new UniformError('HR_UNIFORM_VARIANT_OUTLET_MISMATCH', 'Variant outlet must match uniform item outlet', 400);
+    throw new UniformError('HR_UNIFORM_VARIANT_OUTLET_MISMATCH', 'Variant outlet must match uniform item/outlet', 400);
+  }
+  if (msg.includes('HR_UNIFORM_VARIANT_INACTIVE')) {
+    throw new UniformError('HR_UNIFORM_VARIANT_INACTIVE', 'Uniform variant is inactive', 400);
   }
   if (msg.includes('HR_UNIFORM_INSUFFICIENT_STOCK')) {
     throw new UniformError('HR_UNIFORM_INSUFFICIENT_STOCK', 'Insufficient stock available for this variant', 400);
   }
+  if (msg.includes('HR_UNIFORM_INVALID_TRANSACTION_TYPE')) {
+    throw new UniformError('HR_UNIFORM_INVALID_TRANSACTION_TYPE', 'Invalid or prohibited transaction type', 400);
+  }
   if (msg.includes('HR_UNIFORM_ISSUE_NOT_FOUND')) {
     throw new UniformError('HR_UNIFORM_ISSUE_NOT_FOUND', 'Uniform issue record not found', 404);
+  }
+  if (msg.includes('HR_UNIFORM_ISSUE_ALREADY_CLOSED')) {
+    throw new UniformError('HR_UNIFORM_ISSUE_ALREADY_CLOSED', 'Uniform issue is already closed or processed', 409);
+  }
+  if (msg.includes('HR_UNIFORM_STAFF_NOT_FOUND')) {
+    throw new UniformError('HR_UNIFORM_STAFF_NOT_FOUND', 'Staff member not found', 404);
+  }
+  if (msg.includes('HR_UNIFORM_STAFF_OUTLET_MISMATCH')) {
+    throw new UniformError('HR_UNIFORM_STAFF_OUTLET_MISMATCH', 'Staff member outlet mismatch', 400);
+  }
+  if (msg.includes('HR_UNIFORM_STAFF_NOT_ACTIVE')) {
+    throw new UniformError('HR_UNIFORM_STAFF_NOT_ACTIVE', 'Staff member is not active', 400);
+  }
+  if (msg.includes('HR_UNIFORM_INVALID_RETURN_CONDITION') || msg.includes('HR_UNIFORM_INVALID_RESTOCK')) {
+    throw new UniformError('HR_UNIFORM_INVALID_RETURN_CONDITION', 'Invalid return condition or restock eligibility', 400);
+  }
+  if (msg.includes('HR_UNIFORM_REPLACEMENT_STOCK_UNAVAILABLE')) {
+    throw new UniformError('HR_UNIFORM_REPLACEMENT_STOCK_UNAVAILABLE', 'Insufficient stock for replacement variant', 400);
+  }
+  if (msg.includes('HR_UNIFORM_REPLACEMENT_SELF_REFERENCE')) {
+    throw new UniformError('HR_UNIFORM_REPLACEMENT_SELF_REFERENCE', 'Replacement cannot reference itself', 400);
+  }
+  if (msg.includes('HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')) {
+    throw new UniformError('HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH', 'Replacement source issue mismatch', 400);
   }
 
   throw new UniformError('INTERNAL_SERVER_ERROR', msg, 500);
@@ -87,7 +120,7 @@ export class UniformService {
     }
 
     const now = new Date().toISOString();
-    const id = `uitem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = `uitem-${crypto.randomUUID()}`;
 
     try {
       const item = await this.uniformRepo.createItem({
@@ -103,14 +136,13 @@ export class UniformService {
         updatedAt: now,
       });
 
-      await this.auditRepo.log({
-        id: `aud_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      await this.auditRepo.logAction({
+        id: `aud-${crypto.randomUUID()}`,
         userId,
-        outletId,
         action: 'HR_UNIFORM_ITEM_CREATED',
-        targetType: 'hr_uniform_items',
-        targetId: id,
-        details: JSON.stringify({ itemCode: parsed.itemCode, itemName: parsed.itemName, category: parsed.category }),
+        entityType: 'hr_uniform_items',
+        entityId: id,
+        newValue: { itemCode: parsed.itemCode, itemName: parsed.itemName, category: parsed.category },
         createdAt: now,
       });
 
@@ -142,14 +174,13 @@ export class UniformService {
         updatedAt: now,
       });
 
-      await this.auditRepo.log({
-        id: `aud_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      await this.auditRepo.logAction({
+        id: `aud-${crypto.randomUUID()}`,
         userId,
-        outletId,
         action: 'HR_UNIFORM_ITEM_UPDATED',
-        targetType: 'hr_uniform_items',
-        targetId: itemId,
-        details: JSON.stringify(parsed),
+        entityType: 'hr_uniform_items',
+        entityId: itemId,
+        newValue: parsed,
         createdAt: now,
       });
 
@@ -184,7 +215,7 @@ export class UniformService {
     }
 
     const now = new Date().toISOString();
-    const id = `uvar_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = `uvar-${crypto.randomUUID()}`;
 
     try {
       const variant = await this.uniformRepo.createVariant({
@@ -200,14 +231,13 @@ export class UniformService {
         updatedAt: now,
       });
 
-      await this.auditRepo.log({
-        id: `aud_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      await this.auditRepo.logAction({
+        id: `aud-${crypto.randomUUID()}`,
         userId,
-        outletId,
         action: 'HR_UNIFORM_VARIANT_CREATED',
-        targetType: 'hr_uniform_variants',
-        targetId: id,
-        details: JSON.stringify({ uniformItemId: parsed.uniformItemId, sizeLabel: parsed.sizeLabel }),
+        entityType: 'hr_uniform_variants',
+        entityId: id,
+        newValue: { uniformItemId: parsed.uniformItemId, sizeLabel: parsed.sizeLabel },
         createdAt: now,
       });
 
@@ -238,14 +268,13 @@ export class UniformService {
         updatedAt: now,
       });
 
-      await this.auditRepo.log({
-        id: `aud_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      await this.auditRepo.logAction({
+        id: `aud-${crypto.randomUUID()}`,
         userId,
-        outletId,
         action: 'HR_UNIFORM_VARIANT_UPDATED',
-        targetType: 'hr_uniform_variants',
-        targetId: variantId,
-        details: JSON.stringify(parsed),
+        entityType: 'hr_uniform_variants',
+        entityId: variantId,
+        newValue: parsed,
         createdAt: now,
       });
 
@@ -269,6 +298,10 @@ export class UniformService {
     payload: unknown
   ): Promise<HrUniformStockTransaction> {
     const parsed = UniformStockTransactionCreateSchema.parse(payload);
+    if (['ISSUE_OUT', 'RETURN_IN'].includes(parsed.transactionType)) {
+      throw new UniformError('HR_UNIFORM_INVALID_TRANSACTION_TYPE', 'Manual stock transactions cannot be ISSUE_OUT or RETURN_IN', 400);
+    }
+
     const variant = await this.uniformRepo.getVariantById(parsed.variantId);
     if (!variant || variant.outletId !== outletId) {
       throw new UniformError('HR_UNIFORM_VARIANT_NOT_FOUND', 'Uniform variant not found', 404);
@@ -282,7 +315,7 @@ export class UniformService {
     }
 
     const now = new Date().toISOString();
-    const id = `ustx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = `ustx-${crypto.randomUUID()}`;
 
     try {
       const tx = await this.uniformRepo.createStockTransaction({
@@ -299,14 +332,13 @@ export class UniformService {
         createdAt: now,
       });
 
-      await this.auditRepo.log({
-        id: `aud_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      await this.auditRepo.logAction({
+        id: `aud-${crypto.randomUUID()}`,
         userId,
-        outletId,
         action: 'HR_UNIFORM_STOCK_TRANSACTION_CREATED',
-        targetType: 'hr_uniform_stock_transactions',
-        targetId: id,
-        details: JSON.stringify({ variantId: parsed.variantId, transactionType: parsed.transactionType, quantity: parsed.quantity }),
+        entityType: 'hr_uniform_stock_transactions',
+        entityId: id,
+        newValue: { variantId: parsed.variantId, transactionType: parsed.transactionType, quantity: parsed.quantity },
         createdAt: now,
       });
 
@@ -365,12 +397,11 @@ export class UniformService {
     }
 
     const now = new Date().toISOString();
-    const issueId = `uiss_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const txId = `ustx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const issueId = `uiss-${crypto.randomUUID()}`;
+    const txId = `ustx-${crypto.randomUUID()}`;
 
     try {
-      // Create stock transaction (ISSUE_OUT)
-      await this.uniformRepo.createStockTransaction({
+      const stockTxData = {
         id: txId,
         outletId,
         variantId: parsed.variantId,
@@ -382,10 +413,9 @@ export class UniformService {
         occurredAt: now,
         createdBy: userId,
         createdAt: now,
-      });
+      };
 
-      // Create issue record
-      const issue = await this.uniformRepo.createIssue({
+      const issueData = {
         id: issueId,
         outletId,
         staffId: parsed.staffId,
@@ -398,16 +428,17 @@ export class UniformService {
         notes: parsed.notes || null,
         createdAt: now,
         updatedAt: now,
-      });
+      };
 
-      await this.auditRepo.log({
-        id: `aud_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      const issue = await this.uniformRepo.issueUniformAtomic(issueData, stockTxData);
+
+      await this.auditRepo.logAction({
+        id: `aud-${crypto.randomUUID()}`,
         userId,
-        outletId,
         action: 'HR_UNIFORM_ISSUED',
-        targetType: 'hr_uniform_issues',
-        targetId: issueId,
-        details: JSON.stringify({ staffId: parsed.staffId, variantId: parsed.variantId, quantity: parsed.quantity }),
+        entityType: 'hr_uniform_issues',
+        entityId: issueId,
+        newValue: { staffId: parsed.staffId, variantId: parsed.variantId, quantity: parsed.quantity },
         createdAt: now,
       });
 
@@ -434,15 +465,16 @@ export class UniformService {
     }
 
     const now = new Date().toISOString();
-    const txId = `ustx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const txId = `ustx-${crypto.randomUUID()}`;
 
     try {
+      let stockTxData: any = undefined;
       if (parsed.returnToStock) {
         if (['DAMAGED', 'LOST'].includes(parsed.condition)) {
           throw new UniformError('HR_UNIFORM_INVALID_RESTOCK', 'Damaged or lost items cannot be returned to usable stock', 400);
         }
 
-        await this.uniformRepo.createStockTransaction({
+        stockTxData = {
           id: txId,
           outletId,
           variantId: issue.variantId,
@@ -454,25 +486,26 @@ export class UniformService {
           occurredAt: now,
           createdBy: userId,
           createdAt: now,
-        });
+        };
       }
 
-      const updated = await this.uniformRepo.updateIssue(issueId, {
+      const updateData = {
         status: 'RETURNED',
         closedAt: now,
         closedBy: userId,
         conditionOnClose: parsed.condition,
         updatedAt: now,
-      });
+      };
 
-      await this.auditRepo.log({
-        id: `aud_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      const updated = await this.uniformRepo.returnUniformAtomic(issueId, updateData, stockTxData);
+
+      await this.auditRepo.logAction({
+        id: `aud-${crypto.randomUUID()}`,
         userId,
-        outletId,
         action: 'HR_UNIFORM_RETURNED',
-        targetType: 'hr_uniform_issues',
-        targetId: issueId,
-        details: JSON.stringify({ condition: parsed.condition, returnToStock: parsed.returnToStock }),
+        entityType: 'hr_uniform_issues',
+        entityId: issueId,
+        newValue: { condition: parsed.condition, returnToStock: parsed.returnToStock },
         createdAt: now,
       });
 
@@ -513,18 +546,18 @@ export class UniformService {
     }
 
     const now = new Date().toISOString();
-    const returnTxId = `ustx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const issueTxId = `ustx_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const newIssueId = `uiss_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const returnTxId = `ustx-${crypto.randomUUID()}`;
+    const issueTxId = `ustx-${crypto.randomUUID()}`;
+    const newIssueId = `uiss-${crypto.randomUUID()}`;
 
     try {
-      // 1. If returning old item to stock
+      let stockTxDataIn: any = undefined;
       if (parsed.returnOldToStock) {
         if (['DAMAGED', 'LOST'].includes(parsed.oldCondition)) {
           throw new UniformError('HR_UNIFORM_INVALID_RESTOCK', 'Damaged or lost items cannot be returned to usable stock', 400);
         }
 
-        await this.uniformRepo.createStockTransaction({
+        stockTxDataIn = {
           id: returnTxId,
           outletId,
           variantId: oldIssue.variantId,
@@ -536,21 +569,19 @@ export class UniformService {
           occurredAt: now,
           createdBy: userId,
           createdAt: now,
-        });
+        };
       }
 
-      // 2. Close old issue as REPLACED
-      const updatedOld = await this.uniformRepo.updateIssue(issueId, {
+      const updateData = {
         status: 'REPLACED',
         closedAt: now,
         closedBy: userId,
         conditionOnClose: parsed.oldCondition,
         replacementReason: parsed.replacementReason,
         updatedAt: now,
-      });
+      };
 
-      // 3. Issue new variant (ISSUE_OUT)
-      await this.uniformRepo.createStockTransaction({
+      const stockTxDataOut = {
         id: issueTxId,
         outletId,
         variantId: parsed.replacementVariantId,
@@ -562,9 +593,9 @@ export class UniformService {
         occurredAt: now,
         createdBy: userId,
         createdAt: now,
-      });
+      };
 
-      const newIssue = await this.uniformRepo.createIssue({
+      const newIssueData = {
         id: newIssueId,
         outletId,
         staffId: oldIssue.staffId,
@@ -578,20 +609,21 @@ export class UniformService {
         createdAt: now,
         updatedAt: now,
         replacesIssueId: issueId,
-      });
+      };
 
-      await this.auditRepo.log({
-        id: `aud_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      const res = await this.uniformRepo.replaceUniformAtomic(issueId, updateData, newIssueData, stockTxDataOut, stockTxDataIn);
+
+      await this.auditRepo.logAction({
+        id: `aud-${crypto.randomUUID()}`,
         userId,
-        outletId,
         action: 'HR_UNIFORM_REPLACED',
-        targetType: 'hr_uniform_issues',
-        targetId: newIssueId,
-        details: JSON.stringify({ oldIssueId: issueId, replacementVariantId: parsed.replacementVariantId, reason: parsed.replacementReason }),
+        entityType: 'hr_uniform_issues',
+        entityId: newIssueId,
+        newValue: { oldIssueId: issueId, replacementVariantId: parsed.replacementVariantId, reason: parsed.replacementReason },
         createdAt: now,
       });
 
-      return { oldIssue: updatedOld, newIssue };
+      return res;
     } catch (err) {
       handleUniformDbError(err);
     }

@@ -1,4 +1,4 @@
--- Migration 0021: Phase 5C-1 Uniform Management Backend Foundation
+-- Migration 0021: Phase 5C-1 Uniform Management Backend Foundation & Hardening
 
 -- 1. Permissions & Role Permissions
 INSERT OR IGNORE INTO "permissions" ("id", "code", "name", "description") VALUES
@@ -88,12 +88,26 @@ CREATE TABLE IF NOT EXISTS "hr_uniform_variants" (
 CREATE INDEX IF NOT EXISTS "idx_hr_uniform_variants_outlet_id" ON "hr_uniform_variants" ("outlet_id");
 CREATE INDEX IF NOT EXISTS "idx_hr_uniform_variants_item_id" ON "hr_uniform_variants" ("uniform_item_id");
 
--- Trigger: variant outlet must match item outlet
-CREATE TRIGGER IF NOT EXISTS "trg_hr_uniform_variants_outlet_match"
+-- Trigger: variant relationship and outlet match validation
+CREATE TRIGGER IF NOT EXISTS "trg_hr_uniform_variants_insert_validate"
 BEFORE INSERT ON "hr_uniform_variants"
 BEGIN
     SELECT
         CASE
+            WHEN NOT EXISTS (SELECT 1 FROM hr_uniform_items WHERE id = NEW.uniform_item_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_ITEM_NOT_FOUND')
+            WHEN NEW.outlet_id != (SELECT outlet_id FROM hr_uniform_items WHERE id = NEW.uniform_item_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_VARIANT_OUTLET_MISMATCH')
+        END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_hr_uniform_variants_update_validate"
+BEFORE UPDATE ON "hr_uniform_variants"
+BEGIN
+    SELECT
+        CASE
+            WHEN NOT EXISTS (SELECT 1 FROM hr_uniform_items WHERE id = NEW.uniform_item_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_ITEM_NOT_FOUND')
             WHEN NEW.outlet_id != (SELECT outlet_id FROM hr_uniform_items WHERE id = NEW.uniform_item_id)
             THEN RAISE(ABORT, 'HR_UNIFORM_VARIANT_OUTLET_MISMATCH')
         END;
@@ -143,6 +157,25 @@ CREATE TABLE IF NOT EXISTS "hr_uniform_stock_transactions" (
 CREATE INDEX IF NOT EXISTS "idx_hr_uniform_stock_transactions_outlet_id" ON "hr_uniform_stock_transactions" ("outlet_id");
 CREATE INDEX IF NOT EXISTS "idx_hr_uniform_stock_transactions_variant_id" ON "hr_uniform_stock_transactions" ("variant_id");
 
+-- Triggers: Stock Transactions validation, outlet matching, negative stock protection, manual transaction restriction
+CREATE TRIGGER IF NOT EXISTS "trg_hr_uniform_stock_transactions_insert_validate"
+BEFORE INSERT ON "hr_uniform_stock_transactions"
+BEGIN
+    SELECT
+        CASE
+            WHEN NOT EXISTS (SELECT 1 FROM hr_uniform_variants WHERE id = NEW.variant_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_VARIANT_NOT_FOUND')
+            WHEN NEW.outlet_id != (SELECT outlet_id FROM hr_uniform_variants WHERE id = NEW.variant_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_VARIANT_OUTLET_MISMATCH')
+            WHEN NEW.transaction_type IN ('ISSUE_OUT', 'RETURN_IN') AND (NEW.reference_type IS NULL OR NEW.reference_id IS NULL)
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_TRANSACTION_TYPE')
+            WHEN NEW.transaction_type IN ('ADJUSTMENT_OUT', 'ISSUE_OUT') AND
+                 (SELECT COALESCE(SUM(CASE WHEN transaction_type IN ('OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN', 'RETURN_IN') THEN quantity ELSE -quantity END), 0)
+                  FROM hr_uniform_stock_transactions WHERE variant_id = NEW.variant_id) < NEW.quantity
+            THEN RAISE(ABORT, 'HR_UNIFORM_INSUFFICIENT_STOCK')
+        END;
+END;
+
 CREATE TRIGGER IF NOT EXISTS "trg_hr_uniform_stock_transactions_delete_forbidden"
 BEFORE DELETE ON "hr_uniform_stock_transactions"
 BEGIN
@@ -191,6 +224,60 @@ CREATE INDEX IF NOT EXISTS "idx_hr_uniform_issues_outlet_id" ON "hr_uniform_issu
 CREATE INDEX IF NOT EXISTS "idx_hr_uniform_issues_staff_id" ON "hr_uniform_issues" ("staff_id");
 CREATE INDEX IF NOT EXISTS "idx_hr_uniform_issues_variant_id" ON "hr_uniform_issues" ("variant_id");
 CREATE INDEX IF NOT EXISTS "idx_hr_uniform_issues_status" ON "hr_uniform_issues" ("outlet_id", "status");
+
+-- Triggers: Issue cross-reference integrity & lifecycle state validation
+CREATE TRIGGER IF NOT EXISTS "trg_hr_uniform_issues_insert_validate"
+BEFORE INSERT ON "hr_uniform_issues"
+BEGIN
+    SELECT
+        CASE
+            WHEN NOT EXISTS (SELECT 1 FROM hr_staff WHERE id = NEW.staff_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_STAFF_NOT_FOUND')
+            WHEN NEW.outlet_id != (SELECT outlet_id FROM hr_staff WHERE id = NEW.staff_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_STAFF_OUTLET_MISMATCH')
+            WHEN (SELECT employment_status FROM hr_staff WHERE id = NEW.staff_id) != 'ACTIVE'
+            THEN RAISE(ABORT, 'HR_UNIFORM_STAFF_NOT_ACTIVE')
+
+            WHEN NOT EXISTS (SELECT 1 FROM hr_uniform_variants WHERE id = NEW.variant_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_VARIANT_NOT_FOUND')
+            WHEN NEW.outlet_id != (SELECT outlet_id FROM hr_uniform_variants WHERE id = NEW.variant_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_VARIANT_OUTLET_MISMATCH')
+            WHEN (SELECT status FROM hr_uniform_variants WHERE id = NEW.variant_id) != 'ACTIVE'
+            THEN RAISE(ABORT, 'HR_UNIFORM_VARIANT_INACTIVE')
+
+            WHEN (SELECT status FROM hr_uniform_items WHERE id = (SELECT uniform_item_id FROM hr_uniform_variants WHERE id = NEW.variant_id)) != 'ACTIVE'
+            THEN RAISE(ABORT, 'HR_UNIFORM_ITEM_INACTIVE')
+
+            WHEN NEW.replaces_issue_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM hr_uniform_issues WHERE id = NEW.replaces_issue_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_ISSUE_NOT_FOUND')
+            WHEN NEW.replaces_issue_id IS NOT NULL AND NEW.replaces_issue_id = NEW.id
+            THEN RAISE(ABORT, 'HR_UNIFORM_REPLACEMENT_SELF_REFERENCE')
+            WHEN NEW.replaces_issue_id IS NOT NULL AND NEW.outlet_id != (SELECT outlet_id FROM hr_uniform_issues WHERE id = NEW.replaces_issue_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')
+            WHEN NEW.replaces_issue_id IS NOT NULL AND NEW.staff_id != (SELECT staff_id FROM hr_uniform_issues WHERE id = NEW.replaces_issue_id)
+            THEN RAISE(ABORT, 'HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')
+        END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_hr_uniform_issues_update_validate"
+BEFORE UPDATE ON "hr_uniform_issues"
+BEGIN
+    SELECT
+        CASE
+            -- Prevent changing from closed state (RETURNED or REPLACED)
+            WHEN OLD.status IN ('RETURNED', 'REPLACED')
+            THEN RAISE(ABORT, 'HR_UNIFORM_ISSUE_ALREADY_CLOSED')
+            -- Validate lifecycle transition targets
+            WHEN NEW.status NOT IN ('ISSUED', 'RETURNED', 'REPLACED')
+            THEN RAISE(ABORT, 'HR_UNIFORM_ISSUE_INVALID_STATUS')
+            -- When closing to RETURNED or REPLACED, require close fields
+            WHEN NEW.status IN ('RETURNED', 'REPLACED') AND (NEW.closed_at IS NULL OR NEW.closed_by IS NULL OR NEW.condition_on_close IS NULL)
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_RETURN_CONDITION')
+            -- When REPLACED, require replacement reason
+            WHEN NEW.status = 'REPLACED' AND NEW.replacement_reason IS NULL
+            THEN RAISE(ABORT, 'HR_UNIFORM_INVALID_RETURN_CONDITION')
+        END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS "trg_hr_uniform_issues_delete_forbidden"
 BEFORE DELETE ON "hr_uniform_issues"

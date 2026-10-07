@@ -520,4 +520,113 @@ export class UniformRepository {
       totalReplaced,
     };
   }
+
+  async issueUniformAtomic(issueData: any, stockTxData: any): Promise<HrUniformIssue> {
+    return await this.db.transaction(async (tx) => {
+      await tx.insert(hrUniformStockTransactions).values(stockTxData).run();
+      await tx.insert(hrUniformIssues).values(issueData).run();
+      const created = await tx
+        .select({
+          issue: hrUniformIssues,
+          staff: hrStaff,
+          variant: hrUniformVariants,
+          item: hrUniformItems,
+        })
+        .from(hrUniformIssues)
+        .innerJoin(hrStaff, eq(hrUniformIssues.staffId, hrStaff.id))
+        .innerJoin(hrUniformVariants, eq(hrUniformIssues.variantId, hrUniformVariants.id))
+        .innerJoin(hrUniformItems, eq(hrUniformVariants.uniformItemId, hrUniformItems.id))
+        .where(eq(hrUniformIssues.id, issueData.id))
+        .get();
+      if (!created) throw new Error('Failed to create uniform issue atomically');
+      return {
+        ...(created.issue as unknown as HrUniformIssue),
+        staffName: created.staff.fullName,
+        employeeCode: created.staff.employeeCode,
+        itemCode: created.item.itemCode,
+        itemName: created.item.itemName,
+        sizeLabel: created.variant.sizeLabel,
+        category: created.item.category as HrUniformCategory,
+      };
+    });
+  }
+
+  async returnUniformAtomic(issueId: string, updateData: any, stockTxData?: any): Promise<HrUniformIssue> {
+    return await this.db.transaction(async (tx) => {
+      if (stockTxData) {
+        await tx.insert(hrUniformStockTransactions).values(stockTxData).run();
+      }
+      await tx.update(hrUniformIssues).set(updateData).where(eq(hrUniformIssues.id, issueId)).run();
+      const row = await tx
+        .select({
+          issue: hrUniformIssues,
+          staff: hrStaff,
+          variant: hrUniformVariants,
+          item: hrUniformItems,
+        })
+        .from(hrUniformIssues)
+        .innerJoin(hrStaff, eq(hrUniformIssues.staffId, hrStaff.id))
+        .innerJoin(hrUniformVariants, eq(hrUniformIssues.variantId, hrUniformVariants.id))
+        .innerJoin(hrUniformItems, eq(hrUniformVariants.uniformItemId, hrUniformItems.id))
+        .where(eq(hrUniformIssues.id, issueId))
+        .get();
+      if (!row) throw new Error('Uniform issue not found after return update');
+      return {
+        ...(row.issue as unknown as HrUniformIssue),
+        staffName: row.staff.fullName,
+        employeeCode: row.staff.employeeCode,
+        itemCode: row.item.itemCode,
+        itemName: row.item.itemName,
+        sizeLabel: row.variant.sizeLabel,
+        category: row.item.category as HrUniformCategory,
+      };
+    });
+  }
+
+  async replaceUniformAtomic(
+    issueId: string,
+    updateData: any,
+    newIssueData: any,
+    stockTxDataOut: any,
+    stockTxDataIn?: any
+  ): Promise<{ oldIssue: HrUniformIssue; newIssue: HrUniformIssue }> {
+    return await this.db.transaction(async (tx) => {
+      if (stockTxDataIn) {
+        await tx.insert(hrUniformStockTransactions).values(stockTxDataIn).run();
+      }
+      await tx.update(hrUniformIssues).set(updateData).where(eq(hrUniformIssues.id, issueId)).run();
+      await tx.insert(hrUniformStockTransactions).values(stockTxDataOut).run();
+      await tx.insert(hrUniformIssues).values(newIssueData).run();
+
+      const fetchIssue = async (id: string) => {
+        const row = await tx
+          .select({
+            issue: hrUniformIssues,
+            staff: hrStaff,
+            variant: hrUniformVariants,
+            item: hrUniformItems,
+          })
+          .from(hrUniformIssues)
+          .innerJoin(hrStaff, eq(hrUniformIssues.staffId, hrStaff.id))
+          .innerJoin(hrUniformVariants, eq(hrUniformIssues.variantId, hrUniformVariants.id))
+          .innerJoin(hrUniformItems, eq(hrUniformVariants.uniformItemId, hrUniformItems.id))
+          .where(eq(hrUniformIssues.id, id))
+          .get();
+        if (!row) throw new Error(`Uniform issue ${id} not found`);
+        return {
+          ...(row.issue as unknown as HrUniformIssue),
+          staffName: row.staff.fullName,
+          employeeCode: row.staff.employeeCode,
+          itemCode: row.item.itemCode,
+          itemName: row.item.itemName,
+          sizeLabel: row.variant.sizeLabel,
+          category: row.item.category as HrUniformCategory,
+        };
+      };
+
+      const oldIssue = await fetchIssue(issueId);
+      const newIssue = await fetchIssue(newIssueData.id);
+      return { oldIssue, newIssue };
+    });
+  }
 }
