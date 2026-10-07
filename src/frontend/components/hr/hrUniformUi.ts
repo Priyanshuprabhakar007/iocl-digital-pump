@@ -1,0 +1,427 @@
+import type {
+  HrUniformCategory,
+  HrUniformStatus,
+  HrUniformStockTransactionType,
+  HrUniformIssueStatus,
+  HrUniformCondition,
+  HrUniformReplacementReason,
+} from '../../../shared/types';
+import { formatDisplayDate, formatDisplayDateTime } from '../utilities/utilityUi';
+
+export { formatDisplayDate, formatDisplayDateTime };
+
+/**
+ * Formats Uniform item status with badge styling
+ */
+export function formatUniformItemStatus(status?: HrUniformStatus | string | null): {
+  label: string;
+  bgClass: string;
+  textClass: string;
+  borderClass: string;
+} {
+  switch (status) {
+    case 'ACTIVE':
+      return {
+        label: 'Active',
+        bgClass: 'bg-emerald-500/10',
+        textClass: 'text-emerald-400',
+        borderClass: 'border-emerald-500/20',
+      };
+    case 'INACTIVE':
+      return {
+        label: 'Inactive',
+        bgClass: 'bg-slate-500/10',
+        textClass: 'text-slate-400',
+        borderClass: 'border-slate-500/20',
+      };
+    default:
+      return {
+        label: 'Unknown',
+        bgClass: 'bg-slate-800',
+        textClass: 'text-slate-400',
+        borderClass: 'border-slate-700',
+      };
+  }
+}
+
+/**
+ * Formats Uniform issue status with badge styling
+ */
+export function formatUniformIssueStatus(status?: HrUniformIssueStatus | string | null): {
+  label: string;
+  bgClass: string;
+  textClass: string;
+  borderClass: string;
+} {
+  switch (status) {
+    case 'ISSUED':
+      return {
+        label: 'Issued',
+        bgClass: 'bg-emerald-500/10',
+        textClass: 'text-emerald-400',
+        borderClass: 'border-emerald-500/30',
+      };
+    case 'RETURNED':
+      return {
+        label: 'Returned',
+        bgClass: 'bg-sky-500/10',
+        textClass: 'text-sky-400',
+        borderClass: 'border-sky-500/30',
+      };
+    case 'REPLACED':
+      return {
+        label: 'Replaced',
+        bgClass: 'bg-purple-500/10',
+        textClass: 'text-purple-400',
+        borderClass: 'border-purple-500/30',
+      };
+    default:
+      return {
+        label: 'Unknown',
+        bgClass: 'bg-slate-800',
+        textClass: 'text-slate-400',
+        borderClass: 'border-slate-700',
+      };
+  }
+}
+
+/**
+ * Formats Uniform garment condition with badge styling
+ */
+export function formatUniformCondition(condition?: HrUniformCondition | string | null): {
+  label: string;
+  bgClass: string;
+  textClass: string;
+  borderClass: string;
+} {
+  switch (condition) {
+    case 'NEW':
+      return {
+        label: 'New',
+        bgClass: 'bg-emerald-500/10',
+        textClass: 'text-emerald-400',
+        borderClass: 'border-emerald-500/20',
+      };
+    case 'GOOD':
+      return {
+        label: 'Good',
+        bgClass: 'bg-blue-500/10',
+        textClass: 'text-blue-400',
+        borderClass: 'border-blue-500/20',
+      };
+    case 'FAIR':
+      return {
+        label: 'Fair',
+        bgClass: 'bg-amber-500/10',
+        textClass: 'text-amber-400',
+        borderClass: 'border-amber-500/20',
+      };
+    case 'DAMAGED':
+      return {
+        label: 'Damaged',
+        bgClass: 'bg-rose-500/10',
+        textClass: 'text-rose-400',
+        borderClass: 'border-rose-500/20',
+      };
+    case 'LOST':
+      return {
+        label: 'Lost',
+        bgClass: 'bg-red-500/10',
+        textClass: 'text-red-400',
+        borderClass: 'border-red-500/20',
+      };
+    default:
+      return {
+        label: condition || 'Not Specified',
+        bgClass: 'bg-slate-800',
+        textClass: 'text-slate-400',
+        borderClass: 'border-slate-700',
+      };
+  }
+}
+
+/**
+ * Formats Uniform inventory transaction type and indicates inflow/outflow direction
+ */
+export function formatUniformTransactionType(type?: HrUniformStockTransactionType | string | null): {
+  label: string;
+  isInflow: boolean;
+  badgeClass: string;
+} {
+  switch (type) {
+    case 'OPENING_BALANCE':
+      return {
+        label: 'Opening Balance',
+        isInflow: true,
+        badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      };
+    case 'RECEIPT':
+      return {
+        label: 'Stock Receipt',
+        isInflow: true,
+        badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      };
+    case 'ADJUSTMENT_IN':
+      return {
+        label: 'Adjustment In',
+        isInflow: true,
+        badgeClass: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
+      };
+    case 'RETURN_IN':
+      return {
+        label: 'Return In (Restock)',
+        isInflow: true,
+        badgeClass: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+      };
+    case 'ADJUSTMENT_OUT':
+      return {
+        label: 'Adjustment Out',
+        isInflow: false,
+        badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      };
+    case 'ISSUE_OUT':
+      return {
+        label: 'Issue Out',
+        isInflow: false,
+        badgeClass: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+      };
+    default:
+      return {
+        label: type || 'Unknown',
+        isInflow: false,
+        badgeClass: 'bg-slate-800 text-slate-400 border-slate-700',
+      };
+  }
+}
+
+/**
+ * Formats Uniform replacement reason
+ */
+export function formatUniformReplacementReason(reason?: HrUniformReplacementReason | string | null): {
+  label: string;
+} {
+  switch (reason) {
+    case 'WORN_OUT':
+      return { label: 'Worn Out' };
+    case 'DAMAGED':
+      return { label: 'Damaged' };
+    case 'SIZE_CHANGE':
+      return { label: 'Size Change' };
+    case 'LOST':
+      return { label: 'Lost' };
+    case 'OTHER':
+      return { label: 'Other' };
+    default:
+      return { label: reason || 'None' };
+  }
+}
+
+/**
+ * Formats Uniform item category
+ */
+export function formatUniformCategory(category?: HrUniformCategory | string | null): string {
+  switch (category) {
+    case 'SHIRT':
+      return 'Shirt';
+    case 'TROUSER':
+      return 'Trouser';
+    case 'JACKET':
+      return 'Jacket';
+    case 'T_SHIRT':
+      return 'T-Shirt';
+    case 'CAP':
+      return 'Cap';
+    case 'SHOES':
+      return 'Shoes';
+    case 'BELT':
+      return 'Belt';
+    case 'OTHER':
+      return 'Other';
+    default:
+      if (!category) return 'Unknown';
+      return category
+        .split('_')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+  }
+}
+
+/**
+ * Validates fromDate and toDate range
+ */
+export function validateUniformDateRange(
+  fromDate?: string | null,
+  toDate?: string | null
+): { isValid: boolean; error: string | null } {
+  if (fromDate && toDate && fromDate > toDate) {
+    return {
+      isValid: false,
+      error: 'From Date cannot be later than To Date.',
+    };
+  }
+  return {
+    isValid: true,
+    error: null,
+  };
+}
+
+/**
+ * Builds query params string for Uniform items endpoint
+ * Supported: category, status, search
+ */
+export function buildUniformItemQueryParams(filters: {
+  category?: string;
+  status?: string;
+  search?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (filters.category && filters.category.trim()) {
+    params.set('category', filters.category.trim());
+  }
+  if (filters.status && filters.status.trim()) {
+    params.set('status', filters.status.trim());
+  }
+  if (filters.search && filters.search.trim()) {
+    params.set('search', filters.search.trim());
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/**
+ * Builds query params string for Uniform stock transactions endpoint
+ * Supported: variantId, transactionType, fromDate, toDate
+ */
+export function buildUniformTransactionQueryParams(filters: {
+  variantId?: string;
+  transactionType?: string;
+  fromDate?: string;
+  toDate?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (filters.variantId && filters.variantId.trim()) {
+    params.set('variantId', filters.variantId.trim());
+  }
+  if (filters.transactionType && filters.transactionType.trim()) {
+    params.set('transactionType', filters.transactionType.trim());
+  }
+  if (filters.fromDate && filters.fromDate.trim()) {
+    params.set('fromDate', filters.fromDate.trim());
+  }
+  if (filters.toDate && filters.toDate.trim()) {
+    params.set('toDate', filters.toDate.trim());
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/**
+ * Builds query params string for Uniform issues endpoint
+ * Supported: staffId, itemId, variantId, status, fromDate, toDate
+ */
+export function buildUniformIssueQueryParams(filters: {
+  staffId?: string;
+  itemId?: string;
+  variantId?: string;
+  status?: string;
+  fromDate?: string;
+  toDate?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (filters.staffId && filters.staffId.trim()) {
+    params.set('staffId', filters.staffId.trim());
+  }
+  if (filters.itemId && filters.itemId.trim()) {
+    params.set('itemId', filters.itemId.trim());
+  }
+  if (filters.variantId && filters.variantId.trim()) {
+    params.set('variantId', filters.variantId.trim());
+  }
+  if (filters.status && filters.status.trim()) {
+    params.set('status', filters.status.trim());
+  }
+  if (filters.fromDate && filters.fromDate.trim()) {
+    params.set('fromDate', filters.fromDate.trim());
+  }
+  if (filters.toDate && filters.toDate.trim()) {
+    params.set('toDate', filters.toDate.trim());
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/**
+ * Builds query params string for Uniform staff history report endpoint
+ * Supported: staffId, fromDate, toDate
+ */
+export function buildUniformHistoryQueryParams(filters: {
+  staffId?: string;
+  fromDate?: string;
+  toDate?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (filters.staffId && filters.staffId.trim()) {
+    params.set('staffId', filters.staffId.trim());
+  }
+  if (filters.fromDate && filters.fromDate.trim()) {
+    params.set('fromDate', filters.fromDate.trim());
+  }
+  if (filters.toDate && filters.toDate.trim()) {
+    params.set('toDate', filters.toDate.trim());
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/**
+ * Maps backend Uniform error responses and codes to human-friendly strings
+ */
+export function getUniformErrorMessage(error: any): string {
+  if (!error) return 'Unable to complete the uniform management request.';
+
+  const code = error?.code || error?.error?.code || (typeof error === 'string' ? error : '');
+  const message = error?.message || error?.error?.message || '';
+
+  if (code === 'FORBIDDEN' || message.includes('FORBIDDEN')) {
+    return 'You do not have permission to perform this uniform management action.';
+  }
+  if (code === 'NETWORK_ERROR' || message.includes('Failed to fetch') || message.includes('NetworkError')) {
+    return 'Network connectivity error. Please check your connection.';
+  }
+  if (code === 'HTTP_ERROR') {
+    return 'Server communication error. Please try again.';
+  }
+  if (code === 'HR_UNIFORM_ITEM_NOT_FOUND' || message.includes('HR_UNIFORM_ITEM_NOT_FOUND')) {
+    return 'Uniform item not found.';
+  }
+  if (code === 'HR_UNIFORM_VARIANT_NOT_FOUND' || message.includes('HR_UNIFORM_VARIANT_NOT_FOUND')) {
+    return 'Uniform size/variant not found.';
+  }
+  if (code === 'HR_UNIFORM_ISSUE_NOT_FOUND' || message.includes('HR_UNIFORM_ISSUE_NOT_FOUND')) {
+    return 'Uniform issue record not found.';
+  }
+  if (code === 'HR_UNIFORM_INSUFFICIENT_STOCK' || message.includes('HR_UNIFORM_INSUFFICIENT_STOCK')) {
+    return 'Insufficient stock available for this operation.';
+  }
+  if (code === 'HR_UNIFORM_INVALID_RESTOCK' || message.includes('HR_UNIFORM_INVALID_RESTOCK')) {
+    return 'Damaged or lost items cannot be returned to usable stock.';
+  }
+  if (code === 'HR_UNIFORM_ISSUE_ALREADY_CLOSED' || message.includes('HR_UNIFORM_ISSUE_ALREADY_CLOSED')) {
+    return 'This uniform issue is already closed or processed.';
+  }
+  if (code === 'HR_UNIFORM_ITEM_CODE_EXISTS' || message.includes('HR_UNIFORM_ITEM_CODE_EXISTS')) {
+    return 'A uniform item with this code already exists for this outlet.';
+  }
+  if (code === 'HR_UNIFORM_VARIANT_EXISTS' || message.includes('HR_UNIFORM_VARIANT_EXISTS')) {
+    return 'A variant with this size already exists for this uniform item.';
+  }
+  if (code === 'HR_UNIFORM_INVALID_TRANSACTION_TYPE' || message.includes('HR_UNIFORM_INVALID_TRANSACTION_TYPE')) {
+    return 'Invalid or prohibited transaction type.';
+  }
+
+  if (typeof message === 'string' && message.trim().length > 0 && !message.includes('object Object')) {
+    return message;
+  }
+
+  return 'Unable to complete the uniform management request.';
+}

@@ -27,7 +27,8 @@ export type HrWorkspaceTab =
   | 'roster'
   | 'attendance'
   | 'geofence'
-  | 'nozzle-assignment';
+  | 'nozzle-assignment'
+  | 'uniforms';
 
 export interface HrFilterState {
   staff: {
@@ -130,6 +131,7 @@ export function getHrTabResetTargets(nextTab: HrWorkspaceTab) {
     closeAttendanceUi: nextTab !== 'attendance',
     closeGeofenceUi: nextTab !== 'geofence',
     closeNozzleAssignmentUi: nextTab !== 'nozzle-assignment',
+    closeUniformUi: nextTab !== 'uniforms',
   };
 }
 

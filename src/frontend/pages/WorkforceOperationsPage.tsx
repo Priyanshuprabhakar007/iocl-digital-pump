@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   Fuel,
   MapPin,
+  Shirt,
 } from 'lucide-react';
 import type {
   RetailOutlet,
@@ -54,6 +55,7 @@ import { HrRosterCancelModal } from '../components/hr/HrRosterCancelModal';
 import { HrAttendancePanel } from '../components/hr/HrAttendancePanel';
 import { HrGeofencePanel } from '../components/hr/HrGeofencePanel';
 import { HrNozzleAssignmentsPanel } from '../components/hr/HrNozzleAssignmentsPanel';
+import { HrUniformManagementPanel } from '../components/hr/HrUniformManagementPanel';
 
 export const WorkforceOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
@@ -69,6 +71,9 @@ export const WorkforceOperationsPage: React.FC = () => {
   const canWriteGeofence = hasPermission(PERMISSIONS.HR_GEOFENCE_WRITE as PermissionCode);
   const canWriteNozzleAssignment = hasPermission(PERMISSIONS.HR_NOZZLE_ASSIGNMENT_WRITE as PermissionCode);
   const canReadNozzles = hasPermission(PERMISSIONS.NOZZLES_READ as PermissionCode);
+  const canReadUniform = hasPermission(PERMISSIONS.HR_UNIFORM_READ as PermissionCode);
+  const canWriteUniformInventory = hasPermission(PERMISSIONS.HR_UNIFORM_INVENTORY_WRITE as PermissionCode);
+  const canWriteUniformIssue = hasPermission(PERMISSIONS.HR_UNIFORM_ISSUE_WRITE as PermissionCode);
 
   // Outlets
   const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
@@ -137,10 +142,11 @@ export const WorkforceOperationsPage: React.FC = () => {
   const [rosterDetailRefreshKey, setRosterDetailRefreshKey] = useState<number>(0);
   const [cancellingRoster, setCancellingRoster] = useState<HrRosterAssignment | null>(null);
 
-  // Phase 5B Refresh Keys
+  // Phase 5B & 5C Refresh Keys
   const [attendanceRefreshKey, setAttendanceRefreshKey] = useState<number>(0);
   const [geofenceRefreshKey, setGeofenceRefreshKey] = useState<number>(0);
   const [nozzleAssignmentRefreshKey, setNozzleAssignmentRefreshKey] = useState<number>(0);
+  const [uniformRefreshKey, setUniformRefreshKey] = useState<number>(0);
 
   // Helper to show auto-dismissing notifications
   const showFeedback = useCallback((type: 'success' | 'error', message: string) => {
@@ -471,6 +477,7 @@ export const WorkforceOperationsPage: React.FC = () => {
     setFilters(getResetHrFilters());
     setStaffDetailRefreshKey(0);
     setRosterDetailRefreshKey(0);
+    setUniformRefreshKey(0);
 
     setSelectedOutletId(newOutletId);
   };
@@ -593,11 +600,11 @@ export const WorkforceOperationsPage: React.FC = () => {
                 Workforce & Shift Roster
               </h1>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                Phase 5B-2
+                Phase 5C-2A
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Staff enrollment, manpower, shift roster, attendance, geofencing & nozzle assignments
+              Staff enrollment, manpower, shift roster, attendance, geofencing, nozzle assignments, uniform inventory & staff issue lifecycle
             </p>
           </div>
         </div>
@@ -633,6 +640,7 @@ export const WorkforceOperationsPage: React.FC = () => {
                 if (activeTab === 'attendance') setAttendanceRefreshKey(k => k + 1);
                 if (activeTab === 'geofence') setGeofenceRefreshKey(k => k + 1);
                 if (activeTab === 'nozzle-assignment') setNozzleAssignmentRefreshKey(k => k + 1);
+                if (activeTab === 'uniforms') setUniformRefreshKey(k => k + 1);
                 setIsRefreshingAll(false);
                 showFeedback('success', 'Workspace refreshed successfully.');
               }
@@ -784,6 +792,20 @@ export const WorkforceOperationsPage: React.FC = () => {
               <span>Nozzle Assignment</span>
             </button>
           </>
+        )}
+
+        {canReadUniform && (
+          <button
+            onClick={() => handleTabChange('uniforms')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+              activeTab === 'uniforms'
+                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Shirt className="w-4 h-4" />
+            <span>Uniform Management</span>
+          </button>
         )}
       </div>
 
@@ -941,6 +963,17 @@ export const WorkforceOperationsPage: React.FC = () => {
               shiftTemplates={shiftTemplates}
               showFeedback={showFeedback}
               nozzleAssignmentRefreshKey={nozzleAssignmentRefreshKey}
+            />
+          )}
+
+          {activeTab === 'uniforms' && canReadUniform && (
+            <HrUniformManagementPanel
+              outletId={selectedOutletId}
+              staffList={staffReferenceList}
+              canWriteInventory={canWriteUniformInventory}
+              canWriteIssue={canWriteUniformIssue}
+              showFeedback={showFeedback}
+              uniformRefreshKey={uniformRefreshKey}
             />
           )}
         </div>
