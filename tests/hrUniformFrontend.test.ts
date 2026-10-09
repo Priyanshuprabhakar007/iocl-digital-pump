@@ -20,6 +20,7 @@ import {
   canSubmitUniformIssue,
   canSubmitUniformReturn,
   canSubmitUniformReplacement,
+  resolveOriginalReplacementItemId,
 } from '../src/frontend/components/hr/hrUniformUi';
 
 describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
@@ -513,6 +514,82 @@ describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
       expect(getUniformErrorMessage({ message: 'Custom validation problem' })).toBe(
         'Custom validation problem'
       );
+      expect(getUniformErrorMessage({ message: 'Please select an active uniform size.' })).toBe(
+        'Please select an active uniform size.'
+      );
+    });
+
+    it('sanitizes internal database, SQL, and stack trace error messages', () => {
+      expect(
+        getUniformErrorMessage({
+          code: 'SQLITE_CONSTRAINT',
+          message: 'SQLITE_CONSTRAINT: UNIQUE constraint failed: hr_uniform_items.outlet_id, hr_uniform_items.item_code',
+        })
+      ).toBe('Unable to complete the uniform management request.');
+
+      expect(
+        getUniformErrorMessage({
+          message: 'UNIQUE constraint failed: hr_uniform_variants.uniform_item_id, hr_uniform_variants.size_label',
+        })
+      ).toBe('Unable to complete the uniform management request.');
+
+      expect(
+        getUniformErrorMessage({
+          message: 'FOREIGN KEY constraint failed on hr_uniform_issues.variant_id',
+        })
+      ).toBe('Unable to complete the uniform management request.');
+
+      expect(
+        getUniformErrorMessage({
+          message: 'SELECT * FROM hr_uniform_items WHERE id = ? failed',
+        })
+      ).toBe('Unable to complete the uniform management request.');
+
+      expect(
+        getUniformErrorMessage({
+          message: 'INSERT INTO hr_uniform_issues (id) VALUES ("test")',
+        })
+      ).toBe('Unable to complete the uniform management request.');
+
+      expect(
+        getUniformErrorMessage({
+          message: 'DELETE FROM hr_uniform_variants WHERE id = 123',
+        })
+      ).toBe('Unable to complete the uniform management request.');
+
+      expect(
+        getUniformErrorMessage({
+          message: 'UPDATE hr_uniform_stock SET current_stock = 0',
+        })
+      ).toBe('Unable to complete the uniform management request.');
+
+      expect(
+        getUniformErrorMessage({
+          message: 'Internal database error: SQL constraint failure',
+        })
+      ).toBe('Unable to complete the uniform management request.');
+
+      expect(
+        getUniformErrorMessage({
+          message: 'Error: stack trace at Object.execute (/app/server.ts:100:15)',
+        })
+      ).toBe('Unable to complete the uniform management request.');
+    });
+
+    it('preserves known Uniform error code mappings regardless of raw message text', () => {
+      expect(
+        getUniformErrorMessage({
+          code: 'HR_UNIFORM_ITEM_CODE_EXISTS',
+          message: 'SQLITE_CONSTRAINT: UNIQUE constraint failed: hr_uniform_items.item_code',
+        })
+      ).toBe('A uniform item with this code already exists for this outlet.');
+
+      expect(
+        getUniformErrorMessage({
+          code: 'HR_UNIFORM_INSUFFICIENT_STOCK',
+          message: 'Database check failed',
+        })
+      ).toBe('Insufficient stock available for this operation.');
     });
 
     it('falls back to safe generic error message', () => {
@@ -1115,6 +1192,153 @@ describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
           isValid: true,
           error: null,
         });
+      });
+    });
+
+    describe('resolveOriginalReplacementItemId', () => {
+      const sampleItems = [
+        {
+          id: 'item-1',
+          outletId: 'out-1',
+          itemCode: 'SHIRT-M',
+          itemName: 'Standard Uniform Shirt',
+          category: 'SHIRT',
+          status: 'ACTIVE',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+        {
+          id: 'item-2',
+          outletId: 'out-1',
+          itemCode: 'SHIRT-ALT',
+          itemName: 'Standard Uniform Shirt',
+          category: 'SHIRT',
+          status: 'ACTIVE',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+        {
+          id: 'item-3',
+          outletId: 'out-1',
+          itemCode: 'CAP-STD',
+          itemName: 'Standard Uniform Cap',
+          category: 'CAP',
+          status: 'INACTIVE',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+      ] as any;
+
+      const sampleVariants = [
+        {
+          id: 'var-101',
+          outletId: 'out-1',
+          uniformItemId: 'item-1',
+          sizeLabel: 'M',
+          sizeSortOrder: 1,
+          reorderLevel: 5,
+          status: 'ACTIVE',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+        {
+          id: 'var-102',
+          outletId: 'out-1',
+          uniformItemId: 'item-2',
+          sizeLabel: 'M',
+          sizeSortOrder: 1,
+          reorderLevel: 5,
+          status: 'ACTIVE',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+        {
+          id: 'var-103',
+          outletId: 'out-1',
+          uniformItemId: 'item-3',
+          sizeLabel: 'FREE',
+          sizeSortOrder: 1,
+          reorderLevel: 5,
+          status: 'ACTIVE',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+      ] as any;
+
+      it('resolves original item from issue.variantId', () => {
+        const issue = { variantId: 'var-101', itemCode: 'SHIRT-M' } as any;
+        const resolved = resolveOriginalReplacementItemId({
+          issue,
+          items: sampleItems,
+          variants: sampleVariants,
+        });
+        expect(resolved).toBe('item-1');
+      });
+
+      it('prefers authoritative variant association over duplicate or similar item names', () => {
+        const issue = {
+          variantId: 'var-102',
+          itemCode: 'SHIRT-M',
+        } as any;
+        const resolved = resolveOriginalReplacementItemId({
+          issue,
+          items: sampleItems,
+          variants: sampleVariants,
+        });
+        expect(resolved).toBe('item-2');
+      });
+
+      it('inactive original item falls back to active item', () => {
+        const issue = {
+          variantId: 'var-103',
+          itemCode: 'CAP-STD',
+        } as any;
+        const resolved = resolveOriginalReplacementItemId({
+          issue,
+          items: sampleItems,
+          variants: sampleVariants,
+        });
+        expect(resolved).toBe('item-1');
+      });
+
+      it('falls back to exact itemCode match if original variant item is inactive but itemCode active match exists', () => {
+        const customItems = [
+          { id: 'item-old', itemCode: 'SHIRT-OLD', status: 'INACTIVE' },
+          { id: 'item-active-code', itemCode: 'SHIRT-CODE', status: 'ACTIVE' },
+        ] as any;
+        const customVariants = [
+          { id: 'var-old', uniformItemId: 'item-old', status: 'ACTIVE' },
+        ] as any;
+        const issue = { variantId: 'var-old', itemCode: 'SHIRT-CODE' } as any;
+        const resolved = resolveOriginalReplacementItemId({
+          issue,
+          items: customItems,
+          variants: customVariants,
+        });
+        expect(resolved).toBe('item-active-code');
+      });
+
+      it('no active item returns empty selection', () => {
+        const allInactiveItems = [
+          { id: 'item-inactive-1', itemCode: 'INACT-1', status: 'INACTIVE' },
+          { id: 'item-inactive-2', itemCode: 'INACT-2', status: 'INACTIVE' },
+        ] as any;
+        const issue = { variantId: 'var-any', itemCode: 'INACT-1' } as any;
+        expect(
+          resolveOriginalReplacementItemId({
+            issue,
+            items: allInactiveItems,
+            variants: sampleVariants,
+          })
+        ).toBe('');
+
+        expect(
+          resolveOriginalReplacementItemId({
+            issue: null,
+            items: [],
+            variants: [],
+          })
+        ).toBe('');
       });
     });
   });

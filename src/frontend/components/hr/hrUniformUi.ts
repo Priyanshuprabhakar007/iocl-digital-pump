@@ -1,4 +1,6 @@
 import type {
+  HrUniformItem,
+  HrUniformVariant,
   HrUniformCategory,
   HrUniformStatus,
   HrUniformStockTransactionType,
@@ -470,11 +472,93 @@ export function getUniformErrorMessage(error: any): string {
     return 'Internal server error. Please try again.';
   }
 
+  // Sanitize internal / database / stack trace patterns from custom messages
+  if (isInternalOrUnsafeError(message) || isInternalOrUnsafeError(code)) {
+    return 'Unable to complete the uniform management request.';
+  }
+
   if (typeof message === 'string' && message.trim().length > 0 && !message.includes('object Object')) {
     return message;
   }
 
   return 'Unable to complete the uniform management request.';
+}
+
+/**
+ * Detects internal database / SQL / stack trace patterns to prevent leaking
+ * system internals to the frontend user interface.
+ */
+export function isInternalOrUnsafeError(message?: string | null): boolean {
+  if (!message || typeof message !== 'string') return false;
+  const lower = message.toLowerCase();
+
+  return (
+    lower.includes('sqlite') ||
+    lower.includes('sql constraint') ||
+    lower.includes('unique constraint') ||
+    lower.includes('foreign key') ||
+    lower.includes('database error') ||
+    lower.includes('stack trace') ||
+    /\binsert\s+into\b/i.test(message) ||
+    /\bdelete\s+from\b/i.test(message) ||
+    /\bselect\b[\s\S]*\bfrom\b/i.test(message) ||
+    /\bselect\s+[*0-9]/i.test(message) ||
+    /\bupdate\s+\w+\s+set\b/i.test(message) ||
+    /\bat\s+[\w./\\-]+\s*\(/i.test(message) ||
+    /\bat\s+[\w./\\-]+:\d+:\d+/i.test(message)
+  );
+}
+
+/**
+ * Resolves the original uniform item ID for replacement modal default selection.
+ * Priority:
+ * 1. Original item from authoritative issue.variantId -> variant.uniformItemId if ACTIVE
+ * 2. Exact issue.itemCode match if ACTIVE
+ * 3. First ACTIVE item in catalog
+ * 4. Empty string if no active items exist
+ */
+export function resolveOriginalReplacementItemId(params: {
+  issue?: {
+    variantId?: string | null;
+    itemCode?: string | null;
+  } | null;
+  items: HrUniformItem[];
+  variants: HrUniformVariant[];
+}): string {
+  if (!params.issue) {
+    const firstActive = params.items.find(i => i.status === 'ACTIVE');
+    return firstActive?.id || '';
+  }
+
+  // 1. Authoritative variant lookup
+  if (params.issue.variantId) {
+    const originalVariant = params.variants.find(v => v.id === params.issue?.variantId);
+    if (originalVariant) {
+      const originalItem = params.items.find(i => i.id === originalVariant.uniformItemId);
+      if (originalItem && originalItem.status === 'ACTIVE') {
+        return originalItem.id;
+      }
+    }
+  }
+
+  // 2. Exact issue.itemCode match if ACTIVE
+  if (params.issue.itemCode) {
+    const codeMatchedItem = params.items.find(
+      i => i.itemCode === params.issue?.itemCode && i.status === 'ACTIVE'
+    );
+    if (codeMatchedItem) {
+      return codeMatchedItem.id;
+    }
+  }
+
+  // 3. First ACTIVE item
+  const firstActiveItem = params.items.find(i => i.status === 'ACTIVE');
+  if (firstActiveItem) {
+    return firstActiveItem.id;
+  }
+
+  // 4. Empty string
+  return '';
 }
 
 /**

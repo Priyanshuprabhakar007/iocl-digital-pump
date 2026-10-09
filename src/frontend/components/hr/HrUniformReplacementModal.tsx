@@ -15,6 +15,7 @@ import {
   formatUniformCondition,
   formatUniformReplacementReason,
   formatDisplayDate,
+  resolveOriginalReplacementItemId,
 } from './hrUniformUi';
 
 interface HrUniformReplacementModalProps {
@@ -75,12 +76,12 @@ export const HrUniformReplacementModal: React.FC<HrUniformReplacementModalProps>
   // Initialize form when modal opens
   useEffect(() => {
     if (isOpen && issue) {
-      // Find original item if available and active, otherwise pick first active item
-      const origItem =
-        activeItems.find(i => i.itemName === issue.itemName || i.itemCode === issue.itemCode) ||
-        activeItems[0];
-
-      const initialItemId = origItem?.id || '';
+      // Authoritatively resolve original item or active fallback
+      const initialItemId = resolveOriginalReplacementItemId({
+        issue,
+        items,
+        variants,
+      });
       setReplacementItemId(initialItemId);
 
       if (initialItemId) {

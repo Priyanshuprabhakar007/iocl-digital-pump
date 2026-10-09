@@ -242,6 +242,9 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
           return false;
         }
 
+        // Invalidate reference cache so entering Ledger or Staff Issues reloads complete reference metadata
+        refMetadataLoadedOutletRef.current = '';
+
         let hasError = false;
         let errorMessage = '';
 
@@ -604,10 +607,20 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     } else if (subTab === 'inventory') {
       success = await fetchInventoryData(outletId, inventoryFilters);
     } else if (subTab === 'ledger') {
-      fetchReferenceMetadata(outletId);
+      const metaSuccess = await fetchReferenceMetadata(outletId);
+      if (metaSuccess && activeOutletRef.current === outletId) {
+        refMetadataLoadedOutletRef.current = outletId;
+      } else {
+        refMetadataLoadedOutletRef.current = '';
+      }
       success = await fetchLedgerData(outletId, ledgerFilters);
     } else if (subTab === 'issues') {
-      fetchReferenceMetadata(outletId);
+      const metaSuccess = await fetchReferenceMetadata(outletId);
+      if (metaSuccess && activeOutletRef.current === outletId) {
+        refMetadataLoadedOutletRef.current = outletId;
+      } else {
+        refMetadataLoadedOutletRef.current = '';
+      }
       fetchSummaryData(outletId);
       success = await fetchIssuesData(outletId, issueFilters);
     } else if (subTab === 'history') {
