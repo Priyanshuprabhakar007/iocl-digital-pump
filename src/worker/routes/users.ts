@@ -314,4 +314,223 @@ users.patch('/:id/status', requirePermission(PERMISSIONS.USERS_UPDATE) as any, a
   });
 });
 
+// GET /api/v1/users/:id/permissions - Global Admin only
+users.get('/:id/permissions', async (c: AppContext) => {
+  if (!c.var.user.isGlobalAdmin) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'FORBIDDEN', message: 'Only Global Administrators can view user permission details.' },
+    }, 403);
+  }
+
+  const targetUserId = c.req.param('id');
+  if (!targetUserId) {
+    return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'User ID is required' } }, 400);
+  }
+
+  const db = getDb(c.env.DB);
+  const userRepo = new UserRepository(db);
+  const scopeRepo = new ScopeRepository(db);
+
+  const targetUser = await userRepo.findById(targetUserId);
+  if (!targetUser) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'USER_NOT_FOUND', message: 'Target user not found.' },
+    }, 404);
+  }
+
+  const roleCodes = await userRepo.getUserRoles(targetUserId);
+  const inheritedPermissionCodes = await userRepo.getUserInheritedPermissions(targetUserId);
+  const overrides = await userRepo.getUserPermissionOverrides(targetUserId);
+  const effectivePermissionCodes = await userRepo.getUserPermissions(targetUserId);
+  const scopes = await scopeRepo.getUserScopes(targetUserId);
+
+  return c.json({
+    success: true,
+    data: {
+      user: {
+        id: targetUser.id,
+        name: targetUser.name,
+        empCode: targetUser.empCode,
+        email: targetUser.email,
+        status: targetUser.status,
+      },
+      roleCodes,
+      inheritedPermissionCodes,
+      overrides: overrides.map(o => ({
+        permissionCode: o.permissionCode,
+        effect: o.effect,
+      })),
+      effectivePermissionCodes,
+      scopes,
+    },
+    error: null,
+  });
+});
+
+// PATCH /api/v1/users/:id/permissions/:permissionCode - Direct toggle override endpoint
+users.patch('/:id/permissions/:permissionCode', async (c: AppContext) => {
+  if (!c.var.user.isGlobalAdmin) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'FORBIDDEN', message: 'Only Global Administrators can modify user permissions.' },
+    }, 403);
+  }
+
+  const targetUserId = c.req.param('id');
+  const permissionCode = c.req.param('permissionCode');
+
+  if (!targetUserId || !permissionCode) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'BAD_REQUEST', message: 'User ID and permission code are required.' },
+    }, 400);
+  }
+
+  // Self-permission modification protection
+  if (targetUserId === c.var.user.user.id) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'SELF_PERMISSION_MODIFICATION_FORBIDDEN',
+        message: 'Your own permission access cannot be modified here.',
+      },
+    }, 403);
+  }
+
+  const db = getDb(c.env.DB);
+  const userRepo = new UserRepository(db);
+  const auditRepo = new AuditRepository(db);
+
+  const targetUser = await userRepo.findById(targetUserId);
+  if (!targetUser) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'USER_NOT_FOUND', message: 'Target user not found.' },
+    }, 404);
+  }
+
+  // Admin target protection: ADMIN accounts have full system access
+  const targetRoles = await userRepo.getUserRoles(targetUserId);
+  if (targetRoles.includes('ADMIN')) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'ADMIN_PERMISSION_OVERRIDE_NOT_ALLOWED',
+        message: 'ADMIN accounts have full system access. Individual permission overrides are not applicable.',
+      },
+    }, 400);
+  }
+
+  // Verify permission exists
+  const perm = await userRepo.getPermissionByCode(permissionCode);
+  if (!perm) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'PERMISSION_NOT_FOUND',
+        message: `Permission "${permissionCode}" does not exist.`,
+      },
+    }, 404);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  if (typeof body?.enabled !== 'boolean') {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Field "enabled" must be a boolean.',
+      },
+    }, 400);
+  }
+
+  const enabled = body.enabled as boolean;
+
+  // Determine current effective state before change
+  const currentEffective = await userRepo.getUserPermissions(targetUserId);
+  const wasEnabled = currentEffective.includes(permissionCode as any);
+
+  // Determine inherited state
+  const inheritedCodes = await userRepo.getUserInheritedPermissions(targetUserId);
+  const isInherited = inheritedCodes.includes(permissionCode as any);
+
+  let effect: 'ALLOW' | 'DENY' | null = null;
+  if (enabled) {
+    if (isInherited) {
+      // Permission already inherited from role: remove any DENY override
+      await userRepo.removeUserPermissionOverride(targetUserId, perm.id);
+      effect = null;
+    } else {
+      // Not inherited: store ALLOW override
+      await userRepo.setUserPermissionOverride({
+        userId: targetUserId,
+        permissionId: perm.id,
+        effect: 'ALLOW',
+        assignedByUserId: c.var.user.user.id,
+      });
+      effect = 'ALLOW';
+    }
+  } else {
+    // enabled === false: store DENY override
+    await userRepo.setUserPermissionOverride({
+      userId: targetUserId,
+      permissionId: perm.id,
+      effect: 'DENY',
+      assignedByUserId: c.var.user.user.id,
+    });
+    effect = 'DENY';
+  }
+
+  // Audit record
+  const nowIso = new Date().toISOString();
+  await auditRepo.logAction({
+    id: `aud-${crypto.randomUUID()}`,
+    userId: c.var.user.user.id,
+    action: 'USER_PERMISSION_UPDATED',
+    entityType: 'USER',
+    entityId: targetUserId,
+    oldValue: {
+      permissionCode,
+      enabled: wasEnabled,
+    },
+    newValue: {
+      permissionCode,
+      enabled,
+      effect,
+    },
+    ipAddress: c.req.header('cf-connecting-ip') || null,
+    userAgent: c.req.header('user-agent') || null,
+    createdAt: nowIso,
+  });
+
+  const updatedEffective = await userRepo.getUserPermissions(targetUserId);
+  const updatedOverrides = await userRepo.getUserPermissionOverrides(targetUserId);
+
+  return c.json({
+    success: true,
+    data: {
+      permissionCode,
+      enabled,
+      effect,
+      effectivePermissionCodes: updatedEffective,
+      overrides: updatedOverrides.map(o => ({
+        permissionCode: o.permissionCode,
+        effect: o.effect,
+      })),
+    },
+    error: null,
+  });
+});
+
 export default users;

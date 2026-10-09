@@ -1,6 +1,6 @@
 import { AppDatabase } from '../../db';
 import * as schema from '../../db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, and } from 'drizzle-orm';
 import { User, RoleCode, PermissionCode } from '../../shared/types';
 
 export class UserRepository {
@@ -85,7 +85,7 @@ export class UserRepository {
     return rows.map(r => r.code as RoleCode);
   }
 
-  async getUserPermissions(userId: string): Promise<PermissionCode[]> {
+  async getUserInheritedPermissions(userId: string): Promise<PermissionCode[]> {
     // Join user_roles -> role_permissions -> permissions
     const rows = await this.db
       .select({ code: schema.permissions.code })
@@ -97,6 +97,101 @@ export class UserRepository {
     const set = new Set<PermissionCode>();
     rows.forEach(r => set.add(r.code as PermissionCode));
     return Array.from(set);
+  }
+
+  async getUserPermissionOverrides(userId: string): Promise<Array<{
+    permissionId: string;
+    permissionCode: string;
+    effect: 'ALLOW' | 'DENY';
+    assignedByUserId: string;
+    createdAt: string;
+    updatedAt: string;
+  }>> {
+    const rows = await this.db
+      .select({
+        permissionId: schema.userPermissionOverrides.permissionId,
+        permissionCode: schema.permissions.code,
+        effect: schema.userPermissionOverrides.effect,
+        assignedByUserId: schema.userPermissionOverrides.assignedByUserId,
+        createdAt: schema.userPermissionOverrides.createdAt,
+        updatedAt: schema.userPermissionOverrides.updatedAt,
+      })
+      .from(schema.userPermissionOverrides)
+      .innerJoin(schema.permissions, eq(schema.userPermissionOverrides.permissionId, schema.permissions.id))
+      .where(eq(schema.userPermissionOverrides.userId, userId));
+
+    return rows as Array<{
+      permissionId: string;
+      permissionCode: string;
+      effect: 'ALLOW' | 'DENY';
+      assignedByUserId: string;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  }
+
+  async getUserPermissions(userId: string): Promise<PermissionCode[]> {
+    const inherited = await this.getUserInheritedPermissions(userId);
+    const overrides = await this.getUserPermissionOverrides(userId);
+
+    const effective = new Set<PermissionCode>(inherited);
+    for (const override of overrides) {
+      if (override.effect === 'ALLOW') {
+        effective.add(override.permissionCode as PermissionCode);
+      } else if (override.effect === 'DENY') {
+        effective.delete(override.permissionCode as PermissionCode);
+      }
+    }
+
+    return Array.from(effective);
+  }
+
+  async getPermissionByCode(code: string): Promise<{ id: string; code: string; name: string; description: string } | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.permissions)
+      .where(eq(schema.permissions.code, code))
+      .limit(1);
+
+    return rows[0] || null;
+  }
+
+  async setUserPermissionOverride(data: {
+    userId: string;
+    permissionId: string;
+    effect: 'ALLOW' | 'DENY';
+    assignedByUserId: string;
+  }): Promise<void> {
+    const nowIso = new Date().toISOString();
+    await this.db
+      .insert(schema.userPermissionOverrides)
+      .values({
+        userId: data.userId,
+        permissionId: data.permissionId,
+        effect: data.effect,
+        assignedByUserId: data.assignedByUserId,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      })
+      .onConflictDoUpdate({
+        target: [schema.userPermissionOverrides.userId, schema.userPermissionOverrides.permissionId],
+        set: {
+          effect: data.effect,
+          assignedByUserId: data.assignedByUserId,
+          updatedAt: nowIso,
+        },
+      });
+  }
+
+  async removeUserPermissionOverride(userId: string, permissionId: string): Promise<void> {
+    await this.db
+      .delete(schema.userPermissionOverrides)
+      .where(
+        and(
+          eq(schema.userPermissionOverrides.userId, userId),
+          eq(schema.userPermissionOverrides.permissionId, permissionId)
+        )
+      );
   }
 
   async createUser(data: {

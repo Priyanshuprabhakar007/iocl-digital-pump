@@ -1759,6 +1759,35 @@ export interface HrUniformReportSummary {
   totalReplaced: number;
 }
 
+export interface UserPermissionOverride {
+  userId: string;
+  permissionId: string;
+  permissionCode: string;
+  effect: 'ALLOW' | 'DENY';
+  assignedByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserPermissionsDetails {
+  user: {
+    id: string;
+    name: string;
+    empCode: string;
+    email: string;
+    status: string;
+  };
+  roleCodes: RoleCode[];
+  inheritedPermissionCodes: PermissionCode[];
+  overrides: Array<{
+    permissionCode: string;
+    effect: 'ALLOW' | 'DENY';
+  }>;
+  effectivePermissionCodes: PermissionCode[];
+  scopes: UserScopeAssignment[];
+}
+
+
 
 
 

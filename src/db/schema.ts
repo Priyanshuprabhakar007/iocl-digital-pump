@@ -1437,6 +1437,21 @@ export const hrUniformIssues = sqliteTable('hr_uniform_issues', {
   check('hr_uniform_issue_qty_check', sql`${table.quantity} > 0`),
 ]);
 
+export const userPermissionOverrides = sqliteTable('user_permission_overrides', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  permissionId: text('permission_id').notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+  effect: text('effect', { enum: ['ALLOW', 'DENY'] }).notNull(),
+  assignedByUserId: text('assigned_by_user_id').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.permissionId] }),
+  index('idx_upo_user_id').on(table.userId),
+  index('idx_upo_permission_id').on(table.permissionId),
+  check('chk_upo_effect', sql`${table.effect} IN ('ALLOW', 'DENY')`),
+]);
+
+
 
 
 
