@@ -17,6 +17,9 @@ import {
   canSubmitUniformVariant,
   canSubmitUniformStockTransaction,
   resolveInitialVariantItemId,
+  canSubmitUniformIssue,
+  canSubmitUniformReturn,
+  canSubmitUniformReplacement,
 } from '../src/frontend/components/hr/hrUniformUi';
 
 describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
@@ -477,6 +480,30 @@ describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
       expect(getUniformErrorMessage({ code: 'HR_UNIFORM_VARIANT_INACTIVE' })).toBe(
         'Uniform variant is inactive.'
       );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_STAFF_NOT_FOUND' })).toBe(
+        'Staff member not found.'
+      );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_STAFF_OUTLET_MISMATCH' })).toBe(
+        'Staff member does not belong to this outlet.'
+      );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_STAFF_NOT_ACTIVE' })).toBe(
+        'Staff member is not active.'
+      );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_REPLACEMENT_STOCK_UNAVAILABLE' })).toBe(
+        'Insufficient stock for replacement variant.'
+      );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH' })).toBe(
+        'Replacement source issue mismatch.'
+      );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_REPLACEMENT_SELF_REFERENCE' })).toBe(
+        'Replacement cannot reference itself.'
+      );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_DUPLICATE_ISSUE_OUT' })).toBe(
+        'Duplicate issue transaction.'
+      );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_DUPLICATE_RETURN_IN' })).toBe(
+        'Duplicate return transaction.'
+      );
       expect(getUniformErrorMessage({ code: 'INTERNAL_SERVER_ERROR' })).toBe(
         'Internal server error. Please try again.'
       );
@@ -740,6 +767,354 @@ describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
       it('returns empty string for empty items list', () => {
         expect(resolveInitialVariantItemId([])).toBe('');
         expect(resolveInitialVariantItemId([], 'item-1')).toBe('');
+      });
+    });
+  });
+
+  // ==========================================================================
+  // 9. Phase 5C-2C Lifecycle Form Validators (Issue, Return, Replacement)
+  // ==========================================================================
+  describe('Phase 5C-2C Lifecycle Form Validators', () => {
+    describe('canSubmitUniformIssue', () => {
+      it('validates a correct issue submission', () => {
+        expect(
+          canSubmitUniformIssue({
+            staffId: 'staff-1',
+            variantId: 'var-1',
+            quantity: 2,
+            conditionAtIssue: 'NEW',
+            availableStock: 5,
+          })
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('rejects missing staff member', () => {
+        expect(
+          canSubmitUniformIssue({
+            staffId: '',
+            variantId: 'var-1',
+            quantity: 1,
+            conditionAtIssue: 'NEW',
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Staff member is required.',
+        });
+      });
+
+      it('rejects missing uniform variant', () => {
+        expect(
+          canSubmitUniformIssue({
+            staffId: 'staff-1',
+            variantId: '   ',
+            quantity: 1,
+            conditionAtIssue: 'NEW',
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Uniform size/variant is required.',
+        });
+      });
+
+      it('rejects zero quantity', () => {
+        expect(
+          canSubmitUniformIssue({
+            staffId: 'staff-1',
+            variantId: 'var-1',
+            quantity: 0,
+            conditionAtIssue: 'NEW',
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Quantity must be a positive integer.',
+        });
+      });
+
+      it('rejects negative quantity', () => {
+        expect(
+          canSubmitUniformIssue({
+            staffId: 'staff-1',
+            variantId: 'var-1',
+            quantity: -3,
+            conditionAtIssue: 'NEW',
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Quantity must be a positive integer.',
+        });
+      });
+
+      it('rejects decimal quantity', () => {
+        expect(
+          canSubmitUniformIssue({
+            staffId: 'staff-1',
+            variantId: 'var-1',
+            quantity: 1.5,
+            conditionAtIssue: 'NEW',
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Quantity must be a positive integer.',
+        });
+      });
+
+      it('rejects quantity greater than available stock', () => {
+        expect(
+          canSubmitUniformIssue({
+            staffId: 'staff-1',
+            variantId: 'var-1',
+            quantity: 10,
+            conditionAtIssue: 'NEW',
+            availableStock: 4,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Requested quantity exceeds available stock.',
+        });
+      });
+
+      it('accepts valid NEW condition', () => {
+        expect(
+          canSubmitUniformIssue({
+            staffId: 'staff-1',
+            variantId: 'var-1',
+            quantity: 1,
+            conditionAtIssue: 'NEW',
+            availableStock: 10,
+          })
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('rejects invalid condition at issue', () => {
+        expect(
+          canSubmitUniformIssue({
+            staffId: 'staff-1',
+            variantId: 'var-1',
+            quantity: 1,
+            conditionAtIssue: 'WORN' as any,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Valid condition at issue is required.',
+        });
+      });
+    });
+
+    describe('canSubmitUniformReturn', () => {
+      it('validates GOOD condition with returnToStock true', () => {
+        expect(canSubmitUniformReturn({ condition: 'GOOD', returnToStock: true })).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('validates FAIR condition with returnToStock true', () => {
+        expect(canSubmitUniformReturn({ condition: 'FAIR', returnToStock: true })).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('validates NEW condition with returnToStock true', () => {
+        expect(canSubmitUniformReturn({ condition: 'NEW', returnToStock: true })).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('validates DAMAGED condition with returnToStock false', () => {
+        expect(canSubmitUniformReturn({ condition: 'DAMAGED', returnToStock: false })).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('validates LOST condition with returnToStock false', () => {
+        expect(canSubmitUniformReturn({ condition: 'LOST', returnToStock: false })).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('rejects DAMAGED condition when returnToStock is true', () => {
+        expect(canSubmitUniformReturn({ condition: 'DAMAGED', returnToStock: true })).toEqual({
+          isValid: false,
+          error: 'Damaged or lost uniforms cannot be returned to usable stock.',
+        });
+      });
+
+      it('rejects LOST condition when returnToStock is true', () => {
+        expect(canSubmitUniformReturn({ condition: 'LOST', returnToStock: true })).toEqual({
+          isValid: false,
+          error: 'Damaged or lost uniforms cannot be returned to usable stock.',
+        });
+      });
+    });
+
+    describe('canSubmitUniformReplacement', () => {
+      it('validates a correct replacement submission', () => {
+        expect(
+          canSubmitUniformReplacement({
+            replacementVariantId: 'var-2',
+            quantity: 1,
+            oldCondition: 'DAMAGED',
+            replacementReason: 'WORN_OUT',
+            returnOldToStock: false,
+            availableStock: 5,
+          })
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('rejects missing replacement variant', () => {
+        expect(
+          canSubmitUniformReplacement({
+            replacementVariantId: '',
+            quantity: 1,
+            oldCondition: 'DAMAGED',
+            replacementReason: 'WORN_OUT',
+            returnOldToStock: false,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Replacement size/variant is required.',
+        });
+      });
+
+      it('rejects zero quantity', () => {
+        expect(
+          canSubmitUniformReplacement({
+            replacementVariantId: 'var-2',
+            quantity: 0,
+            oldCondition: 'DAMAGED',
+            replacementReason: 'WORN_OUT',
+            returnOldToStock: false,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Replacement quantity must be a positive integer.',
+        });
+      });
+
+      it('rejects decimal quantity', () => {
+        expect(
+          canSubmitUniformReplacement({
+            replacementVariantId: 'var-2',
+            quantity: 2.2,
+            oldCondition: 'DAMAGED',
+            replacementReason: 'WORN_OUT',
+            returnOldToStock: false,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Replacement quantity must be a positive integer.',
+        });
+      });
+
+      it('rejects quantity greater than available stock', () => {
+        expect(
+          canSubmitUniformReplacement({
+            replacementVariantId: 'var-2',
+            quantity: 8,
+            oldCondition: 'DAMAGED',
+            replacementReason: 'WORN_OUT',
+            returnOldToStock: false,
+            availableStock: 3,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Replacement quantity exceeds available stock.',
+        });
+      });
+
+      it('accepts all standard replacement reasons', () => {
+        const reasons = ['WORN_OUT', 'DAMAGED', 'SIZE_CHANGE', 'LOST', 'OTHER'] as const;
+        reasons.forEach(reason => {
+          expect(
+            canSubmitUniformReplacement({
+              replacementVariantId: 'var-2',
+              quantity: 1,
+              oldCondition: 'FAIR',
+              replacementReason: reason,
+              returnOldToStock: true,
+              availableStock: 10,
+            })
+          ).toEqual({
+            isValid: true,
+            error: null,
+          });
+        });
+      });
+
+      it('rejects invalid replacement reason', () => {
+        expect(
+          canSubmitUniformReplacement({
+            replacementVariantId: 'var-2',
+            quantity: 1,
+            oldCondition: 'FAIR',
+            replacementReason: 'INVALID_REASON' as any,
+            returnOldToStock: false,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Valid replacement reason is required.',
+        });
+      });
+
+      it('rejects DAMAGED old uniform when returnOldToStock is true', () => {
+        expect(
+          canSubmitUniformReplacement({
+            replacementVariantId: 'var-2',
+            quantity: 1,
+            oldCondition: 'DAMAGED',
+            replacementReason: 'DAMAGED',
+            returnOldToStock: true,
+            availableStock: 5,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Damaged or lost uniforms cannot be returned to usable stock.',
+        });
+      });
+
+      it('rejects LOST old uniform when returnOldToStock is true', () => {
+        expect(
+          canSubmitUniformReplacement({
+            replacementVariantId: 'var-2',
+            quantity: 1,
+            oldCondition: 'LOST',
+            replacementReason: 'LOST',
+            returnOldToStock: true,
+            availableStock: 5,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Damaged or lost uniforms cannot be returned to usable stock.',
+        });
+      });
+
+      it('validates GOOD old uniform with returnOldToStock true', () => {
+        expect(
+          canSubmitUniformReplacement({
+            replacementVariantId: 'var-2',
+            quantity: 1,
+            oldCondition: 'GOOD',
+            replacementReason: 'SIZE_CHANGE',
+            returnOldToStock: true,
+            availableStock: 5,
+          })
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
       });
     });
   });

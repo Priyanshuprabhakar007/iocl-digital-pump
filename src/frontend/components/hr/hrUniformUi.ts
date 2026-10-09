@@ -442,6 +442,30 @@ export function getUniformErrorMessage(error: any): string {
   if (code === 'HR_UNIFORM_VARIANT_INACTIVE' || message.includes('HR_UNIFORM_VARIANT_INACTIVE')) {
     return 'Uniform variant is inactive.';
   }
+  if (code === 'HR_UNIFORM_STAFF_NOT_FOUND' || message.includes('HR_UNIFORM_STAFF_NOT_FOUND')) {
+    return 'Staff member not found.';
+  }
+  if (code === 'HR_UNIFORM_STAFF_OUTLET_MISMATCH' || message.includes('HR_UNIFORM_STAFF_OUTLET_MISMATCH')) {
+    return 'Staff member does not belong to this outlet.';
+  }
+  if (code === 'HR_UNIFORM_STAFF_NOT_ACTIVE' || message.includes('HR_UNIFORM_STAFF_NOT_ACTIVE')) {
+    return 'Staff member is not active.';
+  }
+  if (code === 'HR_UNIFORM_REPLACEMENT_STOCK_UNAVAILABLE' || message.includes('HR_UNIFORM_REPLACEMENT_STOCK_UNAVAILABLE')) {
+    return 'Insufficient stock for replacement variant.';
+  }
+  if (code === 'HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH' || message.includes('HR_UNIFORM_REPLACEMENT_SOURCE_MISMATCH')) {
+    return 'Replacement source issue mismatch.';
+  }
+  if (code === 'HR_UNIFORM_REPLACEMENT_SELF_REFERENCE' || message.includes('HR_UNIFORM_REPLACEMENT_SELF_REFERENCE')) {
+    return 'Replacement cannot reference itself.';
+  }
+  if (code === 'HR_UNIFORM_DUPLICATE_ISSUE_OUT' || message.includes('HR_UNIFORM_DUPLICATE_ISSUE_OUT')) {
+    return 'Duplicate issue transaction.';
+  }
+  if (code === 'HR_UNIFORM_DUPLICATE_RETURN_IN' || message.includes('HR_UNIFORM_DUPLICATE_RETURN_IN')) {
+    return 'Duplicate return transaction.';
+  }
   if (code === 'INTERNAL_SERVER_ERROR' || message.includes('INTERNAL_SERVER_ERROR')) {
     return 'Internal server error. Please try again.';
   }
@@ -573,6 +597,113 @@ export function resolveInitialVariantItemId(
     return targetItem.id;
   }
   return activeItems[0]?.id || '';
+}
+
+/**
+ * Validates uniform issue form inputs before submission
+ */
+export function canSubmitUniformIssue(data: {
+  staffId?: string;
+  variantId?: string;
+  quantity?: number | string;
+  conditionAtIssue?: string;
+  availableStock?: number;
+}): { isValid: boolean; error: string | null } {
+  if (!data.staffId || !data.staffId.trim()) {
+    return { isValid: false, error: 'Staff member is required.' };
+  }
+
+  if (!data.variantId || !data.variantId.trim()) {
+    return { isValid: false, error: 'Uniform size/variant is required.' };
+  }
+
+  const qty = Number(data.quantity);
+  if (isNaN(qty) || !Number.isInteger(qty) || qty <= 0) {
+    return { isValid: false, error: 'Quantity must be a positive integer.' };
+  }
+
+  const validConditions = ['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST'];
+  if (!data.conditionAtIssue || !validConditions.includes(data.conditionAtIssue)) {
+    return { isValid: false, error: 'Valid condition at issue is required.' };
+  }
+
+  if (typeof data.availableStock === 'number' && !isNaN(data.availableStock)) {
+    if (qty > data.availableStock) {
+      return { isValid: false, error: 'Requested quantity exceeds available stock.' };
+    }
+  }
+
+  return { isValid: true, error: null };
+}
+
+/**
+ * Validates uniform return form inputs before submission
+ */
+export function canSubmitUniformReturn(data: {
+  condition?: string;
+  returnToStock?: boolean;
+}): { isValid: boolean; error: string | null } {
+  const validConditions = ['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST'];
+  if (!data.condition || !validConditions.includes(data.condition)) {
+    return { isValid: false, error: 'Valid return condition is required.' };
+  }
+
+  if (typeof data.returnToStock !== 'boolean') {
+    return { isValid: false, error: 'Return to stock preference must be specified.' };
+  }
+
+  if (data.returnToStock && (data.condition === 'DAMAGED' || data.condition === 'LOST')) {
+    return { isValid: false, error: 'Damaged or lost uniforms cannot be returned to usable stock.' };
+  }
+
+  return { isValid: true, error: null };
+}
+
+/**
+ * Validates uniform replacement form inputs before submission
+ */
+export function canSubmitUniformReplacement(data: {
+  replacementVariantId?: string;
+  quantity?: number | string;
+  oldCondition?: string;
+  replacementReason?: string;
+  returnOldToStock?: boolean;
+  availableStock?: number;
+}): { isValid: boolean; error: string | null } {
+  if (!data.replacementVariantId || !data.replacementVariantId.trim()) {
+    return { isValid: false, error: 'Replacement size/variant is required.' };
+  }
+
+  const qty = Number(data.quantity);
+  if (isNaN(qty) || !Number.isInteger(qty) || qty <= 0) {
+    return { isValid: false, error: 'Replacement quantity must be a positive integer.' };
+  }
+
+  if (typeof data.availableStock === 'number' && !isNaN(data.availableStock)) {
+    if (qty > data.availableStock) {
+      return { isValid: false, error: 'Replacement quantity exceeds available stock.' };
+    }
+  }
+
+  const validConditions = ['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST'];
+  if (!data.oldCondition || !validConditions.includes(data.oldCondition)) {
+    return { isValid: false, error: 'Valid old uniform condition is required.' };
+  }
+
+  const validReasons = ['WORN_OUT', 'DAMAGED', 'SIZE_CHANGE', 'LOST', 'OTHER'];
+  if (!data.replacementReason || !validReasons.includes(data.replacementReason)) {
+    return { isValid: false, error: 'Valid replacement reason is required.' };
+  }
+
+  if (typeof data.returnOldToStock !== 'boolean') {
+    return { isValid: false, error: 'Return to stock preference must be specified.' };
+  }
+
+  if (data.returnOldToStock && (data.oldCondition === 'DAMAGED' || data.oldCondition === 'LOST')) {
+    return { isValid: false, error: 'Damaged or lost uniforms cannot be returned to usable stock.' };
+  }
+
+  return { isValid: true, error: null };
 }
 
 

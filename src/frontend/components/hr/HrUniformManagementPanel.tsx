@@ -34,6 +34,9 @@ import { HrUniformHistoryView } from './HrUniformHistoryView';
 import { HrUniformItemModal } from './HrUniformItemModal';
 import { HrUniformVariantModal } from './HrUniformVariantModal';
 import { HrUniformStockTransactionModal } from './HrUniformStockTransactionModal';
+import { HrUniformIssueModal } from './HrUniformIssueModal';
+import { HrUniformReturnModal } from './HrUniformReturnModal';
+import { HrUniformReplacementModal } from './HrUniformReplacementModal';
 
 export interface HrUniformManagementPanelProps {
   outletId: string;
@@ -128,6 +131,13 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
 
   const [isStockModalOpen, setIsStockModalOpen] = useState<boolean>(false);
   const [initialVariantIdForStock, setInitialVariantIdForStock] = useState<string | undefined>(undefined);
+
+  // Modal States for Phase 5C-2C Lifecycle Operations
+  const [isIssueModalOpen, setIsIssueModalOpen] = useState<boolean>(false);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState<boolean>(false);
+  const [selectedIssueForReturn, setSelectedIssueForReturn] = useState<HrUniformIssue | null>(null);
+  const [isReplacementModalOpen, setIsReplacementModalOpen] = useState<boolean>(false);
+  const [selectedIssueForReplacement, setSelectedIssueForReplacement] = useState<HrUniformIssue | null>(null);
 
   // 1. Fetch Report Summary & Stock Summary (Overview) -> Promise<boolean>
   const fetchSummaryData = useCallback(
@@ -515,6 +525,13 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
 
     setIsStockModalOpen(false);
     setInitialVariantIdForStock(undefined);
+
+    // Close and reset lifecycle mutation modals on outlet switch
+    setIsIssueModalOpen(false);
+    setIsReturnModalOpen(false);
+    setSelectedIssueForReturn(null);
+    setIsReplacementModalOpen(false);
+    setSelectedIssueForReplacement(null);
   }, [outletId]);
 
   // 7. Non-overlapping Single Effect Per Sub-View (Eliminates Duplicate Fetches)
@@ -561,12 +578,13 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     }
   }, [outletId, subTab, ledgerFilters, uniformRefreshKey, fetchLedgerData]);
 
-  // Staff Issues
+  // Staff Issues (also ensures authoritative stock-summary is available for lifecycle operations)
   useEffect(() => {
     if (outletId && subTab === 'issues') {
       fetchIssuesData(outletId, issueFilters);
+      fetchSummaryData(outletId);
     }
-  }, [outletId, subTab, issueFilters, uniformRefreshKey, fetchIssuesData]);
+  }, [outletId, subTab, issueFilters, uniformRefreshKey, fetchIssuesData, fetchSummaryData]);
 
   // Staff History
   useEffect(() => {
@@ -590,6 +608,7 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
       success = await fetchLedgerData(outletId, ledgerFilters);
     } else if (subTab === 'issues') {
       fetchReferenceMetadata(outletId);
+      fetchSummaryData(outletId);
       success = await fetchIssuesData(outletId, issueFilters);
     } else if (subTab === 'history') {
       success = await fetchHistoryData(outletId, historyFilters);
@@ -687,6 +706,50 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
         }
       }
     }
+  };
+
+  // Lifecycle Handlers (Gated strictly by canWriteIssue)
+  const handleOpenIssueUniform = () => {
+    if (!canWriteIssue) return;
+    setIsIssueModalOpen(true);
+  };
+
+  const handleOpenReturnUniform = (issue: HrUniformIssue) => {
+    if (!canWriteIssue || issue.status !== 'ISSUED') return;
+    setSelectedIssueForReturn(issue);
+    setIsReturnModalOpen(true);
+  };
+
+  const handleOpenReplaceUniform = (issue: HrUniformIssue) => {
+    if (!canWriteIssue || issue.status !== 'ISSUED') return;
+    setSelectedIssueForReplacement(issue);
+    setIsReplacementModalOpen(true);
+  };
+
+  const handleIssueSuccess = (_newIssue: HrUniformIssue) => {
+    setIsIssueModalOpen(false);
+    showFeedback('success', 'Uniform issued successfully.');
+    fetchIssuesData(outletId, issueFilters);
+    fetchSummaryData(outletId);
+    fetchHistoryData(outletId, historyFilters);
+  };
+
+  const handleReturnSuccess = (_updatedIssue: HrUniformIssue) => {
+    setIsReturnModalOpen(false);
+    setSelectedIssueForReturn(null);
+    showFeedback('success', 'Uniform return processed successfully.');
+    fetchIssuesData(outletId, issueFilters);
+    fetchSummaryData(outletId);
+    fetchHistoryData(outletId, historyFilters);
+  };
+
+  const handleReplacementSuccess = (_result: any) => {
+    setIsReplacementModalOpen(false);
+    setSelectedIssueForReplacement(null);
+    showFeedback('success', 'Uniform replacement processed successfully.');
+    fetchIssuesData(outletId, issueFilters);
+    fetchSummaryData(outletId);
+    fetchHistoryData(outletId, historyFilters);
   };
 
   return (
@@ -835,6 +898,10 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
               toDate: '',
             })
           }
+          canWriteIssue={canWriteIssue}
+          onIssueUniform={handleOpenIssueUniform}
+          onReturnUniform={handleOpenReturnUniform}
+          onReplaceUniform={handleOpenReplaceUniform}
         />
       )}
 
@@ -880,6 +947,45 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
             initialVariantId={initialVariantIdForStock}
             onClose={() => setIsStockModalOpen(false)}
             onSuccess={handleStockSuccess}
+          />
+        </>
+      )}
+
+      {/* Lifecycle Mutation Modals (Gated strictly by canWriteIssue) */}
+      {canWriteIssue && (
+        <>
+          <HrUniformIssueModal
+            isOpen={isIssueModalOpen}
+            outletId={outletId}
+            staffList={staffList}
+            items={items}
+            variants={variants}
+            stockSummary={stockSummary}
+            onClose={() => setIsIssueModalOpen(false)}
+            onSuccess={handleIssueSuccess}
+          />
+          <HrUniformReturnModal
+            isOpen={isReturnModalOpen}
+            outletId={outletId}
+            issue={selectedIssueForReturn}
+            onClose={() => {
+              setIsReturnModalOpen(false);
+              setSelectedIssueForReturn(null);
+            }}
+            onSuccess={handleReturnSuccess}
+          />
+          <HrUniformReplacementModal
+            isOpen={isReplacementModalOpen}
+            outletId={outletId}
+            issue={selectedIssueForReplacement}
+            items={items}
+            variants={variants}
+            stockSummary={stockSummary}
+            onClose={() => {
+              setIsReplacementModalOpen(false);
+              setSelectedIssueForReplacement(null);
+            }}
+            onSuccess={handleReplacementSuccess}
           />
         </>
       )}

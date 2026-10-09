@@ -8,6 +8,7 @@ import {
   RefreshCw,
   CheckCircle2,
   Clock,
+  Plus,
 } from 'lucide-react';
 import type {
   HrUniformIssue,
@@ -40,6 +41,10 @@ interface HrUniformIssuesViewProps {
   };
   onFilterChange: (key: string, value: string) => void;
   onClearFilters: () => void;
+  canWriteIssue?: boolean;
+  onIssueUniform?: () => void;
+  onReturnUniform?: (issue: HrUniformIssue) => void;
+  onReplaceUniform?: (issue: HrUniformIssue) => void;
 }
 
 const ISSUE_STATUSES = ['ISSUED', 'RETURNED', 'REPLACED'];
@@ -53,6 +58,10 @@ export const HrUniformIssuesView: React.FC<HrUniformIssuesViewProps> = ({
   filters,
   onFilterChange,
   onClearFilters,
+  canWriteIssue = false,
+  onIssueUniform,
+  onReturnUniform,
+  onReplaceUniform,
 }) => {
   const dateValidation = validateUniformDateRange(filters.fromDate, filters.toDate);
 
@@ -201,9 +210,20 @@ export const HrUniformIssuesView: React.FC<HrUniformIssuesViewProps> = ({
               </p>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
-            {issues.length} Records
-          </span>
+          <div className="flex items-center gap-2.5">
+            <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+              {issues.length} Records
+            </span>
+            {canWriteIssue && onIssueUniform && (
+              <button
+                onClick={onIssueUniform}
+                className="px-3.5 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-orange-500/20"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Issue Uniform</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
@@ -228,6 +248,9 @@ export const HrUniformIssuesView: React.FC<HrUniformIssuesViewProps> = ({
                   <th className="py-2.5 px-3.5 text-center">Condition</th>
                   <th className="py-2.5 px-3.5 text-center">Status</th>
                   <th className="py-2.5 px-3.5">Closed / Notes</th>
+                  {canWriteIssue && (
+                    <th className="py-2.5 px-3.5 text-right">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-[11px]">
@@ -329,6 +352,34 @@ export const HrUniformIssuesView: React.FC<HrUniformIssuesViewProps> = ({
                           </div>
                         )}
                       </td>
+
+                      {/* Actions (Gated by canWriteIssue) */}
+                      {canWriteIssue && (
+                        <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
+                          {issue.status === 'ISSUED' ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => onReturnUniform?.(issue)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold transition flex items-center gap-1"
+                                title="Process return"
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Return</span>
+                              </button>
+                              <button
+                                onClick={() => onReplaceUniform?.(issue)}
+                                className="px-2.5 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[10px] font-semibold transition flex items-center gap-1"
+                                title="Process replacement"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                <span>Replace</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-600">—</span>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
