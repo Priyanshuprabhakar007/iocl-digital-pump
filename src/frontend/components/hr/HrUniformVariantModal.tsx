@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { X, Layers, AlertCircle } from 'lucide-react';
 import type { HrUniformVariant, HrUniformItem, HrUniformStatus } from '../../../shared/types';
 import { apiFetch } from '../../services/api';
-import { canSubmitUniformVariant, getUniformErrorMessage } from './hrUniformUi';
+import {
+  canSubmitUniformVariant,
+  getUniformErrorMessage,
+  resolveInitialVariantItemId,
+} from './hrUniformUi';
 
 interface HrUniformVariantModalProps {
   isOpen: boolean;
@@ -43,12 +47,12 @@ export const HrUniformVariantModal: React.FC<HrUniformVariantModalProps> = ({
         setReorderLevel(variant.reorderLevel);
         setStatus(variant.status);
       } else {
-        // Find default item: initialItemId or first active item
-        const defaultItem = initialItemId
-          ? items.find(i => i.id === initialItemId)
-          : items.find(i => i.status === 'ACTIVE') || items[0];
+        // In CREATE mode: selectable items must be ACTIVE only.
+        // If initialItemId references an active item, preselect it.
+        // If initialItemId references an inactive item or none: select first ACTIVE item, or empty if none.
+        const defaultItemId = resolveInitialVariantItemId(items, initialItemId);
 
-        setUniformItemId(defaultItem?.id || '');
+        setUniformItemId(defaultItemId);
         setSizeLabel('');
         setSizeSortOrder(0);
         setReorderLevel(5);
@@ -61,16 +65,12 @@ export const HrUniformVariantModal: React.FC<HrUniformVariantModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Filter items: for create mode, show active items (or the initial item if selected).
-  // For edit mode, make sure the variant's current item is displayed.
+  // For CREATE mode, selectable Uniform Items must be ACTIVE only.
+  // In EDIT mode, existing variant's item is displayed (association is immutable).
   const selectableItems =
     mode === 'edit'
       ? items
-      : items.filter(
-          item =>
-            item.status === 'ACTIVE' ||
-            (initialItemId && item.id === initialItemId)
-        );
+      : items.filter(item => item.status === 'ACTIVE');
 
   const selectedItem = items.find(i => i.id === uniformItemId);
 

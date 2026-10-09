@@ -558,3 +558,21 @@ export function canSubmitUniformStockTransaction(data: {
   return { isValid: true, error: null };
 }
 
+/**
+ * Resolves the initial uniform item selection for variant creation.
+ * Selects initialItemId if and only if it points to an active item.
+ * Otherwise selects the first available active item, or empty string if none.
+ */
+export function resolveInitialVariantItemId(
+  items: Array<{ id: string; status: string }>,
+  initialItemId?: string
+): string {
+  const activeItems = items.filter(item => item.status === 'ACTIVE');
+  const targetItem = initialItemId ? items.find(item => item.id === initialItemId) : undefined;
+  if (targetItem && targetItem.status === 'ACTIVE') {
+    return targetItem.id;
+  }
+  return activeItems[0]?.id || '';
+}
+
+

@@ -16,6 +16,7 @@ import {
   canSubmitUniformItem,
   canSubmitUniformVariant,
   canSubmitUniformStockTransaction,
+  resolveInitialVariantItemId,
 } from '../src/frontend/components/hr/hrUniformUi';
 
 describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
@@ -703,6 +704,42 @@ describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
           isValid: true,
           error: null,
         });
+      });
+    });
+
+    describe('resolveInitialVariantItemId', () => {
+      const mockItems = [
+        { id: 'item-1', status: 'INACTIVE' },
+        { id: 'item-2', status: 'ACTIVE' },
+        { id: 'item-3', status: 'ACTIVE' },
+      ];
+
+      it('preselects initialItemId if it references an ACTIVE item', () => {
+        expect(resolveInitialVariantItemId(mockItems, 'item-2')).toBe('item-2');
+        expect(resolveInitialVariantItemId(mockItems, 'item-3')).toBe('item-3');
+      });
+
+      it('does NOT preselect initialItemId if it references an INACTIVE item and falls back to first ACTIVE item', () => {
+        expect(resolveInitialVariantItemId(mockItems, 'item-1')).toBe('item-2');
+      });
+
+      it('falls back to first ACTIVE item when initialItemId is undefined or not found', () => {
+        expect(resolveInitialVariantItemId(mockItems)).toBe('item-2');
+        expect(resolveInitialVariantItemId(mockItems, 'non-existent')).toBe('item-2');
+      });
+
+      it('returns empty string if no active items exist in the catalog', () => {
+        const inactiveOnly = [
+          { id: 'item-1', status: 'INACTIVE' },
+          { id: 'item-4', status: 'INACTIVE' },
+        ];
+        expect(resolveInitialVariantItemId(inactiveOnly, 'item-1')).toBe('');
+        expect(resolveInitialVariantItemId(inactiveOnly)).toBe('');
+      });
+
+      it('returns empty string for empty items list', () => {
+        expect(resolveInitialVariantItemId([])).toBe('');
+        expect(resolveInitialVariantItemId([], 'item-1')).toBe('');
       });
     });
   });

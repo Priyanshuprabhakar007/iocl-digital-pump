@@ -116,6 +116,19 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     toDate: '',
   });
 
+  // Modal States for Phase 5C-2B Write Operations
+  const [isItemModalOpen, setIsItemModalOpen] = useState<boolean>(false);
+  const [itemModalMode, setItemModalMode] = useState<'create' | 'edit'>('create');
+  const [selectedItemForEdit, setSelectedItemForEdit] = useState<HrUniformItem | null>(null);
+
+  const [isVariantModalOpen, setIsVariantModalOpen] = useState<boolean>(false);
+  const [variantModalMode, setVariantModalMode] = useState<'create' | 'edit'>('create');
+  const [selectedVariantForEdit, setSelectedVariantForEdit] = useState<HrUniformVariant | null>(null);
+  const [initialItemIdForVariant, setInitialItemIdForVariant] = useState<string | undefined>(undefined);
+
+  const [isStockModalOpen, setIsStockModalOpen] = useState<boolean>(false);
+  const [initialVariantIdForStock, setInitialVariantIdForStock] = useState<string | undefined>(undefined);
+
   // 1. Fetch Report Summary & Stock Summary (Overview) -> Promise<boolean>
   const fetchSummaryData = useCallback(
     async (currentOutletId: string): Promise<boolean> => {
@@ -444,10 +457,15 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
 
         if (activeOutletRef.current !== currentOutletId) return false;
 
-        if (itemsRes.success && Array.isArray(itemsRes.data)) {
+        // Explicitly handle failure of either request; must not return true if either failed
+        if (!itemsRes.success || !varRes.success) {
+          return false;
+        }
+
+        if (Array.isArray(itemsRes.data)) {
           setItems(itemsRes.data);
         }
-        if (varRes.success && Array.isArray(varRes.data)) {
+        if (Array.isArray(varRes.data)) {
           setVariants(varRes.data);
         }
         return true;
@@ -484,6 +502,19 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     setLedgerFilters({ variantId: '', transactionType: '', fromDate: '', toDate: '' });
     setIssueFilters({ staffId: '', itemId: '', variantId: '', status: '', fromDate: '', toDate: '' });
     setHistoryFilters({ staffId: '', fromDate: '', toDate: '' });
+
+    // Close and reset mutation modals on outlet switch
+    setIsItemModalOpen(false);
+    setSelectedItemForEdit(null);
+    setItemModalMode('create');
+
+    setIsVariantModalOpen(false);
+    setSelectedVariantForEdit(null);
+    setInitialItemIdForVariant(undefined);
+    setVariantModalMode('create');
+
+    setIsStockModalOpen(false);
+    setInitialVariantIdForStock(undefined);
   }, [outletId]);
 
   // 7. Non-overlapping Single Effect Per Sub-View (Eliminates Duplicate Fetches)
@@ -503,12 +534,24 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
 
   // Isolated Reference Metadata Loader for Ledger and Issues (prevents duplicate Ledger/Issues queries)
   useEffect(() => {
+    let isCancelled = false;
+
     if (outletId && (subTab === 'ledger' || subTab === 'issues')) {
       if (refMetadataLoadedOutletRef.current !== outletId) {
-        refMetadataLoadedOutletRef.current = outletId;
-        fetchReferenceMetadata(outletId);
+        fetchReferenceMetadata(outletId).then(success => {
+          if (isCancelled) return;
+          if (success && activeOutletRef.current === outletId) {
+            refMetadataLoadedOutletRef.current = outletId;
+          } else {
+            refMetadataLoadedOutletRef.current = '';
+          }
+        });
       }
     }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [outletId, subTab, fetchReferenceMetadata]);
 
   // Stock Ledger
@@ -558,19 +601,6 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     }
   };
 
-  // Modal States for Phase 5C-2B Write Operations
-  const [isItemModalOpen, setIsItemModalOpen] = useState<boolean>(false);
-  const [itemModalMode, setItemModalMode] = useState<'create' | 'edit'>('create');
-  const [selectedItemForEdit, setSelectedItemForEdit] = useState<HrUniformItem | null>(null);
-
-  const [isVariantModalOpen, setIsVariantModalOpen] = useState<boolean>(false);
-  const [variantModalMode, setVariantModalMode] = useState<'create' | 'edit'>('create');
-  const [selectedVariantForEdit, setSelectedVariantForEdit] = useState<HrUniformVariant | null>(null);
-  const [initialItemIdForVariant, setInitialItemIdForVariant] = useState<string | undefined>(undefined);
-
-  const [isStockModalOpen, setIsStockModalOpen] = useState<boolean>(false);
-  const [initialVariantIdForStock, setInitialVariantIdForStock] = useState<string | undefined>(undefined);
-
   // Mutation Handlers
   const handleOpenAddItem = () => {
     if (!canWriteInventory) return;
@@ -594,6 +624,8 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
         ? `Uniform item "${savedItem.itemCode}" created successfully.`
         : `Uniform item "${savedItem.itemCode}" updated successfully.`
     );
+    // Invalidate reference cache so subsequent Ledger/Issues views reload authoritative metadata
+    refMetadataLoadedOutletRef.current = '';
     fetchInventoryData(outletId, inventoryFilters);
     fetchSummaryData(outletId);
   };
@@ -622,6 +654,8 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
         ? `Uniform size variant "${savedVariant.sizeLabel}" created successfully.`
         : `Uniform size variant "${savedVariant.sizeLabel}" updated successfully.`
     );
+    // Invalidate reference cache so subsequent Ledger/Issues views reload authoritative metadata
+    refMetadataLoadedOutletRef.current = '';
     fetchInventoryData(outletId, inventoryFilters);
     fetchSummaryData(outletId);
   };
@@ -632,16 +666,26 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     setIsStockModalOpen(true);
   };
 
-  const handleStockSuccess = (transaction: HrUniformStockTransaction) => {
+  const handleStockSuccess = async (transaction: HrUniformStockTransaction) => {
     setIsStockModalOpen(false);
     showFeedback(
       'success',
       `Stock transaction (${transaction.transactionType}) recorded successfully.`
     );
-    fetchInventoryData(outletId, inventoryFilters);
+    // Always refresh authoritative report summary and stock summary
     fetchSummaryData(outletId);
-    if (subTab === 'ledger') {
+
+    // Only refresh filtered inventory when inventory tab is active to avoid clobbering ledger metadata
+    if (subTab === 'inventory') {
+      fetchInventoryData(outletId, inventoryFilters);
+    } else if (subTab === 'ledger') {
       fetchLedgerData(outletId, ledgerFilters);
+      if (refMetadataLoadedOutletRef.current !== outletId) {
+        const metadataSuccess = await fetchReferenceMetadata(outletId);
+        if (metadataSuccess && activeOutletRef.current === outletId) {
+          refMetadataLoadedOutletRef.current = outletId;
+        }
+      }
     }
   };
 
