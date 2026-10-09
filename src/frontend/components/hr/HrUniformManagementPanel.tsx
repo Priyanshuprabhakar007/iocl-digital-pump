@@ -60,6 +60,7 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
   const ledgerReqSeqRef = useRef<number>(0);
   const issuesReqSeqRef = useRef<number>(0);
   const historyReqSeqRef = useRef<number>(0);
+  const refMetadataLoadedOutletRef = useRef<string>('');
 
   useEffect(() => {
     activeOutletRef.current = outletId;
@@ -277,14 +278,16 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     ): Promise<boolean> => {
       if (!currentOutletId) return false;
 
-      // Block invalid date range before calling API
+      const seq = ++ledgerReqSeqRef.current;
+
+      // Block invalid date range before calling API & clear visible dataset
       const dateCheck = validateUniformDateRange(filters.fromDate, filters.toDate);
       if (!dateCheck.isValid) {
+        setTransactions([]);
         setIsLoadingLedger(false);
         return false;
       }
 
-      const seq = ++ledgerReqSeqRef.current;
       setIsLoadingLedger(true);
 
       try {
@@ -328,14 +331,16 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     ): Promise<boolean> => {
       if (!currentOutletId) return false;
 
-      // Block invalid date range before calling API
+      const seq = ++issuesReqSeqRef.current;
+
+      // Block invalid date range before calling API & clear visible dataset
       const dateCheck = validateUniformDateRange(filters.fromDate, filters.toDate);
       if (!dateCheck.isValid) {
+        setIssues([]);
         setIsLoadingIssues(false);
         return false;
       }
 
-      const seq = ++issuesReqSeqRef.current;
       setIsLoadingIssues(true);
 
       try {
@@ -379,14 +384,16 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     ): Promise<boolean> => {
       if (!currentOutletId) return false;
 
-      // Block invalid date range before calling API
+      const seq = ++historyReqSeqRef.current;
+
+      // Block invalid date range before calling API & clear visible dataset
       const dateCheck = validateUniformDateRange(filters.fromDate, filters.toDate);
       if (!dateCheck.isValid) {
+        setHistory([]);
         setIsLoadingHistory(false);
         return false;
       }
 
-      const seq = ++historyReqSeqRef.current;
       setIsLoadingHistory(true);
 
       try {
@@ -422,6 +429,32 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     [showFeedback]
   );
 
+  // Dedicated reference-data loader for items & variants (without touching inventory filters or stock-summary)
+  const fetchReferenceMetadata = useCallback(
+    async (currentOutletId: string): Promise<boolean> => {
+      if (!currentOutletId) return false;
+      try {
+        const [itemsRes, varRes] = await Promise.all([
+          apiFetch<HrUniformItem[]>(`/api/v1/outlets/${currentOutletId}/hr/uniform/items`),
+          apiFetch<HrUniformVariant[]>(`/api/v1/outlets/${currentOutletId}/hr/uniform/variants`),
+        ]);
+
+        if (activeOutletRef.current !== currentOutletId) return false;
+
+        if (itemsRes.success && Array.isArray(itemsRes.data)) {
+          setItems(itemsRes.data);
+        }
+        if (varRes.success && Array.isArray(varRes.data)) {
+          setVariants(varRes.data);
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    []
+  );
+
   // 6. Outlet Switching Cleanup
   useEffect(() => {
     if (!outletId) return;
@@ -432,6 +465,7 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     ledgerReqSeqRef.current++;
     issuesReqSeqRef.current++;
     historyReqSeqRef.current++;
+    refMetadataLoadedOutletRef.current = '';
 
     // Clear stale state immediately
     setReportSummary(null);
@@ -464,26 +498,29 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     }
   }, [outletId, subTab, inventoryFilters, uniformRefreshKey, fetchInventoryData]);
 
+  // Isolated Reference Metadata Loader for Ledger and Issues (prevents duplicate Ledger/Issues queries)
+  useEffect(() => {
+    if (outletId && (subTab === 'ledger' || subTab === 'issues')) {
+      if (refMetadataLoadedOutletRef.current !== outletId) {
+        refMetadataLoadedOutletRef.current = outletId;
+        fetchReferenceMetadata(outletId);
+      }
+    }
+  }, [outletId, subTab, fetchReferenceMetadata]);
+
   // Stock Ledger
   useEffect(() => {
     if (outletId && subTab === 'ledger') {
       fetchLedgerData(outletId, ledgerFilters);
-      // Pre-load items & variants for ledger labels if not loaded
-      if (items.length === 0 || variants.length === 0) {
-        fetchInventoryData(outletId, { category: '', status: '', search: '', selectedItemId: '' });
-      }
     }
-  }, [outletId, subTab, ledgerFilters, uniformRefreshKey, fetchLedgerData, fetchInventoryData, items.length, variants.length]);
+  }, [outletId, subTab, ledgerFilters, uniformRefreshKey, fetchLedgerData]);
 
   // Staff Issues
   useEffect(() => {
     if (outletId && subTab === 'issues') {
       fetchIssuesData(outletId, issueFilters);
-      if (items.length === 0 || variants.length === 0) {
-        fetchInventoryData(outletId, { category: '', status: '', search: '', selectedItemId: '' });
-      }
     }
-  }, [outletId, subTab, issueFilters, uniformRefreshKey, fetchIssuesData, fetchInventoryData, items.length, variants.length]);
+  }, [outletId, subTab, issueFilters, uniformRefreshKey, fetchIssuesData]);
 
   // Staff History
   useEffect(() => {
@@ -503,8 +540,10 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     } else if (subTab === 'inventory') {
       success = await fetchInventoryData(outletId, inventoryFilters);
     } else if (subTab === 'ledger') {
+      fetchReferenceMetadata(outletId);
       success = await fetchLedgerData(outletId, ledgerFilters);
     } else if (subTab === 'issues') {
+      fetchReferenceMetadata(outletId);
       success = await fetchIssuesData(outletId, issueFilters);
     } else if (subTab === 'history') {
       success = await fetchHistoryData(outletId, historyFilters);
