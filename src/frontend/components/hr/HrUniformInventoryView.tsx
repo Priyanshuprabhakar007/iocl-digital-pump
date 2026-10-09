@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Package,
   Layers,
   Search,
-  Filter,
   AlertTriangle,
   CheckCircle2,
-  Tag,
-  Boxes,
+  Plus,
+  Edit2,
+  PlusCircle,
 } from 'lucide-react';
 import type {
   HrUniformItem,
@@ -16,7 +16,7 @@ import type {
 } from '../../../shared/types';
 import { formatUniformCategory, formatUniformItemStatus } from './hrUniformUi';
 
-interface HrUniformInventoryViewProps {
+export interface HrUniformInventoryViewProps {
   items: HrUniformItem[];
   variants: HrUniformVariant[];
   stockSummary: HrUniformStockSummary[];
@@ -29,6 +29,12 @@ interface HrUniformInventoryViewProps {
   };
   onFilterChange: (key: string, value: string) => void;
   onClearFilters: () => void;
+  canWriteInventory: boolean;
+  onAddItem?: () => void;
+  onEditItem?: (item: HrUniformItem) => void;
+  onAddVariant?: (initialItemId?: string) => void;
+  onEditVariant?: (variant: HrUniformVariant) => void;
+  onRecordStock?: (variantId?: string) => void;
 }
 
 const CATEGORIES = [
@@ -50,6 +56,12 @@ export const HrUniformInventoryView: React.FC<HrUniformInventoryViewProps> = ({
   filters,
   onFilterChange,
   onClearFilters,
+  canWriteInventory,
+  onAddItem,
+  onEditItem,
+  onAddVariant,
+  onEditVariant,
+  onRecordStock,
 }) => {
   // Map stock by variantId for fast lookups
   const stockMap = new Map<string, HrUniformStockSummary>();
@@ -142,7 +154,7 @@ export const HrUniformInventoryView: React.FC<HrUniformInventoryViewProps> = ({
 
       {/* Item Master Section */}
       <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3.5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-400">
               <Package className="w-4 h-4" />
@@ -154,9 +166,20 @@ export const HrUniformInventoryView: React.FC<HrUniformInventoryViewProps> = ({
               </p>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
-            {items.length} Items
-          </span>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+              {items.length} Items
+            </span>
+            {canWriteInventory && onAddItem && (
+              <button
+                onClick={onAddItem}
+                className="px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-orange-500/20"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Item</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
@@ -180,6 +203,7 @@ export const HrUniformInventoryView: React.FC<HrUniformInventoryViewProps> = ({
                   <th className="py-2.5 px-3.5">Description</th>
                   <th className="py-2.5 px-3.5 text-center">Variants</th>
                   <th className="py-2.5 px-3.5 text-center">Status</th>
+                  {canWriteInventory && <th className="py-2.5 px-3.5 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-[11px]">
@@ -217,6 +241,21 @@ export const HrUniformInventoryView: React.FC<HrUniformInventoryViewProps> = ({
                           {statusStyle.label}
                         </span>
                       </td>
+                      {canWriteInventory && (
+                        <td
+                          className="py-2.5 px-3.5 text-right"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => onEditItem?.(item)}
+                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition inline-flex items-center gap-1 text-[10px] font-semibold"
+                            title="Edit Item"
+                          >
+                            <Edit2 className="w-3 h-3 text-orange-400" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -228,7 +267,7 @@ export const HrUniformInventoryView: React.FC<HrUniformInventoryViewProps> = ({
 
       {/* Variant & Stock Section */}
       <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3.5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
               <Layers className="w-4 h-4" />
@@ -241,9 +280,20 @@ export const HrUniformInventoryView: React.FC<HrUniformInventoryViewProps> = ({
               </p>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
-            {displayVariants.length} Sizes
-          </span>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+              {displayVariants.length} Sizes
+            </span>
+            {canWriteInventory && onAddVariant && (
+              <button
+                onClick={() => onAddVariant(filters.selectedItemId || undefined)}
+                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-amber-500/20"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Variant</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
@@ -268,6 +318,7 @@ export const HrUniformInventoryView: React.FC<HrUniformInventoryViewProps> = ({
                   <th className="py-2.5 px-3.5 text-right">Reorder Level</th>
                   <th className="py-2.5 px-3.5 text-center">Stock Alert</th>
                   <th className="py-2.5 px-3.5 text-center">Status</th>
+                  {canWriteInventory && <th className="py-2.5 px-3.5 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-[11px]">
@@ -320,6 +371,28 @@ export const HrUniformInventoryView: React.FC<HrUniformInventoryViewProps> = ({
                           {statusStyle.label}
                         </span>
                       </td>
+                      {canWriteInventory && (
+                        <td className="py-2.5 px-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => onRecordStock?.(variant.id)}
+                              className="px-2 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/20 transition inline-flex items-center gap-1 text-[10px] font-semibold"
+                              title="Record Stock Movement"
+                            >
+                              <PlusCircle className="w-3 h-3" />
+                              <span>Stock</span>
+                            </button>
+                            <button
+                              onClick={() => onEditVariant?.(variant)}
+                              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition inline-flex items-center gap-1 text-[10px] font-semibold"
+                              title="Edit Variant"
+                            >
+                              <Edit2 className="w-3 h-3 text-amber-400" />
+                              <span>Edit</span>
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

@@ -31,6 +31,9 @@ import { HrUniformInventoryView } from './HrUniformInventoryView';
 import { HrUniformLedgerView } from './HrUniformLedgerView';
 import { HrUniformIssuesView } from './HrUniformIssuesView';
 import { HrUniformHistoryView } from './HrUniformHistoryView';
+import { HrUniformItemModal } from './HrUniformItemModal';
+import { HrUniformVariantModal } from './HrUniformVariantModal';
+import { HrUniformStockTransactionModal } from './HrUniformStockTransactionModal';
 
 export interface HrUniformManagementPanelProps {
   outletId: string;
@@ -555,6 +558,93 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
     }
   };
 
+  // Modal States for Phase 5C-2B Write Operations
+  const [isItemModalOpen, setIsItemModalOpen] = useState<boolean>(false);
+  const [itemModalMode, setItemModalMode] = useState<'create' | 'edit'>('create');
+  const [selectedItemForEdit, setSelectedItemForEdit] = useState<HrUniformItem | null>(null);
+
+  const [isVariantModalOpen, setIsVariantModalOpen] = useState<boolean>(false);
+  const [variantModalMode, setVariantModalMode] = useState<'create' | 'edit'>('create');
+  const [selectedVariantForEdit, setSelectedVariantForEdit] = useState<HrUniformVariant | null>(null);
+  const [initialItemIdForVariant, setInitialItemIdForVariant] = useState<string | undefined>(undefined);
+
+  const [isStockModalOpen, setIsStockModalOpen] = useState<boolean>(false);
+  const [initialVariantIdForStock, setInitialVariantIdForStock] = useState<string | undefined>(undefined);
+
+  // Mutation Handlers
+  const handleOpenAddItem = () => {
+    if (!canWriteInventory) return;
+    setItemModalMode('create');
+    setSelectedItemForEdit(null);
+    setIsItemModalOpen(true);
+  };
+
+  const handleOpenEditItem = (itemToEdit: HrUniformItem) => {
+    if (!canWriteInventory) return;
+    setItemModalMode('edit');
+    setSelectedItemForEdit(itemToEdit);
+    setIsItemModalOpen(true);
+  };
+
+  const handleItemSuccess = (savedItem: HrUniformItem, mode: 'create' | 'edit') => {
+    setIsItemModalOpen(false);
+    showFeedback(
+      'success',
+      mode === 'create'
+        ? `Uniform item "${savedItem.itemCode}" created successfully.`
+        : `Uniform item "${savedItem.itemCode}" updated successfully.`
+    );
+    fetchInventoryData(outletId, inventoryFilters);
+    fetchSummaryData(outletId);
+  };
+
+  const handleOpenAddVariant = (initialItemId?: string) => {
+    if (!canWriteInventory) return;
+    setVariantModalMode('create');
+    setSelectedVariantForEdit(null);
+    setInitialItemIdForVariant(initialItemId);
+    setIsVariantModalOpen(true);
+  };
+
+  const handleOpenEditVariant = (variantToEdit: HrUniformVariant) => {
+    if (!canWriteInventory) return;
+    setVariantModalMode('edit');
+    setSelectedVariantForEdit(variantToEdit);
+    setInitialItemIdForVariant(undefined);
+    setIsVariantModalOpen(true);
+  };
+
+  const handleVariantSuccess = (savedVariant: HrUniformVariant, mode: 'create' | 'edit') => {
+    setIsVariantModalOpen(false);
+    showFeedback(
+      'success',
+      mode === 'create'
+        ? `Uniform size variant "${savedVariant.sizeLabel}" created successfully.`
+        : `Uniform size variant "${savedVariant.sizeLabel}" updated successfully.`
+    );
+    fetchInventoryData(outletId, inventoryFilters);
+    fetchSummaryData(outletId);
+  };
+
+  const handleOpenRecordStock = (variantId?: string) => {
+    if (!canWriteInventory) return;
+    setInitialVariantIdForStock(variantId);
+    setIsStockModalOpen(true);
+  };
+
+  const handleStockSuccess = (transaction: HrUniformStockTransaction) => {
+    setIsStockModalOpen(false);
+    showFeedback(
+      'success',
+      `Stock transaction (${transaction.transactionType}) recorded successfully.`
+    );
+    fetchInventoryData(outletId, inventoryFilters);
+    fetchSummaryData(outletId);
+    if (subTab === 'ledger') {
+      fetchLedgerData(outletId, ledgerFilters);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Sub-Tabs Navigation Bar */}
@@ -657,6 +747,12 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
           onClearFilters={() =>
             setInventoryFilters({ category: '', status: '', search: '', selectedItemId: '' })
           }
+          canWriteInventory={canWriteInventory}
+          onAddItem={handleOpenAddItem}
+          onEditItem={handleOpenEditItem}
+          onAddVariant={handleOpenAddVariant}
+          onEditVariant={handleOpenEditVariant}
+          onRecordStock={handleOpenRecordStock}
         />
       )}
 
@@ -671,6 +767,8 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
           onClearFilters={() =>
             setLedgerFilters({ variantId: '', transactionType: '', fromDate: '', toDate: '' })
           }
+          canWriteInventory={canWriteInventory}
+          onRecordStock={() => handleOpenRecordStock()}
         />
       )}
 
@@ -707,6 +805,39 @@ export const HrUniformManagementPanel: React.FC<HrUniformManagementPanelProps> =
             setHistoryFilters({ staffId: '', fromDate: '', toDate: '' })
           }
         />
+      )}
+
+      {/* Mutation Modals (Gated strictly by canWriteInventory) */}
+      {canWriteInventory && (
+        <>
+          <HrUniformItemModal
+            isOpen={isItemModalOpen}
+            mode={itemModalMode}
+            outletId={outletId}
+            item={selectedItemForEdit}
+            onClose={() => setIsItemModalOpen(false)}
+            onSuccess={handleItemSuccess}
+          />
+          <HrUniformVariantModal
+            isOpen={isVariantModalOpen}
+            mode={variantModalMode}
+            outletId={outletId}
+            variant={selectedVariantForEdit}
+            items={items}
+            initialItemId={initialItemIdForVariant}
+            onClose={() => setIsVariantModalOpen(false)}
+            onSuccess={handleVariantSuccess}
+          />
+          <HrUniformStockTransactionModal
+            isOpen={isStockModalOpen}
+            outletId={outletId}
+            variants={variants}
+            stockSummary={stockSummary}
+            initialVariantId={initialVariantIdForStock}
+            onClose={() => setIsStockModalOpen(false)}
+            onSuccess={handleStockSuccess}
+          />
+        </>
       )}
     </div>
   );

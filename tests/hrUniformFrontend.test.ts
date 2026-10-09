@@ -13,6 +13,9 @@ import {
   buildUniformIssueQueryParams,
   buildUniformHistoryQueryParams,
   getUniformErrorMessage,
+  canSubmitUniformItem,
+  canSubmitUniformVariant,
+  canSubmitUniformStockTransaction,
 } from '../src/frontend/components/hr/hrUniformUi';
 
 describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
@@ -464,6 +467,18 @@ describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
       expect(getUniformErrorMessage({ code: 'HR_UNIFORM_ISSUE_ALREADY_CLOSED' })).toBe(
         'This uniform issue is already closed or processed.'
       );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_ITEM_INACTIVE' })).toBe(
+        'Uniform item is inactive.'
+      );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_VARIANT_OUTLET_MISMATCH' })).toBe(
+        'Uniform variant outlet mismatch.'
+      );
+      expect(getUniformErrorMessage({ code: 'HR_UNIFORM_VARIANT_INACTIVE' })).toBe(
+        'Uniform variant is inactive.'
+      );
+      expect(getUniformErrorMessage({ code: 'INTERNAL_SERVER_ERROR' })).toBe(
+        'Internal server error. Please try again.'
+      );
     });
 
     it('returns custom message string if available and meaningful', () => {
@@ -479,6 +494,216 @@ describe('Phase 5C-2A Uniform Frontend UI Helpers & Pure Logic Suite', () => {
       expect(getUniformErrorMessage({})).toBe(
         'Unable to complete the uniform management request.'
       );
+    });
+  });
+
+  // ==========================================================================
+  // 8. Phase 5C-2B Mutation Form Validators
+  // ==========================================================================
+  describe('Phase 5C-2B Mutation Form Validators', () => {
+    describe('canSubmitUniformItem', () => {
+      it('validates required fields for item creation', () => {
+        expect(canSubmitUniformItem({}, 'create')).toEqual({
+          isValid: false,
+          error: 'Item Code is required.',
+        });
+        expect(canSubmitUniformItem({ itemCode: 'SHIRT-M' }, 'create')).toEqual({
+          isValid: false,
+          error: 'Item Name is required.',
+        });
+        expect(
+          canSubmitUniformItem({ itemCode: 'SHIRT-M', itemName: 'Shirt Medium' }, 'create')
+        ).toEqual({
+          isValid: false,
+          error: 'Category is required.',
+        });
+        expect(
+          canSubmitUniformItem(
+            { itemCode: 'SHIRT-M', itemName: 'Shirt Medium', category: 'SHIRT', status: 'UNKNOWN' as any },
+            'create'
+          )
+        ).toEqual({
+          isValid: false,
+          error: 'Status must be ACTIVE or INACTIVE.',
+        });
+        expect(
+          canSubmitUniformItem(
+            { itemCode: 'SHIRT-M', itemName: 'Shirt Medium', category: 'SHIRT', status: 'ACTIVE' },
+            'create'
+          )
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('does not require itemCode on item edit', () => {
+        expect(
+          canSubmitUniformItem(
+            { itemName: 'Updated Shirt', category: 'SHIRT', status: 'ACTIVE' },
+            'edit'
+          )
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
+        expect(canSubmitUniformItem({ itemName: '' }, 'edit')).toEqual({
+          isValid: false,
+          error: 'Item Name is required.',
+        });
+      });
+    });
+
+    describe('canSubmitUniformVariant', () => {
+      it('validates required fields for variant creation', () => {
+        expect(canSubmitUniformVariant({}, 'create')).toEqual({
+          isValid: false,
+          error: 'Uniform Item is required.',
+        });
+        expect(canSubmitUniformVariant({ uniformItemId: 'item-1' }, 'create')).toEqual({
+          isValid: false,
+          error: 'Size Label is required.',
+        });
+        expect(
+          canSubmitUniformVariant(
+            { uniformItemId: 'item-1', sizeLabel: 'XL', sizeSortOrder: 'invalid' },
+            'create'
+          )
+        ).toEqual({
+          isValid: false,
+          error: 'Size Sort Order must be an integer.',
+        });
+        expect(
+          canSubmitUniformVariant(
+            { uniformItemId: 'item-1', sizeLabel: 'XL', sizeSortOrder: 1, reorderLevel: -5 },
+            'create'
+          )
+        ).toEqual({
+          isValid: false,
+          error: 'Reorder Level must be a non-negative integer.',
+        });
+        expect(
+          canSubmitUniformVariant(
+            {
+              uniformItemId: 'item-1',
+              sizeLabel: 'XL',
+              sizeSortOrder: 1,
+              reorderLevel: 5,
+              status: 'ACTIVE',
+            },
+            'create'
+          )
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('allows editing variant without re-providing immutable uniformItemId or sizeLabel', () => {
+        expect(
+          canSubmitUniformVariant(
+            { sizeSortOrder: 2, reorderLevel: 10, status: 'INACTIVE' },
+            'edit'
+          )
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+    });
+
+    describe('canSubmitUniformStockTransaction', () => {
+      it('validates variantId, transactionType and positive integer quantity', () => {
+        expect(canSubmitUniformStockTransaction({})).toEqual({
+          isValid: false,
+          error: 'Variant is required.',
+        });
+        expect(
+          canSubmitUniformStockTransaction({ variantId: 'var-1', transactionType: 'ISSUE' })
+        ).toEqual({
+          isValid: false,
+          error: 'Invalid or prohibited transaction type.',
+        });
+        expect(
+          canSubmitUniformStockTransaction({
+            variantId: 'var-1',
+            transactionType: 'RECEIPT',
+            quantity: 0,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Quantity must be a positive integer.',
+        });
+        expect(
+          canSubmitUniformStockTransaction({
+            variantId: 'var-1',
+            transactionType: 'RECEIPT',
+            quantity: -3,
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Quantity must be a positive integer.',
+        });
+      });
+
+      it('enforces mandatory notes for inventory adjustments', () => {
+        expect(
+          canSubmitUniformStockTransaction({
+            variantId: 'var-1',
+            transactionType: 'ADJUSTMENT_IN',
+            quantity: 5,
+            notes: '',
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Notes are mandatory for inventory adjustments.',
+        });
+        expect(
+          canSubmitUniformStockTransaction({
+            variantId: 'var-1',
+            transactionType: 'ADJUSTMENT_OUT',
+            quantity: 2,
+            notes: '  ',
+          })
+        ).toEqual({
+          isValid: false,
+          error: 'Notes are mandatory for inventory adjustments.',
+        });
+        expect(
+          canSubmitUniformStockTransaction({
+            variantId: 'var-1',
+            transactionType: 'ADJUSTMENT_OUT',
+            quantity: 2,
+            notes: 'Found damaged in transit',
+          })
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
+
+      it('allows RECEIPT and OPENING_BALANCE without notes', () => {
+        expect(
+          canSubmitUniformStockTransaction({
+            variantId: 'var-1',
+            transactionType: 'RECEIPT',
+            quantity: 10,
+          })
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
+        expect(
+          canSubmitUniformStockTransaction({
+            variantId: 'var-1',
+            transactionType: 'OPENING_BALANCE',
+            quantity: 20,
+          })
+        ).toEqual({
+          isValid: true,
+          error: null,
+        });
+      });
     });
   });
 });

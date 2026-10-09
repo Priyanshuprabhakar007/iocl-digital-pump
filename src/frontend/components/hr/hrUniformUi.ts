@@ -433,6 +433,18 @@ export function getUniformErrorMessage(error: any): string {
   if (code === 'HR_UNIFORM_INVALID_TRANSACTION_TYPE' || message.includes('HR_UNIFORM_INVALID_TRANSACTION_TYPE')) {
     return 'Invalid or prohibited transaction type.';
   }
+  if (code === 'HR_UNIFORM_ITEM_INACTIVE' || message.includes('HR_UNIFORM_ITEM_INACTIVE')) {
+    return 'Uniform item is inactive.';
+  }
+  if (code === 'HR_UNIFORM_VARIANT_OUTLET_MISMATCH' || message.includes('HR_UNIFORM_VARIANT_OUTLET_MISMATCH')) {
+    return 'Uniform variant outlet mismatch.';
+  }
+  if (code === 'HR_UNIFORM_VARIANT_INACTIVE' || message.includes('HR_UNIFORM_VARIANT_INACTIVE')) {
+    return 'Uniform variant is inactive.';
+  }
+  if (code === 'INTERNAL_SERVER_ERROR' || message.includes('INTERNAL_SERVER_ERROR')) {
+    return 'Internal server error. Please try again.';
+  }
 
   if (typeof message === 'string' && message.trim().length > 0 && !message.includes('object Object')) {
     return message;
@@ -440,3 +452,109 @@ export function getUniformErrorMessage(error: any): string {
 
   return 'Unable to complete the uniform management request.';
 }
+
+/**
+ * Validates uniform item form inputs before submission
+ */
+export function canSubmitUniformItem(
+  data: {
+    itemCode?: string;
+    itemName?: string;
+    category?: string;
+    status?: string;
+  },
+  mode: 'create' | 'edit'
+): { isValid: boolean; error: string | null } {
+  if (mode === 'create') {
+    if (!data.itemCode || !data.itemCode.trim()) {
+      return { isValid: false, error: 'Item Code is required.' };
+    }
+  }
+
+  if (!data.itemName || !data.itemName.trim()) {
+    return { isValid: false, error: 'Item Name is required.' };
+  }
+
+  if (!data.category || !data.category.trim()) {
+    return { isValid: false, error: 'Category is required.' };
+  }
+
+  if (data.status && data.status !== 'ACTIVE' && data.status !== 'INACTIVE') {
+    return { isValid: false, error: 'Status must be ACTIVE or INACTIVE.' };
+  }
+
+  return { isValid: true, error: null };
+}
+
+/**
+ * Validates uniform variant form inputs before submission
+ */
+export function canSubmitUniformVariant(
+  data: {
+    uniformItemId?: string;
+    sizeLabel?: string;
+    sizeSortOrder?: number | string;
+    reorderLevel?: number | string;
+    status?: string;
+  },
+  mode: 'create' | 'edit'
+): { isValid: boolean; error: string | null } {
+  if (mode === 'create') {
+    if (!data.uniformItemId || !data.uniformItemId.trim()) {
+      return { isValid: false, error: 'Uniform Item is required.' };
+    }
+    if (!data.sizeLabel || !data.sizeLabel.trim()) {
+      return { isValid: false, error: 'Size Label is required.' };
+    }
+  }
+
+  const sortOrderNum = Number(data.sizeSortOrder);
+  if (isNaN(sortOrderNum) || !Number.isInteger(sortOrderNum)) {
+    return { isValid: false, error: 'Size Sort Order must be an integer.' };
+  }
+
+  const reorderNum = Number(data.reorderLevel);
+  if (isNaN(reorderNum) || !Number.isInteger(reorderNum) || reorderNum < 0) {
+    return { isValid: false, error: 'Reorder Level must be a non-negative integer.' };
+  }
+
+  if (data.status && data.status !== 'ACTIVE' && data.status !== 'INACTIVE') {
+    return { isValid: false, error: 'Status must be ACTIVE or INACTIVE.' };
+  }
+
+  return { isValid: true, error: null };
+}
+
+/**
+ * Validates uniform stock transaction form inputs before submission
+ */
+export function canSubmitUniformStockTransaction(data: {
+  variantId?: string;
+  transactionType?: string;
+  quantity?: number | string;
+  notes?: string | null;
+}): { isValid: boolean; error: string | null } {
+  if (!data.variantId || !data.variantId.trim()) {
+    return { isValid: false, error: 'Variant is required.' };
+  }
+
+  const allowedTypes = ['OPENING_BALANCE', 'RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT'];
+  if (!data.transactionType || !allowedTypes.includes(data.transactionType)) {
+    return { isValid: false, error: 'Invalid or prohibited transaction type.' };
+  }
+
+  const qtyNum = Number(data.quantity);
+  if (isNaN(qtyNum) || !Number.isInteger(qtyNum) || qtyNum <= 0) {
+    return { isValid: false, error: 'Quantity must be a positive integer.' };
+  }
+
+  if (
+    (data.transactionType === 'ADJUSTMENT_IN' || data.transactionType === 'ADJUSTMENT_OUT') &&
+    (!data.notes || !data.notes.trim())
+  ) {
+    return { isValid: false, error: 'Notes are mandatory for inventory adjustments.' };
+  }
+
+  return { isValid: true, error: null };
+}
+

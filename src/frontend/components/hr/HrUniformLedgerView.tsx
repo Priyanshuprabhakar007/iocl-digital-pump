@@ -7,6 +7,7 @@ import {
   Calendar,
   AlertCircle,
   Hash,
+  Plus,
 } from 'lucide-react';
 import type {
   HrUniformStockTransaction,
@@ -19,7 +20,7 @@ import {
   validateUniformDateRange,
 } from './hrUniformUi';
 
-interface HrUniformLedgerViewProps {
+export interface HrUniformLedgerViewProps {
   transactions: HrUniformStockTransaction[];
   variants: HrUniformVariant[];
   items: HrUniformItem[];
@@ -32,6 +33,8 @@ interface HrUniformLedgerViewProps {
   };
   onFilterChange: (key: string, value: string) => void;
   onClearFilters: () => void;
+  canWriteInventory?: boolean;
+  onRecordStock?: () => void;
 }
 
 const TRANSACTION_TYPES = [
@@ -51,6 +54,8 @@ export const HrUniformLedgerView: React.FC<HrUniformLedgerViewProps> = ({
   filters,
   onFilterChange,
   onClearFilters,
+  canWriteInventory,
+  onRecordStock,
 }) => {
   const dateValidation = validateUniformDateRange(filters.fromDate, filters.toDate);
 
@@ -156,9 +161,20 @@ export const HrUniformLedgerView: React.FC<HrUniformLedgerViewProps> = ({
               </p>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
-            {transactions.length} Records
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+              {transactions.length} Records
+            </span>
+            {canWriteInventory && onRecordStock && (
+              <button
+                onClick={onRecordStock}
+                className="px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-teal-500/20"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Record Stock</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
