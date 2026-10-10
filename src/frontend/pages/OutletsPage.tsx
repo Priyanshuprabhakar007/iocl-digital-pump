@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { RetailOutlet, User } from '../../shared/types';
+import { RetailOutlet, User, State, Division, SalesArea } from '../../shared/types';
 import { PERMISSIONS } from '../../shared/constants';
-import { Building2, Plus, MapPin, UserPlus, Filter, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  Building2,
+  Plus,
+  MapPin,
+  UserPlus,
+  Filter,
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react';
 
 export const OutletsPage: React.FC = () => {
   const { hasPermission, userCtx } = useAuth();
@@ -14,20 +24,31 @@ export const OutletsPage: React.FC = () => {
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedOutlet, setSelectedOutlet] = useState<RetailOutlet | null>(null);
 
-  // Form states for new outlet
-  const [form, setForm] = useState({
+  // Initial form states for new outlet (no hardcoded defaults)
+  const initialFormState = {
     roCode: '',
     name: '',
     outletType: 'COCO' as 'COCO' | 'CODO' | 'A_SITE',
-    stateId: 'state-wb',
-    divisionId: 'div-kol',
-    salesAreaId: 'sa-cen',
+    stateId: '',
+    divisionId: '',
+    salesAreaId: '',
     address: '',
-    city: 'Kolkata',
-    district: 'Kolkata',
-    pincode: '700001',
+    city: '',
+    district: '',
+    pincode: '',
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE',
-  });
+  };
+
+  const [form, setForm] = useState(initialFormState);
+
+  // Cascading hierarchy data and loading states
+  const [states, setStates] = useState<State[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
+  const [salesAreas, setSalesAreas] = useState<SalesArea[]>([]);
+
+  const [loadingStates, setLoadingStates] = useState(false);
+  const [loadingDivisions, setLoadingDivisions] = useState(false);
+  const [loadingSalesAreas, setLoadingSalesAreas] = useState(false);
 
   // Form state for assignment
   const [assignUserId, setAssignUserId] = useState('');
@@ -50,22 +71,113 @@ export const OutletsPage: React.FC = () => {
     }
   };
 
+  // Fetch ACTIVE State Offices for the modal
+  const fetchStates = async () => {
+    setLoadingStates(true);
+    const res = await apiFetch<State[]>('/api/v1/hierarchy/states');
+    if (res.success && res.data) {
+      // Show only ACTIVE states
+      setStates(res.data.filter((s) => s.status === 'ACTIVE'));
+    } else {
+      setErrorMsg(res.error?.message || 'Failed to load State Offices');
+    }
+    setLoadingStates(false);
+  };
+
   useEffect(() => {
     fetchOutlets();
     fetchUsers();
   }, []);
 
+  const openCreateModal = () => {
+    setErrorMsg(null);
+    setForm(initialFormState);
+    setDivisions([]);
+    setSalesAreas([]);
+    setModalOpen(true);
+    fetchStates();
+  };
+
+  const handleStateChange = async (selectedStateId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      stateId: selectedStateId,
+      divisionId: '',
+      salesAreaId: '',
+    }));
+    setDivisions([]);
+    setSalesAreas([]);
+
+    if (!selectedStateId) return;
+
+    setLoadingDivisions(true);
+    const res = await apiFetch<Division[]>(
+      `/api/v1/hierarchy/divisions?stateId=${encodeURIComponent(selectedStateId)}`
+    );
+    if (res.success && res.data) {
+      // Show only ACTIVE divisions for selected state
+      setDivisions(res.data.filter((d) => d.status === 'ACTIVE'));
+    } else {
+      setErrorMsg(res.error?.message || 'Failed to load Division Offices');
+    }
+    setLoadingDivisions(false);
+  };
+
+  const handleDivisionChange = async (selectedDivisionId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      divisionId: selectedDivisionId,
+      salesAreaId: '',
+    }));
+    setSalesAreas([]);
+
+    if (!selectedDivisionId) return;
+
+    setLoadingSalesAreas(true);
+    const res = await apiFetch<SalesArea[]>(
+      `/api/v1/hierarchy/sales-areas?divisionId=${encodeURIComponent(selectedDivisionId)}`
+    );
+    if (res.success && res.data) {
+      // Show only ACTIVE sales areas for selected division
+      setSalesAreas(res.data.filter((sa) => sa.status === 'ACTIVE'));
+    } else {
+      setErrorMsg(res.error?.message || 'Failed to load Sales Areas');
+    }
+    setLoadingSalesAreas(false);
+  };
+
   const handleCreateOutlet = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
+    // Required hierarchy validation
+    if (!form.stateId || !form.divisionId || !form.salesAreaId) {
+      setErrorMsg('Please select State Office, Division Office, and Sales Area.');
+      return;
+    }
+
     const res = await apiFetch<RetailOutlet>('/api/v1/outlets', {
       method: 'POST',
-      body: JSON.stringify(form),
+      body: JSON.stringify({
+        roCode: form.roCode.trim(),
+        name: form.name.trim(),
+        outletType: form.outletType,
+        stateId: form.stateId,
+        divisionId: form.divisionId,
+        salesAreaId: form.salesAreaId,
+        address: form.address.trim(),
+        city: form.city.trim(),
+        district: form.district.trim(),
+        pincode: form.pincode.trim(),
+        status: form.status,
+      }),
     });
 
     if (res.success) {
       setModalOpen(false);
+      setForm(initialFormState);
+      setDivisions([]);
+      setSalesAreas([]);
       fetchOutlets();
     } else {
       setErrorMsg(res.error?.message || 'Failed to create retail outlet');
@@ -103,16 +215,14 @@ export const OutletsPage: React.FC = () => {
             <h1 className="text-xl font-extrabold text-white">Retail Outlet Directory</h1>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            IOCL Retail Petrol Pump Outlets • Filtered strictly by backend scope: <span className="font-mono text-orange-400 font-bold">{userCtx?.primaryScope}</span>
+            IOCL Retail Petrol Pump Outlets • Filtered strictly by backend scope:{' '}
+            <span className="font-mono text-orange-400 font-bold">{userCtx?.primaryScope}</span>
           </p>
         </div>
 
         {hasPermission(PERMISSIONS.OUTLETS_CREATE) && (
           <button
-            onClick={() => {
-              setErrorMsg(null);
-              setModalOpen(true);
-            }}
+            onClick={openCreateModal}
             className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-xs font-bold rounded-lg shadow-lg shadow-orange-500/20 flex items-center gap-2 self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
@@ -125,7 +235,10 @@ export const OutletsPage: React.FC = () => {
       <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs flex items-center justify-between">
         <div className="flex items-center gap-2 text-slate-300">
           <Filter className="w-4 h-4 text-orange-400" />
-          <span>Active Scope Constraint: <strong className="text-white font-mono">{userCtx?.primaryScope}</strong></span>
+          <span>
+            Active Scope Constraint:{' '}
+            <strong className="text-white font-mono">{userCtx?.primaryScope}</strong>
+          </span>
         </div>
         <span className="text-[11px] font-mono text-slate-400">
           Showing {outlets.length} accessible record(s)
@@ -142,7 +255,8 @@ export const OutletsPage: React.FC = () => {
           <Building2 className="w-10 h-10 text-slate-600 mx-auto" />
           <p className="text-sm font-semibold text-slate-300">No Retail Outlets Accessible</p>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Either no outlets match your assigned organizational scope ({userCtx?.primaryScope}), or no outlets have been registered yet under this division.
+            Either no outlets match your assigned organizational scope ({userCtx?.primaryScope}),
+            or no outlets have been registered yet under this division.
           </p>
         </div>
       ) : (
@@ -165,9 +279,13 @@ export const OutletsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                  ro.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'
-                }`}>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                    ro.status === 'ACTIVE'
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
                   {ro.status}
                 </span>
               </div>
@@ -180,24 +298,31 @@ export const OutletsPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Division Office:</span>
-                  <span className="text-slate-200 font-semibold">{ro.divisionName || ro.divisionId}</span>
+                  <span className="text-slate-200 font-semibold">
+                    {ro.divisionName || ro.divisionId}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Sales Area:</span>
-                  <span className="text-slate-200 font-semibold">{ro.salesAreaName || ro.salesAreaId}</span>
+                  <span className="text-slate-200 font-semibold">
+                    {ro.salesAreaName || ro.salesAreaId}
+                  </span>
                 </div>
               </div>
 
               {/* Address */}
               <div className="text-xs text-slate-400 flex items-start gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                <span>{ro.address}, {ro.city}, {ro.district} - {ro.pincode}</span>
+                <span>
+                  {ro.address}, {ro.city}, {ro.district} - {ro.pincode}
+                </span>
               </div>
 
               {/* User Assignments */}
               <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
                 <div className="text-xs font-mono text-slate-400">
-                  Assigned Personnel: <span className="text-white font-bold">{ro.assignedUsersCount || 0}</span>
+                  Assigned Personnel:{' '}
+                  <span className="text-white font-bold">{ro.assignedUsersCount || 0}</span>
                 </div>
 
                 {hasPermission(PERMISSIONS.OUTLETS_UPDATE) && (
@@ -222,7 +347,7 @@ export const OutletsPage: React.FC = () => {
       {/* Register New Outlet Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-white">Register Retail Outlet</h2>
 
             {errorMsg && (
@@ -232,8 +357,8 @@ export const OutletsPage: React.FC = () => {
               </div>
             )}
 
-            <form onSubmit={handleCreateOutlet} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleCreateOutlet} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">RO Code</label>
                   <input
@@ -241,7 +366,7 @@ export const OutletsPage: React.FC = () => {
                     required
                     placeholder="RO-110025"
                     value={form.roCode}
-                    onChange={e => setForm({ ...form, roCode: e.target.value })}
+                    onChange={(e) => setForm({ ...form, roCode: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                   />
                 </div>
@@ -250,7 +375,7 @@ export const OutletsPage: React.FC = () => {
                   <label className="block text-slate-300 font-semibold mb-1">Outlet Type</label>
                   <select
                     value={form.outletType}
-                    onChange={e => setForm({ ...form, outletType: e.target.value as any })}
+                    onChange={(e) => setForm({ ...form, outletType: e.target.value as any })}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
                   >
                     <option value="COCO">COCO (Company Owned)</option>
@@ -267,11 +392,107 @@ export const OutletsPage: React.FC = () => {
                   required
                   placeholder="New Town Fuel Station"
                   value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
                 />
               </div>
 
+              {/* Cascading Organizational Hierarchy Selection */}
+              <div className="space-y-3 p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-orange-400">
+                    Organizational Hierarchy Allocation
+                  </span>
+                  {(loadingStates || loadingDivisions || loadingSalesAreas) && (
+                    <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                      <Loader2 className="w-3 h-3 animate-spin text-orange-400" />
+                      Loading hierarchy...
+                    </span>
+                  )}
+                </div>
+
+                {/* State Office */}
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    State Office <span className="text-orange-400">*</span>
+                  </label>
+                  <select
+                    required
+                    value={form.stateId}
+                    onChange={(e) => handleStateChange(e.target.value)}
+                    disabled={loadingStates}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      {loadingStates ? 'Loading state offices...' : '-- Select State Office --'}
+                    </option>
+                    {states.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Division Office & Sales Area Cascading Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Division Office <span className="text-orange-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={form.divisionId}
+                      onChange={(e) => handleDivisionChange(e.target.value)}
+                      disabled={!form.stateId || loadingDivisions}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">
+                        {loadingDivisions
+                          ? 'Loading divisions...'
+                          : !form.stateId
+                          ? '-- Select State Office First --'
+                          : '-- Select Division Office --'}
+                      </option>
+                      {divisions.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Sales Area <span className="text-orange-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={form.salesAreaId}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, salesAreaId: e.target.value }))
+                      }
+                      disabled={!form.divisionId || loadingSalesAreas}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">
+                        {loadingSalesAreas
+                          ? 'Loading sales areas...'
+                          : !form.divisionId
+                          ? '-- Select Division First --'
+                          : '-- Select Sales Area --'}
+                      </option>
+                      {salesAreas.map((sa) => (
+                        <option key={sa.id} value={sa.id}>
+                          {sa.name} ({sa.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address */}
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Address</label>
                 <input
@@ -279,19 +500,21 @@ export const OutletsPage: React.FC = () => {
                   required
                   placeholder="Plot 12, Action Area I"
                   value={form.address}
-                  onChange={e => setForm({ ...form, address: e.target.value })}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              {/* City, District, Pincode */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">City</label>
                   <input
                     type="text"
                     required
+                    placeholder="Kolkata"
                     value={form.city}
-                    onChange={e => setForm({ ...form, city: e.target.value })}
+                    onChange={(e) => setForm({ ...form, city: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
                   />
                 </div>
@@ -300,8 +523,9 @@ export const OutletsPage: React.FC = () => {
                   <input
                     type="text"
                     required
+                    placeholder="Kolkata"
                     value={form.district}
-                    onChange={e => setForm({ ...form, district: e.target.value })}
+                    onChange={(e) => setForm({ ...form, district: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
                   />
                 </div>
@@ -311,8 +535,9 @@ export const OutletsPage: React.FC = () => {
                     type="text"
                     required
                     maxLength={6}
+                    placeholder="700001"
                     value={form.pincode}
-                    onChange={e => setForm({ ...form, pincode: e.target.value })}
+                    onChange={(e) => setForm({ ...form, pincode: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                   />
                 </div>
@@ -321,14 +546,17 @@ export const OutletsPage: React.FC = () => {
               <div className="pt-3 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700"
+                  onClick={() => {
+                    setModalOpen(false);
+                    setErrorMsg(null);
+                  }}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md"
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md transition-colors"
                 >
                   Register Outlet
                 </button>
@@ -344,7 +572,9 @@ export const OutletsPage: React.FC = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-white">Assign Personnel to Outlet</h2>
             <p className="text-xs text-slate-400">
-              Assigning Dealer/CSP to <span className="text-orange-400 font-bold">{selectedOutlet.name}</span> ({selectedOutlet.roCode})
+              Assigning Dealer/CSP to{' '}
+              <span className="text-orange-400 font-bold">{selectedOutlet.name}</span> (
+              {selectedOutlet.roCode})
             </p>
 
             {errorMsg && (
@@ -360,11 +590,11 @@ export const OutletsPage: React.FC = () => {
                 <select
                   required
                   value={assignUserId}
-                  onChange={e => setAssignUserId(e.target.value)}
+                  onChange={(e) => setAssignUserId(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                 >
                   <option value="">-- Choose User --</option>
-                  {users.map(u => (
+                  {users.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name} ({u.empCode}) - {u.email}
                     </option>
@@ -376,7 +606,7 @@ export const OutletsPage: React.FC = () => {
                 <label className="block text-slate-300 font-semibold mb-1">Assignment Type</label>
                 <select
                   value={assignType}
-                  onChange={e => setAssignType(e.target.value as any)}
+                  onChange={(e) => setAssignType(e.target.value as any)}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                 >
                   <option value="DEALER">DEALER (Retail Outlet Franchisee)</option>
@@ -404,7 +634,6 @@ export const OutletsPage: React.FC = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };
