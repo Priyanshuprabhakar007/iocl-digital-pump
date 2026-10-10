@@ -4,6 +4,7 @@ import { createLocalD1Database } from '../src/db/localD1';
 import { getDb } from '../src/db';
 import { seedDatabase } from '../src/db/seed';
 import fs from 'fs';
+import { hrDesignations } from '../src/db/schema';
 
 describe('Phase 4: HR Skill Categories & Workforce Strength Suite', () => {
   let localD1: any;
@@ -46,52 +47,52 @@ describe('Phase 4: HR Skill Categories & Workforce Strength Suite', () => {
     return setCookie ? setCookie.split(';')[0] : '';
   }
 
-  it('should support creating designations with and without skill category', async () => {
-    const cookie = await loginAs('admin@iocl.in');
-
-    const res1 = await app.request(`/api/v1/outlets/${OUTLET_ID}/hr/designations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
-      body: JSON.stringify({ code: 'UNCLASSIFIED_ROLE', name: 'Unclassified Role' }),
-    }, env);
-    expect(res1.status).toBe(201);
-    const json1 = await res1.json() as any;
-    expect(json1.data.skillCategory).toBeNull();
-
-    const res2 = await app.request(`/api/v1/outlets/${OUTLET_ID}/hr/designations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
-      body: JSON.stringify({ code: 'SKILLED_ROLE', name: 'Skilled Technician', skillCategory: 'SKILLED' }),
-    }, env);
-    expect(res2.status).toBe(201);
-    const json2 = await res2.json() as any;
-    expect(json2.data.skillCategory).toBe('SKILLED');
-
-    const res3 = await app.request(`/api/v1/hr/designations/${json2.data.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
-      body: JSON.stringify({ skillCategory: 'HIGHLY_SKILLED' }),
-    }, env);
-    expect(res3.status).toBe(200);
-    const json3 = await res3.json() as any;
-    expect(json3.data.skillCategory).toBe('HIGHLY_SKILLED');
-  });
-
-  it('should reject invalid skill categories', async () => {
+  it('should reject POST designation without skillCategory (400 VALIDATION_ERROR)', async () => {
     const cookie = await loginAs('admin@iocl.in');
 
     const res = await app.request(`/api/v1/outlets/${OUTLET_ID}/hr/designations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
-      body: JSON.stringify({ code: 'BAD_ROLE', name: 'Bad Role', skillCategory: 'SUPER_DUPER_SKILLED' }),
+      body: JSON.stringify({ code: 'UNSKILLED_ROLE', name: 'Unskilled Role' }),
     }, env);
     expect(res.status).toBe(400);
+    const json = await res.json() as any;
+    expect(json.error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('should compute manpower summary aggregated by skill category including NULL bucket via API', async () => {
+  it('should successfully POST designation with HIGHLY_SKILLED, SKILLED, SEMI_SKILLED, UNSKILLED', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+    const categories = ['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED'] as const;
+
+    for (const cat of categories) {
+      const res = await app.request(`/api/v1/outlets/${OUTLET_ID}/hr/designations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ code: `ROLE_${cat}`, name: `Role ${cat}`, skillCategory: cat }),
+      }, env);
+      expect(res.status).toBe(201);
+      const json = await res.json() as any;
+      expect(json.data.skillCategory).toBe(cat);
+    }
+  });
+
+  it('should reject invalid skill category value EXPERT with 400 VALIDATION_ERROR', async () => {
     const cookie = await loginAs('admin@iocl.in');
 
-    // Create 3 designations via API
+    const res = await app.request(`/api/v1/outlets/${OUTLET_ID}/hr/designations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+      body: JSON.stringify({ code: 'EXPERT_ROLE', name: 'Expert Role', skillCategory: 'EXPERT' }),
+    }, env);
+    expect(res.status).toBe(400);
+    const json = await res.json() as any;
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('should compute manpower summary aggregated by skill category including legacy NULL bucket via API', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+
+    // Create 1 designation with skillCategory via API
     const d1Res = await app.request(`/api/v1/outlets/${OUTLET_ID}/hr/designations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
@@ -99,12 +100,21 @@ describe('Phase 4: HR Skill Categories & Workforce Strength Suite', () => {
     }, env);
     const d1 = (await d1Res.json() as any).data;
 
-    const d2Res = await app.request(`/api/v1/outlets/${OUTLET_ID}/hr/designations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
-      body: JSON.stringify({ code: 'NC_ROLE', name: 'Not Classified' }),
-    }, env);
-    const d2 = (await d2Res.json() as any).data;
+    // Insert legacy designation with NULL skill_category directly into DB
+    const db = getDb(localD1);
+    const legacyDesigId = `desig-legacy-${Math.random()}`;
+    const now = new Date().toISOString();
+    await db.insert(hrDesignations).values({
+      id: legacyDesigId,
+      outletId: OUTLET_ID,
+      code: 'LEGACY_ROLE',
+      name: 'Legacy Unclassified',
+      skillCategory: null,
+      status: 'ACTIVE',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    }).run();
 
     // Create manpower sanctions
     await app.request(`/api/v1/outlets/${OUTLET_ID}/hr/manpower-sanctions`, {
@@ -116,7 +126,7 @@ describe('Phase 4: HR Skill Categories & Workforce Strength Suite', () => {
     await app.request(`/api/v1/outlets/${OUTLET_ID}/hr/manpower-sanctions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
-      body: JSON.stringify({ designationId: d2.id, sanctionedCount: 1, effectiveFrom: '2026-01-01' }),
+      body: JSON.stringify({ designationId: legacyDesigId, sanctionedCount: 1, effectiveFrom: '2026-01-01' }),
     }, env);
 
     // Create staff

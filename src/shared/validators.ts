@@ -1091,7 +1091,7 @@ export const HrSkillCategoryEnum = z.enum(['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SK
 export const CreateHrDesignationSchema = z.object({
   code: z.string().trim().min(1, 'code is required'),
   name: z.string().trim().min(1, 'name is required'),
-  skillCategory: HrSkillCategoryEnum.optional().nullable(),
+  skillCategory: HrSkillCategoryEnum,
   status: HrDesignationStatusEnum.optional().default('ACTIVE'),
   notes: z.string().trim().optional().nullable(),
 }).strict();
