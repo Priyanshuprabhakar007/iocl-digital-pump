@@ -191,7 +191,7 @@ export interface ApiResponse<T = unknown> {
 // Phase 2A: Pump Operations & Shift Foundation
 // ==========================================
 
-export type ProductCategory = 'MS' | 'HSD' | 'XP95' | 'XTRAGREEN' | 'CNG' | 'OTHER' | string;
+export type ProductCategory = 'MS' | 'HSD' | 'XP95' | 'XP100' | 'XTRAGREEN' | 'CNG' | 'OTHER' | string;
 export type ProductUnit = 'LITRE' | 'KG';
 export type ProductStatus = 'ACTIVE' | 'INACTIVE';
 export type EquipmentStatus = 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'DECOMMISSIONED';
@@ -244,6 +244,7 @@ export interface Dispenser {
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;
+  nozzleCapacity?: number;
   status: EquipmentStatus;
   commissionedAt?: string | null;
   createdAt: string;

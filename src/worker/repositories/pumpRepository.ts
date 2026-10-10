@@ -332,6 +332,7 @@ export class PumpRepository {
     manufacturer?: string | null;
     model?: string | null;
     serialNumber?: string | null;
+    nozzleCapacity?: number;
     status: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'DECOMMISSIONED';
     commissionedAt?: string | null;
     createdAt: string;
@@ -347,12 +348,21 @@ export class PumpRepository {
     manufacturer: string | null;
     model: string | null;
     serialNumber: string | null;
+    nozzleCapacity: number;
     status: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'DECOMMISSIONED';
     commissionedAt: string | null;
     updatedAt: string;
   }>): Promise<Dispenser | null> {
     await this.db.update(schema.dispensers).set(data).where(eq(schema.dispensers.id, id));
     return this.findDispenserById(id);
+  }
+
+  async findMaxNozzleNumberByDispenser(dispenserId: string): Promise<number> {
+    const [result] = await this.db
+      .select({ maxNozzle: sql<number>`COALESCE(MAX(nozzle_number), 0)` })
+      .from(schema.nozzles)
+      .where(eq(schema.nozzles.dispenserId, dispenserId));
+    return Number(result?.maxNozzle || 0);
   }
 
   // ==========================================

@@ -259,6 +259,7 @@ export const DispenserSchema = z.object({
   manufacturer: z.string().trim().nullable().optional(),
   model: z.string().trim().nullable().optional(),
   serialNumber: z.string().trim().nullable().optional(),
+  nozzleCapacity: z.union([z.literal(2), z.literal(4), z.literal(6)], { message: 'Nozzle capacity must be 2, 4, or 6' }).default(6),
   status: z.enum(['ACTIVE', 'INACTIVE', 'MAINTENANCE', 'DECOMMISSIONED']).default('ACTIVE'),
   commissionedAt: z.string().nullable().optional(),
 });
@@ -268,6 +269,7 @@ export const DispenserUpdateSchema = z.object({
   manufacturer: z.string().trim().nullable().optional(),
   model: z.string().trim().nullable().optional(),
   serialNumber: z.string().trim().nullable().optional(),
+  nozzleCapacity: z.union([z.literal(2), z.literal(4), z.literal(6)], { message: 'Nozzle capacity must be 2, 4, or 6' }).optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'MAINTENANCE', 'DECOMMISSIONED']).optional(),
   commissionedAt: z.string().nullable().optional(),
 });

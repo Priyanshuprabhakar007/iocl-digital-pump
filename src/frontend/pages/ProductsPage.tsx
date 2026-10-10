@@ -243,7 +243,7 @@ export const ProductsPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(p => {
-            const isMS = p.category === 'MS' || p.category === 'XP95';
+            const isMS = p.category === 'MS' || p.category === 'XP95' || p.category === 'XP100';
             const isHSD = p.category === 'HSD' || p.category === 'XTRAGREEN';
             const isCNG = p.category === 'CNG';
 
@@ -361,7 +361,7 @@ export const ProductsPage: React.FC = () => {
                   disabled={Boolean(editingProduct)}
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. MS, HSD, XP95, CNG"
+                  placeholder="e.g. MS, HSD, XP95, XP100, CNG"
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-200 font-mono focus:outline-none focus:border-orange-500 disabled:opacity-50"
                 />
               </div>

@@ -541,6 +541,7 @@ pumpOperations.post('/outlets/:outletId/dispensers', requirePermission(PERMISSIO
     manufacturer: payload.manufacturer || null,
     model: payload.model || null,
     serialNumber: payload.serialNumber || null,
+    nozzleCapacity: payload.nozzleCapacity ?? 6,
     status: payload.status,
     commissionedAt: payload.commissionedAt || null,
     createdAt: nowIso,
@@ -629,6 +630,21 @@ pumpOperations.put('/dispensers/:id', requirePermission(PERMISSIONS.DISPENSERS_W
         error: {
           code: 'ACTIVE_NOZZLES_DEPEND_ON_DISPENSER',
           message: `Cannot change dispenser status to ${payload.status} while ${activeNozzles.length} ACTIVE nozzle(s) belong to it. Deactivate the nozzles first.`,
+        },
+      }, 409);
+    }
+  }
+
+  // Dispenser Capacity Reduction Guard: Prevent reducing capacity below existing configured nozzles
+  if (payload.nozzleCapacity !== undefined) {
+    const maxNozzle = await pumpRepo.findMaxNozzleNumberByDispenser(id);
+    if (maxNozzle > payload.nozzleCapacity) {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'DISPENSER_CAPACITY_BELOW_EXISTING_NOZZLES',
+          message: `Cannot reduce dispenser nozzle capacity to ${payload.nozzleCapacity} because nozzle #${maxNozzle} is already configured.`,
         },
       }, 409);
     }
@@ -869,6 +885,19 @@ pumpOperations.post('/dispensers/:dispenserId/nozzles', requirePermission(PERMIS
         error: { code: 'INACTIVE_PRODUCT', message: `Cannot create an ACTIVE nozzle because product mapping is ${outletProduct.status}` },
       }, 400);
     }
+  }
+
+  // Rule: nozzle_number must be within dispenser physical nozzle capacity
+  const maxCapacity = disp.nozzleCapacity || 6;
+  if (payload.nozzleNumber < 1 || payload.nozzleNumber > maxCapacity) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'NOZZLE_CAPACITY_EXCEEDED',
+        message: `Nozzle #${payload.nozzleNumber} exceeds dispenser physical capacity of ${maxCapacity} nozzle(s)`,
+      },
+    }, 400);
   }
 
   const nowIso = new Date().toISOString();

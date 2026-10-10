@@ -368,10 +368,11 @@ export async function seedDatabase(db: AppDatabase) {
     { id: 'prod-ms', code: 'MS', name: 'Motor Spirit (Petrol)', category: 'MS', unit: 'LITRE' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
     { id: 'prod-hsd', code: 'HSD', name: 'High Speed Diesel', category: 'HSD', unit: 'LITRE' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
     { id: 'prod-xp95', code: 'XP95', name: 'XP95 Premium Petrol', category: 'XP95', unit: 'LITRE' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
+    { id: 'prod-xp100', code: 'XP100', name: 'XP100 Premium 100 Octane Petrol', category: 'XP100', unit: 'LITRE' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
     { id: 'prod-xtragreen', code: 'XTRAGREEN', name: 'XTRAGREEN Diesel', category: 'XTRAGREEN', unit: 'LITRE' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
     { id: 'prod-cng', code: 'CNG', name: 'Compressed Natural Gas', category: 'CNG', unit: 'KG' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
   ];
-  await db.insert(schema.products).values(defaultProducts);
+  await db.insert(schema.products).values(defaultProducts).onConflictDoNothing();
 
   // 11. Outlet Product Mapping (Park Street RO sells MS, HSD, XP95)
   await db.insert(schema.outletProducts).values([
@@ -439,6 +440,7 @@ export async function seedDatabase(db: AppDatabase) {
       manufacturer: 'Wayne Dresser',
       model: 'Helix 5000',
       serialNumber: 'WD-2023-01991',
+      nozzleCapacity: 4,
       status: 'ACTIVE' as const,
       commissionedAt: '2023-01-20T00:00:00Z',
       createdAt: now,
@@ -453,6 +455,7 @@ export async function seedDatabase(db: AppDatabase) {
       manufacturer: 'Gilbarco Veeder-Root',
       model: 'Horizon',
       serialNumber: 'GVR-2023-08812',
+      nozzleCapacity: 4,
       status: 'ACTIVE' as const,
       commissionedAt: '2023-01-20T00:00:00Z',
       createdAt: now,

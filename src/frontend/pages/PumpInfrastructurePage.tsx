@@ -26,6 +26,7 @@ import {
   Flame,
   Sliders,
   ChevronRight,
+  Edit2,
 } from 'lucide-react';
 
 export const PumpInfrastructurePage: React.FC = () => {
@@ -50,7 +51,7 @@ export const PumpInfrastructurePage: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Modals
-  const [modalType, setModalType] = useState<'mapProduct' | 'addTank' | 'addDispenser' | 'addNozzle' | 'addShift' | null>(null);
+  const [modalType, setModalType] = useState<'mapProduct' | 'addTank' | 'addDispenser' | 'editDispenser' | 'addNozzle' | 'addShift' | null>(null);
   const [modalSubmitting, setModalSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
@@ -67,6 +68,8 @@ export const PumpInfrastructurePage: React.FC = () => {
   const [dispManufacturer, setDispManufacturer] = useState('');
   const [dispModel, setDispModel] = useState('');
   const [dispSerial, setDispSerial] = useState('');
+  const [dispNozzleCapacity, setDispNozzleCapacity] = useState<2 | 4 | 6>(6);
+  const [editingDispenser, setEditingDispenser] = useState<Dispenser | null>(null);
 
   const [nozzleDispenserId, setNozzleDispenserId] = useState('');
   const [nozzleNumber, setNozzleNumber] = useState(1);
@@ -197,6 +200,7 @@ export const PumpInfrastructurePage: React.FC = () => {
         manufacturer: dispManufacturer || null,
         model: dispModel || null,
         serialNumber: dispSerial || null,
+        nozzleCapacity: Number(dispNozzleCapacity),
         status: 'ACTIVE',
       }),
     });
@@ -209,6 +213,47 @@ export const PumpInfrastructurePage: React.FC = () => {
       loadOutletData();
     } else {
       setModalError(res.error?.message || 'Failed to create dispenser');
+    }
+  };
+
+  const openEditDispenser = (d: Dispenser) => {
+    setEditingDispenser(d);
+    setDispNumber(d.dispenserNumber);
+    setDispName(d.name);
+    setDispManufacturer(d.manufacturer || '');
+    setDispModel(d.model || '');
+    setDispSerial(d.serialNumber || '');
+    setDispNozzleCapacity(((d.nozzleCapacity || 6) as 2 | 4 | 6));
+    setModalError(null);
+    setModalType('editDispenser');
+  };
+
+  const handleEditDispenser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDispenser) return;
+    setModalSubmitting(true);
+    setModalError(null);
+
+    const res = await apiFetch(`/api/v1/dispensers/${editingDispenser.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: dispName,
+        manufacturer: dispManufacturer || null,
+        model: dispModel || null,
+        serialNumber: dispSerial || null,
+        nozzleCapacity: Number(dispNozzleCapacity),
+      }),
+    });
+
+    setModalSubmitting(false);
+    if (res.success) {
+      setModalType(null);
+      setEditingDispenser(null);
+      setSuccessMsg('Dispenser updated successfully');
+      setTimeout(() => setSuccessMsg(null), 3000);
+      loadOutletData();
+    } else {
+      setModalError(res.error?.message || 'Failed to update dispenser');
     }
   };
 
@@ -576,9 +621,14 @@ export const PumpInfrastructurePage: React.FC = () => {
             {dispensers.map(d => (
               <div key={d.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
                 <div className="flex items-start justify-between">
-                  <span className="px-2.5 py-1 rounded bg-slate-800 text-orange-400 font-mono text-xs font-bold border border-slate-700">
-                    MPD #{d.dispenserNumber}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded bg-slate-800 text-orange-400 font-mono text-xs font-bold border border-slate-700">
+                      MPD #{d.dispenserNumber}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono text-[10px] font-bold border border-blue-500/20">
+                      {d.nozzleCapacity || 6}-Nozzle DU
+                    </span>
+                  </div>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
                     {d.status}
                   </span>
@@ -598,8 +648,20 @@ export const PumpInfrastructurePage: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-500 block text-[10px]">CONNECTED NOZZLES</span>
-                    <span className="text-orange-400 font-bold">{d.nozzlesCount || 0}</span>
+                    <span className="text-orange-400 font-bold">
+                      {d.nozzlesCount || 0} / {d.nozzleCapacity || 6}
+                    </span>
                   </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80">
+                  <button
+                    onClick={() => openEditDispenser(d)}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-orange-400" />
+                    <span>Configure DU</span>
+                  </button>
                 </div>
               </div>
             ))}
@@ -903,10 +965,121 @@ export const PumpInfrastructurePage: React.FC = () => {
                   />
                 </div>
               </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  DU Physical Nozzle Capacity
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([2, 4, 6] as const).map((cap) => (
+                    <button
+                      key={cap}
+                      type="button"
+                      onClick={() => setDispNozzleCapacity(cap)}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                        dispNozzleCapacity === cap
+                          ? 'bg-orange-500/20 border-orange-500 text-orange-400 shadow-sm shadow-orange-500/20'
+                          : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {cap} Nozzles
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Physical nozzle capacity supported by this Dispensing Unit (2, 4, or 6).
+                </p>
+              </div>
+
               <div className="flex justify-end gap-2 pt-3">
                 <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
                 <button type="submit" disabled={modalSubmitting} className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">
                   {modalSubmitting ? 'Registering...' : 'Register Dispenser'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Dispenser Modal */}
+      {modalType === 'editDispenser' && editingDispenser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-white mb-2">Configure Dispenser (MPD #{editingDispenser.dispenserNumber})</h2>
+            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
+            <form onSubmit={handleEditDispenser} className="space-y-3">
+              <div>
+                <label className="block text-xs text-slate-300 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={dispName}
+                  onChange={(e) => setDispName(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Manufacturer</label>
+                  <input
+                    type="text"
+                    value={dispManufacturer}
+                    onChange={(e) => setDispManufacturer(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Model</label>
+                  <input
+                    type="text"
+                    value={dispModel}
+                    onChange={(e) => setDispModel(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-300 mb-1">Serial Number</label>
+                <input
+                  type="text"
+                  value={dispSerial}
+                  onChange={(e) => setDispSerial(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  DU Physical Nozzle Capacity
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([2, 4, 6] as const).map((cap) => (
+                    <button
+                      key={cap}
+                      type="button"
+                      onClick={() => setDispNozzleCapacity(cap)}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                        dispNozzleCapacity === cap
+                          ? 'bg-orange-500/20 border-orange-500 text-orange-400 shadow-sm shadow-orange-500/20'
+                          : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {cap} Nozzles
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Cannot be reduced below existing configured nozzle numbers on this unit.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3">
+                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
+                <button type="submit" disabled={modalSubmitting} className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">
+                  {modalSubmitting ? 'Saving...' : 'Update Dispenser'}
                 </button>
               </div>
             </form>
@@ -931,7 +1104,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
                   >
                     {dispensers.map(d => (
-                      <option key={d.id} value={d.id}>MPD #{d.dispenserNumber}</option>
+                      <option key={d.id} value={d.id}>MPD #{d.dispenserNumber} ({d.nozzleCapacity || 6}-Nozzle DU)</option>
                     ))}
                   </select>
                 </div>
@@ -943,6 +1116,14 @@ export const PumpInfrastructurePage: React.FC = () => {
                     onChange={(e) => setNozzleNumber(Number(e.target.value))}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
                   />
+                  {(() => {
+                    const selD = dispensers.find(d => d.id === nozzleDispenserId);
+                    return selD ? (
+                      <span className="text-[10px] text-slate-400 block mt-1">
+                        Max: #{selD.nozzleCapacity || 6}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
               </div>
               <div>

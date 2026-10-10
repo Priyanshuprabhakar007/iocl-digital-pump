@@ -241,6 +241,7 @@ export const dispensers = sqliteTable('dispensers', {
   manufacturer: text('manufacturer'),
   model: text('model'),
   serialNumber: text('serial_number'),
+  nozzleCapacity: integer('nozzle_capacity').notNull().default(6),
   status: text('status', { enum: ['ACTIVE', 'INACTIVE', 'MAINTENANCE', 'DECOMMISSIONED'] }).notNull().default('ACTIVE'),
   commissionedAt: text('commissioned_at'),
   createdAt: text('created_at').notNull(),
