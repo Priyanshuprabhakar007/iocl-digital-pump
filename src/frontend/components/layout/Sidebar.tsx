@@ -144,6 +144,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       perm: PERMISSIONS.HIERARCHY_READ,
     },
     {
+      id: 'org-masters',
+      label: 'Organization Management',
+      icon: Building,
+      perm: PERMISSIONS.ORG_MASTERS_READ,
+    },
+    {
       id: 'rbac',
       label: 'Roles & Permissions',
       icon: ShieldAlert,

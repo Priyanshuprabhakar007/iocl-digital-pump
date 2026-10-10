@@ -22,6 +22,7 @@ import { UtilitiesOperationsPage } from './frontend/pages/UtilitiesOperationsPag
 import { MunicipalTaxesPage } from './frontend/pages/MunicipalTaxesPage';
 import { NfrOperationsPage } from './frontend/pages/NfrOperationsPage';
 import { WorkforceOperationsPage } from './frontend/pages/WorkforceOperationsPage';
+import { OrganizationMastersPage } from './frontend/pages/OrganizationMastersPage';
 
 function MainAppContent() {
   const { userCtx, loading } = useAuth();
@@ -66,6 +67,7 @@ function MainAppContent() {
       {activeTab === 'users' && <UsersPage />}
       {activeTab === 'scopes' && <ScopesPage />}
       {activeTab === 'hierarchy' && <HierarchyPage />}
+      {activeTab === 'org-masters' && <OrganizationMastersPage />}
       {activeTab === 'rbac' && <RbacPage />}
       {activeTab === 'audit' && <AuditPage />}
       {activeTab === 'documents' && <DocumentsPage />}
