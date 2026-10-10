@@ -49,7 +49,7 @@ orgRoutes.post('/departments', requirePermission(PERMISSIONS.ORG_MASTERS_WRITE) 
     const body = await c.req.json();
     const user = c.var.user;
     const service = getService(c);
-    const department = await service.createDepartment(body, user.id);
+    const department = await service.createDepartment(body, user.user.id);
     return c.json({ success: true, data: department, error: null }, 201);
   } catch (err) {
     return handleOrgError(c, err);
@@ -73,7 +73,7 @@ orgRoutes.post('/officers', requirePermission(PERMISSIONS.ORG_MASTERS_WRITE) as 
     const body = await c.req.json();
     const user = c.var.user;
     const service = getService(c);
-    const officer = await service.createOfficer(body, user.id);
+    const officer = await service.createOfficer(body, user.user.id);
     return c.json({ success: true, data: officer, error: null }, 201);
   } catch (err) {
     return handleOrgError(c, err);
@@ -97,7 +97,7 @@ orgRoutes.post('/service-providers', requirePermission(PERMISSIONS.ORG_MASTERS_W
     const body = await c.req.json();
     const user = c.var.user;
     const service = getService(c);
-    const provider = await service.createServiceProvider(body, user.id);
+    const provider = await service.createServiceProvider(body, user.user.id);
     return c.json({ success: true, data: provider, error: null }, 201);
   } catch (err) {
     return handleOrgError(c, err);
@@ -109,7 +109,7 @@ orgRoutes.post('/outlet-service-providers', requirePermission(PERMISSIONS.ORG_MA
     const body = await c.req.json();
     const user = c.var.user;
     const service = getService(c);
-    const assignment = await service.assignServiceProviderToOutlet(body, user.id);
+    const assignment = await service.assignServiceProviderToOutlet(body, user.user.id);
     return c.json({ success: true, data: assignment, error: null }, 201);
   } catch (err) {
     return handleOrgError(c, err);
