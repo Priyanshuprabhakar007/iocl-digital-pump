@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getDb } from '../../db';
-import { OrgService, OrgError } from '../services/orgService';
+import { OrgService, OrgError, AuditContext } from '../services/orgService';
 import { ScopeService } from '../services/scopeService';
 import { HierarchyRepository } from '../repositories/hierarchyRepository';
 import { OutletRepository } from '../repositories/outletRepository';
@@ -18,6 +18,13 @@ orgRoutes.use('*', requireAuth as any);
 function getService(c: AppContext) {
   const db = getDb(c.env.DB);
   return new OrgService(db);
+}
+
+function getAuditContext(c: AppContext): AuditContext {
+  return {
+    ipAddress: c.req.header('cf-connecting-ip') || null,
+    userAgent: c.req.header('user-agent') || null,
+  };
 }
 
 function handleOrgError(c: AppContext, err: any) {
@@ -62,7 +69,7 @@ orgRoutes.post('/departments', requirePermission(PERMISSIONS.ORG_MASTERS_WRITE) 
     const body = await c.req.json();
     const user = c.var.user;
     const service = getService(c);
-    const department = await service.createDepartment(body, user.user.id);
+    const department = await service.createDepartment(body, user.user.id, getAuditContext(c));
     return c.json({ success: true, data: department, error: null }, 201);
   } catch (err) {
     return handleOrgError(c, err);
@@ -83,7 +90,7 @@ orgRoutes.put('/departments/:id', requirePermission(PERMISSIONS.ORG_MASTERS_WRIT
     const body = await c.req.json();
     const user = c.var.user;
     const service = getService(c);
-    const department = await service.updateDepartment(id, body, user.user.id);
+    const department = await service.updateDepartment(id, body, user.user.id, getAuditContext(c));
     return c.json({ success: true, data: department, error: null });
   } catch (err) {
     return handleOrgError(c, err);
@@ -117,7 +124,7 @@ orgRoutes.post('/officers', requirePermission(PERMISSIONS.ORG_MASTERS_WRITE) as 
     const body = await c.req.json();
     const user = c.var.user;
     const service = getService(c);
-    const officer = await service.createOfficer(body, user.user.id);
+    const officer = await service.createOfficer(body, user.user.id, getAuditContext(c));
     return c.json({ success: true, data: officer, error: null }, 201);
   } catch (err) {
     return handleOrgError(c, err);
@@ -138,7 +145,7 @@ orgRoutes.put('/officers/:id', requirePermission(PERMISSIONS.ORG_MASTERS_WRITE) 
     const body = await c.req.json();
     const user = c.var.user;
     const service = getService(c);
-    const officer = await service.updateOfficer(id, body, user.user.id);
+    const officer = await service.updateOfficer(id, body, user.user.id, getAuditContext(c));
     return c.json({ success: true, data: officer, error: null });
   } catch (err) {
     return handleOrgError(c, err);
@@ -151,8 +158,9 @@ orgRoutes.put('/officers/:id', requirePermission(PERMISSIONS.ORG_MASTERS_WRITE) 
 orgRoutes.get('/officers/:officerId/postings', requirePermission(PERMISSIONS.ORG_MASTERS_READ) as any, async (c) => {
   try {
     const officerId = c.req.param('officerId');
+    const user = c.var.user;
     const service = getService(c);
-    const postings = await service.listOfficerPostings(officerId);
+    const postings = await service.listOfficerPostings(officerId, user);
     return c.json({ success: true, data: postings, error: null });
   } catch (err) {
     return handleOrgError(c, err);
@@ -213,7 +221,7 @@ orgRoutes.post('/officers/:officerId/postings', requirePermission(PERMISSIONS.OR
     }
 
     const service = getService(c);
-    const posting = await service.createOfficerPosting(officerId, body, user.user.id);
+    const posting = await service.createOfficerPosting(officerId, body, user.user.id, getAuditContext(c));
     return c.json({ success: true, data: posting, error: null }, 201);
   } catch (err) {
     return handleOrgError(c, err);
@@ -282,7 +290,7 @@ orgRoutes.put('/officer-postings/:postingId', requirePermission(PERMISSIONS.ORG_
       }
     }
 
-    const posting = await service.updateOfficerPosting(postingId, body, user.user.id);
+    const posting = await service.updateOfficerPosting(postingId, body, user.user.id, getAuditContext(c));
     return c.json({ success: true, data: posting, error: null });
   } catch (err) {
     return handleOrgError(c, err);
@@ -316,7 +324,7 @@ orgRoutes.post('/service-providers', requirePermission(PERMISSIONS.ORG_MASTERS_W
     const body = await c.req.json();
     const user = c.var.user;
     const service = getService(c);
-    const provider = await service.createServiceProvider(body, user.user.id);
+    const provider = await service.createServiceProvider(body, user.user.id, getAuditContext(c));
     return c.json({ success: true, data: provider, error: null }, 201);
   } catch (err) {
     return handleOrgError(c, err);
@@ -337,7 +345,7 @@ orgRoutes.put('/service-providers/:id', requirePermission(PERMISSIONS.ORG_MASTER
     const body = await c.req.json();
     const user = c.var.user;
     const service = getService(c);
-    const provider = await service.updateServiceProvider(id, body, user.user.id);
+    const provider = await service.updateServiceProvider(id, body, user.user.id, getAuditContext(c));
     return c.json({ success: true, data: provider, error: null });
   } catch (err) {
     return handleOrgError(c, err);
@@ -387,7 +395,7 @@ orgRoutes.post('/outlets/:outletId/service-providers', requirePermission(PERMISS
 
     const body = await c.req.json();
     const service = getService(c);
-    const assignment = await service.assignServiceProviderToOutlet(outletId, body, user.user.id);
+    const assignment = await service.assignServiceProviderToOutlet(outletId, body, user.user.id, getAuditContext(c));
     return c.json({ success: true, data: assignment, error: null }, 201);
   } catch (err) {
     return handleOrgError(c, err);
@@ -420,7 +428,7 @@ orgRoutes.put('/outlet-service-provider-assignments/:id', requirePermission(PERM
     }
 
     const body = await c.req.json();
-    const assignment = await service.updateOutletServiceProviderAssignment(id, body, user.user.id);
+    const assignment = await service.updateOutletServiceProviderAssignment(id, body, user.user.id, getAuditContext(c));
     return c.json({ success: true, data: assignment, error: null });
   } catch (err) {
     return handleOrgError(c, err);

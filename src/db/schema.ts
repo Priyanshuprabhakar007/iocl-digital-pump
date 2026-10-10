@@ -1512,6 +1512,7 @@ export const orgOfficerPostings = sqliteTable('org_officer_postings', {
   index('idx_org_officer_postings_scope').on(table.scopeLevel),
   check('chk_org_op_scope', sql`${table.scopeLevel} IN ('GLOBAL', 'STATE', 'DIVISION', 'SALES_AREA', 'OUTLET')`),
   check('chk_org_op_status', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('chk_org_op_dates', sql`${table.effectiveTo} IS NULL OR ${table.effectiveTo} >= ${table.effectiveFrom}`),
 ]);
 
 export const serviceProviders = sqliteTable('service_providers', {
@@ -1561,6 +1562,7 @@ export const outletServiceProviderAssignments = sqliteTable('outlet_service_prov
   index('idx_osp_provider_id').on(table.serviceProviderId),
   check('chk_osp_stype', sql`${table.serviceType} IN ('MANPOWER', 'HOUSEKEEPING', 'SECURITY', 'MAINTENANCE', 'OTHER')`),
   check('chk_osp_status', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('chk_osp_dates', sql`${table.effectiveTo} IS NULL OR ${table.effectiveTo} >= ${table.effectiveFrom}`),
 ]);
 
 

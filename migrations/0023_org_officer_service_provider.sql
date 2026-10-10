@@ -87,7 +87,8 @@ CREATE TABLE IF NOT EXISTS "org_officer_postings" (
 	FOREIGN KEY ("created_by") REFERENCES "users"("id") ON UPDATE no action ON DELETE restrict,
 	CHECK (scope_level IN ('GLOBAL', 'STATE', 'DIVISION', 'SALES_AREA', 'OUTLET')),
 	CHECK (status IN ('ACTIVE', 'INACTIVE')),
-	CHECK (is_primary IN (0, 1))
+	CHECK (is_primary IN (0, 1)),
+	CHECK (effective_to IS NULL OR effective_to >= effective_from)
 );
 
 CREATE INDEX IF NOT EXISTS "idx_org_officer_postings_officer" ON "org_officer_postings" ("officer_id");
@@ -142,8 +143,113 @@ CREATE TABLE IF NOT EXISTS "outlet_service_provider_assignments" (
 	FOREIGN KEY ("service_provider_id") REFERENCES "service_providers"("id") ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY ("created_by") REFERENCES "users"("id") ON UPDATE no action ON DELETE restrict,
 	CHECK (service_type IN ('MANPOWER', 'HOUSEKEEPING', 'SECURITY', 'MAINTENANCE', 'OTHER')),
-	CHECK (status IN ('ACTIVE', 'INACTIVE'))
+	CHECK (status IN ('ACTIVE', 'INACTIVE')),
+	CHECK (effective_to IS NULL OR effective_to >= effective_from)
 );
 
 CREATE INDEX IF NOT EXISTS "idx_osp_outlet_id" ON "outlet_service_provider_assignments" ("outlet_id");
 CREATE INDEX IF NOT EXISTS "idx_osp_provider_id" ON "outlet_service_provider_assignments" ("service_provider_id");
+
+-- =========================================================================
+-- 7. DELETE PROTECTION TRIGGERS
+-- =========================================================================
+
+CREATE TRIGGER IF NOT EXISTS "trg_org_departments_delete_forbidden"
+BEFORE DELETE ON "org_departments"
+BEGIN
+    SELECT RAISE(ABORT, 'ORG_DEPARTMENT_DELETE_FORBIDDEN');
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_org_officers_delete_forbidden"
+BEFORE DELETE ON "org_officers"
+BEGIN
+    SELECT RAISE(ABORT, 'ORG_OFFICER_DELETE_FORBIDDEN');
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_org_officer_postings_delete_forbidden"
+BEFORE DELETE ON "org_officer_postings"
+BEGIN
+    SELECT RAISE(ABORT, 'ORG_OFFICER_POSTING_DELETE_FORBIDDEN');
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_service_providers_delete_forbidden"
+BEFORE DELETE ON "service_providers"
+BEGIN
+    SELECT RAISE(ABORT, 'SERVICE_PROVIDER_DELETE_FORBIDDEN');
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_outlet_service_provider_assignments_delete_forbidden"
+BEFORE DELETE ON "outlet_service_provider_assignments"
+BEGIN
+    SELECT RAISE(ABORT, 'OUTLET_SERVICE_PROVIDER_ASSIGNMENT_DELETE_FORBIDDEN');
+END;
+
+-- =========================================================================
+-- 8. IDENTITY IMMUTABILITY TRIGGERS
+-- =========================================================================
+
+CREATE TRIGGER IF NOT EXISTS "trg_org_departments_identity_immutable"
+BEFORE UPDATE ON "org_departments"
+BEGIN
+    SELECT
+        CASE
+            WHEN (OLD.id IS NOT NEW.id) OR
+                 (OLD.code IS NOT NEW.code) OR
+                 (OLD.created_by IS NOT NEW.created_by) OR
+                 (OLD.created_at IS NOT NEW.created_at)
+            THEN RAISE(ABORT, 'ORG_DEPARTMENT_IDENTITY_IMMUTABLE')
+        END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_org_officers_identity_immutable"
+BEFORE UPDATE ON "org_officers"
+BEGIN
+    SELECT
+        CASE
+            WHEN (OLD.id IS NOT NEW.id) OR
+                 (OLD.employee_code IS NOT NEW.employee_code) OR
+                 (OLD.created_by IS NOT NEW.created_by) OR
+                 (OLD.created_at IS NOT NEW.created_at)
+            THEN RAISE(ABORT, 'ORG_OFFICER_IDENTITY_IMMUTABLE')
+        END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_org_officer_postings_identity_immutable"
+BEFORE UPDATE ON "org_officer_postings"
+BEGIN
+    SELECT
+        CASE
+            WHEN (OLD.id IS NOT NEW.id) OR
+                 (OLD.officer_id IS NOT NEW.officer_id) OR
+                 (OLD.created_by IS NOT NEW.created_by) OR
+                 (OLD.created_at IS NOT NEW.created_at)
+            THEN RAISE(ABORT, 'ORG_OFFICER_POSTING_IDENTITY_IMMUTABLE')
+        END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_service_providers_identity_immutable"
+BEFORE UPDATE ON "service_providers"
+BEGIN
+    SELECT
+        CASE
+            WHEN (OLD.id IS NOT NEW.id) OR
+                 (OLD.provider_code IS NOT NEW.provider_code) OR
+                 (OLD.created_by IS NOT NEW.created_by) OR
+                 (OLD.created_at IS NOT NEW.created_at)
+            THEN RAISE(ABORT, 'SERVICE_PROVIDER_IDENTITY_IMMUTABLE')
+        END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS "trg_outlet_service_provider_assignments_identity_immutable"
+BEFORE UPDATE ON "outlet_service_provider_assignments"
+BEGIN
+    SELECT
+        CASE
+            WHEN (OLD.id IS NOT NEW.id) OR
+                 (OLD.outlet_id IS NOT NEW.outlet_id) OR
+                 (OLD.service_provider_id IS NOT NEW.service_provider_id) OR
+                 (OLD.created_by IS NOT NEW.created_by) OR
+                 (OLD.created_at IS NOT NEW.created_at)
+            THEN RAISE(ABORT, 'OUTLET_SERVICE_PROVIDER_ASSIGNMENT_IDENTITY_IMMUTABLE')
+        END;
+END;
