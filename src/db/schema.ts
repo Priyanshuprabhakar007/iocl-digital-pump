@@ -1451,6 +1451,94 @@ export const userPermissionOverrides = sqliteTable('user_permission_overrides', 
   check('chk_upo_effect', sql`${table.effect} IN ('ALLOW', 'DENY')`),
 ]);
 
+export const departments = sqliteTable('departments', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull().unique(),
+  name: text('name').notNull(),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_departments_code').on(table.code),
+  index('idx_departments_status').on(table.status),
+  check('chk_dept_status', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('chk_dept_code', sql`trim(${table.code}) <> ''`),
+  check('chk_dept_name', sql`trim(${table.name}) <> ''`),
+]);
+
+export const officers = sqliteTable('officers', {
+  id: text('id').primaryKey(),
+  officerCode: text('officer_code').notNull().unique(),
+  name: text('name').notNull(),
+  email: text('email').notNull().unique(),
+  phone: text('phone').notNull(),
+  departmentId: text('department_id').notNull().references(() => departments.id),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_officers_code').on(table.officerCode),
+  index('idx_officers_dept').on(table.departmentId),
+  index('idx_officers_status').on(table.status),
+  check('chk_officer_status', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('chk_officer_code', sql`trim(${table.officerCode}) <> ''`),
+  check('chk_officer_name', sql`trim(${table.name}) <> ''`),
+]);
+
+export const officerPostings = sqliteTable('officer_postings', {
+  id: text('id').primaryKey(),
+  officerId: text('officer_id').notNull().references(() => officers.id, { onDelete: 'cascade' }),
+  scopeLevel: text('scope_level', { enum: ['GLOBAL', 'STATE', 'DIVISION', 'SALES_AREA', 'OUTLET'] }).notNull(),
+  stateId: text('state_id').references(() => states.id, { onDelete: 'set null' }),
+  divisionId: text('division_id').references(() => divisions.id, { onDelete: 'set null' }),
+  salesAreaId: text('sales_area_id').references(() => salesAreas.id, { onDelete: 'set null' }),
+  outletId: text('outlet_id').references(() => retailOutlets.id, { onDelete: 'set null' }),
+  effectiveFrom: text('effective_from').notNull(),
+  effectiveTo: text('effective_to'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull(),
+  createdBy: text('created_by').notNull().references(() => users.id),
+}, (table) => [
+  index('idx_officer_postings_officer').on(table.officerId),
+  index('idx_officer_postings_scope').on(table.scopeLevel),
+  check('chk_op_scope', sql`${table.scopeLevel} IN ('GLOBAL', 'STATE', 'DIVISION', 'SALES_AREA', 'OUTLET')`),
+]);
+
+export const serviceProviders = sqliteTable('service_providers', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull().unique(),
+  name: text('name').notNull(),
+  serviceType: text('service_type').notNull(),
+  contactName: text('contact_name'),
+  phone: text('phone'),
+  email: text('email'),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_service_providers_code').on(table.code),
+  index('idx_service_providers_type').on(table.serviceType),
+  check('chk_sp_status', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('chk_sp_code', sql`trim(${table.code}) <> ''`),
+  check('chk_sp_name', sql`trim(${table.name}) <> ''`),
+]);
+
+export const outletServiceProviderAssignments = sqliteTable('outlet_service_provider_assignments', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  serviceProviderId: text('service_provider_id').notNull().references(() => serviceProviders.id, { onDelete: 'cascade' }),
+  contractReference: text('contract_reference'),
+  effectiveFrom: text('effective_from').notNull(),
+  effectiveTo: text('effective_to'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull(),
+  createdBy: text('created_by').notNull().references(() => users.id),
+}, (table) => [
+  uniqueIndex('idx_osp_outlet_provider').on(table.outletId, table.serviceProviderId),
+  index('idx_osp_outlet_id').on(table.outletId),
+  index('idx_osp_provider_id').on(table.serviceProviderId),
+]);
+
 
 
 

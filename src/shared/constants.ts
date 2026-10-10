@@ -151,6 +151,10 @@ export const PERMISSIONS = {
   HR_UNIFORM_READ: 'hr.uniform.read',
   HR_UNIFORM_INVENTORY_WRITE: 'hr.uniform.inventory.write',
   HR_UNIFORM_ISSUE_WRITE: 'hr.uniform.issue.write',
+
+  // Phase 2A: Org Masters (Department, Officer, Service Provider)
+  ORG_MASTERS_READ: 'org.masters.read',
+  ORG_MASTERS_WRITE: 'org.masters.write',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
