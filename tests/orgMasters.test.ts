@@ -3,6 +3,7 @@ import { app } from '../src/worker/app';
 import { createLocalD1Database } from '../src/db/localD1';
 import { getDb } from '../src/db';
 import { seedDatabase } from '../src/db/seed';
+import * as schema from '../src/db/schema';
 import fs from 'fs';
 
 describe('Phase 2A Org Masters Suite (Comprehensive)', () => {
@@ -41,6 +42,17 @@ describe('Phase 2A Org Masters Suite (Comprehensive)', () => {
       body: JSON.stringify({ email: 'wbso@iocl.in', password: 'Password@123' }),
     }, env);
     soCookie = soLoginRes.headers.get('set-cookie')?.split(';')[0] || '';
+
+    // Give SO user org.masters.write permission override to test that even WITH permission, lack of GLOBAL scope blocks write
+    const nowIso = new Date().toISOString();
+    await db.insert(schema.userPermissionOverrides).values({
+      userId: 'user-so',
+      permissionId: 'perm-org-w',
+      effect: 'ALLOW',
+      assignedByUserId: 'user-admin',
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
   });
 
   afterEach(() => {
@@ -223,5 +235,44 @@ describe('Phase 2A Org Masters Suite (Comprehensive)', () => {
       }),
     }, env);
     expect(assign2.status).toBe(201);
+  });
+
+  it('enforces global scope restriction for department, officer, and service provider masters', async () => {
+    // Non-global user attempt (State Office) to create department returns 403 with controlled message
+    const deptRes = await app.request('/api/v1/org/departments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': soCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ code: 'FIN', name: 'Finance' }),
+    }, env);
+    expect(deptRes.status).toBe(403);
+    const deptJson = await deptRes.json() as any;
+    expect(deptJson.error?.message).toMatch(/Global scope is required/i);
+
+    // Non-global user attempt to create officer returns 403
+    const offRes = await app.request('/api/v1/org/officers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': soCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({
+        employeeCode: 'EMP-777',
+        fullName: 'Rajesh Sen',
+        designationTitle: 'Manager',
+      }),
+    }, env);
+    expect(offRes.status).toBe(403);
+    const offJson = await offRes.json() as any;
+    expect(offJson.error?.message).toMatch(/Global scope is required/i);
+
+    // Non-global user attempt to create service provider returns 403
+    const spRes = await app.request('/api/v1/org/service-providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': soCookie, 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({
+        providerCode: 'SP-SEC-2',
+        providerName: 'Guard Services',
+      }),
+    }, env);
+    expect(spRes.status).toBe(403);
+    const spJson = await spRes.json() as any;
+    expect(spJson.error?.message).toMatch(/Global scope is required/i);
   });
 });

@@ -212,6 +212,14 @@ export class OrgService {
     return this.repo.listOfficerPostings(officerId);
   }
 
+  async getPostingById(id: string) {
+    return this.repo.getPostingById(id);
+  }
+
+  async getAssignmentById(id: string) {
+    return this.repo.getAssignmentById(id);
+  }
+
   async createOfficerPosting(officerId: string, input: unknown, userId: string) {
     this.ensureActor(userId);
     const officer = await this.repo.getOfficerById(officerId);
