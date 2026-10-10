@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   Edit2,
@@ -54,24 +54,42 @@ export const OrgOfficerDetailPanel: React.FC<OrgOfficerDetailPanelProps> = ({
   const [isLoadingPostings, setIsLoadingPostings] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Stale request protection & mounted ref
+  const postingsReqIdRef = useRef(0);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Modal states for posting
   const [postingModalOpen, setPostingModalOpen] = useState(false);
   const [postingToEdit, setPostingToEdit] = useState<OfficerPosting | null>(null);
 
   const fetchPostings = async () => {
+    const currentReqId = ++postingsReqIdRef.current;
     setIsLoadingPostings(true);
     setErrorMsg(null);
+
     try {
       const res = await apiFetch<OfficerPosting[]>(`/api/v1/org/officers/${officer.id}/postings`);
+      if (!isMountedRef.current || currentReqId !== postingsReqIdRef.current) return;
+
       if (res.success && res.data) {
         setPostings(res.data);
       } else {
         setErrorMsg(res.error?.message || 'Failed to load officer postings');
       }
     } catch (err: any) {
+      if (!isMountedRef.current || currentReqId !== postingsReqIdRef.current) return;
       setErrorMsg(err.message || 'Error fetching postings');
     } finally {
-      setIsLoadingPostings(false);
+      if (isMountedRef.current && currentReqId === postingsReqIdRef.current) {
+        setIsLoadingPostings(false);
+      }
     }
   };
 
@@ -100,7 +118,11 @@ export const OrgOfficerDetailPanel: React.FC<OrgOfficerDetailPanelProps> = ({
           await fetchPostings();
           return { success: true };
         }
-        return { success: false, error: res.error?.message || 'Failed to update posting' };
+        return {
+          success: false,
+          errorCode: res.error?.code,
+          error: res.error?.message || 'Failed to update posting',
+        };
       } else {
         const res = await apiFetch(`/api/v1/org/officers/${officer.id}/postings`, {
           method: 'POST',
@@ -110,10 +132,14 @@ export const OrgOfficerDetailPanel: React.FC<OrgOfficerDetailPanelProps> = ({
           await fetchPostings();
           return { success: true };
         }
-        return { success: false, error: res.error?.message || 'Failed to create posting' };
+        return {
+          success: false,
+          errorCode: res.error?.code,
+          error: res.error?.message || 'Failed to create posting',
+        };
       }
     } catch (err: any) {
-      return { success: false, error: err.message || 'Network error occurred' };
+      return { success: false, errorCode: 'NETWORK_ERROR', error: err.message || 'Network error occurred' };
     }
   };
 

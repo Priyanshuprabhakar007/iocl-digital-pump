@@ -7,7 +7,7 @@ interface OrgDepartmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   departmentToEdit?: Department | null;
-  onSave: (payload: { code?: string; name: string; description?: string | null; status: OrgStatus }) => Promise<{ success: boolean; error?: string }>;
+  onSave: (payload: { code?: string; name: string; description?: string | null; status: OrgStatus }) => Promise<{ success: boolean; errorCode?: string; error?: string }>;
 }
 
 export const OrgDepartmentModal: React.FC<OrgDepartmentModalProps> = ({
@@ -61,7 +61,7 @@ export const OrgDepartmentModal: React.FC<OrgDepartmentModalProps> = ({
     if (res.success) {
       onClose();
     } else {
-      setErrorMessage(mapOrgErrorMessage(undefined, res.error));
+      setErrorMessage(mapOrgErrorMessage(res.errorCode, res.error));
     }
   };
 

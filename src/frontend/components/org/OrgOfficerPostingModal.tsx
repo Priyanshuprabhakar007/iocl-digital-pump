@@ -38,7 +38,7 @@ interface OrgOfficerPostingModalProps {
     isPrimary?: boolean;
     status: OrgStatus;
     notes?: string | null;
-  }) => Promise<{ success: boolean; error?: string }>;
+  }) => Promise<{ success: boolean; errorCode?: string; error?: string }>;
 }
 
 export const OrgOfficerPostingModal: React.FC<OrgOfficerPostingModalProps> = ({
@@ -152,7 +152,7 @@ export const OrgOfficerPostingModal: React.FC<OrgOfficerPostingModalProps> = ({
     if (res.success) {
       onClose();
     } else {
-      setErrorMessage(mapOrgErrorMessage(undefined, res.error));
+      setErrorMessage(mapOrgErrorMessage(res.errorCode, res.error));
     }
   };
 

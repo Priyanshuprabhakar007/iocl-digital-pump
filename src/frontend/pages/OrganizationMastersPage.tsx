@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/api';
 import {
@@ -65,17 +65,54 @@ export const OrganizationMastersPage: React.FC = () => {
   // Selected outlet for assignments tab
   const [selectedOutletId, setSelectedOutletId] = useState<string>('');
   const [outletAssignments, setOutletAssignments] = useState<OutletServiceProviderAssignment[]>([]);
+
+  // Focused loading states
+  const [loadingDepartments, setLoadingDepartments] = useState(true);
+  const [loadingOfficers, setLoadingOfficers] = useState(true);
+  const [loadingProviders, setLoadingProviders] = useState(true);
+  const [loadingReferenceData, setLoadingReferenceData] = useState(true);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
+
+  // Stale request & lifecycle refs
+  const isMountedRef = useRef(true);
+  const outletRequestIdRef = useRef(0);
+  const feedbackTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Detail Drilldown selections
   const [selectedOfficer, setSelectedOfficer] = useState<Officer | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<ServiceProvider | null>(null);
 
-  // Loading & Feedback
-  const [loadingInitial, setLoadingInitial] = useState(true);
+  // Feedback banner state
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null
   );
+
+  // Safe feedback setter with auto-dismiss (4.5s)
+  const setFeedback = (msg: { type: 'success' | 'error'; text: string } | null) => {
+    if (feedbackTimerRef.current) {
+      clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = null;
+    }
+    setFeedbackMsg(msg);
+    if (msg) {
+      feedbackTimerRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          setFeedbackMsg(null);
+        }
+        feedbackTimerRef.current = null;
+      }, 4500);
+    }
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (feedbackTimerRef.current) {
+        clearTimeout(feedbackTimerRef.current);
+      }
+    };
+  }, []);
 
   // Modal Open states
   const [deptModalOpen, setDeptModalOpen] = useState(false);
@@ -99,9 +136,13 @@ export const OrganizationMastersPage: React.FC = () => {
     outlets,
   };
 
-  // 1. Initial Load of Reference Data
+  // 1. Initial Load of Reference Data with mount protection & focused states
   const loadInitialData = async () => {
-    setLoadingInitial(true);
+    setLoadingDepartments(true);
+    setLoadingOfficers(true);
+    setLoadingProviders(true);
+    setLoadingReferenceData(true);
+
     try {
       const [deptRes, offRes, provRes, outRes, stRes, divRes, saRes] = await Promise.all([
         apiFetch<Department[]>('/api/v1/org/departments'),
@@ -113,9 +154,16 @@ export const OrganizationMastersPage: React.FC = () => {
         apiFetch<SalesArea[]>('/api/v1/hierarchy/sales-areas'),
       ]);
 
+      if (!isMountedRef.current) return;
+
       if (deptRes.data) setDepartments(deptRes.data);
+      setLoadingDepartments(false);
+
       if (offRes.data) setOfficers(offRes.data);
+      setLoadingOfficers(false);
+
       if (provRes.data) setServiceProviders(provRes.data);
+      setLoadingProviders(false);
 
       if (outRes.data) {
         setOutlets(outRes.data);
@@ -127,13 +175,17 @@ export const OrganizationMastersPage: React.FC = () => {
       if (stRes.data) setStates(stRes.data);
       if (divRes.data) setDivisions(divRes.data);
       if (saRes.data) setSalesAreas(saRes.data);
+      setLoadingReferenceData(false);
     } catch (err: any) {
-      setFeedbackMsg({
+      if (!isMountedRef.current) return;
+      setFeedback({
         type: 'error',
         text: 'Failed to synchronize organization records from backend.',
       });
-    } finally {
-      setLoadingInitial(false);
+      setLoadingDepartments(false);
+      setLoadingOfficers(false);
+      setLoadingProviders(false);
+      setLoadingReferenceData(false);
     }
   };
 
@@ -143,26 +195,35 @@ export const OrganizationMastersPage: React.FC = () => {
     }
   }, [canRead]);
 
-  // 2. Fetch assignments whenever selectedOutletId changes or on demand
+  // 2. Fetch assignments with stale request protection (useRef counter)
   const fetchOutletAssignments = async (outletId: string) => {
     if (!outletId) {
       setOutletAssignments([]);
+      setLoadingAssignments(false);
       return;
     }
+
+    const currentReqId = ++outletRequestIdRef.current;
     setLoadingAssignments(true);
+
     try {
       const res = await apiFetch<OutletServiceProviderAssignment[]>(
         `/api/v1/org/outlets/${outletId}/service-providers`
       );
+      if (!isMountedRef.current || currentReqId !== outletRequestIdRef.current) return;
+
       if (res.success && res.data) {
         setOutletAssignments(res.data);
       } else {
         setOutletAssignments([]);
       }
     } catch {
+      if (!isMountedRef.current || currentReqId !== outletRequestIdRef.current) return;
       setOutletAssignments([]);
     } finally {
-      setLoadingAssignments(false);
+      if (isMountedRef.current && currentReqId === outletRequestIdRef.current) {
+        setLoadingAssignments(false);
+      }
     }
   };
 
@@ -174,35 +235,47 @@ export const OrganizationMastersPage: React.FC = () => {
 
   // Refresh helper for departments
   const refreshDepartments = async () => {
+    setLoadingDepartments(true);
     const res = await apiFetch<Department[]>('/api/v1/org/departments');
-    if (res.success && res.data) setDepartments(res.data);
+    if (isMountedRef.current) {
+      if (res.success && res.data) setDepartments(res.data);
+      setLoadingDepartments(false);
+    }
   };
 
   // Refresh helper for officers
   const refreshOfficers = async () => {
+    setLoadingOfficers(true);
     const res = await apiFetch<Officer[]>('/api/v1/org/officers');
-    if (res.success && res.data) {
-      setOfficers(res.data);
-      if (selectedOfficer) {
-        const updated = res.data.find((o) => o.id === selectedOfficer.id);
-        if (updated) setSelectedOfficer(updated);
+    if (isMountedRef.current) {
+      if (res.success && res.data) {
+        setOfficers(res.data);
+        if (selectedOfficer) {
+          const updated = res.data.find((o) => o.id === selectedOfficer.id);
+          if (updated) setSelectedOfficer(updated);
+        }
       }
+      setLoadingOfficers(false);
     }
   };
 
   // Refresh helper for service providers
   const refreshServiceProviders = async () => {
+    setLoadingProviders(true);
     const res = await apiFetch<ServiceProvider[]>('/api/v1/org/service-providers');
-    if (res.success && res.data) {
-      setServiceProviders(res.data);
-      if (selectedProvider) {
-        const updated = res.data.find((p) => p.id === selectedProvider.id);
-        if (updated) setSelectedProvider(updated);
+    if (isMountedRef.current) {
+      if (res.success && res.data) {
+        setServiceProviders(res.data);
+        if (selectedProvider) {
+          const updated = res.data.find((p) => p.id === selectedProvider.id);
+          if (updated) setSelectedProvider(updated);
+        }
       }
+      setLoadingProviders(false);
     }
   };
 
-  // Handler: Save Department
+  // Handler: Save Department (preserving errorCode)
   const handleSaveDepartment = async (payload: any) => {
     try {
       if (deptToEdit) {
@@ -212,10 +285,14 @@ export const OrganizationMastersPage: React.FC = () => {
         });
         if (res.success) {
           await refreshDepartments();
-          setFeedbackMsg({ type: 'success', text: 'Department successfully updated.' });
+          setFeedback({ type: 'success', text: 'Department successfully updated.' });
           return { success: true };
         }
-        return { success: false, error: res.error?.message };
+        return {
+          success: false,
+          errorCode: res.error?.code,
+          error: res.error?.message,
+        };
       } else {
         const res = await apiFetch('/api/v1/org/departments', {
           method: 'POST',
@@ -223,17 +300,21 @@ export const OrganizationMastersPage: React.FC = () => {
         });
         if (res.success) {
           await refreshDepartments();
-          setFeedbackMsg({ type: 'success', text: 'Department registered successfully.' });
+          setFeedback({ type: 'success', text: 'Department registered successfully.' });
           return { success: true };
         }
-        return { success: false, error: res.error?.message };
+        return {
+          success: false,
+          errorCode: res.error?.code,
+          error: res.error?.message,
+        };
       }
     } catch (err: any) {
-      return { success: false, error: err.message };
+      return { success: false, errorCode: 'NETWORK_ERROR', error: err.message };
     }
   };
 
-  // Handler: Save Officer
+  // Handler: Save Officer (preserving errorCode)
   const handleSaveOfficer = async (payload: any) => {
     try {
       if (officerToEdit) {
@@ -243,10 +324,14 @@ export const OrganizationMastersPage: React.FC = () => {
         });
         if (res.success) {
           await refreshOfficers();
-          setFeedbackMsg({ type: 'success', text: 'Officer profile updated successfully.' });
+          setFeedback({ type: 'success', text: 'Officer profile updated successfully.' });
           return { success: true };
         }
-        return { success: false, error: res.error?.message };
+        return {
+          success: false,
+          errorCode: res.error?.code,
+          error: res.error?.message,
+        };
       } else {
         const res = await apiFetch('/api/v1/org/officers', {
           method: 'POST',
@@ -254,17 +339,21 @@ export const OrganizationMastersPage: React.FC = () => {
         });
         if (res.success) {
           await refreshOfficers();
-          setFeedbackMsg({ type: 'success', text: 'Officer enpanelled successfully.' });
+          setFeedback({ type: 'success', text: 'Officer enpanelled successfully.' });
           return { success: true };
         }
-        return { success: false, error: res.error?.message };
+        return {
+          success: false,
+          errorCode: res.error?.code,
+          error: res.error?.message,
+        };
       }
     } catch (err: any) {
-      return { success: false, error: err.message };
+      return { success: false, errorCode: 'NETWORK_ERROR', error: err.message };
     }
   };
 
-  // Handler: Save Service Provider
+  // Handler: Save Service Provider (preserving errorCode)
   const handleSaveServiceProvider = async (payload: any) => {
     try {
       if (providerToEdit) {
@@ -274,10 +363,14 @@ export const OrganizationMastersPage: React.FC = () => {
         });
         if (res.success) {
           await refreshServiceProviders();
-          setFeedbackMsg({ type: 'success', text: 'Service provider updated successfully.' });
+          setFeedback({ type: 'success', text: 'Service provider updated successfully.' });
           return { success: true };
         }
-        return { success: false, error: res.error?.message };
+        return {
+          success: false,
+          errorCode: res.error?.code,
+          error: res.error?.message,
+        };
       } else {
         const res = await apiFetch('/api/v1/org/service-providers', {
           method: 'POST',
@@ -285,17 +378,21 @@ export const OrganizationMastersPage: React.FC = () => {
         });
         if (res.success) {
           await refreshServiceProviders();
-          setFeedbackMsg({ type: 'success', text: 'Service provider enrolled successfully.' });
+          setFeedback({ type: 'success', text: 'Service provider enrolled successfully.' });
           return { success: true };
         }
-        return { success: false, error: res.error?.message };
+        return {
+          success: false,
+          errorCode: res.error?.code,
+          error: res.error?.message,
+        };
       }
     } catch (err: any) {
-      return { success: false, error: err.message };
+      return { success: false, errorCode: 'NETWORK_ERROR', error: err.message };
     }
   };
 
-  // Handler: Save Outlet Assignment
+  // Handler: Save Outlet Assignment (preserving errorCode)
   const handleSaveOutletAssignment = async (payload: any) => {
     try {
       if (assignmentToEdit) {
@@ -308,10 +405,14 @@ export const OrganizationMastersPage: React.FC = () => {
         );
         if (res.success) {
           if (selectedOutletId) await fetchOutletAssignments(selectedOutletId);
-          setFeedbackMsg({ type: 'success', text: 'Outlet deployment updated successfully.' });
+          setFeedback({ type: 'success', text: 'Outlet deployment updated successfully.' });
           return { success: true };
         }
-        return { success: false, error: res.error?.message };
+        return {
+          success: false,
+          errorCode: res.error?.code,
+          error: res.error?.message,
+        };
       } else {
         const res = await apiFetch(`/api/v1/org/outlets/${payload.outletId}/service-providers`, {
           method: 'POST',
@@ -320,13 +421,17 @@ export const OrganizationMastersPage: React.FC = () => {
         if (res.success) {
           setSelectedOutletId(payload.outletId);
           await fetchOutletAssignments(payload.outletId);
-          setFeedbackMsg({ type: 'success', text: 'Service provider deployed to outlet.' });
+          setFeedback({ type: 'success', text: 'Service provider deployed to outlet.' });
           return { success: true };
         }
-        return { success: false, error: res.error?.message };
+        return {
+          success: false,
+          errorCode: res.error?.code,
+          error: res.error?.message,
+        };
       }
     } catch (err: any) {
-      return { success: false, error: err.message };
+      return { success: false, errorCode: 'NETWORK_ERROR', error: err.message };
     }
   };
 
@@ -369,10 +474,10 @@ export const OrganizationMastersPage: React.FC = () => {
         )}
       </div>
 
-      {/* Feedback banner */}
+      {/* Feedback banner with auto-dismiss */}
       {feedbackMsg && (
         <div
-          className={`flex items-center justify-between gap-3 p-3 rounded-xl border text-xs ${
+          className={`flex items-center justify-between gap-3 p-3 rounded-xl border text-xs transition-all ${
             feedbackMsg.type === 'success'
               ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
               : 'bg-red-500/10 border-red-500/20 text-red-400'
@@ -387,7 +492,7 @@ export const OrganizationMastersPage: React.FC = () => {
             <span>{feedbackMsg.text}</span>
           </div>
           <button
-            onClick={() => setFeedbackMsg(null)}
+            onClick={() => setFeedback(null)}
             className="text-[11px] hover:underline font-medium text-slate-400 hover:text-white"
           >
             Dismiss
@@ -489,7 +594,7 @@ export const OrganizationMastersPage: React.FC = () => {
           {activeTab === 'departments' && (
             <OrgDepartmentsPanel
               departments={departments}
-              isLoading={loadingInitial}
+              isLoading={loadingDepartments}
               canWriteGlobal={canWriteGlobal}
               onAddClick={() => {
                 setDeptToEdit(null);
@@ -506,7 +611,7 @@ export const OrganizationMastersPage: React.FC = () => {
             <OrgOfficersPanel
               officers={officers}
               departments={departments}
-              isLoading={loadingInitial}
+              isLoading={loadingOfficers}
               canWriteGlobal={canWriteGlobal}
               onAddClick={() => {
                 setOfficerToEdit(null);
@@ -525,7 +630,7 @@ export const OrganizationMastersPage: React.FC = () => {
           {activeTab === 'service-providers' && (
             <OrgServiceProvidersPanel
               providers={serviceProviders}
-              isLoading={loadingInitial}
+              isLoading={loadingProviders}
               canWriteGlobal={canWriteGlobal}
               onAddClick={() => {
                 setProviderToEdit(null);
@@ -597,3 +702,4 @@ export const OrganizationMastersPage: React.FC = () => {
     </div>
   );
 };
+

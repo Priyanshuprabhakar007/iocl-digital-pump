@@ -184,30 +184,36 @@ export interface HierarchyContext {
 }
 
 export function buildPostingLocationLabel(
-  posting: OfficerPosting,
-  hierarchy: HierarchyContext
+  posting?: OfficerPosting | null,
+  hierarchy?: Partial<HierarchyContext> | null
 ): string {
+  if (!posting) return '—';
   if (posting.scopeLevel === 'GLOBAL') {
     return 'All IOCL Operations (Head Office)';
   }
 
+  const states = hierarchy?.states || [];
+  const divisions = hierarchy?.divisions || [];
+  const salesAreas = hierarchy?.salesAreas || [];
+  const outlets = hierarchy?.outlets || [];
+
   if (posting.scopeLevel === 'STATE') {
-    const st = hierarchy.states.find(s => s.id === posting.stateId);
+    const st = states.find(s => s.id === posting.stateId);
     return st ? `${st.name} (${st.code})` : posting.stateId || 'State Office';
   }
 
   if (posting.scopeLevel === 'DIVISION') {
-    const div = hierarchy.divisions.find(d => d.id === posting.divisionId);
+    const div = divisions.find(d => d.id === posting.divisionId);
     return div ? `${div.name} (${div.code})` : posting.divisionId || 'Divisional Office';
   }
 
   if (posting.scopeLevel === 'SALES_AREA') {
-    const sa = hierarchy.salesAreas.find(s => s.id === posting.salesAreaId);
+    const sa = salesAreas.find(s => s.id === posting.salesAreaId);
     return sa ? `${sa.name} (${sa.code})` : posting.salesAreaId || 'Sales Area';
   }
 
   if (posting.scopeLevel === 'OUTLET') {
-    const ro = hierarchy.outlets.find(o => o.id === posting.outletId);
+    const ro = outlets.find(o => o.id === posting.outletId);
     return ro ? `${ro.name} (${ro.roCode})` : posting.outletId || 'Retail Outlet';
   }
 
@@ -218,17 +224,24 @@ export function buildPostingLocationLabel(
 // 4. Cascading Hierarchy Filter Helpers
 // ---------------------------------------------------------------------------
 
-export function getFilteredDivisions(divisions: Division[], selectedStateId?: string): Division[] {
+export function getFilteredDivisions(divisions?: Division[] | null, selectedStateId?: string | null): Division[] {
+  if (!divisions || !Array.isArray(divisions)) return [];
   if (!selectedStateId) return divisions;
   return divisions.filter(d => d.stateId === selectedStateId);
 }
 
-export function getFilteredSalesAreas(salesAreas: SalesArea[], selectedDivisionId?: string): SalesArea[] {
+export function getFilteredSalesAreas(salesAreas?: SalesArea[] | null, selectedDivisionId?: string | null): SalesArea[] {
+  if (!salesAreas || !Array.isArray(salesAreas)) return [];
   if (!selectedDivisionId) return salesAreas;
   return salesAreas.filter(sa => sa.divisionId === selectedDivisionId);
 }
 
-export function getFilteredOutlets(outlets: RetailOutlet[], selectedSalesAreaId?: string, selectedDivisionId?: string): RetailOutlet[] {
+export function getFilteredOutlets(
+  outlets?: RetailOutlet[] | null,
+  selectedSalesAreaId?: string | null,
+  selectedDivisionId?: string | null
+): RetailOutlet[] {
+  if (!outlets || !Array.isArray(outlets)) return [];
   let filtered = outlets;
   if (selectedDivisionId) {
     filtered = filtered.filter(o => o.divisionId === selectedDivisionId);
@@ -244,26 +257,30 @@ export function getFilteredOutlets(outlets: RetailOutlet[], selectedSalesAreaId?
 // ---------------------------------------------------------------------------
 
 export function canReadOrgMasters(hasPermission: (p: PermissionCode) => boolean): boolean {
+  if (typeof hasPermission !== 'function') return false;
   return hasPermission(PERMISSIONS.ORG_MASTERS_READ);
 }
 
 export function canWriteOrgMasters(hasPermission: (p: PermissionCode) => boolean): boolean {
+  if (typeof hasPermission !== 'function') return false;
   return hasPermission(PERMISSIONS.ORG_MASTERS_WRITE);
 }
 
 export function canWriteGlobalOrgMasters(
   hasPermission: (p: PermissionCode) => boolean,
-  userCtx: UserContext | null
+  userCtx?: UserContext | null
 ): boolean {
-  if (!userCtx) return false;
+  if (!userCtx || typeof hasPermission !== 'function') return false;
   return hasPermission(PERMISSIONS.ORG_MASTERS_WRITE) && Boolean(userCtx.isGlobalScope);
 }
 
 export function canWriteOfficerPostings(hasPermission: (p: PermissionCode) => boolean): boolean {
+  if (typeof hasPermission !== 'function') return false;
   return hasPermission(PERMISSIONS.ORG_MASTERS_WRITE);
 }
 
 export function canWriteOutletAssignments(hasPermission: (p: PermissionCode) => boolean): boolean {
+  if (typeof hasPermission !== 'function') return false;
   return hasPermission(PERMISSIONS.ORG_MASTERS_WRITE);
 }
 
@@ -272,10 +289,11 @@ export function canWriteOutletAssignments(hasPermission: (p: PermissionCode) => 
 // ---------------------------------------------------------------------------
 
 export function filterDepartments(
-  departments: Department[],
-  searchQuery: string,
-  statusFilter: string
+  departments?: Department[] | null,
+  searchQuery?: string | null,
+  statusFilter?: string | null
 ): Department[] {
+  if (!departments || !Array.isArray(departments)) return [];
   const query = (searchQuery || '').trim().toLowerCase();
   return departments.filter(d => {
     if (statusFilter && statusFilter !== 'ALL' && d.status !== statusFilter) {
@@ -285,16 +303,17 @@ export function filterDepartments(
     const codeMatch = d.code?.toLowerCase().includes(query);
     const nameMatch = d.name?.toLowerCase().includes(query);
     const descMatch = d.description?.toLowerCase().includes(query);
-    return codeMatch || nameMatch || descMatch;
+    return Boolean(codeMatch || nameMatch || descMatch);
   });
 }
 
 export function filterOfficers(
-  officers: Officer[],
-  searchQuery: string,
-  departmentFilter: string,
-  statusFilter: string
+  officers?: Officer[] | null,
+  searchQuery?: string | null,
+  departmentFilter?: string | null,
+  statusFilter?: string | null
 ): Officer[] {
+  if (!officers || !Array.isArray(officers)) return [];
   const query = (searchQuery || '').trim().toLowerCase();
   return officers.filter(o => {
     if (departmentFilter && departmentFilter !== 'ALL' && o.departmentId !== departmentFilter) {
@@ -309,15 +328,16 @@ export function filterOfficers(
     const desigMatch = o.designationTitle?.toLowerCase().includes(query);
     const phoneMatch = o.phone?.toLowerCase().includes(query);
     const emailMatch = o.email?.toLowerCase().includes(query);
-    return empMatch || nameMatch || desigMatch || phoneMatch || emailMatch;
+    return Boolean(empMatch || nameMatch || desigMatch || phoneMatch || emailMatch);
   });
 }
 
 export function filterServiceProviders(
-  providers: ServiceProvider[],
-  searchQuery: string,
-  statusFilter: string
+  providers?: ServiceProvider[] | null,
+  searchQuery?: string | null,
+  statusFilter?: string | null
 ): ServiceProvider[] {
+  if (!providers || !Array.isArray(providers)) return [];
   const query = (searchQuery || '').trim().toLowerCase();
   return providers.filter(p => {
     if (statusFilter && statusFilter !== 'ALL' && p.status !== statusFilter) {
@@ -333,11 +353,12 @@ export function filterServiceProviders(
     const panMatch = p.pan?.toLowerCase().includes(query);
     const cityMatch = p.city?.toLowerCase().includes(query);
     const distMatch = p.district?.toLowerCase().includes(query);
-    return codeMatch || nameMatch || personMatch || phoneMatch || emailMatch || gstinMatch || panMatch || cityMatch || distMatch;
+    return Boolean(codeMatch || nameMatch || personMatch || phoneMatch || emailMatch || gstinMatch || panMatch || cityMatch || distMatch);
   });
 }
 
-export function getActiveServiceProvidersForNewAssignment(providers: ServiceProvider[]): ServiceProvider[] {
+export function getActiveServiceProvidersForNewAssignment(providers?: ServiceProvider[] | null): ServiceProvider[] {
+  if (!providers || !Array.isArray(providers)) return [];
   return providers.filter(p => p.status === 'ACTIVE');
 }
 
@@ -347,13 +368,24 @@ export function getActiveServiceProvidersForNewAssignment(providers: ServiceProv
 
 export function mapOrgErrorMessage(errorCode?: string | null, rawMessage?: string | null): string {
   // Never expose raw SQL / SQLite / internal text
+  const codeStr = (errorCode || '').trim();
   const cleanMsg = (rawMessage || '').trim();
-  const lower = cleanMsg.toLowerCase();
-  if (lower.includes('sqlite') || lower.includes('syntax error') || lower.includes('raise(abort') || lower.includes('near "')) {
+  const lowerMsg = cleanMsg.toLowerCase();
+  const lowerCode = codeStr.toLowerCase();
+
+  if (
+    lowerMsg.includes('sqlite') ||
+    lowerMsg.includes('syntax error') ||
+    lowerMsg.includes('raise(abort') ||
+    lowerMsg.includes('near "') ||
+    lowerMsg.includes('sql') ||
+    lowerCode.includes('sqlite') ||
+    lowerCode.includes('sql')
+  ) {
     return 'An unexpected database error occurred. The transaction was safely aborted.';
   }
 
-  switch (errorCode) {
+  switch (codeStr) {
     case 'FORBIDDEN':
       return cleanMsg || 'You do not have permission or scope authority to perform this operation.';
     case 'VALIDATION_ERROR':
@@ -370,6 +402,8 @@ export function mapOrgErrorMessage(errorCode?: string | null, rawMessage?: strin
       return 'The specified officer posting was not found.';
     case 'INVALID_ORG_HIERARCHY':
       return cleanMsg || 'The specified location does not match the organizational hierarchy structure.';
+    case 'INVALID_POSTING_SCOPE':
+      return cleanMsg || 'The specified posting scope is invalid for this officer or organizational hierarchy.';
     case 'SERVICE_PROVIDER_NOT_FOUND':
       return 'The requested service provider could not be found.';
     case 'SERVICE_PROVIDER_INACTIVE':
@@ -390,15 +424,51 @@ export function mapOrgErrorMessage(errorCode?: string | null, rawMessage?: strin
 }
 
 // ---------------------------------------------------------------------------
-// 8. Form Date Validation
+// 8. Form Strict Calendar Date Validation
 // ---------------------------------------------------------------------------
 
-export function validateEffectiveDates(effectiveFrom?: string, effectiveTo?: string | null): string | null {
-  if (!effectiveFrom) {
+export function isValidCalendarDate(dateStr?: string | null): boolean {
+  if (!dateStr || typeof dateStr !== 'string') return false;
+  const trimmed = dateStr.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
+
+  const [yStr, mStr, dStr] = trimmed.split('-');
+  const y = parseInt(yStr, 10);
+  const m = parseInt(mStr, 10);
+  const d = parseInt(dStr, 10);
+
+  if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+
+  const dateObj = new Date(Date.UTC(y, m - 1, d));
+  return (
+    dateObj.getUTCFullYear() === y &&
+    dateObj.getUTCMonth() === m - 1 &&
+    dateObj.getUTCDate() === d
+  );
+}
+
+export function validateEffectiveDates(
+  effectiveFrom?: string | null,
+  effectiveTo?: string | null
+): string | null {
+  if (!effectiveFrom || !effectiveFrom.trim()) {
     return 'Effective From date is required.';
   }
-  if (effectiveTo && effectiveFrom > effectiveTo) {
-    return 'Effective To date cannot be earlier than Effective From date.';
+
+  const fromTrimmed = effectiveFrom.trim();
+  if (!isValidCalendarDate(fromTrimmed)) {
+    return 'Effective From must be a valid calendar date in YYYY-MM-DD format.';
   }
+
+  if (effectiveTo && effectiveTo.trim()) {
+    const toTrimmed = effectiveTo.trim();
+    if (!isValidCalendarDate(toTrimmed)) {
+      return 'Effective To must be a valid calendar date in YYYY-MM-DD format.';
+    }
+    if (fromTrimmed > toTrimmed) {
+      return 'Effective To date cannot be earlier than Effective From date.';
+    }
+  }
+
   return null;
 }

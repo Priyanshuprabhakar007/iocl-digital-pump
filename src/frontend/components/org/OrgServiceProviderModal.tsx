@@ -24,7 +24,7 @@ interface OrgServiceProviderModalProps {
     pincode?: string | null;
     status: OrgStatus;
     notes?: string | null;
-  }) => Promise<{ success: boolean; error?: string }>;
+  }) => Promise<{ success: boolean; errorCode?: string; error?: string }>;
 }
 
 export const OrgServiceProviderModal: React.FC<OrgServiceProviderModalProps> = ({
@@ -103,7 +103,7 @@ export const OrgServiceProviderModal: React.FC<OrgServiceProviderModalProps> = (
     if (res.success) {
       onClose();
     } else {
-      setErrorMessage(mapOrgErrorMessage(undefined, res.error));
+      setErrorMessage(mapOrgErrorMessage(res.errorCode, res.error));
     }
   };
 

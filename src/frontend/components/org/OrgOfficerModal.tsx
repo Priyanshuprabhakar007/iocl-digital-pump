@@ -17,7 +17,7 @@ interface OrgOfficerModalProps {
     phone?: string | null;
     status: OfficerStatus;
     notes?: string | null;
-  }) => Promise<{ success: boolean; error?: string }>;
+  }) => Promise<{ success: boolean; errorCode?: string; error?: string }>;
 }
 
 export const OrgOfficerModal: React.FC<OrgOfficerModalProps> = ({
@@ -87,7 +87,7 @@ export const OrgOfficerModal: React.FC<OrgOfficerModalProps> = ({
     if (res.success) {
       onClose();
     } else {
-      setErrorMessage(mapOrgErrorMessage(undefined, res.error));
+      setErrorMessage(mapOrgErrorMessage(res.errorCode, res.error));
     }
   };
 
