@@ -65,7 +65,7 @@ describe('Phase 3 DU Nozzle Capacity & Fuel Topology Hardened Suite', () => {
   // 1. MIGRATION 0024 & DB CHECK CONSTRAINTS
   // =========================================================================
 
-  it('1. Migration 0024 adds nozzle_capacity column with DEFAULT 6 and CHECK(2,4,6)', async () => {
+  it('1. Migration 0024 enforces nozzle_capacity CHECK (2, 4, 6) in database', async () => {
     const db = getDb(localD1);
 
     // Existing dispensers from seed should have valid nozzle_capacity
@@ -75,25 +75,54 @@ describe('Phase 3 DU Nozzle Capacity & Fuel Topology Hardened Suite', () => {
       expect([2, 4, 6]).toContain(d.nozzleCapacity);
     }
 
-    // Direct SQL insert with invalid capacity (e.g. 5) must fail SQLite CHECK constraint
-    await expect(
-      localD1.prepare(`
+    // Direct SQL inserts with valid capacity: 2, 4, 6 succeed
+    for (const cap of [2, 4, 6]) {
+      await localD1.prepare(`
         INSERT INTO dispensers (
           id, outlet_id, dispenser_number, name, nozzle_capacity, status, created_at, updated_at, created_by
         ) VALUES (
-          'disp-invalid-cap', 'ro-1001', 99, 'Invalid DU', 5, 'ACTIVE', datetime('now'), datetime('now'), 'user-admin'
+          'disp-valid-cap-${cap}', 'ro-1001', ${100 + cap}, 'DU Cap ${cap}', ${cap}, 'ACTIVE', datetime('now'), datetime('now'), 'user-admin'
         )
-      `).run()
-    ).rejects.toThrow();
+      `).run();
+    }
+
+    // Direct SQL inserts with invalid capacities: 1, 3, 5, 8 must fail SQLite CHECK constraint
+    for (const invalidCap of [1, 3, 5, 8]) {
+      await expect(
+        localD1.prepare(`
+          INSERT INTO dispensers (
+            id, outlet_id, dispenser_number, name, nozzle_capacity, status, created_at, updated_at, created_by
+          ) VALUES (
+            'disp-invalid-cap-${invalidCap}', 'ro-1001', ${200 + invalidCap}, 'Invalid DU ${invalidCap}', ${invalidCap}, 'ACTIVE', datetime('now'), datetime('now'), 'user-admin'
+          )
+        `).run()
+      ).rejects.toThrow();
+    }
   });
 
-  it('2. XP100 exists in master product catalog', async () => {
-    const db = getDb(localD1);
-    const [xp100] = await db.select().from(schema.products).where(eq(schema.products.code, 'XP100'));
-    expect(xp100).toBeDefined();
-    expect(xp100.category).toBe('XP100');
-    expect(xp100.unit).toBe('LITRE');
-    expect(xp100.status).toBe('ACTIVE');
+  it('2. GLOBAL ADMIN creates XP100 product via POST /api/v1/products', async () => {
+    const createRes = await app.fetch(
+      new Request('http://localhost/api/v1/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          code: 'XP100',
+          name: 'XP100 Premium Petrol',
+          category: 'XP100',
+          unit: 'LITRE',
+          status: 'ACTIVE',
+        }),
+      }),
+      env
+    );
+
+    expect(createRes.status).toBe(201);
+    const json = (await createRes.json()) as any;
+    expect(json.success).toBe(true);
+    expect(json.data.code).toBe('XP100');
+    expect(json.data.category).toBe('XP100');
+    expect(json.data.unit).toBe('LITRE');
+    expect(json.data.status).toBe('ACTIVE');
   });
 
   // =========================================================================
@@ -317,78 +346,65 @@ describe('Phase 3 DU Nozzle Capacity & Fuel Topology Hardened Suite', () => {
     expect(resInvalid.status).toBe(400);
   });
 
-  it('13. API enforces nozzle capacity when creating nozzles', async () => {
-    // Create a 2-nozzle dispenser
-    const dispRes = await app.fetch(
+  it('13. API enforces nozzle capacity limits on 2, 4, and 6 nozzle DUs', async () => {
+    // 2-nozzle DU: #1 succeeds, #2 succeeds, #3 rejected
+    const du2Res = await app.fetch(
       new Request('http://localhost/api/v1/outlets/ro-1001/dispensers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' },
-        body: JSON.stringify({
-          dispenserNumber: 20,
-          name: 'Compact 2-Nozzle DU',
-          nozzleCapacity: 2,
-          status: 'ACTIVE',
-        }),
+        body: JSON.stringify({ dispenserNumber: 20, name: '2-Nozzle DU', nozzleCapacity: 2, status: 'ACTIVE' }),
       }),
       env
     );
-    const disp = ((await dispRes.json()) as any).data;
+    const du2 = ((await du2Res.json()) as any).data;
 
-    // Nozzle 1 -> OK
-    const nozz1Res = await app.fetch(
-      new Request(`http://localhost/api/v1/dispensers/${disp.id}/nozzles`, {
+    const nozz1 = await app.fetch(new Request(`http://localhost/api/v1/dispensers/${du2.id}/nozzles`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' }, body: JSON.stringify({ nozzleNumber: 1, productId: 'prod-ms', tankId: 'tank-ro1-1', status: 'ACTIVE' }) }), env);
+    expect(nozz1.status).toBe(201);
+
+    const nozz2 = await app.fetch(new Request(`http://localhost/api/v1/dispensers/${du2.id}/nozzles`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' }, body: JSON.stringify({ nozzleNumber: 2, productId: 'prod-hsd', tankId: 'tank-ro1-2', status: 'ACTIVE' }) }), env);
+    expect(nozz2.status).toBe(201);
+
+    const nozz3 = await app.fetch(new Request(`http://localhost/api/v1/dispensers/${du2.id}/nozzles`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' }, body: JSON.stringify({ nozzleNumber: 3, productId: 'prod-ms', tankId: 'tank-ro1-1', status: 'ACTIVE' }) }), env);
+    expect(nozz3.status).toBe(400);
+
+    // 4-nozzle DU: #4 succeeds, #5 rejected
+    const du4Res = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/dispensers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' },
-        body: JSON.stringify({
-          nozzleNumber: 1,
-          productId: 'prod-ms',
-          tankId: 'tank-ro1-1',
-          status: 'ACTIVE',
-        }),
+        body: JSON.stringify({ dispenserNumber: 21, name: '4-Nozzle DU', nozzleCapacity: 4, status: 'ACTIVE' }),
       }),
       env
     );
-    expect(nozz1Res.status).toBe(201);
+    const du4 = ((await du4Res.json()) as any).data;
 
-    // Nozzle 2 -> OK
-    const nozz2Res = await app.fetch(
-      new Request(`http://localhost/api/v1/dispensers/${disp.id}/nozzles`, {
+    const nozz4 = await app.fetch(new Request(`http://localhost/api/v1/dispensers/${du4.id}/nozzles`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' }, body: JSON.stringify({ nozzleNumber: 4, productId: 'prod-ms', tankId: 'tank-ro1-1', status: 'ACTIVE' }) }), env);
+    expect(nozz4.status).toBe(201);
+
+    const nozz5 = await app.fetch(new Request(`http://localhost/api/v1/dispensers/${du4.id}/nozzles`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' }, body: JSON.stringify({ nozzleNumber: 5, productId: 'prod-ms', tankId: 'tank-ro1-1', status: 'ACTIVE' }) }), env);
+    expect(nozz5.status).toBe(400);
+
+    // 6-nozzle DU: #6 succeeds, #7 rejected
+    const du6Res = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/dispensers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' },
-        body: JSON.stringify({
-          nozzleNumber: 2,
-          productId: 'prod-hsd',
-          tankId: 'tank-ro1-2',
-          status: 'ACTIVE',
-        }),
+        body: JSON.stringify({ dispenserNumber: 22, name: '6-Nozzle DU', nozzleCapacity: 6, status: 'ACTIVE' }),
       }),
       env
     );
-    expect(nozz2Res.status).toBe(201);
+    const du6 = ((await du6Res.json()) as any).data;
 
-    // Nozzle 3 on 2-nozzle DU -> REJECTED with 400 NOZZLE_CAPACITY_EXCEEDED
-    const nozz3Res = await app.fetch(
-      new Request(`http://localhost/api/v1/dispensers/${disp.id}/nozzles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' },
-        body: JSON.stringify({
-          nozzleNumber: 3,
-          productId: 'prod-ms',
-          tankId: 'tank-ro1-1',
-          status: 'ACTIVE',
-        }),
-      }),
-      env
-    );
-    expect(nozz3Res.status).toBe(400);
-    const nozz3Json = (await nozz3Res.json()) as any;
-    expect(nozz3Json.error.code).toBe('NOZZLE_CAPACITY_EXCEEDED');
+    const nozz6 = await app.fetch(new Request(`http://localhost/api/v1/dispensers/${du6.id}/nozzles`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' }, body: JSON.stringify({ nozzleNumber: 6, productId: 'prod-ms', tankId: 'tank-ro1-1', status: 'ACTIVE' }) }), env);
+    expect(nozz6.status).toBe(201);
+
+    const nozz7 = await app.fetch(new Request(`http://localhost/api/v1/dispensers/${du6.id}/nozzles`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' }, body: JSON.stringify({ nozzleNumber: 7, productId: 'prod-ms', tankId: 'tank-ro1-1', status: 'ACTIVE' }) }), env);
+    expect(nozz7.status).toBe(400);
   });
 
   it('14. API rejects reducing dispenser nozzle capacity below existing nozzles (HTTP 409)', async () => {
     // disp-ro1-1 has nozzle 1 and nozzle 2
-    // Attempt to reduce capacity to 2 when it has nozzle 1 and 2:
-    // First add nozzle 3 (capacity is 4)
+    // Add nozzle 3 (capacity is 4)
     const addNozz3 = await app.fetch(
       new Request(`http://localhost/api/v1/dispensers/disp-ro1-1/nozzles`, {
         method: 'POST',
@@ -436,21 +452,67 @@ describe('Phase 3 DU Nozzle Capacity & Fuel Topology Hardened Suite', () => {
   });
 
   // =========================================================================
-  // 6. END-TO-END XP100 FUEL TOPOLOGY WORKFLOW
+  // 6. PRODUCT REGRESSION TESTS (MS, HSD, XP95, XTRAGREEN, CNG)
   // =========================================================================
 
-  it('15. Complete XP100 physical fuel topology: Product -> Tank -> 4-Nozzle DU -> Nozzle', async () => {
-    // Step 1: Verify XP100 is in product master
-    const prodRes = await app.fetch(
-      new Request('http://localhost/api/v1/products', {
-        method: 'GET',
-        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+  it('15. Standard fuel products (MS, HSD, XP95, XTRAGREEN) support liquid tanks and nozzles', async () => {
+    const db = getDb(localD1);
+    const allProducts = await db.select().from(schema.products);
+    const codes = allProducts.map(p => p.code);
+
+    expect(codes).toContain('MS');
+    expect(codes).toContain('HSD');
+    expect(codes).toContain('XP95');
+    expect(codes).toContain('XTRAGREEN');
+
+    // CNG/KG product rejects liquid tank creation
+    const cngProd = allProducts.find(p => p.code === 'CNG');
+    expect(cngProd).toBeDefined();
+
+    const cngTankRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/tanks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          tankNumber: 99,
+          name: 'Invalid CNG Tank',
+          productId: cngProd!.id,
+          capacityLitres: 10000,
+          safeFillCapacityLitres: 9000,
+          minimumOperatingLevelLitres: 1000,
+          status: 'ACTIVE',
+        }),
       }),
       env
     );
-    const prods = ((await prodRes.json()) as any).data;
-    const xp100 = prods.find((p: any) => p.code === 'XP100');
-    expect(xp100).toBeDefined();
+    expect(cngTankRes.status).toBe(400);
+    const cngJson = (await cngTankRes.json()) as any;
+    expect(cngJson.error.code).toBe('UNIT_NOT_SUPPORTED_BY_LIQUID_TANK');
+  });
+
+  // =========================================================================
+  // 7. END-TO-END XP100 FUEL TOPOLOGY WORKFLOW
+  // =========================================================================
+
+  it('16. Complete XP100 physical fuel topology: Admin Create Product -> Outlet Map -> Tank -> 4-Nozzle DU -> Nozzle', async () => {
+    // Step 1: Admin creates XP100 in product catalog
+    const createProdRes = await app.fetch(
+      new Request('http://localhost/api/v1/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          code: 'XP100',
+          name: 'XP100 Premium Petrol',
+          category: 'XP100',
+          unit: 'LITRE',
+          status: 'ACTIVE',
+        }),
+      }),
+      env
+    );
+    expect(createProdRes.status).toBe(201);
+    const xp100 = ((await createProdRes.json()) as any).data;
+    expect(xp100.code).toBe('XP100');
 
     // Step 2: Map XP100 to Retail Outlet (Park Street RO ro-1001)
     const mapRes = await app.fetch(

@@ -823,6 +823,15 @@ pumpOperations.post('/dispensers/:dispenserId/nozzles', requirePermission(PERMIS
     }, 404);
   }
 
+  // Rule: Product must be ACTIVE for any newly configured nozzle
+  if (prodMaster.status !== 'ACTIVE') {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'INACTIVE_PRODUCT', message: `Cannot configure nozzle because product '${prodMaster.code}' is ${prodMaster.status}` },
+    }, 400);
+  }
+
   // Rule: Product must be mapped to the outlet
   const outletProduct = await pumpRepo.findOutletProduct(outletId, payload.productId);
   if (!outletProduct) {
@@ -830,6 +839,15 @@ pumpOperations.post('/dispensers/:dispenserId/nozzles', requirePermission(PERMIS
       success: false,
       data: null,
       error: { code: 'INVALID_PRODUCT', message: 'Product must be mapped to this retail outlet' },
+    }, 400);
+  }
+
+  // Rule: Outlet product mapping must be ACTIVE
+  if (outletProduct.status !== 'ACTIVE') {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'INACTIVE_PRODUCT', message: `Cannot configure nozzle because outlet product mapping is ${outletProduct.status}` },
     }, 400);
   }
 
@@ -855,7 +873,7 @@ pumpOperations.post('/dispensers/:dispenserId/nozzles', requirePermission(PERMIS
     }, 400);
   }
 
-  // Rule: When creating an ACTIVE nozzle, all dependencies must be ACTIVE
+  // Rule: When creating an ACTIVE nozzle, dispenser and tank must be ACTIVE
   if (targetStatus === 'ACTIVE') {
     if (disp.status !== 'ACTIVE') {
       return c.json({
@@ -869,20 +887,6 @@ pumpOperations.post('/dispensers/:dispenserId/nozzles', requirePermission(PERMIS
         success: false,
         data: null,
         error: { code: 'INACTIVE_TANK', message: `Cannot create an ACTIVE nozzle for tank #${tank.tankNumber} because it is ${tank.status}` },
-      }, 400);
-    }
-    if (prodMaster.status !== 'ACTIVE') {
-      return c.json({
-        success: false,
-        data: null,
-        error: { code: 'INACTIVE_PRODUCT', message: `Cannot create an ACTIVE nozzle because product '${prodMaster.code}' is ${prodMaster.status}` },
-      }, 400);
-    }
-    if (outletProduct.status !== 'ACTIVE') {
-      return c.json({
-        success: false,
-        data: null,
-        error: { code: 'INACTIVE_PRODUCT', message: `Cannot create an ACTIVE nozzle because product mapping is ${outletProduct.status}` },
       }, 400);
     }
   }
@@ -994,9 +998,17 @@ pumpOperations.put('/nozzles/:id', requirePermission(PERMISSIONS.NOZZLES_WRITE) 
     return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Product not found in global catalog' } }, 404);
   }
 
+  if (payload.productId && prodMaster.status !== 'ACTIVE') {
+    return c.json({ success: false, data: null, error: { code: 'INACTIVE_PRODUCT', message: `Cannot set nozzle product because product '${prodMaster.code}' is ${prodMaster.status}` } }, 400);
+  }
+
   const outletProd = await pumpRepo.findOutletProduct(nozzle.outletId, targetProductId);
   if (!outletProd) {
     return c.json({ success: false, data: null, error: { code: 'INVALID_PRODUCT', message: 'Product is not mapped for this outlet' } }, 400);
+  }
+
+  if (payload.productId && outletProd.status !== 'ACTIVE') {
+    return c.json({ success: false, data: null, error: { code: 'INACTIVE_PRODUCT', message: `Cannot set nozzle product because outlet product mapping is ${outletProd.status}` } }, 400);
   }
 
   // Active Nozzle Dependency Safety: if target status is ACTIVE, verify all dependencies are ACTIVE

@@ -121,6 +121,7 @@ jobs:
             "migrations/0021_phase5c_uniform_management.sql"
             "migrations/0022_user_permission_overrides.sql"
             "migrations/0023_org_officer_service_provider.sql"
+            "migrations/0024_phase3_du_nozzle_capacity.sql"
           )
 
           for FILE in "${MIGRATIONS[@]}"; do
@@ -178,8 +179,8 @@ jobs:
 
           echo "Recorded migrations: $COUNT"
 
-          if [ "$COUNT" -lt "23" ]; then
-            echo "ERROR: Expected all 23 migrations to be recorded."
+          if [ "$COUNT" -lt "24" ]; then
+            echo "ERROR: Expected all 24 migrations to be recorded."
             exit 1
           fi
 
@@ -205,6 +206,71 @@ jobs:
             echo "ERROR: Remote database contains foreign-key violations."
             exit 1
           fi
+
+      - name: Verify Phase 3 Fuel Topology Integrity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          echo "=== VERIFYING PHASE 3 PHYSICAL FUEL TOPOLOGY INTEGRITY ==="
+
+          # A. nozzle_number < 1 OR nozzle_number > dispenser.nozzle_capacity
+          CAPACITY_VIOLATIONS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM nozzles n JOIN dispensers d ON n.dispenser_id = d.id WHERE n.nozzle_number < 1 OR n.nozzle_number > d.nozzle_capacity;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          # B. nozzle.outlet_id != dispenser.outlet_id
+          DISP_OUTLET_VIOLATIONS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM nozzles n JOIN dispensers d ON n.dispenser_id = d.id WHERE n.outlet_id != d.outlet_id;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          # C. nozzle.outlet_id != tank.outlet_id
+          TANK_OUTLET_VIOLATIONS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM nozzles n JOIN tanks t ON n.tank_id = t.id WHERE n.outlet_id != t.outlet_id;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          # D. nozzle.product_id != tank.product_id
+          PRODUCT_VIOLATIONS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM nozzles n JOIN tanks t ON n.tank_id = t.id WHERE n.product_id != t.product_id;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "Topology Violations: Capacity=$CAPACITY_VIOLATIONS, DispenserOutlet=$DISP_OUTLET_VIOLATIONS, TankOutlet=$TANK_OUTLET_VIOLATIONS, TankProduct=$PRODUCT_VIOLATIONS"
+
+          TOPOLOGY_FAILED=0
+          if [ "$CAPACITY_VIOLATIONS" -gt 0 ]; then
+            echo "ERROR: Remote database contains $CAPACITY_VIOLATIONS nozzle(s) violating DU nozzle_capacity limits."
+            TOPOLOGY_FAILED=1
+          fi
+
+          if [ "$DISP_OUTLET_VIOLATIONS" -gt 0 ]; then
+            echo "ERROR: Remote database contains $DISP_OUTLET_VIOLATIONS nozzle(s) with mismatched dispenser outlet IDs."
+            TOPOLOGY_FAILED=1
+          fi
+
+          if [ "$TANK_OUTLET_VIOLATIONS" -gt 0 ]; then
+            echo "ERROR: Remote database contains $TANK_OUTLET_VIOLATIONS nozzle(s) with mismatched tank outlet IDs."
+            TOPOLOGY_FAILED=1
+          fi
+
+          if [ "$PRODUCT_VIOLATIONS" -gt 0 ]; then
+            echo "ERROR: Remote database contains $PRODUCT_VIOLATIONS nozzle(s) with mismatched tank product IDs."
+            TOPOLOGY_FAILED=1
+          fi
+
+          if [ "$TOPOLOGY_FAILED" -ne 0 ]; then
+            echo "CRITICAL: Physical fuel topology verification failed. Halting deployment."
+            exit 1
+          fi
+          echo "Physical fuel topology integrity verified successfully (all counts 0)."
 
       - name: Capture Post-Migration Counts & Verify Row Count Safety
         env:

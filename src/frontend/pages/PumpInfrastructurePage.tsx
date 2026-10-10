@@ -27,7 +27,20 @@ import {
   Sliders,
   ChevronRight,
   Edit2,
+  Network,
+  AlertTriangle,
+  CheckCircle,
 } from 'lucide-react';
+import {
+  getDuTypeLabel,
+  getAvailableNozzleNumbers,
+  getTanksForProduct,
+  getActiveLiquidOutletProducts,
+  getDuUtilization,
+  buildFuelMappingTree,
+  getPumpInfrastructureErrorMessage,
+  getProductCategoryBadgeClass,
+} from '../components/pump/pumpInfrastructureUi';
 
 export const PumpInfrastructurePage: React.FC = () => {
   const { userCtx } = useAuth();
@@ -36,7 +49,7 @@ export const PumpInfrastructurePage: React.FC = () => {
   const [loadingOutlets, setLoadingOutlets] = useState(true);
 
   // Active Sub-tab
-  const [activeTab, setActiveTab] = useState<'products' | 'tanks' | 'dispensers' | 'nozzles' | 'shifts'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'tanks' | 'dispensers' | 'nozzles' | 'shifts' | 'fuelMapping'>('products');
 
   // Outlet-specific data
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
@@ -69,6 +82,8 @@ export const PumpInfrastructurePage: React.FC = () => {
   const [dispModel, setDispModel] = useState('');
   const [dispSerial, setDispSerial] = useState('');
   const [dispNozzleCapacity, setDispNozzleCapacity] = useState<2 | 4 | 6>(6);
+  const [dispStatus, setDispStatus] = useState<'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'DECOMMISSIONED'>('ACTIVE');
+  const [dispCommissionedAt, setDispCommissionedAt] = useState('');
   const [editingDispenser, setEditingDispenser] = useState<Dispenser | null>(null);
 
   const [nozzleDispenserId, setNozzleDispenserId] = useState('');
@@ -134,6 +149,14 @@ export const PumpInfrastructurePage: React.FC = () => {
     loadOutletData();
   }, [selectedOutletId]);
 
+  // Reset dependent fields when outlet changes
+  useEffect(() => {
+    setNozzleDispenserId('');
+    setNozzleNumber(1);
+    setNozzleProductId('');
+    setNozzleTankId('');
+  }, [selectedOutletId]);
+
   const selectedOutlet = outlets.find(o => o.id === selectedOutletId);
 
   // Form Submissions
@@ -154,7 +177,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       setTimeout(() => setSuccessMsg(null), 3000);
       loadOutletData();
     } else {
-      setModalError(res.error?.message || 'Failed to map product');
+      setModalError(getPumpInfrastructureErrorMessage(res.error));
     }
   };
 
@@ -183,7 +206,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       setTimeout(() => setSuccessMsg(null), 3000);
       loadOutletData();
     } else {
-      setModalError(res.error?.message || 'Failed to create tank');
+      setModalError(getPumpInfrastructureErrorMessage(res.error));
     }
   };
 
@@ -201,18 +224,19 @@ export const PumpInfrastructurePage: React.FC = () => {
         model: dispModel || null,
         serialNumber: dispSerial || null,
         nozzleCapacity: Number(dispNozzleCapacity),
-        status: 'ACTIVE',
+        status: dispStatus,
+        commissionedAt: dispCommissionedAt ? new Date(dispCommissionedAt).toISOString() : null,
       }),
     });
 
     setModalSubmitting(false);
     if (res.success) {
       setModalType(null);
-      setSuccessMsg('Dispenser registered successfully');
+      setSuccessMsg('Dispensing Unit (DU) registered successfully');
       setTimeout(() => setSuccessMsg(null), 3000);
       loadOutletData();
     } else {
-      setModalError(res.error?.message || 'Failed to create dispenser');
+      setModalError(getPumpInfrastructureErrorMessage(res.error));
     }
   };
 
@@ -224,6 +248,8 @@ export const PumpInfrastructurePage: React.FC = () => {
     setDispModel(d.model || '');
     setDispSerial(d.serialNumber || '');
     setDispNozzleCapacity(((d.nozzleCapacity || 6) as 2 | 4 | 6));
+    setDispStatus((d.status as any) || 'ACTIVE');
+    setDispCommissionedAt(d.commissionedAt ? d.commissionedAt.split('T')[0] : '');
     setModalError(null);
     setModalType('editDispenser');
   };
@@ -242,6 +268,8 @@ export const PumpInfrastructurePage: React.FC = () => {
         model: dispModel || null,
         serialNumber: dispSerial || null,
         nozzleCapacity: Number(dispNozzleCapacity),
+        status: dispStatus,
+        commissionedAt: dispCommissionedAt ? new Date(dispCommissionedAt).toISOString() : null,
       }),
     });
 
@@ -249,11 +277,50 @@ export const PumpInfrastructurePage: React.FC = () => {
     if (res.success) {
       setModalType(null);
       setEditingDispenser(null);
-      setSuccessMsg('Dispenser updated successfully');
+      setSuccessMsg('Dispensing Unit (DU) updated successfully');
       setTimeout(() => setSuccessMsg(null), 3000);
       loadOutletData();
     } else {
-      setModalError(res.error?.message || 'Failed to update dispenser');
+      setModalError(getPumpInfrastructureErrorMessage(res.error));
+    }
+  };
+
+  const openAddNozzleModal = () => {
+    if (dispensers.length === 0 || tanks.length === 0) {
+      setError('Please add at least one Dispenser (DU) and Underground Tank first');
+      return;
+    }
+    const initialDisp = dispensers[0];
+    const initialDispId = initialDisp.id;
+    const duNozzles = nozzles.filter(n => n.dispenserId === initialDispId);
+    const available = getAvailableNozzleNumbers(initialDisp.nozzleCapacity, duNozzles);
+
+    const activeLiquidOps = getActiveLiquidOutletProducts(outletProducts);
+    const initialProdId = activeLiquidOps[0]?.productId || '';
+    const matchingTanks = getTanksForProduct(tanks, initialProdId).filter(t => t.status === 'ACTIVE');
+
+    setNozzleDispenserId(initialDispId);
+    setNozzleNumber(available[0] || 1);
+    setNozzleProductId(initialProdId);
+    setNozzleTankId(matchingTanks[0]?.id || '');
+    setModalError(null);
+    setModalType('addNozzle');
+  };
+
+  const handleNozzleDispenserChange = (newDispId: string) => {
+    setNozzleDispenserId(newDispId);
+    const selectedDisp = dispensers.find(d => d.id === newDispId);
+    const duNozzles = nozzles.filter(n => n.dispenserId === newDispId);
+    const available = getAvailableNozzleNumbers(selectedDisp?.nozzleCapacity, duNozzles);
+    setNozzleNumber(available[0] || 1);
+  };
+
+  const handleNozzleProductChange = (newProdId: string) => {
+    setNozzleProductId(newProdId);
+    const matchingTanks = getTanksForProduct(tanks, newProdId).filter(t => t.status === 'ACTIVE');
+    const isCurrentValid = matchingTanks.some(t => t.id === nozzleTankId);
+    if (!isCurrentValid) {
+      setNozzleTankId(matchingTanks[0]?.id || '');
     }
   };
 
@@ -279,7 +346,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       setTimeout(() => setSuccessMsg(null), 3000);
       loadOutletData();
     } else {
-      setModalError(res.error?.message || 'Failed to configure nozzle');
+      setModalError(getPumpInfrastructureErrorMessage(res.error));
     }
   };
 
@@ -453,6 +520,18 @@ export const PumpInfrastructurePage: React.FC = () => {
         >
           <Flame className="w-3.5 h-3.5" />
           <span>Nozzles ({nozzles.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('fuelMapping')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            activeTab === 'fuelMapping'
+              ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          <Network className="w-3.5 h-3.5" />
+          <span>Fuel Mapping</span>
         </button>
 
         <button
@@ -791,6 +870,165 @@ export const PumpInfrastructurePage: React.FC = () => {
         </div>
       )}
 
+      {/* 6. FUEL MAPPING TOPOLOGY TAB */}
+      {activeTab === 'fuelMapping' && (() => {
+        const mappingTree = buildFuelMappingTree(catalogProducts, outletProducts, tanks, dispensers, nozzles);
+
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                  <Network className="w-4 h-4 text-orange-400" />
+                  <span>Physical Fuel Topology Tree (PRODUCT → TANK → DU → NOZZLE)</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Hierarchical physical mapping derived from active tanks, DUs, and configured nozzles.
+                </p>
+              </div>
+            </div>
+
+            {/* Warnings Summary Panel */}
+            {mappingTree.warningsSummary.length > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-amber-400 text-xs font-bold font-mono">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>TOPOLOGY AUDIT WARNINGS ({mappingTree.warningsSummary.length})</span>
+                </div>
+                <ul className="list-disc list-inside space-y-1 text-xs text-amber-300/80 font-mono">
+                  {mappingTree.warningsSummary.map((warn, idx) => (
+                    <li key={idx}>{warn}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Product Mapping Nodes */}
+            <div className="space-y-6">
+              {mappingTree.products.map(pNode => (
+                <div key={pNode.product.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                  {/* Product Header */}
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-3">
+                      <span className={`px-2.5 py-1 rounded font-mono text-xs font-bold border ${getProductCategoryBadgeClass(pNode.product.category)}`}>
+                        {pNode.product.code}
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">{pNode.product.name}</h3>
+                        <span className="text-[10px] text-slate-400 font-mono">Category: {pNode.product.category} • Unit: {pNode.product.unit}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 font-mono text-xs">
+                      <span className="text-slate-400">Tanks: <strong className="text-slate-200">{pNode.totalTanksCount}</strong></span>
+                      <span className="text-slate-400">Nozzles: <strong className="text-orange-400">{pNode.totalNozzlesCount}</strong></span>
+                    </div>
+                  </div>
+
+                  {/* Product Node Warnings */}
+                  {pNode.warnings.map((w, idx) => (
+                    <div key={idx} className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs rounded-xl font-mono flex items-center gap-2">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{w}</span>
+                    </div>
+                  ))}
+
+                  {/* Tanks under Product */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-2 border-l-2 border-slate-800">
+                    {pNode.tanks.map(tNode => (
+                      <div key={tNode.tank.id} className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="px-2 py-0.5 rounded bg-slate-800 text-orange-400 font-mono text-[10px] font-bold border border-slate-700">
+                              Tank #{tNode.tank.tankNumber}
+                            </span>
+                            <h4 className="text-xs font-bold text-white mt-1">{tNode.tank.name}</h4>
+                          </div>
+                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                            {tNode.tank.status}
+                          </span>
+                        </div>
+
+                        <div className="text-[10px] font-mono text-slate-400 flex justify-between">
+                          <span>Safe Fill: {tNode.tank.safeFillCapacityLitres.toLocaleString()} L</span>
+                          <span>Cap: {tNode.tank.capacityLitres.toLocaleString()} L</span>
+                        </div>
+
+                        {/* Tank Warnings */}
+                        {tNode.warnings.map((w, idx) => (
+                          <div key={idx} className="p-2 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-mono rounded-lg">
+                            ⚠️ {w}
+                          </div>
+                        ))}
+
+                        {/* DUs connected to Tank */}
+                        {tNode.connectedDus.length > 0 && (
+                          <div className="space-y-2 pt-2 border-t border-slate-800/60">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Connected Dispensing Units</span>
+                            {tNode.connectedDus.map(duNode => (
+                              <div key={duNode.dispenser.id} className="bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono font-bold text-slate-200">DU #{duNode.dispenser.dispenserNumber}</span>
+                                    <span className="text-[10px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
+                                      {duNode.duTypeLabel}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-mono text-slate-400">
+                                    {duNode.utilization.ratioText}
+                                  </span>
+                                </div>
+
+                                {/* DU Warnings */}
+                                {duNode.warnings.map((w, idx) => (
+                                  <div key={idx} className="text-[9px] font-mono text-amber-400/80">
+                                    ℹ️ {w}
+                                  </div>
+                                ))}
+
+                                {/* Nozzles List */}
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                  {duNode.nozzles.map(nNode => (
+                                    <span key={nNode.id} className="px-2 py-0.5 bg-slate-800 text-orange-400 border border-slate-700 text-[10px] font-bold font-mono rounded">
+                                      Nozzle #{nNode.nozzleNumber} ({nNode.status})
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Unassigned DUs */}
+            {mappingTree.unassignedDispensers.length > 0 && (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  <span>Unassigned Dispensing Units (0 Configured Nozzles)</span>
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {mappingTree.unassignedDispensers.map(duNode => (
+                    <div key={duNode.dispenser.id} className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs space-y-1">
+                      <div className="flex justify-between font-mono font-bold text-white">
+                        <span>DU #{duNode.dispenser.dispenserNumber}</span>
+                        <span className="text-blue-400">{duNode.duTypeLabel}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400">{duNode.dispenser.name}</div>
+                      <div className="text-[10px] font-mono text-amber-400">0 / {duNode.utilization.capacity} nozzles configured</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* MODALS */}
 
       {/* Map Product Modal */}
@@ -913,12 +1151,12 @@ export const PumpInfrastructurePage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
           <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-2">Register Multi-Product Dispenser (MPD)</h2>
+            <h2 className="text-lg font-bold text-white mb-2">Register Dispensing Unit (DU)</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleAddDispenser} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Dispenser #</label>
+                  <label className="block text-xs text-slate-300 mb-1">DU # / Number</label>
                   <input
                     type="number"
                     value={dispNumber}
@@ -927,7 +1165,19 @@ export const PumpInfrastructurePage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Manufacturer</label>
+                  <label className="block text-xs text-slate-300 mb-1">DU Name</label>
+                  <input
+                    type="text"
+                    value={dispName}
+                    onChange={(e) => setDispName(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Manufacturer / Make</label>
                   <input
                     type="text"
                     value={dispManufacturer}
@@ -935,17 +1185,6 @@ export const PumpInfrastructurePage: React.FC = () => {
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-300 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={dispName}
-                  onChange={(e) => setDispName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-slate-300 mb-1">Model</label>
                   <input
@@ -955,6 +1194,9 @@ export const PumpInfrastructurePage: React.FC = () => {
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-slate-300 mb-1">Serial Number</label>
                   <input
@@ -964,11 +1206,34 @@ export const PumpInfrastructurePage: React.FC = () => {
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Commissioned Date</label>
+                  <input
+                    type="date"
+                    value={dispCommissionedAt}
+                    onChange={(e) => setDispCommissionedAt(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-300 mb-1">DU Operational Status</label>
+                <select
+                  value={dispStatus}
+                  onChange={(e) => setDispStatus(e.target.value as any)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                >
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="INACTIVE">INACTIVE</option>
+                  <option value="MAINTENANCE">MAINTENANCE</option>
+                  <option value="DECOMMISSIONED">DECOMMISSIONED</option>
+                </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  DU Physical Nozzle Capacity
+                  DU Type / Nozzle Capacity
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {([2, 4, 6] as const).map((cap) => (
@@ -982,13 +1247,10 @@ export const PumpInfrastructurePage: React.FC = () => {
                           : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
                       }`}
                     >
-                      {cap} Nozzles
+                      {getDuTypeLabel(cap)}
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Physical nozzle capacity supported by this Dispensing Unit (2, 4, or 6).
-                </p>
               </div>
 
               <div className="flex justify-end gap-2 pt-3">
@@ -1007,17 +1269,25 @@ export const PumpInfrastructurePage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
           <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-2">Configure Dispenser (MPD #{editingDispenser.dispenserNumber})</h2>
+            <h2 className="text-lg font-bold text-white mb-2">Configure Dispensing Unit (DU #{editingDispenser.dispenserNumber})</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleEditDispenser} className="space-y-3">
-              <div>
-                <label className="block text-xs text-slate-300 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={dispName}
-                  onChange={(e) => setDispName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">DU Number (Read Only)</label>
+                  <div className="w-full bg-slate-800/60 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold font-mono text-orange-400">
+                    DU #{editingDispenser.dispenserNumber}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">DU Name</label>
+                  <input
+                    type="text"
+                    value={dispName}
+                    onChange={(e) => setDispName(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1041,19 +1311,44 @@ export const PumpInfrastructurePage: React.FC = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Serial Number</label>
+                  <input
+                    type="text"
+                    value={dispSerial}
+                    onChange={(e) => setDispSerial(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Commissioned Date</label>
+                  <input
+                    type="date"
+                    value={dispCommissionedAt}
+                    onChange={(e) => setDispCommissionedAt(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs text-slate-300 mb-1">Serial Number</label>
-                <input
-                  type="text"
-                  value={dispSerial}
-                  onChange={(e) => setDispSerial(e.target.value)}
+                <label className="block text-xs text-slate-300 mb-1">DU Operational Status</label>
+                <select
+                  value={dispStatus}
+                  onChange={(e) => setDispStatus(e.target.value as any)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                />
+                >
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="INACTIVE">INACTIVE</option>
+                  <option value="MAINTENANCE">MAINTENANCE</option>
+                  <option value="DECOMMISSIONED">DECOMMISSIONED</option>
+                </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  DU Physical Nozzle Capacity
+                  DU Type / Nozzle Capacity
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {([2, 4, 6] as const).map((cap) => (
@@ -1067,12 +1362,12 @@ export const PumpInfrastructurePage: React.FC = () => {
                           : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
                       }`}
                     >
-                      {cap} Nozzles
+                      {getDuTypeLabel(cap)}
                     </button>
                   ))}
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Cannot be reduced below existing configured nozzle numbers on this unit.
+                  Cannot be reduced below existing configured nozzle positions on this unit.
                 </p>
               </div>
 
@@ -1087,72 +1382,125 @@ export const PumpInfrastructurePage: React.FC = () => {
         </div>
       )}
 
-      {/* Add Nozzle Modal */}
-      {modalType === 'addNozzle' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-2">Configure Nozzle</h2>
-            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
-            <form onSubmit={handleAddNozzle} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+      {/* Add Nozzle Modal (Product-First Flow with Position Selection) */}
+      {modalType === 'addNozzle' && (() => {
+        const selectedDu = dispensers.find(d => d.id === nozzleDispenserId) || dispensers[0];
+        const duNozzlesList = nozzles.filter(n => n.dispenserId === (selectedDu?.id || ''));
+        const availablePositions = getAvailableNozzleNumbers(selectedDu?.nozzleCapacity, duNozzlesList);
+        const activeLiquidOps = getActiveLiquidOutletProducts(outletProducts);
+        const matchingTanks = getTanksForProduct(tanks, nozzleProductId).filter(t => t.status === 'ACTIVE');
+        const isNoPositionsAvailable = availablePositions.length === 0;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
+            <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
+              <h2 className="text-lg font-bold text-white">Configure Fuel Nozzle</h2>
+              {modalError && <div className="p-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
+
+              <form onSubmit={handleAddNozzle} className="space-y-3">
+                {/* 1. Select DU */}
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Dispenser</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    1. Select Dispensing Unit (DU)
+                  </label>
                   <select
                     value={nozzleDispenserId}
-                    onChange={(e) => setNozzleDispenserId(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    onChange={(e) => handleNozzleDispenserChange(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
                   >
                     {dispensers.map(d => (
-                      <option key={d.id} value={d.id}>MPD #{d.dispenserNumber} ({d.nozzleCapacity || 6}-Nozzle DU)</option>
+                      <option key={d.id} value={d.id}>
+                        DU #{d.dispenserNumber} — {d.name} ({getDuTypeLabel(d.nozzleCapacity)})
+                      </option>
                     ))}
                   </select>
                 </div>
+
+                {/* 2. Select Nozzle Position */}
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Nozzle Number</label>
-                  <input
-                    type="number"
-                    value={nozzleNumber}
-                    onChange={(e) => setNozzleNumber(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                  />
-                  {(() => {
-                    const selD = dispensers.find(d => d.id === nozzleDispenserId);
-                    return selD ? (
-                      <span className="text-[10px] text-slate-400 block mt-1">
-                        Max: #{selD.nozzleCapacity || 6}
-                      </span>
-                    ) : null;
-                  })()}
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    2. Select Available Nozzle Position
+                  </label>
+                  {isNoPositionsAvailable ? (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs rounded-xl font-medium">
+                      All nozzle positions on this DU ({selectedDu?.nozzleCapacity || 6}) are already configured.
+                    </div>
+                  ) : (
+                    <select
+                      value={nozzleNumber}
+                      onChange={(e) => setNozzleNumber(Number(e.target.value))}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold font-mono"
+                    >
+                      {availablePositions.map(pos => (
+                        <option key={pos} value={pos}>
+                          Position #{pos}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-300 mb-1">Connected Tank</label>
-                <select
-                  value={nozzleTankId}
-                  onChange={(e) => {
-                    const tid = e.target.value;
-                    setNozzleTankId(tid);
-                    const t = tanks.find(x => x.id === tid);
-                    if (t) setNozzleProductId(t.productId);
-                  }}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                >
-                  {tanks.map(t => (
-                    <option key={t.id} value={t.id}>Tank #{t.tankNumber} ({t.name} - {t.productCode})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end gap-2 pt-3">
-                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
-                <button type="submit" disabled={modalSubmitting} className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">
-                  {modalSubmitting ? 'Saving...' : 'Save Nozzle'}
-                </button>
-              </div>
-            </form>
+
+                {/* 3. Select Fuel Product */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    3. Select Fuel Product (Active Liquid Grades)
+                  </label>
+                  <select
+                    value={nozzleProductId}
+                    onChange={(e) => handleNozzleProductChange(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
+                  >
+                    {activeLiquidOps.map(op => {
+                      const prod = op.product || catalogProducts.find(p => p.id === op.productId);
+                      return (
+                        <option key={op.productId} value={op.productId}>
+                          {prod ? `${prod.code} — ${prod.name}` : op.productId}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* 4. Select Underground Tank */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    4. Select Connected Underground Tank
+                  </label>
+                  {matchingTanks.length === 0 ? (
+                    <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl font-medium">
+                      No active underground tanks configured for this product grade. Please create an underground tank first.
+                    </div>
+                  ) : (
+                    <select
+                      value={nozzleTankId}
+                      onChange={(e) => setNozzleTankId(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
+                    >
+                      {matchingTanks.map(t => (
+                        <option key={t.id} value={t.id}>
+                          Tank #{t.tankNumber} — {t.name} ({t.capacityLitres.toLocaleString()} L)
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3">
+                  <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
+                  <button
+                    type="submit"
+                    disabled={modalSubmitting || isNoPositionsAvailable || matchingTanks.length === 0}
+                    className="px-4 py-2 bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
+                  >
+                    {modalSubmitting ? 'Saving...' : 'Configure Nozzle'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Add Shift Template Modal */}
       {modalType === 'addShift' && (

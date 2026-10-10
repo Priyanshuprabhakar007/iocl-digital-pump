@@ -368,7 +368,6 @@ export async function seedDatabase(db: AppDatabase) {
     { id: 'prod-ms', code: 'MS', name: 'Motor Spirit (Petrol)', category: 'MS', unit: 'LITRE' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
     { id: 'prod-hsd', code: 'HSD', name: 'High Speed Diesel', category: 'HSD', unit: 'LITRE' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
     { id: 'prod-xp95', code: 'XP95', name: 'XP95 Premium Petrol', category: 'XP95', unit: 'LITRE' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
-    { id: 'prod-xp100', code: 'XP100', name: 'XP100 Premium 100 Octane Petrol', category: 'XP100', unit: 'LITRE' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
     { id: 'prod-xtragreen', code: 'XTRAGREEN', name: 'XTRAGREEN Diesel', category: 'XTRAGREEN', unit: 'LITRE' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
     { id: 'prod-cng', code: 'CNG', name: 'Compressed Natural Gas', category: 'CNG', unit: 'KG' as const, status: 'ACTIVE' as const, createdAt: now, updatedAt: now },
   ];
