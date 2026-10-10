@@ -9,4 +9,7 @@ Phase 3C-1 equipment breakdowns and audit hardening complete (99 independent tes
 - **No Remote Seeding**: Normal deployment never runs demo seeds remotely (`demo-seed.sql` is excluded from production deployment).
 - **Additive Migrations**: All migrations (0001–0022) are frozen. Future schema work begins with migration `0023`.
 - **Preserved Live Records**: Live Company-Owned Company-Operated (COCO) operational records are fully preserved across deployments.
-- **Bootstrap Seeding**: Brand-new empty environments can be explicitly bootstrapped using the separate `bootstrap-cloudflare-demo.yml` workflow requiring explicit `BOOTSTRAP_DEMO` confirmation.
+- **Demo Seeding Isolation**:
+  - demo seeding is limited to local/development environments
+  - no production GitHub workflow executes demo seed against remote D1
+  - creating a separate demo Cloudflare database in the future must use a different D1 database binding/name and must never target the production operational database
