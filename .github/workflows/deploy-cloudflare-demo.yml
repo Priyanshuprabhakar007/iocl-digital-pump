@@ -122,6 +122,7 @@ jobs:
             "migrations/0022_user_permission_overrides.sql"
             "migrations/0023_org_officer_service_provider.sql"
             "migrations/0024_phase3_du_nozzle_capacity.sql"
+            "migrations/0025_phase4_hr_skill_categories.sql"
           )
 
           for FILE in "${MIGRATIONS[@]}"; do
@@ -179,10 +180,32 @@ jobs:
 
           echo "Recorded migrations: $COUNT"
 
-          if [ "$COUNT" -lt "24" ]; then
-            echo "ERROR: Expected all 24 migrations to be recorded."
+          if [ "$COUNT" -lt "25" ]; then
+            echo "ERROR: Expected all 25 migrations to be recorded."
             exit 1
           fi
+
+      - name: Verify Phase 4 HR Skill Category Integrity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          echo "=== VERIFYING PHASE 4 HR SKILL CATEGORY INTEGRITY ==="
+
+          INVALID_SKILL_VIOLATIONS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM hr_designations WHERE skill_category IS NOT NULL AND skill_category NOT IN ('HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED');" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "Invalid HR Skill Category Violations: $INVALID_SKILL_VIOLATIONS"
+
+          if [ "$INVALID_SKILL_VIOLATIONS" -gt 0 ]; then
+            echo "ERROR: Remote database contains $INVALID_SKILL_VIOLATIONS designation(s) with invalid skill_category."
+            exit 1
+          fi
+          echo "HR skill category integrity verified successfully (all counts 0)."
 
       - name: Verify Foreign Key Constraints
         env:

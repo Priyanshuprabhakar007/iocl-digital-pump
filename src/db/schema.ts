@@ -1182,6 +1182,7 @@ export const hrDesignations = sqliteTable('hr_designations', {
   outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
   code: text('code').notNull(),
   name: text('name').notNull(),
+  skillCategory: text('skill_category', { enum: ['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED'] }),
   status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
   notes: text('notes'),
   createdBy: text('created_by').notNull().references(() => users.id),
@@ -1191,9 +1192,11 @@ export const hrDesignations = sqliteTable('hr_designations', {
   uniqueIndex('idx_hr_designations_outlet_code').on(table.outletId, table.code),
   index('idx_hr_designations_outlet_id').on(table.outletId),
   index('idx_hr_designations_outlet_status').on(table.outletId, table.status),
+  index('idx_hr_designations_outlet_skill_category').on(table.outletId, table.skillCategory),
   check('hr_designations_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
   check('hr_designations_code_check', sql`trim(${table.code}) <> ''`),
   check('hr_designations_name_check', sql`trim(${table.name}) <> ''`),
+  check('hr_designations_skill_category_check', sql`${table.skillCategory} IS NULL OR ${table.skillCategory} IN ('HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED')`),
 ]);
 
 export const hrStaff = sqliteTable('hr_staff', {

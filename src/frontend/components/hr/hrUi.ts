@@ -7,6 +7,7 @@ import {
   HrDesignationStatus,
   HrEmploymentStatus,
   HrRosterStatus,
+  HrSkillCategory,
   HrDesignation,
   HrStaff,
   HrManpowerSanction,
@@ -33,6 +34,7 @@ export type HrWorkspaceTab =
 export interface HrFilterState {
   staff: {
     designationId: string;
+    skillCategory: string;
     employmentStatus: string;
     search: string;
     joinedFrom: string;
@@ -41,6 +43,7 @@ export interface HrFilterState {
   designations: {
     search: string;
     status: string;
+    skillCategory: string;
   };
   manpower: {
     search: string;
@@ -79,6 +82,7 @@ export function getResetHrFilters(): HrFilterState {
   return {
     staff: {
       designationId: '',
+      skillCategory: '',
       employmentStatus: '',
       search: '',
       joinedFrom: '',
@@ -87,6 +91,7 @@ export function getResetHrFilters(): HrFilterState {
     designations: {
       search: '',
       status: '',
+      skillCategory: '',
     },
     manpower: {
       search: '',
@@ -231,11 +236,48 @@ export function getInitials(name?: string | null): string {
 }
 
 /**
+ * Formats HR skill category into human-friendly label and badge CSS classes
+ */
+export function formatHrSkillCategory(category?: HrSkillCategory | string | null): {
+  label: string;
+  badgeClass: string;
+} {
+  switch (category) {
+    case 'HIGHLY_SKILLED':
+      return {
+        label: 'Highly Skilled',
+        badgeClass: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+      };
+    case 'SKILLED':
+      return {
+        label: 'Skilled',
+        badgeClass: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+      };
+    case 'SEMI_SKILLED':
+      return {
+        label: 'Semi-Skilled',
+        badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      };
+    case 'UNSKILLED':
+      return {
+        label: 'Unskilled',
+        badgeClass: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
+      };
+    default:
+      return {
+        label: 'Not Classified',
+        badgeClass: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+      };
+  }
+}
+
+/**
  * Builds query params for Designation listing
  */
 export function buildHrDesignationQueryParams(filters?: {
   search?: string;
   status?: string;
+  skillCategory?: string;
 }): string {
   if (!filters) return '';
   const params = new URLSearchParams();
@@ -244,6 +286,9 @@ export function buildHrDesignationQueryParams(filters?: {
   }
   if (filters.status && filters.status.trim()) {
     params.set('status', filters.status.trim());
+  }
+  if (filters.skillCategory && filters.skillCategory.trim()) {
+    params.set('skillCategory', filters.skillCategory.trim());
   }
   const str = params.toString();
   return str ? `?${str}` : '';
@@ -254,6 +299,7 @@ export function buildHrDesignationQueryParams(filters?: {
  */
 export function buildHrStaffQueryParams(filters?: {
   designationId?: string;
+  skillCategory?: string;
   employmentStatus?: string;
   search?: string;
   joinedFrom?: string;
@@ -263,6 +309,9 @@ export function buildHrStaffQueryParams(filters?: {
   const params = new URLSearchParams();
   if (filters.designationId && filters.designationId.trim()) {
     params.set('designationId', filters.designationId.trim());
+  }
+  if (filters.skillCategory && filters.skillCategory.trim()) {
+    params.set('skillCategory', filters.skillCategory.trim());
   }
   if (filters.employmentStatus && filters.employmentStatus.trim()) {
     params.set('employmentStatus', filters.employmentStatus.trim());
@@ -567,7 +616,7 @@ export function getEligibleRosterShiftTemplates(
  * Validates designation form payload
  */
 export function canSubmitHrDesignation(
-  payload: { code?: string; name?: string; status?: string },
+  payload: { code?: string; name?: string; status?: string; skillCategory?: string | null },
   isEdit = false
 ): boolean {
   if (!isEdit) {
@@ -575,6 +624,9 @@ export function canSubmitHrDesignation(
   }
   if (!payload.name || !payload.name.trim()) return false;
   if (payload.status && payload.status !== 'ACTIVE' && payload.status !== 'INACTIVE') {
+    return false;
+  }
+  if (payload.skillCategory && !['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED'].includes(payload.skillCategory)) {
     return false;
   }
   return true;

@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, gte, lte, sql, like, or } from 'drizzle-orm';
+import { eq, and, desc, asc, gte, lte, sql, like, or, isNull } from 'drizzle-orm';
 import { AppDatabase } from '../../db';
 import {
   hrDesignations,
@@ -26,15 +26,18 @@ import {
   HrDesignationStatus,
   HrEmploymentStatus,
   HrRosterStatus,
+  HrSkillCategory,
 } from '../../shared/types';
 
 export interface HrDesignationFilters {
   status?: HrDesignationStatus;
+  skillCategory?: HrSkillCategory | null;
   search?: string;
 }
 
 export interface HrStaffFilters {
   designationId?: string;
+  skillCategory?: HrSkillCategory | null;
   employmentStatus?: HrEmploymentStatus;
   search?: string;
   joinedFrom?: string;
@@ -81,6 +84,13 @@ export class HrRepository {
     if (filters?.status) {
       conditions.push(eq(hrDesignations.status, filters.status));
     }
+    if (filters?.skillCategory !== undefined) {
+      if (filters.skillCategory === null) {
+        conditions.push(isNull(hrDesignations.skillCategory));
+      } else {
+        conditions.push(eq(hrDesignations.skillCategory, filters.skillCategory));
+      }
+    }
     if (filters?.search) {
       const s = `%${filters.search.trim()}%`;
       conditions.push(
@@ -103,6 +113,7 @@ export class HrRepository {
     outletId: string;
     code: string;
     name: string;
+    skillCategory: HrSkillCategory | null;
     status: HrDesignationStatus;
     notes?: string | null;
     createdBy: string;
@@ -114,6 +125,7 @@ export class HrRepository {
       outletId: data.outletId,
       code: data.code,
       name: data.name,
+      skillCategory: data.skillCategory ?? null,
       status: data.status,
       notes: data.notes ?? null,
       createdBy: data.createdBy,
@@ -130,6 +142,7 @@ export class HrRepository {
     outletId: string,
     data: {
       name?: string;
+      skillCategory?: HrSkillCategory | null;
       status?: HrDesignationStatus;
       notes?: string | null;
       updatedAt: string;
@@ -139,6 +152,7 @@ export class HrRepository {
       updatedAt: data.updatedAt,
     };
     if (data.name !== undefined) updateValues.name = data.name;
+    if (data.skillCategory !== undefined) updateValues.skillCategory = data.skillCategory;
     if (data.status !== undefined) updateValues.status = data.status;
     if (data.notes !== undefined) updateValues.notes = data.notes;
 
@@ -173,6 +187,7 @@ export class HrRepository {
       maskedAadhaar: `XXXX XXXX ${row.staff.aadhaarLast4}`,
       designationName: row.designation?.name,
       designationCode: row.designation?.code,
+      designationSkillCategory: row.designation?.skillCategory,
     };
   }
 
@@ -195,6 +210,13 @@ export class HrRepository {
 
     if (filters?.designationId) {
       conditions.push(eq(hrStaff.designationId, filters.designationId));
+    }
+    if (filters?.skillCategory !== undefined) {
+      if (filters.skillCategory === null) {
+        conditions.push(isNull(hrDesignations.skillCategory));
+      } else {
+        conditions.push(eq(hrDesignations.skillCategory, filters.skillCategory));
+      }
     }
     if (filters?.employmentStatus) {
       conditions.push(eq(hrStaff.employmentStatus, filters.employmentStatus));
@@ -228,6 +250,7 @@ export class HrRepository {
       maskedAadhaar: `XXXX XXXX ${r.staff.aadhaarLast4}`,
       designationName: r.designation?.name,
       designationCode: r.designation?.code,
+      designationSkillCategory: r.designation?.skillCategory,
     }));
   }
 
@@ -337,6 +360,7 @@ export class HrRepository {
       ...(row.sanction as HrManpowerSanction),
       designationName: row.designation?.name,
       designationCode: row.designation?.code,
+      designationSkillCategory: row.designation?.skillCategory,
     };
   }
 
@@ -365,6 +389,7 @@ export class HrRepository {
       ...(row.sanction as HrManpowerSanction),
       designationName: row.designation?.name,
       designationCode: row.designation?.code,
+      designationSkillCategory: row.designation?.skillCategory,
     };
   }
 
@@ -384,6 +409,7 @@ export class HrRepository {
       ...(r.sanction as HrManpowerSanction),
       designationName: r.designation?.name,
       designationCode: r.designation?.code,
+      designationSkillCategory: r.designation?.skillCategory,
     }));
   }
 

@@ -1086,16 +1086,19 @@ export const NfrRentDueFilterSchema = z.object({
 export const HrDesignationStatusEnum = z.enum(['ACTIVE', 'INACTIVE']);
 export const HrEmploymentStatusEnum = z.enum(['ACTIVE', 'INACTIVE', 'EXITED']);
 export const HrRosterStatusEnum = z.enum(['SCHEDULED', 'CANCELLED']);
+export const HrSkillCategoryEnum = z.enum(['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED']);
 
 export const CreateHrDesignationSchema = z.object({
   code: z.string().trim().min(1, 'code is required'),
   name: z.string().trim().min(1, 'name is required'),
+  skillCategory: HrSkillCategoryEnum.optional().nullable(),
   status: HrDesignationStatusEnum.optional().default('ACTIVE'),
   notes: z.string().trim().optional().nullable(),
 }).strict();
 
 export const UpdateHrDesignationSchema = z.object({
   name: z.string().trim().min(1, 'name cannot be empty').optional(),
+  skillCategory: HrSkillCategoryEnum.optional().nullable(),
   status: HrDesignationStatusEnum.optional(),
   notes: z.string().trim().optional().nullable(),
 }).strict();
@@ -1169,11 +1172,13 @@ export const UpdateHrRosterAssignmentSchema = z.object({
 
 export const HrDesignationFilterSchema = z.object({
   status: HrDesignationStatusEnum.optional(),
+  skillCategory: HrSkillCategoryEnum.optional(),
   search: z.string().trim().optional(),
 }).strict();
 
 export const HrStaffFilterSchema = z.object({
   designationId: z.string().trim().min(1).optional(),
+  skillCategory: HrSkillCategoryEnum.optional(),
   employmentStatus: HrEmploymentStatusEnum.optional(),
   search: z.string().trim().optional(),
   joinedFrom: StrictDateOnlySchema.optional(),

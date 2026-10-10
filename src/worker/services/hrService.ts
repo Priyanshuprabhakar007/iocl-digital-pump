@@ -25,6 +25,7 @@ import {
   HrStaff,
   HrManpowerSanction,
   HrManpowerSummary,
+  HrSkillCategorySummary,
   HrRosterAssignment,
   HrGeofencePolicy,
   HrAttendanceRecord,
@@ -315,6 +316,7 @@ export class HrService {
         outletId,
         code: validated.code,
         name: validated.name,
+        skillCategory: validated.skillCategory,
         status: validated.status,
         notes: validated.notes,
         createdBy: actorUserId,
@@ -331,6 +333,7 @@ export class HrService {
         newValue: {
           code: created.code,
           name: created.name,
+          skillCategory: created.skillCategory,
           status: created.status,
         },
         createdAt: now,
@@ -356,6 +359,7 @@ export class HrService {
     try {
       const updated = await this.hrRepo.updateDesignation(id, outletId, {
         name: validated.name,
+        skillCategory: validated.skillCategory,
         status: validated.status,
         notes: validated.notes,
         updatedAt: now,
@@ -374,10 +378,12 @@ export class HrService {
         oldValue: {
           status: existing.status,
           name: existing.name,
+          skillCategory: existing.skillCategory,
         },
         newValue: {
           status: updated.status,
           name: updated.name,
+          skillCategory: updated.skillCategory,
         },
         createdAt: now,
       });
@@ -746,6 +752,26 @@ export class HrService {
     let totalShortageCount = 0;
     let totalExcessCount = 0;
 
+    const skillCats: Array<'HIGHLY_SKILLED' | 'SKILLED' | 'SEMI_SKILLED' | 'UNSKILLED' | null> = [
+      'HIGHLY_SKILLED',
+      'SKILLED',
+      'SEMI_SKILLED',
+      'UNSKILLED',
+      null,
+    ];
+
+    const skillCatMap = new Map<string | null, {
+      designationCount: number;
+      sanctionedCount: number;
+      actualCount: number;
+      shortageCount: number;
+      excessCount: number;
+    }>();
+
+    for (const cat of skillCats) {
+      skillCatMap.set(cat, { designationCount: 0, sanctionedCount: 0, actualCount: 0, shortageCount: 0, excessCount: 0 });
+    }
+
     const byDesignation = designations.map((d) => {
       const sanctionedCount = sanctionMap.get(d.id) ?? 0;
       const actualCount = actualCountMap.get(d.id) ?? 0;
@@ -758,10 +784,23 @@ export class HrService {
       totalShortageCount += shortageCount;
       totalExcessCount += excessCount;
 
+      const catBucket = d.skillCategory ?? null;
+      let bucket = skillCatMap.get(catBucket);
+      if (!bucket) {
+        bucket = { designationCount: 0, sanctionedCount: 0, actualCount: 0, shortageCount: 0, excessCount: 0 };
+        skillCatMap.set(catBucket, bucket);
+      }
+      bucket.designationCount += 1;
+      bucket.sanctionedCount += sanctionedCount;
+      bucket.actualCount += actualCount;
+      bucket.shortageCount += shortageCount;
+      bucket.excessCount += excessCount;
+
       return {
         designationId: d.id,
         designationCode: d.code,
         designationName: d.name,
+        skillCategory: d.skillCategory,
         sanctionedCount,
         actualCount,
         varianceCount,
@@ -770,12 +809,32 @@ export class HrService {
       };
     });
 
+    const bySkillCategory: HrSkillCategorySummary[] = [];
+    for (const cat of skillCats) {
+      const b = skillCatMap.get(cat);
+      if (cat === null && (!b || b.designationCount === 0)) {
+        continue;
+      }
+      if (b) {
+        bySkillCategory.push({
+          skillCategory: cat,
+          designationCount: b.designationCount,
+          sanctionedCount: b.sanctionedCount,
+          actualCount: b.actualCount,
+          varianceCount: b.actualCount - b.sanctionedCount,
+          shortageCount: b.shortageCount,
+          excessCount: b.excessCount,
+        });
+      }
+    }
+
     return {
       totalSanctionedCount,
       totalActualCount,
       totalShortageCount,
       totalExcessCount,
       byDesignation,
+      bySkillCategory,
     };
   }
 

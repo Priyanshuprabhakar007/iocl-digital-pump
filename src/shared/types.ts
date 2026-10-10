@@ -1496,12 +1496,18 @@ export interface NfrSummary {
 export type HrDesignationStatus = 'ACTIVE' | 'INACTIVE';
 export type HrEmploymentStatus = 'ACTIVE' | 'INACTIVE' | 'EXITED';
 export type HrRosterStatus = 'SCHEDULED' | 'CANCELLED';
+export type HrSkillCategory =
+  | 'HIGHLY_SKILLED'
+  | 'SKILLED'
+  | 'SEMI_SKILLED'
+  | 'UNSKILLED';
 
 export interface HrDesignation {
   id: string;
   outletId: string;
   code: string;
   name: string;
+  skillCategory: HrSkillCategory | null;
   status: HrDesignationStatus;
   notes: string | null;
   createdBy: string;
@@ -1530,6 +1536,7 @@ export interface HrStaff {
   updatedAt: string;
   designationName?: string;
   designationCode?: string;
+  designationSkillCategory?: HrSkillCategory | null;
 }
 
 export interface HrManpowerSanction {
@@ -1544,12 +1551,24 @@ export interface HrManpowerSanction {
   updatedAt: string;
   designationName?: string;
   designationCode?: string;
+  designationSkillCategory?: HrSkillCategory | null;
 }
 
 export interface HrManpowerDesignationSummary {
   designationId: string;
   designationCode: string;
   designationName: string;
+  skillCategory: HrSkillCategory | null;
+  sanctionedCount: number;
+  actualCount: number;
+  varianceCount: number;
+  shortageCount: number;
+  excessCount: number;
+}
+
+export interface HrSkillCategorySummary {
+  skillCategory: HrSkillCategory | null;
+  designationCount: number;
   sanctionedCount: number;
   actualCount: number;
   varianceCount: number;
@@ -1563,6 +1582,7 @@ export interface HrManpowerSummary {
   totalShortageCount: number;
   totalExcessCount: number;
   byDesignation: HrManpowerDesignationSummary[];
+  bySkillCategory: HrSkillCategorySummary[];
 }
 
 export interface HrRosterAssignment {
