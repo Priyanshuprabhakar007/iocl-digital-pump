@@ -1759,16 +1759,6 @@ export interface HrUniformReportSummary {
   totalReplaced: number;
 }
 
-export interface UserPermissionOverride {
-  userId: string;
-  permissionId: string;
-  permissionCode: string;
-  effect: 'ALLOW' | 'DENY';
-  assignedByUserId: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface UserPermissionsDetails {
   user: {
     id: string;
@@ -1786,6 +1776,101 @@ export interface UserPermissionsDetails {
   effectivePermissionCodes: PermissionCode[];
   scopes: UserScopeAssignment[];
 }
+
+export type OrgStatus = 'ACTIVE' | 'INACTIVE';
+export type OfficerStatus = 'ACTIVE' | 'INACTIVE' | 'TRANSFERRED' | 'RETIRED';
+export type OfficerPostingScopeLevel = 'GLOBAL' | 'STATE' | 'DIVISION' | 'SALES_AREA' | 'OUTLET';
+export type ServiceType = 'MANPOWER' | 'HOUSEKEEPING' | 'SECURITY' | 'MAINTENANCE' | 'OTHER';
+
+export interface Department {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  status: OrgStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Officer {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  designationTitle: string;
+  departmentId: string;
+  email: string | null;
+  phone: string | null;
+  status: OfficerStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  departmentName?: string;
+  departmentCode?: string;
+}
+
+export interface OfficerPosting {
+  id: string;
+  officerId: string;
+  scopeLevel: OfficerPostingScopeLevel;
+  stateId: string | null;
+  divisionId: string | null;
+  salesAreaId: string | null;
+  outletId: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  isPrimary: boolean;
+  status: OrgStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  officerName?: string;
+  employeeCode?: string;
+}
+
+export interface ServiceProvider {
+  id: string;
+  providerCode: string;
+  providerName: string;
+  proprietorOrAuthorizedPerson: string | null;
+  contactPerson: string | null;
+  phone: string | null;
+  alternatePhone: string | null;
+  email: string | null;
+  gstin: string | null;
+  pan: string | null;
+  address: string | null;
+  city: string | null;
+  district: string | null;
+  stateText: string | null;
+  pincode: string | null;
+  status: OrgStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OutletServiceProviderAssignment {
+  id: string;
+  outletId: string;
+  serviceProviderId: string;
+  serviceType: ServiceType;
+  contractNumber: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  status: OrgStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  outletName?: string;
+  serviceProviderName?: string;
+  providerCode?: string;
+}
+
 
 
 

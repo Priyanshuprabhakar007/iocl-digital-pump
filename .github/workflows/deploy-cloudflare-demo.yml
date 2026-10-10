@@ -82,6 +82,11 @@ jobs:
             "hr_manpower_sanctions"
             "hr_roster_assignments"
             "hr_attendance_records"
+            "org_departments"
+            "org_officers"
+            "org_officer_postings"
+            "service_providers"
+            "outlet_service_provider_assignments"
           )
 
           TABLES_RESULT=$(npx wrangler d1 execute iocl-pump-manager-d1 --remote --command "SELECT name FROM sqlite_master WHERE type='table';" --json --yes)
@@ -115,6 +120,7 @@ jobs:
             "migrations/0020_phase5b_attendance_geofence_nozzle_assignments.sql"
             "migrations/0021_phase5c_uniform_management.sql"
             "migrations/0022_user_permission_overrides.sql"
+            "migrations/0023_org_officer_service_provider.sql"
           )
 
           for FILE in "${MIGRATIONS[@]}"; do
@@ -172,8 +178,8 @@ jobs:
 
           echo "Recorded migrations: $COUNT"
 
-          if [ "$COUNT" -lt "22" ]; then
-            echo "ERROR: Expected all 22 migrations to be recorded."
+          if [ "$COUNT" -lt "23" ]; then
+            echo "ERROR: Expected all 23 migrations to be recorded."
             exit 1
           fi
 
@@ -229,6 +235,11 @@ jobs:
             "hr_manpower_sanctions"
             "hr_roster_assignments"
             "hr_attendance_records"
+            "org_departments"
+            "org_officers"
+            "org_officer_postings"
+            "service_providers"
+            "outlet_service_provider_assignments"
           )
 
           for T in "${TABLES[@]}"; do

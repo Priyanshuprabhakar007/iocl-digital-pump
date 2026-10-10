@@ -130,6 +130,8 @@ export async function seedDatabase(db: AppDatabase) {
     { id: 'perm-hr-uniform-r', code: PERMISSIONS.HR_UNIFORM_READ, name: 'Read Uniforms', description: 'View uniform items, variants, stock ledger and issue history' },
     { id: 'perm-hr-uniform-inv-w', code: PERMISSIONS.HR_UNIFORM_INVENTORY_WRITE, name: 'Write Uniform Inventory', description: 'Manage uniform items, variants and stock transactions' },
     { id: 'perm-hr-uniform-issue-w', code: PERMISSIONS.HR_UNIFORM_ISSUE_WRITE, name: 'Write Uniform Issues', description: 'Issue, return and replace staff uniforms' },
+    { id: 'perm-org-r', code: PERMISSIONS.ORG_MASTERS_READ, name: 'Read Org Masters', description: 'View departments, officers, officer postings and service providers' },
+    { id: 'perm-org-w', code: PERMISSIONS.ORG_MASTERS_WRITE, name: 'Write Org Masters', description: 'Manage departments, officers, officer postings and service providers' },
   ];
   await db.insert(schema.permissions).values(permissionsList).onConflictDoNothing();
 
@@ -148,6 +150,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-eq-r',
     'perm-hr-att-r',
     'perm-hr-uniform-r',
+    'perm-org-r',
   ].map(pId => ({ roleId: 'role-so', permissionId: pId }));
 
   const divOfficePerms = [
@@ -161,6 +164,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-eq-r', 'perm-eq-t-m', 'perm-eq-t-s',
     'perm-hr-att-r',
     'perm-hr-uniform-r',
+    'perm-org-r',
   ].map(pId => ({ roleId: 'role-do', permissionId: pId }));
 
   const bmPerms = [
@@ -172,6 +176,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-eq-r', 'perm-eq-as-w', 'perm-eq-t-m', 'perm-eq-t-s',
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-geo-w', 'perm-hr-nozz-w',
     'perm-hr-uniform-r', 'perm-hr-uniform-inv-w', 'perm-hr-uniform-issue-w',
+    'perm-org-r',
   ].map(pId => ({ roleId: 'role-bm', permissionId: pId }));
 
   const fieldOfficerPerms = [
@@ -183,6 +188,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-eq-r', 'perm-eq-as-w', 'perm-eq-t-m', 'perm-eq-t-s',
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-geo-w', 'perm-hr-nozz-w',
     'perm-hr-uniform-r', 'perm-hr-uniform-inv-w', 'perm-hr-uniform-issue-w',
+    'perm-org-r',
   ].map(pId => ({ roleId: 'role-fo', permissionId: pId }));
 
   const dealerPerms = [

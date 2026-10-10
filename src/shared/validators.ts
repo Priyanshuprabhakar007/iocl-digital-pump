@@ -1387,19 +1387,139 @@ export const UniformStockTransactionListQuerySchema = z.object({
   path: ['fromDate'],
 });
 
-export const UniformReportQuerySchema = z.object({
-  staffId: z.string().trim().min(1).optional(),
-  fromDate: StrictDateOnlySchema.optional(),
-  toDate: StrictDateOnlySchema.optional(),
+export const DepartmentCreateSchema = z.object({
+  code: z.string().min(1, 'Department code required').trim(),
+  name: z.string().min(1, 'Department name required').trim(),
+  description: z.string().trim().optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+}).strict();
+
+export const DepartmentUpdateSchema = z.object({
+  name: z.string().min(1, 'Department name required').trim().optional(),
+  description: z.string().trim().optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+}).strict();
+
+export const OfficerCreateSchema = z.object({
+  employeeCode: z.string().min(1, 'Employee code required').trim(),
+  fullName: z.string().min(1, 'Full name required').trim(),
+  designationTitle: z.string().min(1, 'Designation title required').trim(),
+  departmentId: z.string().min(1, 'Department ID required').trim(),
+  email: z.string().email('Invalid email').trim().optional().nullable(),
+  phone: z.string().trim().optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'TRANSFERRED', 'RETIRED']).default('ACTIVE'),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const OfficerUpdateSchema = z.object({
+  fullName: z.string().min(1).trim().optional(),
+  designationTitle: z.string().min(1).trim().optional(),
+  departmentId: z.string().min(1).trim().optional(),
+  email: z.string().email().trim().optional().nullable(),
+  phone: z.string().trim().optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'TRANSFERRED', 'RETIRED']).optional(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const OfficerPostingCreateSchema = z.object({
+  scopeLevel: z.enum(['GLOBAL', 'STATE', 'DIVISION', 'SALES_AREA', 'OUTLET']),
+  stateId: z.string().trim().optional().nullable(),
+  divisionId: z.string().trim().optional().nullable(),
+  salesAreaId: z.string().trim().optional().nullable(),
+  outletId: z.string().trim().optional().nullable(),
+  effectiveFrom: StrictDateOnlySchema,
+  effectiveTo: StrictDateOnlySchema.optional().nullable(),
+  isPrimary: z.boolean().default(false),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+  notes: z.string().trim().optional().nullable(),
 }).strict().refine(data => {
-  if (data.fromDate && data.toDate) {
-    return data.fromDate <= data.toDate;
+  if (data.scopeLevel === 'STATE' && !data.stateId) return false;
+  if (data.scopeLevel === 'DIVISION' && !data.divisionId) return false;
+  if (data.scopeLevel === 'SALES_AREA' && !data.salesAreaId) return false;
+  if (data.scopeLevel === 'OUTLET' && !data.outletId) return false;
+  return true;
+}, {
+  message: 'Appropriate hierarchy location ID must be provided for the selected scope level',
+  path: ['scopeLevel'],
+}).refine(data => {
+  if (data.effectiveFrom && data.effectiveTo) {
+    return data.effectiveFrom <= data.effectiveTo;
   }
   return true;
 }, {
-  message: 'fromDate must be on or before toDate',
-  path: ['fromDate'],
+  message: 'effectiveFrom must be on or before effectiveTo',
+  path: ['effectiveFrom'],
 });
+
+export const OfficerPostingUpdateSchema = z.object({
+  effectiveTo: StrictDateOnlySchema.optional().nullable(),
+  isPrimary: z.boolean().optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const ServiceProviderCreateSchema = z.object({
+  providerCode: z.string().min(1, 'Provider code required').trim(),
+  providerName: z.string().min(1, 'Provider name required').trim(),
+  proprietorOrAuthorizedPerson: z.string().trim().optional().nullable(),
+  contactPerson: z.string().trim().optional().nullable(),
+  phone: z.string().trim().optional().nullable(),
+  alternatePhone: z.string().trim().optional().nullable(),
+  email: z.string().email().trim().optional().nullable(),
+  gstin: z.string().trim().optional().nullable(),
+  pan: z.string().trim().optional().nullable(),
+  address: z.string().trim().optional().nullable(),
+  city: z.string().trim().optional().nullable(),
+  district: z.string().trim().optional().nullable(),
+  stateText: z.string().trim().optional().nullable(),
+  pincode: z.string().trim().optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const ServiceProviderUpdateSchema = z.object({
+  providerName: z.string().min(1).trim().optional(),
+  proprietorOrAuthorizedPerson: z.string().trim().optional().nullable(),
+  contactPerson: z.string().trim().optional().nullable(),
+  phone: z.string().trim().optional().nullable(),
+  alternatePhone: z.string().trim().optional().nullable(),
+  email: z.string().email().trim().optional().nullable(),
+  gstin: z.string().trim().optional().nullable(),
+  pan: z.string().trim().optional().nullable(),
+  address: z.string().trim().optional().nullable(),
+  city: z.string().trim().optional().nullable(),
+  district: z.string().trim().optional().nullable(),
+  stateText: z.string().trim().optional().nullable(),
+  pincode: z.string().trim().optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
+export const OutletServiceProviderAssignmentCreateSchema = z.object({
+  outletId: z.string().min(1, 'Outlet ID required').trim(),
+  serviceProviderId: z.string().min(1, 'Service Provider ID required').trim(),
+  serviceType: z.enum(['MANPOWER', 'HOUSEKEEPING', 'SECURITY', 'MAINTENANCE', 'OTHER']),
+  contractNumber: z.string().trim().optional().nullable(),
+  effectiveFrom: StrictDateOnlySchema,
+  effectiveTo: StrictDateOnlySchema.optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+  notes: z.string().trim().optional().nullable(),
+}).strict().refine(data => {
+  if (data.effectiveFrom && data.effectiveTo) {
+    return data.effectiveFrom <= data.effectiveTo;
+  }
+  return true;
+}, {
+  message: 'effectiveFrom must be on or before effectiveTo',
+  path: ['effectiveFrom'],
+});
+
+export const OutletServiceProviderAssignmentUpdateSchema = z.object({
+  effectiveTo: StrictDateOnlySchema.optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  notes: z.string().trim().optional().nullable(),
+}).strict();
+
 
 
 

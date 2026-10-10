@@ -151,7 +151,7 @@ app.route('/api/v1', municipalTaxRoutes);
 app.route('/api/v1', nfrRoutes);
 app.route('/api/v1', hrRoutes);
 app.route('/api/v1', uniformRoutes);
-app.route('/api/v1', orgRoutes);
+app.route('/api/v1/org', orgRoutes);
 
 // Global Error Handler - Generic external response, detailed internal server log
 app.onError((err, c) => {
