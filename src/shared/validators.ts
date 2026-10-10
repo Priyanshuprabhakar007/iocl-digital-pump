@@ -98,8 +98,11 @@ export const CreateRetailOutletSchema = RetailOutletSchema;
 
 export const UpdateRetailOutletSchema = z.object({
   name: z.string().min(2).trim().optional(),
-  outletType: z.enum(['A_SITE', 'B_SITE', 'COCO', 'CORO', 'CODO']).optional(),
+  outletType: z.enum(['A_SITE', 'COCO', 'CODO']).optional(),
   category: z.enum(['A_SITE', 'B_SITE', 'COCO', 'CORO', 'CODO']).optional(),
+  stateId: z.string().min(1).optional(),
+  divisionId: z.string().min(1).optional(),
+  salesAreaId: z.string().min(1).optional(),
   address: z.string().min(1).trim().optional(),
   location: z.string().min(1).trim().optional(),
   city: z.string().min(1).trim().optional(),
@@ -108,6 +111,16 @@ export const UpdateRetailOutletSchema = z.object({
   latitude: z.number().optional().nullable(),
   longitude: z.number().optional().nullable(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+}).refine(data => {
+  const hasState = !!data.stateId;
+  const hasDivision = !!data.divisionId;
+  const hasSalesArea = !!data.salesAreaId;
+  if (hasState || hasDivision || hasSalesArea) {
+    return hasState && hasDivision && hasSalesArea;
+  }
+  return true;
+}, {
+  message: 'If any hierarchy field (stateId, divisionId, salesAreaId) is supplied, all three must be provided.',
 });
 export const RetailOutletUpdateSchema = UpdateRetailOutletSchema;
 

@@ -192,6 +192,9 @@ export class OutletRepository {
   async updateOutlet(id: string, data: Partial<{
     name: string;
     outletType: 'COCO' | 'CODO' | 'A_SITE';
+    stateId: string;
+    divisionId: string;
+    salesAreaId: string;
     address: string;
     city: string;
     district: string;

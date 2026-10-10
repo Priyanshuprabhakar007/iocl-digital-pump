@@ -7,7 +7,7 @@ import { requireAuth, AppContext, EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 import { requireOutletAccess } from '../middleware/scope';
 import { ScopeService } from '../services/scopeService';
-import { RetailOutletSchema, OutletUserAssignmentSchema } from '../../shared/validators';
+import { RetailOutletSchema, UpdateRetailOutletSchema, OutletUserAssignmentSchema } from '../../shared/validators';
 import { PERMISSIONS } from '../../shared/constants';
 
 const outlets = new Hono<{ Bindings: EnvBindings }>();
@@ -145,6 +145,92 @@ outlets.post('/', requirePermission(PERMISSIONS.OUTLETS_CREATE) as any, async (c
   return c.json({
     success: true,
     data: created,
+    error: null,
+  });
+});
+
+outlets.patch('/:id', requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any, requireOutletAccess('id') as any, async (c: AppContext) => {
+  const id = c.req.param('id') as string;
+  const body = await c.req.json().catch(() => ({}));
+  const parseResult = UpdateRetailOutletSchema.safeParse(body);
+
+  if (!parseResult.success) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid retail outlet update payload',
+        details: parseResult.error.flatten(),
+      },
+    }, 400);
+  }
+
+  const payload = parseResult.data;
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+  const hierarchyRepo = new HierarchyRepository(db);
+  const auditRepo = new AuditRepository(db);
+
+  const currentOutlet = await outletRepo.findById(id);
+  if (!currentOutlet) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'NOT_FOUND', message: 'Retail outlet not found' },
+    }, 404);
+  }
+
+  const salesAreaId = payload.salesAreaId;
+  const divisionId = payload.divisionId;
+  const stateId = payload.stateId;
+
+  if (salesAreaId && divisionId && stateId) {
+    const sa = await hierarchyRepo.findSalesAreaById(salesAreaId);
+    if (!sa || sa.divisionId !== divisionId || sa.stateId !== stateId) {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'INVALID_HIERARCHY',
+          message: 'The selected Sales Area does not match the selected State Office and Division Office.',
+        },
+      }, 400);
+    }
+
+    if (!await ScopeService.canAccessSalesArea(c.var.user, salesAreaId, hierarchyRepo)) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'FORBIDDEN', message: 'Cannot move outlet outside your authorized Sales Area hierarchy.' },
+      }, 403);
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  await outletRepo.updateOutlet(id, {
+    ...payload,
+    updatedAt: nowIso,
+  });
+
+  const updatedOutlet = await outletRepo.findById(id);
+
+  await auditRepo.logAction({
+    id: `aud-${crypto.randomUUID()}`,
+    userId: c.var.user.user.id,
+    action: 'OUTLET_UPDATE',
+    entityType: 'RETAIL_OUTLET',
+    entityId: id,
+    oldValue: currentOutlet as unknown as Record<string, unknown>,
+    newValue: updatedOutlet as unknown as Record<string, unknown>,
+    ipAddress: c.req.header('cf-connecting-ip') || null,
+    userAgent: c.req.header('user-agent') || null,
+    createdAt: nowIso,
+  });
+
+  return c.json({
+    success: true,
+    data: updatedOutlet,
     error: null,
   });
 });

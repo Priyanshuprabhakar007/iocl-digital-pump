@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Pencil,
 } from 'lucide-react';
 
 export const OutletsPage: React.FC = () => {
@@ -21,8 +22,12 @@ export const OutletsPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedOutlet, setSelectedOutlet] = useState<RetailOutlet | null>(null);
+  const [editingOutlet, setEditingOutlet] = useState<RetailOutlet | null>(null);
+
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Initial form states for new outlet (no hardcoded defaults)
   const initialFormState = {
@@ -40,8 +45,9 @@ export const OutletsPage: React.FC = () => {
   };
 
   const [form, setForm] = useState(initialFormState);
+  const [editForm, setEditForm] = useState(initialFormState);
 
-  // Cascading hierarchy data and loading states
+  // Cascading hierarchy data and loading states for Register Modal
   const [states, setStates] = useState<State[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [salesAreas, setSalesAreas] = useState<SalesArea[]>([]);
@@ -49,6 +55,13 @@ export const OutletsPage: React.FC = () => {
   const [loadingStates, setLoadingStates] = useState(false);
   const [loadingDivisions, setLoadingDivisions] = useState(false);
   const [loadingSalesAreas, setLoadingSalesAreas] = useState(false);
+
+  // Cascading hierarchy data and loading states for Edit Modal
+  const [editDivisions, setEditDivisions] = useState<Division[]>([]);
+  const [editSalesAreas, setEditSalesAreas] = useState<SalesArea[]>([]);
+
+  const [loadingEditDivisions, setLoadingEditDivisions] = useState(false);
+  const [loadingEditSalesAreas, setLoadingEditSalesAreas] = useState(false);
 
   // Form state for assignment
   const [assignUserId, setAssignUserId] = useState('');
@@ -71,12 +84,11 @@ export const OutletsPage: React.FC = () => {
     }
   };
 
-  // Fetch ACTIVE State Offices for the modal
+  // Fetch ACTIVE State Offices for the modals
   const fetchStates = async () => {
     setLoadingStates(true);
     const res = await apiFetch<State[]>('/api/v1/hierarchy/states');
     if (res.success && res.data) {
-      // Show only ACTIVE states
       setStates(res.data.filter((s) => s.status === 'ACTIVE'));
     } else {
       setErrorMsg(res.error?.message || 'Failed to load State Offices');
@@ -87,15 +99,60 @@ export const OutletsPage: React.FC = () => {
   useEffect(() => {
     fetchOutlets();
     fetchUsers();
+    fetchStates();
   }, []);
 
   const openCreateModal = () => {
     setErrorMsg(null);
+    setSuccessMsg(null);
     setForm(initialFormState);
     setDivisions([]);
     setSalesAreas([]);
     setModalOpen(true);
-    fetchStates();
+  };
+
+  const openEditModal = async (ro: RetailOutlet) => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setEditingOutlet(ro);
+    setEditForm({
+      roCode: ro.roCode,
+      name: ro.name,
+      outletType: ro.outletType,
+      stateId: ro.stateId,
+      divisionId: ro.divisionId,
+      salesAreaId: ro.salesAreaId,
+      address: ro.address,
+      city: ro.city,
+      district: ro.district,
+      pincode: ro.pincode,
+      status: ro.status as any,
+    });
+
+    setEditModalOpen(true);
+
+    // Pre-load divisions for ro.stateId and sales areas for ro.divisionId
+    if (ro.stateId) {
+      setLoadingEditDivisions(true);
+      const divRes = await apiFetch<Division[]>(
+        `/api/v1/hierarchy/divisions?stateId=${encodeURIComponent(ro.stateId)}`
+      );
+      if (divRes.success && divRes.data) {
+        setEditDivisions(divRes.data.filter((d) => d.status === 'ACTIVE'));
+      }
+      setLoadingEditDivisions(false);
+    }
+
+    if (ro.divisionId) {
+      setLoadingEditSalesAreas(true);
+      const saRes = await apiFetch<SalesArea[]>(
+        `/api/v1/hierarchy/sales-areas?divisionId=${encodeURIComponent(ro.divisionId)}`
+      );
+      if (saRes.success && saRes.data) {
+        setEditSalesAreas(saRes.data.filter((sa) => sa.status === 'ACTIVE'));
+      }
+      setLoadingEditSalesAreas(false);
+    }
   };
 
   const handleStateChange = async (selectedStateId: string) => {
@@ -115,7 +172,6 @@ export const OutletsPage: React.FC = () => {
       `/api/v1/hierarchy/divisions?stateId=${encodeURIComponent(selectedStateId)}`
     );
     if (res.success && res.data) {
-      // Show only ACTIVE divisions for selected state
       setDivisions(res.data.filter((d) => d.status === 'ACTIVE'));
     } else {
       setErrorMsg(res.error?.message || 'Failed to load Division Offices');
@@ -138,7 +194,6 @@ export const OutletsPage: React.FC = () => {
       `/api/v1/hierarchy/sales-areas?divisionId=${encodeURIComponent(selectedDivisionId)}`
     );
     if (res.success && res.data) {
-      // Show only ACTIVE sales areas for selected division
       setSalesAreas(res.data.filter((sa) => sa.status === 'ACTIVE'));
     } else {
       setErrorMsg(res.error?.message || 'Failed to load Sales Areas');
@@ -146,11 +201,56 @@ export const OutletsPage: React.FC = () => {
     setLoadingSalesAreas(false);
   };
 
+  const handleEditStateChange = async (selectedStateId: string) => {
+    setEditForm((prev) => ({
+      ...prev,
+      stateId: selectedStateId,
+      divisionId: '',
+      salesAreaId: '',
+    }));
+    setEditDivisions([]);
+    setEditSalesAreas([]);
+
+    if (!selectedStateId) return;
+
+    setLoadingEditDivisions(true);
+    const res = await apiFetch<Division[]>(
+      `/api/v1/hierarchy/divisions?stateId=${encodeURIComponent(selectedStateId)}`
+    );
+    if (res.success && res.data) {
+      setEditDivisions(res.data.filter((d) => d.status === 'ACTIVE'));
+    } else {
+      setErrorMsg(res.error?.message || 'Failed to load Division Offices');
+    }
+    setLoadingEditDivisions(false);
+  };
+
+  const handleEditDivisionChange = async (selectedDivisionId: string) => {
+    setEditForm((prev) => ({
+      ...prev,
+      divisionId: selectedDivisionId,
+      salesAreaId: '',
+    }));
+    setEditSalesAreas([]);
+
+    if (!selectedDivisionId) return;
+
+    setLoadingEditSalesAreas(true);
+    const res = await apiFetch<SalesArea[]>(
+      `/api/v1/hierarchy/sales-areas?divisionId=${encodeURIComponent(selectedDivisionId)}`
+    );
+    if (res.success && res.data) {
+      setEditSalesAreas(res.data.filter((sa) => sa.status === 'ACTIVE'));
+    } else {
+      setErrorMsg(res.error?.message || 'Failed to load Sales Areas');
+    }
+    setLoadingEditSalesAreas(false);
+  };
+
   const handleCreateOutlet = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    // Required hierarchy validation
     if (!form.stateId || !form.divisionId || !form.salesAreaId) {
       setErrorMsg('Please select State Office, Division Office, and Sales Area.');
       return;
@@ -178,9 +278,46 @@ export const OutletsPage: React.FC = () => {
       setForm(initialFormState);
       setDivisions([]);
       setSalesAreas([]);
+      setSuccessMsg('Retail outlet registered successfully.');
       fetchOutlets();
     } else {
       setErrorMsg(res.error?.message || 'Failed to create retail outlet');
+    }
+  };
+
+  const handleUpdateOutlet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOutlet) return;
+    setErrorMsg(null);
+
+    if (!editForm.stateId || !editForm.divisionId || !editForm.salesAreaId) {
+      setErrorMsg('Please select State Office, Division Office, and Sales Area.');
+      return;
+    }
+
+    const res = await apiFetch<RetailOutlet>(`/api/v1/outlets/${editingOutlet.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: editForm.name.trim(),
+        outletType: editForm.outletType,
+        stateId: editForm.stateId,
+        divisionId: editForm.divisionId,
+        salesAreaId: editForm.salesAreaId,
+        address: editForm.address.trim(),
+        city: editForm.city.trim(),
+        district: editForm.district.trim(),
+        pincode: editForm.pincode.trim(),
+        status: editForm.status,
+      }),
+    });
+
+    if (res.success) {
+      setEditModalOpen(false);
+      setEditingOutlet(null);
+      setSuccessMsg('Retail outlet updated successfully.');
+      fetchOutlets();
+    } else {
+      setErrorMsg(res.error?.message || 'Failed to update retail outlet');
     }
   };
 
@@ -199,6 +336,7 @@ export const OutletsPage: React.FC = () => {
 
     if (res.success) {
       setAssignModalOpen(false);
+      setSuccessMsg('Personnel assigned successfully.');
       fetchOutlets();
     } else {
       setErrorMsg(res.error?.message || 'Failed to assign user to outlet');
@@ -230,6 +368,19 @@ export const OutletsPage: React.FC = () => {
           </button>
         )}
       </div>
+
+      {/* Success Banner */}
+      {successMsg && (
+        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+          <button onClick={() => setSuccessMsg(null)} className="text-slate-400 hover:text-white text-xs">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Scope Banner */}
       <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs flex items-center justify-between">
@@ -318,26 +469,38 @@ export const OutletsPage: React.FC = () => {
                 </span>
               </div>
 
-              {/* User Assignments */}
+              {/* User Assignments & Edit */}
               <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
                 <div className="text-xs font-mono text-slate-400">
                   Assigned Personnel:{' '}
                   <span className="text-white font-bold">{ro.assignedUsersCount || 0}</span>
                 </div>
 
-                {hasPermission(PERMISSIONS.OUTLETS_UPDATE) && (
-                  <button
-                    onClick={() => {
-                      setSelectedOutlet(ro);
-                      setErrorMsg(null);
-                      setAssignModalOpen(true);
-                    }}
-                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                  >
-                    <UserPlus className="w-3.5 h-3.5 text-orange-400" />
-                    <span>Assign Personnel</span>
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {hasPermission(PERMISSIONS.OUTLETS_UPDATE) && (
+                    <>
+                      <button
+                        onClick={() => openEditModal(ro)}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-orange-400" />
+                        <span>Edit Outlet</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setSelectedOutlet(ro);
+                          setErrorMsg(null);
+                          setAssignModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <UserPlus className="w-3.5 h-3.5 text-orange-400" />
+                        <span>Assign Personnel</span>
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -411,7 +574,6 @@ export const OutletsPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* State Office */}
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">
                     State Office <span className="text-orange-400">*</span>
@@ -434,7 +596,6 @@ export const OutletsPage: React.FC = () => {
                   </select>
                 </div>
 
-                {/* Division Office & Sales Area Cascading Row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-300 font-semibold mb-1">
@@ -492,7 +653,6 @@ export const OutletsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Address */}
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Address</label>
                 <input
@@ -505,7 +665,6 @@ export const OutletsPage: React.FC = () => {
                 />
               </div>
 
-              {/* City, District, Pincode */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">City</label>
@@ -559,6 +718,241 @@ export const OutletsPage: React.FC = () => {
                   className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md transition-colors"
                 >
                   Register Outlet
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Retail Outlet Modal */}
+      {editModalOpen && editingOutlet && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h2 className="text-lg font-bold text-white">Edit Retail Outlet</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Update outlet master details & organizational hierarchy allocation.
+                </p>
+              </div>
+              <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-orange-500/10 text-orange-400 border border-orange-500/30">
+                {editForm.roCode}
+              </span>
+            </div>
+
+            {errorMsg && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateOutlet} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">RO Code (Read-Only)</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editForm.roCode}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-400 font-mono cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Outlet Type</label>
+                  <select
+                    value={editForm.outletType}
+                    onChange={(e) => setEditForm({ ...editForm, outletType: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                  >
+                    <option value="COCO">COCO (Company Owned)</option>
+                    <option value="CODO">CODO (Company Owned Dealer Operated)</option>
+                    <option value="A_SITE">A-Site (A-Site Franchisee)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Status</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Outlet Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                />
+              </div>
+
+              {/* Cascading Organizational Hierarchy Reallocation */}
+              <div className="space-y-3 p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-orange-400">
+                    Organizational Hierarchy Reallocation
+                  </span>
+                  {(loadingStates || loadingEditDivisions || loadingEditSalesAreas) && (
+                    <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                      <Loader2 className="w-3 h-3 animate-spin text-orange-400" />
+                      Loading hierarchy...
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    State Office <span className="text-orange-400">*</span>
+                  </label>
+                  <select
+                    required
+                    value={editForm.stateId}
+                    onChange={(e) => handleEditStateChange(e.target.value)}
+                    disabled={loadingStates}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      {loadingStates ? 'Loading state offices...' : '-- Select State Office --'}
+                    </option>
+                    {states.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Division Office <span className="text-orange-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={editForm.divisionId}
+                      onChange={(e) => handleEditDivisionChange(e.target.value)}
+                      disabled={!editForm.stateId || loadingEditDivisions}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">
+                        {loadingEditDivisions
+                          ? 'Loading divisions...'
+                          : !editForm.stateId
+                          ? '-- Select State Office First --'
+                          : '-- Select Division Office --'}
+                      </option>
+                      {editDivisions.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Sales Area <span className="text-orange-400">*</span>
+                    </label>
+                    <select
+                      required
+                      value={editForm.salesAreaId}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, salesAreaId: e.target.value }))
+                      }
+                      disabled={!editForm.divisionId || loadingEditSalesAreas}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">
+                        {loadingEditSalesAreas
+                          ? 'Loading sales areas...'
+                          : !editForm.divisionId
+                          ? '-- Select Division First --'
+                          : '-- Select Sales Area --'}
+                      </option>
+                      {editSalesAreas.map((sa) => (
+                        <option key={sa.id} value={sa.id}>
+                          {sa.name} ({sa.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Address</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.address}
+                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">City</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.city}
+                    onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">District</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.district}
+                    onChange={(e) => setEditForm({ ...editForm, district: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Pincode</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={editForm.pincode}
+                    onChange={(e) => setEditForm({ ...editForm, pincode: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditModalOpen(false);
+                    setEditingOutlet(null);
+                    setErrorMsg(null);
+                  }}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingEditDivisions || loadingEditSalesAreas}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg font-bold shadow-md transition-colors"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>
