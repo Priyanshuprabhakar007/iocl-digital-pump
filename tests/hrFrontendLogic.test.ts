@@ -3,6 +3,7 @@ import {
   formatHrEmploymentStatus,
   formatHrDesignationStatus,
   formatHrRosterStatus,
+  formatHrSkillCategory,
   getInitials,
   buildHrDesignationQueryParams,
   buildHrStaffQueryParams,
@@ -96,6 +97,15 @@ describe('Phase 5A-2 HR & Workforce Frontend Logic Test Suite', () => {
     it('1.10 should fallback gracefully for null roster status', () => {
       expect(formatHrRosterStatus(null).label).toBe('—');
     });
+
+    it('1.11 should format skill category with Not Classified fallback for null or undefined', () => {
+      expect(formatHrSkillCategory(null).label).toBe('Not Classified');
+      expect(formatHrSkillCategory(undefined).label).toBe('Not Classified');
+      expect(formatHrSkillCategory('SKILLED').label).toBe('Skilled');
+      expect(formatHrSkillCategory('HIGHLY_SKILLED').label).toBe('Highly Skilled');
+      expect(formatHrSkillCategory('SEMI_SKILLED').label).toBe('Semi-Skilled');
+      expect(formatHrSkillCategory('UNSKILLED').label).toBe('Unskilled');
+    });
   });
 
   // ==========================================================================
@@ -143,9 +153,18 @@ describe('Phase 5A-2 HR & Workforce Frontend Logic Test Suite', () => {
       ).toBe(false);
     });
 
-    it('3.4 should accept designation without code on EDIT', () => {
+    it('3.4 should accept designation without code on EDIT with valid skillCategory', () => {
       expect(
-        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE' }, true)
+        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE', skillCategory: 'SKILLED' }, true)
+      ).toBe(true);
+      expect(
+        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE', skillCategory: 'HIGHLY_SKILLED' }, true)
+      ).toBe(true);
+      expect(
+        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE', skillCategory: 'SEMI_SKILLED' }, true)
+      ).toBe(true);
+      expect(
+        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE', skillCategory: 'UNSKILLED' }, true)
       ).toBe(true);
     });
 
@@ -159,15 +178,42 @@ describe('Phase 5A-2 HR & Workforce Frontend Logic Test Suite', () => {
       expect(
         canSubmitHrDesignation({ code: 'DSM', name: 'DSM', status: 'ACTIVE' }, false)
       ).toBe(false);
-    });
-
-    it('3.7 should require skillCategory on EDIT if isLegacyUnclassified is true', () => {
       expect(
-        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE' }, true, true)
+        canSubmitHrDesignation({ code: 'DSM', name: 'DSM', status: 'ACTIVE', skillCategory: undefined }, false)
       ).toBe(false);
       expect(
-        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE', skillCategory: 'HIGHLY_SKILLED' }, true, true)
-      ).toBe(true);
+        canSubmitHrDesignation({ code: 'DSM', name: 'DSM', status: 'ACTIVE', skillCategory: null }, false)
+      ).toBe(false);
+      expect(
+        canSubmitHrDesignation({ code: 'DSM', name: 'DSM', status: 'ACTIVE', skillCategory: '' }, false)
+      ).toBe(false);
+      expect(
+        canSubmitHrDesignation({ code: 'DSM', name: 'DSM', status: 'ACTIVE', skillCategory: 'INVALID' as any }, false)
+      ).toBe(false);
+    });
+
+    it('3.7 should reject designation on EDIT when skillCategory is undefined, null, empty string, or invalid', () => {
+      expect(
+        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE', skillCategory: undefined }, true)
+      ).toBe(false);
+      expect(
+        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE', skillCategory: null }, true)
+      ).toBe(false);
+      expect(
+        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE', skillCategory: '' }, true)
+      ).toBe(false);
+      expect(
+        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE', skillCategory: 'EXPERT' as any }, true)
+      ).toBe(false);
+    });
+
+    it('3.8 should reject designation with missing name on EDIT', () => {
+      expect(
+        canSubmitHrDesignation({ name: '', status: 'ACTIVE', skillCategory: 'SKILLED' }, true)
+      ).toBe(false);
+      expect(
+        canSubmitHrDesignation({ name: '   ', status: 'ACTIVE', skillCategory: 'SKILLED' }, true)
+      ).toBe(false);
     });
   });
 

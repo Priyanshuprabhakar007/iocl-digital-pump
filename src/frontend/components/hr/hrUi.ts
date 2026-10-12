@@ -618,24 +618,16 @@ export function getEligibleRosterShiftTemplates(
 export function canSubmitHrDesignation(
   payload: { code?: string; name?: string; status?: string; skillCategory?: string | null },
   isEdit = false,
-  isLegacyUnclassified = false
+  _isLegacyUnclassified = false
 ): boolean {
   if (!isEdit) {
     if (!payload.code || !payload.code.trim()) return false;
-    if (!payload.skillCategory || !['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED'].includes(payload.skillCategory)) {
-      return false;
-    }
-  }
-  if (isLegacyUnclassified) {
-    if (!payload.skillCategory || !['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED'].includes(payload.skillCategory)) {
-      return false;
-    }
   }
   if (!payload.name || !payload.name.trim()) return false;
-  if (payload.status && payload.status !== 'ACTIVE' && payload.status !== 'INACTIVE') {
+  if (!payload.skillCategory || !['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED'].includes(payload.skillCategory)) {
     return false;
   }
-  if (payload.skillCategory && !['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED'].includes(payload.skillCategory)) {
+  if (payload.status && payload.status !== 'ACTIVE' && payload.status !== 'INACTIVE') {
     return false;
   }
   return true;

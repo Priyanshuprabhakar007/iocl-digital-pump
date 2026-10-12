@@ -225,15 +225,13 @@ export const HrStaffDetailPanel: React.FC<HrStaffDetailPanelProps> = ({
             </div>
             <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1.5 flex-wrap">
               <span>Code: {staff.designationCode || '—'}</span>
-              {staff.designationSkillCategory && (
-                <span
-                  className={`px-1.5 py-0.2 rounded text-[9px] font-semibold border ${
-                    formatHrSkillCategory(staff.designationSkillCategory).badgeClass
-                  }`}
-                >
-                  {formatHrSkillCategory(staff.designationSkillCategory).label}
-                </span>
-              )}
+              <span
+                className={`px-1.5 py-0.2 rounded text-[9px] font-semibold border ${
+                  formatHrSkillCategory(staff.designationSkillCategory).badgeClass
+                }`}
+              >
+                {formatHrSkillCategory(staff.designationSkillCategory).label}
+              </span>
             </div>
           </div>
 

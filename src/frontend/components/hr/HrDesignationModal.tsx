@@ -73,11 +73,9 @@ export const HrDesignationModal: React.FC<HrDesignationModalProps> = ({
         const payload: any = {
           name: name.trim(),
           status,
+          skillCategory: skillCategory as HrSkillCategory,
           notes: notes.trim() ? notes.trim() : null,
         };
-        if (skillCategory) {
-          payload.skillCategory = skillCategory;
-        }
 
         const res = await apiFetch<HrDesignation>(`/api/v1/hr/designations/${designation.id}`, {
           method: 'PUT',
@@ -223,7 +221,7 @@ export const HrDesignationModal: React.FC<HrDesignationModalProps> = ({
               value={skillCategory}
               onChange={e => setSkillCategory(e.target.value as HrSkillCategory)}
               className="w-full px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
-              required={!isEdit || isLegacyUnclassified}
+              required
             >
               <option value="">-- Select Skill Category --</option>
               <option value="HIGHLY_SKILLED">Highly Skilled</option>

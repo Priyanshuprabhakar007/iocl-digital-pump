@@ -46,6 +46,16 @@ export const HrManpowerSummaryPanel: React.FC<HrManpowerSummaryPanelProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Section Heading */}
+      <div className="flex items-center gap-2">
+        <div className="p-1.5 rounded-lg bg-orange-500/10 text-orange-400">
+          <Users className="w-4 h-4" />
+        </div>
+        <h3 className="text-sm font-bold text-white tracking-wide">
+          Employee Strength & Skill Mix
+        </h3>
+      </div>
+
       {/* 4 Overview Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. Total Sanctioned */}
@@ -204,27 +214,37 @@ export const HrManpowerSummaryPanel: React.FC<HrManpowerSummaryPanelProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-1 pt-1 border-t border-slate-800 text-center">
+                  <div className="grid grid-cols-4 gap-1 pt-1 border-t border-slate-800 text-center">
                     <div>
-                      <div className="text-[9px] text-slate-500 uppercase">Sanc</div>
+                      <div className="text-[9px] text-slate-500 uppercase">Sanctioned</div>
                       <div className="text-xs font-bold font-mono text-slate-200">
                         {item.sanctionedCount}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[9px] text-slate-500 uppercase">Act</div>
+                      <div className="text-[9px] text-slate-500 uppercase">Actual</div>
                       <div className="text-xs font-bold font-mono text-emerald-400">
                         {item.actualCount}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[9px] text-slate-500 uppercase">Deficit</div>
+                      <div className="text-[9px] text-slate-500 uppercase">Shortage</div>
                       <div
                         className={`text-xs font-bold font-mono ${
                           item.shortageCount > 0 ? 'text-rose-400' : 'text-slate-400'
                         }`}
                       >
                         {item.shortageCount}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] text-slate-500 uppercase">Excess</div>
+                      <div
+                        className={`text-xs font-bold font-mono ${
+                          item.excessCount > 0 ? 'text-sky-400' : 'text-slate-400'
+                        }`}
+                      >
+                        {item.excessCount}
                       </div>
                     </div>
                   </div>
