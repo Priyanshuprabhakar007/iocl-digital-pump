@@ -103,4 +103,49 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
       expect(triggerNames).toContain('trg_hr_leave_update_integrity');
     });
   });
+
+    // 2. Workflow Integrity
+    describe('2. Workflow Integrity', () => {
+      it('should block direct INSERT of non-PENDING status', async () => {
+        const db = getDb(localD1);
+        await expect(db.insert(hrLeaveRequests).values({
+          id: 'test-1',
+          outletId: OUTLET_ID,
+          staffId: 'staff-1',
+          leaveType: 'CL',
+          fromDate: '2026-11-01',
+          toDate: '2026-11-02',
+          status: 'APPROVED',
+          requestedByUserId: 'user-1',
+        }).run()).rejects.toThrow('HR_LEAVE_INVALID_STATE_TRANSITION');
+      });
+
+      it('should prevent updating terminal metadata once APPROVED', async () => {
+        const db = getDb(localD1);
+        await db.insert(hrLeaveRequests).values({
+          id: 'test-1',
+          outletId: OUTLET_ID,
+          staffId: 'staff-1',
+          leaveType: 'CL',
+          fromDate: '2026-11-01',
+          toDate: '2026-11-02',
+          status: 'APPROVED',
+          requestedByUserId: 'user-1',
+          decisionByUserId: 'admin-1',
+          decisionAt: '2026-10-10T10:00:00Z',
+        }).run();
+
+        await expect(db.update(hrLeaveRequests)
+          .set({ decisionNotes: 'New notes' })
+          .where(eq(hrLeaveRequests.id, 'test-1'))
+          .run()).rejects.toThrow('HR_LEAVE_TERMINAL_IMMUTABLE');
+      });
+    });
+
+    // 3. Role Matrix
+    describe('3. Role Matrix', () => {
+      it('should allow ADMIN to approve', async () => {
+        // Placeholder
+      });
+    });
 });
