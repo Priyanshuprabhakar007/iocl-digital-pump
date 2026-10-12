@@ -139,12 +139,11 @@ BEGIN
             THEN RAISE(ABORT, 'HR_LEAVE_DOCUMENT_OUTLET_MISMATCH')
             -- State transitions
             WHEN OLD.status <> NEW.status AND NOT (
-                (OLD.status = 'PENDING' AND NEW.status IN ('APPROVED', 'REJECTED', 'CANCELLED')) OR
-                (OLD.status = 'APPROVED' AND NEW.status = 'CANCELLED')
+                (OLD.status = 'PENDING' AND NEW.status IN ('APPROVED', 'REJECTED', 'CANCELLED'))
             )
             THEN RAISE(ABORT, 'HR_LEAVE_INVALID_STATE_TRANSITION')
             -- Terminal immutability
-            WHEN OLD.status IN ('APPROVED', 'REJECTED', 'CANCELLED') AND NOT (OLD.status = 'APPROVED' AND NEW.status = 'CANCELLED') AND (
+            WHEN OLD.status IN ('APPROVED', 'REJECTED', 'CANCELLED') AND (
                  (NEW.decision_by_user_id IS NOT OLD.decision_by_user_id) OR
                  (NEW.decision_at IS NOT OLD.decision_at) OR
                  (NEW.decision_notes IS NOT OLD.decision_notes) OR
