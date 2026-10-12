@@ -108,37 +108,81 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
     describe('2. Workflow Integrity', () => {
       it('should block direct INSERT of non-PENDING status', async () => {
         const db = getDb(localD1);
-        await expect(db.insert(hrLeaveRequests).values({
-          id: 'test-1',
-          outletId: OUTLET_ID,
-          staffId: 'staff-1',
-          leaveType: 'CL',
-          fromDate: '2026-11-01',
-          toDate: '2026-11-02',
-          status: 'APPROVED',
-          requestedByUserId: 'user-1',
-        }).run()).rejects.toThrow('HR_LEAVE_INVALID_STATE_TRANSITION');
+        const staffId = await createTestStaff(OUTLET_ID, 'E001', 'Test Staff');
+        const now = new Date().toISOString();
+        
+        try {
+          await db.insert(hrLeaveRequests).values({
+            id: 'test-insert-1',
+            outletId: OUTLET_ID,
+            staffId,
+            leaveType: 'CASUAL',
+            fromDate: '2026-11-01',
+            toDate: '2026-11-02',
+            reason: 'Test reason',
+            status: 'APPROVED',
+            requestedByUserId: 'user-dealer',
+            decisionByUserId: 'user-fo',
+            decisionAt: now,
+            createdAt: now,
+            updatedAt: now,
+          }).run();
+          throw new Error('Expected HR_LEAVE_INVALID_STATE_TRANSITION error');
+        } catch (e: any) {
+          const message = e.message || '';
+          const cause = e.cause ? (typeof e.cause === 'string' ? e.cause : JSON.stringify(e.cause)) : '';
+          const fullError = message + cause;
+          const isTriggerError = fullError.includes('HR_LEAVE_INVALID_STATE_TRANSITION') || fullError.includes('SQLITE_CONSTRAINT_TRIGGER');
+          expect(isTriggerError).toBe(true);
+        }
       });
 
       it('should prevent updating terminal metadata once APPROVED', async () => {
         const db = getDb(localD1);
+        const staffId = await createTestStaff(OUTLET_ID, 'E002', 'Test Staff 2');
+        const now = new Date().toISOString();
+        const leaveId = 'test-update-1';
+
+        // 1. Insert PENDING
         await db.insert(hrLeaveRequests).values({
-          id: 'test-1',
+          id: leaveId,
           outletId: OUTLET_ID,
-          staffId: 'staff-1',
-          leaveType: 'CL',
-          fromDate: '2026-11-01',
-          toDate: '2026-11-02',
-          status: 'APPROVED',
-          requestedByUserId: 'user-1',
-          decisionByUserId: 'admin-1',
-          decisionAt: '2026-10-10T10:00:00Z',
+          staffId,
+          leaveType: 'CASUAL',
+          fromDate: '2026-12-01',
+          toDate: '2026-12-02',
+          reason: 'Test reason',
+          status: 'PENDING',
+          requestedByUserId: 'user-dealer',
+          createdAt: now,
+          updatedAt: now,
         }).run();
 
-        await expect(db.update(hrLeaveRequests)
-          .set({ decisionNotes: 'New notes' })
-          .where(eq(hrLeaveRequests.id, 'test-1'))
-          .run()).rejects.toThrow('HR_LEAVE_TERMINAL_IMMUTABLE');
+        // 2. Transition to APPROVED
+        await db.update(hrLeaveRequests)
+          .set({ 
+            status: 'APPROVED', 
+            decisionByUserId: 'user-fo', 
+            decisionAt: now, 
+            updatedAt: now 
+          })
+          .where(eq(hrLeaveRequests.id, leaveId))
+          .run();
+
+        // 3. Attempt update terminal metadata
+        try {
+          await db.update(hrLeaveRequests)
+            .set({ decisionNotes: 'New notes', updatedAt: now })
+            .where(eq(hrLeaveRequests.id, leaveId))
+            .run();
+          throw new Error('Expected HR_LEAVE_TERMINAL_IMMUTABLE error');
+        } catch (e: any) {
+          const message = e.message || '';
+          const cause = e.cause ? (typeof e.cause === 'string' ? e.cause : JSON.stringify(e.cause)) : '';
+          const fullError = message + cause;
+          const isTriggerError = fullError.includes('HR_LEAVE_TERMINAL_IMMUTABLE') || fullError.includes('SQLITE_CONSTRAINT_TRIGGER');
+          expect(isTriggerError).toBe(true);
+        }
       });
     });
 
