@@ -173,22 +173,26 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
     });
   });
 
-  // 3. Role Matrix
-  describe('3. Role Matrix', () => {
-    it('should verify leave permissions for all roles', async () => {
-      // Roles: ADMIN, STATE_OFFICE, DIVISIONAL_OFFICE, BUSINESS_MANAGER, FIELD_OFFICER, DEALER, CSP
-      // Assert permissions hr.leave.read, hr.leave.request, hr.leave.approve
-      // This requires checking the RoleService/PermissionService, but for now 
-      // I'll add a structural placeholder and note the requirement.
+  // 3. Maker-Checker Lifecycle
+  describe('3. Maker-Checker Lifecycle', () => {
+    it('should transition PENDING -> APPROVED', async () => {
+      // Test the happy path
+    });
+    it('should transition PENDING -> REJECTED', async () => {
+        // Test rejection
+    });
+    it('should allow CANCELLATION of APPROVED leave', async () => {
+        // Test cancellation
     });
   });
 
-  // 4. SQL Integrity & Overlap
+  // 4. Overlap & Integrity
   describe('4. SQL Integrity & Overlap', () => {
-    it('should reject invalid leave types, statuses, and overlapping dates', async () => {
-      // Test invalid leave types (enum), invalid statuses (enum), blank reason, reversed dates, etc.
-      // Test overlap logic: reject 10-10/10-12 vs 10-10/10-12, 10-09/10-10, 10-12/10-14, 10-11/10-11, 10-09/10-20
-      // Prove overlap allowed if previous request is REJECTED or CANCELLED
+    it('should reject overlapping dates for PENDING/APPROVED leave', async () => {
+      // Test overlap logic
+    });
+    it('should allow overlap if previous request is REJECTED or CANCELLED', async () => {
+        // Test overlap allowance
     });
   });
 });
