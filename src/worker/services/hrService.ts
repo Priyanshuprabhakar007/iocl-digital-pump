@@ -1506,8 +1506,14 @@ export class HrService {
     }
 
     const staff = await this.hrRepo.getStaffById(leave.staffId);
-    if (!staff || staff.outletId !== outletId || staff.employmentStatus !== 'ACTIVE') {
-      throw new HrError('HR_STAFF_NOT_ACTIVE', 'Staff member is not active or not found', 409);
+    if (!staff) {
+      throw new HrError('HR_STAFF_NOT_FOUND', 'Staff member not found', 404);
+    }
+    if (staff.outletId !== outletId) {
+      throw new HrError('HR_LEAVE_STAFF_OUTLET_MISMATCH', 'Staff belongs to another outlet', 400);
+    }
+    if (staff.employmentStatus !== 'ACTIVE') {
+      throw new HrError('HR_LEAVE_STAFF_NOT_ACTIVE', 'Staff member is not active', 409);
     }
 
     const hasOverlap = await this.hrRepo.findOverlappingLeave(leave.staffId, leave.fromDate, leave.toDate, id);
@@ -1525,6 +1531,11 @@ export class HrService {
 
       const updated = await this.getLeaveRequestById(id, outletId);
 
+      const auditNewValue: any = { status: 'APPROVED', decisionByUserId: actorUserId };
+      if (validated.decisionNotes) {
+        auditNewValue.decisionNotes = validated.decisionNotes;
+      }
+
       await this.auditRepo.logAction({
         id: crypto.randomUUID(),
         userId: actorUserId,
@@ -1532,7 +1543,7 @@ export class HrService {
         entityType: 'HR_LEAVE_REQUEST',
         entityId: id,
         oldValue: { status: 'PENDING' },
-        newValue: { status: 'APPROVED', decisionByUserId: actorUserId },
+        newValue: auditNewValue,
         createdAt: now,
       });
 
