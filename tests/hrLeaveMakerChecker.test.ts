@@ -305,4 +305,47 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
         expect(result?.id).toBe('leave-2');
     });
   });
+
+  // 5. Additional Hardening
+  describe('5. Additional Hardening', () => {
+    it('should save decision notes in audit log', async () => {
+        const db = getDb(localD1);
+        const staffId = await createTestStaff(OUTLET_ID, 'E-NOTES', 'Staff Notes');
+        const now = new Date().toISOString();
+        const leaveId = 'leave-notes';
+        const notes = 'Approved for emergency';
+        
+        await db.insert(hrLeaveRequests).values({
+          id: leaveId, outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+          fromDate: '2026-11-01', toDate: '2026-11-02', reason: 'Test',
+          status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+        }).run();
+  
+        await db.update(hrLeaveRequests)
+          .set({ status: 'APPROVED', decisionByUserId: 'user-fo', decisionAt: now, updatedAt: now, decisionNotes: notes })
+          .where(eq(hrLeaveRequests.id, leaveId))
+          .run();
+  
+        const result = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, leaveId)).get();
+        expect(result?.decisionNotes).toBe(notes);
+    });
+
+    it('should prevent leave request with fromDate > toDate', async () => {
+        const db = getDb(localD1);
+        const staffId = await createTestStaff(OUTLET_ID, 'E-DATE', 'Staff Date');
+        const now = new Date().toISOString();
+        
+        try {
+            await db.insert(hrLeaveRequests).values({
+              id: 'leave-date', outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+              fromDate: '2026-12-02', toDate: '2026-12-01', reason: 'Test',
+              status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+            }).run();
+            throw new Error('Should have failed due to invalid dates');
+        } catch (e: any) {
+            const fullError = (e.message || '') + (e.cause ? JSON.stringify(e.cause) : '');
+            expect(fullError).toMatch(/HR_LEAVE_INVALID_DATES|SQLITE_CONSTRAINT/);
+        }
+    });
+  });
 });
