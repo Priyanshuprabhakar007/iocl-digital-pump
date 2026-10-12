@@ -627,6 +627,7 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
         body: JSON.stringify({
           code: 'NOZZLE_ATTENDANT',
           name: 'Nozzle Attendant',
+          skillCategory: 'SEMI_SKILLED',
           status: 'ACTIVE',
           notes: 'Customer-facing fueling attendant',
         }),
@@ -637,6 +638,7 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
       expect(json.success).toBe(true);
       expect(json.data.code).toBe('NOZZLE_ATTENDANT');
       expect(json.data.name).toBe('Nozzle Attendant');
+      expect(json.data.skillCategory).toBe('SEMI_SKILLED');
       expect(json.data.status).toBe('ACTIVE');
       expect(json.data.outletId).toBe(OUTLET_1_ID);
     });
@@ -705,6 +707,7 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
         body: JSON.stringify({
           code: 'DUP_CODE',
           name: 'Duplicate Attempt',
+          skillCategory: 'SKILLED',
         }),
       }, env);
 
@@ -724,6 +727,7 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
         body: JSON.stringify({
           code: 'COMMON_ROLE',
           name: 'Common Role O2',
+          skillCategory: 'SKILLED',
         }),
       }, env);
 
@@ -2632,7 +2636,7 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
       const desigRes = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/designations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: foCookie, Origin: 'http://localhost:3000' },
-        body: JSON.stringify({ code: 'FO_DESIG', name: 'FO Desig' }),
+        body: JSON.stringify({ code: 'FO_DESIG', name: 'FO Desig', skillCategory: 'SEMI_SKILLED' }),
       }, env);
       expect(desigRes.status).toBe(201);
       const desigId = (await jsonOf(desigRes)).data.id;
@@ -2822,7 +2826,7 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
       const res = await app.request(`/api/v1/outlets/${OUTLET_1_ID}/hr/designations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
-        body: JSON.stringify({ code: 'AUDIT_DESIG', name: 'Audit Desig' }),
+        body: JSON.stringify({ code: 'AUDIT_DESIG', name: 'Audit Desig', skillCategory: 'SKILLED' }),
       }, env);
       expect(res.status).toBe(201);
       const desigId = (await jsonOf(res)).data.id;
