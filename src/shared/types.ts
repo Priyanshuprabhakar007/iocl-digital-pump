@@ -1502,6 +1502,48 @@ export type HrSkillCategory =
   | 'SEMI_SKILLED'
   | 'UNSKILLED';
 
+export type HrLeaveType =
+  | 'CASUAL'
+  | 'SICK'
+  | 'EARNED'
+  | 'UNPAID'
+  | 'OTHER';
+
+export type HrLeaveStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED';
+
+export interface HrLeaveRequest {
+  id: string;
+  outletId: string;
+  staffId: string;
+  leaveType: HrLeaveType;
+  fromDate: string;
+  toDate: string;
+  reason: string;
+  attachmentDocumentId: string | null;
+  status: HrLeaveStatus;
+  requestedByUserId: string;
+  decisionByUserId: string | null;
+  decisionAt: string | null;
+  decisionNotes: string | null;
+  cancelledByUserId: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  staffName?: string | null;
+  employeeCode?: string | null;
+  designationName?: string | null;
+  designationSkillCategory?: HrSkillCategory | null;
+  requestedByName?: string | null;
+  decisionByName?: string | null;
+  cancelledByName?: string | null;
+  calendarDays?: number;
+}
+
 export interface HrDesignation {
   id: string;
   outletId: string;

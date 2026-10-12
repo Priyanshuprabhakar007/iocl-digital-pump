@@ -19,6 +19,11 @@ import {
   AttendanceListQuerySchema,
   NozzleAssignmentCreateSchema,
   NozzleAssignmentListQuerySchema,
+  CreateHrLeaveRequestSchema,
+  ApproveHrLeaveRequestSchema,
+  RejectHrLeaveRequestSchema,
+  CancelHrLeaveRequestSchema,
+  HrLeaveListQuerySchema,
 } from '../../shared/validators';
 import {
   HrDesignation,
@@ -30,7 +35,10 @@ import {
   HrGeofencePolicy,
   HrAttendanceRecord,
   HrNozzleAssignment,
+  HrLeaveRequest,
 } from '../../shared/types';
+import { documents } from '../../db/schema';
+import { eq } from 'drizzle-orm';
 
 export function calculateHaversineDistanceMetres(
   lat1: number,
@@ -229,6 +237,42 @@ function handleDbError(err: any): never {
   }
   if (msg.includes('HR_NOZZLE_ASSIGNMENT_ALREADY_CANCELLED')) {
     throw new HrError('HR_NOZZLE_ASSIGNMENT_ALREADY_CANCELLED', 'Nozzle assignment is already cancelled', 409);
+  }
+  if (msg.includes('HR_LEAVE_DELETE_FORBIDDEN')) {
+    throw new HrError('HR_LEAVE_DELETE_FORBIDDEN', 'Direct deletion of leave requests is forbidden', 409);
+  }
+  if (msg.includes('HR_LEAVE_IDENTITY_IMMUTABLE')) {
+    throw new HrError('HR_LEAVE_IDENTITY_IMMUTABLE', 'Leave request identity fields cannot be modified', 400);
+  }
+  if (msg.includes('HR_LEAVE_STAFF_OUTLET_MISMATCH')) {
+    throw new HrError('HR_LEAVE_STAFF_OUTLET_MISMATCH', 'Staff member does not belong to this outlet', 400);
+  }
+  if (msg.includes('HR_LEAVE_STAFF_NOT_ACTIVE')) {
+    throw new HrError('HR_LEAVE_STAFF_NOT_ACTIVE', 'Staff member is not active', 409);
+  }
+  if (msg.includes('HR_LEAVE_DOCUMENT_NOT_FOUND')) {
+    throw new HrError('HR_LEAVE_DOCUMENT_NOT_FOUND', 'Document not found', 400);
+  }
+  if (msg.includes('HR_LEAVE_DOCUMENT_OUTLET_MISMATCH')) {
+    throw new HrError('HR_LEAVE_DOCUMENT_OUTLET_MISMATCH', 'Document does not belong to this outlet', 400);
+  }
+  if (msg.includes('HR_LEAVE_OVERLAP')) {
+    throw new HrError('HR_LEAVE_OVERLAP', 'Overlapping active leave request exists for staff member', 409);
+  }
+  if (msg.includes('HR_MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN')) {
+    throw new HrError('HR_MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN', 'Maker cannot approve or reject their own leave request', 409);
+  }
+  if (msg.includes('HR_LEAVE_CANCEL_NOT_REQUESTER')) {
+    throw new HrError('HR_LEAVE_CANCEL_NOT_REQUESTER', 'Only the original requester can cancel this leave request', 403);
+  }
+  if (msg.includes('HR_LEAVE_INVALID_STATE_TRANSITION')) {
+    throw new HrError('HR_LEAVE_INVALID_STATE_TRANSITION', 'Invalid leave request state transition', 409);
+  }
+  if (msg.includes('HR_LEAVE_NOT_PENDING')) {
+    throw new HrError('HR_LEAVE_NOT_PENDING', 'Leave request is not pending', 409);
+  }
+  if (msg.includes('HR_LEAVE_NOT_FOUND')) {
+    throw new HrError('HR_LEAVE_NOT_FOUND', 'Leave request not found', 404);
   }
   if (msg.includes('HR_ROSTER_OUTLET_MISMATCH')) {
     throw new HrError('HR_ROSTER_OUTLET_MISMATCH', 'Roster assignment belongs to another outlet', 400);
@@ -1357,6 +1401,214 @@ export class HrService {
         entityId: assignmentId,
         oldValue: { status: assignment.status },
         newValue: { status: 'CANCELLED' },
+        createdAt: now,
+      });
+
+      return updated;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  async listLeaveRequests(outletId: string, rawQuery?: any): Promise<HrLeaveRequest[]> {
+    const query = rawQuery ? HrLeaveListQuerySchema.parse(rawQuery) : undefined;
+    return this.hrRepo.listLeaveRequests(outletId, query);
+  }
+
+  async getLeaveRequestById(id: string, outletId: string): Promise<HrLeaveRequest> {
+    const leave = await this.hrRepo.getLeaveRequestById(id);
+    if (!leave || leave.outletId !== outletId) {
+      throw new HrError('HR_LEAVE_NOT_FOUND', 'Leave request not found', 404);
+    }
+    return leave;
+  }
+
+  async createLeaveRequest(outletId: string, actorUserId: string, rawPayload: any): Promise<HrLeaveRequest> {
+    const validated = CreateHrLeaveRequestSchema.parse(rawPayload);
+
+    const staff = await this.hrRepo.getStaffById(validated.staffId);
+    if (!staff) {
+      throw new HrError('HR_STAFF_NOT_FOUND', 'Staff member not found', 404);
+    }
+    if (staff.outletId !== outletId) {
+      throw new HrError('HR_LEAVE_STAFF_OUTLET_MISMATCH', 'Staff member does not belong to this outlet', 400);
+    }
+    if (staff.employmentStatus !== 'ACTIVE') {
+      throw new HrError('HR_STAFF_NOT_ACTIVE', 'Staff member is not active', 409);
+    }
+
+    if (validated.attachmentDocumentId) {
+      const db = (this.hrRepo as any).db;
+      const doc = await db.select().from(documents).where(eq(documents.id, validated.attachmentDocumentId)).get();
+      if (!doc) {
+        throw new HrError('HR_LEAVE_DOCUMENT_NOT_FOUND', 'Document not found', 400);
+      }
+      if (doc.outletId && doc.outletId !== outletId) {
+        throw new HrError('HR_LEAVE_DOCUMENT_OUTLET_MISMATCH', 'Document does not belong to this outlet', 400);
+      }
+    }
+
+    const hasOverlap = await this.hrRepo.findOverlappingLeave(validated.staffId, validated.fromDate, validated.toDate);
+    if (hasOverlap) {
+      throw new HrError('HR_LEAVE_OVERLAP', 'Overlapping active leave request exists for staff member', 409);
+    }
+
+    const id = `leave-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+
+    try {
+      const created = await this.hrRepo.createLeaveRequest({
+        id,
+        outletId,
+        staffId: validated.staffId,
+        leaveType: validated.leaveType,
+        fromDate: validated.fromDate,
+        toDate: validated.toDate,
+        reason: validated.reason,
+        attachmentDocumentId: validated.attachmentDocumentId,
+        status: 'PENDING',
+        requestedByUserId: actorUserId,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_LEAVE_REQUEST_CREATE',
+        entityType: 'HR_LEAVE_REQUEST',
+        entityId: id,
+        newValue: {
+          staffId: validated.staffId,
+          leaveType: validated.leaveType,
+          fromDate: validated.fromDate,
+          toDate: validated.toDate,
+          status: 'PENDING',
+        },
+        createdAt: now,
+      });
+
+      return created;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  async approveLeaveRequest(id: string, outletId: string, actorUserId: string, rawPayload: any): Promise<HrLeaveRequest> {
+    const validated = ApproveHrLeaveRequestSchema.parse(rawPayload);
+    const leave = await this.getLeaveRequestById(id, outletId);
+
+    if (leave.status !== 'PENDING') {
+      throw new HrError('HR_LEAVE_NOT_PENDING', 'Leave request is not pending', 409);
+    }
+    if (leave.requestedByUserId === actorUserId) {
+      throw new HrError('HR_MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN', 'Maker cannot approve their own leave request', 409);
+    }
+
+    const staff = await this.hrRepo.getStaffById(leave.staffId);
+    if (!staff || staff.outletId !== outletId || staff.employmentStatus !== 'ACTIVE') {
+      throw new HrError('HR_STAFF_NOT_ACTIVE', 'Staff member is not active or not found', 409);
+    }
+
+    const hasOverlap = await this.hrRepo.findOverlappingLeave(leave.staffId, leave.fromDate, leave.toDate, id);
+    if (hasOverlap) {
+      throw new HrError('HR_LEAVE_OVERLAP', 'Overlapping approved leave exists', 409);
+    }
+
+    const now = new Date().toISOString();
+
+    try {
+      const success = await this.hrRepo.approveLeaveConditional(id, outletId, actorUserId, validated.decisionNotes, now);
+      if (!success) {
+        throw new HrError('HR_LEAVE_STATE_CHANGED', 'Leave request state changed concurrently', 409);
+      }
+
+      const updated = await this.getLeaveRequestById(id, outletId);
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_LEAVE_REQUEST_APPROVE',
+        entityType: 'HR_LEAVE_REQUEST',
+        entityId: id,
+        oldValue: { status: 'PENDING' },
+        newValue: { status: 'APPROVED', decisionByUserId: actorUserId },
+        createdAt: now,
+      });
+
+      return updated;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  async rejectLeaveRequest(id: string, outletId: string, actorUserId: string, rawPayload: any): Promise<HrLeaveRequest> {
+    const validated = RejectHrLeaveRequestSchema.parse(rawPayload);
+    const leave = await this.getLeaveRequestById(id, outletId);
+
+    if (leave.status !== 'PENDING') {
+      throw new HrError('HR_LEAVE_NOT_PENDING', 'Leave request is not pending', 409);
+    }
+    if (leave.requestedByUserId === actorUserId) {
+      throw new HrError('HR_MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN', 'Maker cannot reject their own leave request', 409);
+    }
+
+    const now = new Date().toISOString();
+
+    try {
+      const success = await this.hrRepo.rejectLeaveConditional(id, outletId, actorUserId, validated.decisionNotes, now);
+      if (!success) {
+        throw new HrError('HR_LEAVE_STATE_CHANGED', 'Leave request state changed concurrently', 409);
+      }
+
+      const updated = await this.getLeaveRequestById(id, outletId);
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_LEAVE_REQUEST_REJECT',
+        entityType: 'HR_LEAVE_REQUEST',
+        entityId: id,
+        oldValue: { status: 'PENDING' },
+        newValue: { status: 'REJECTED', decisionByUserId: actorUserId, decisionNotes: validated.decisionNotes },
+        createdAt: now,
+      });
+
+      return updated;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  async cancelLeaveRequest(id: string, outletId: string, actorUserId: string, rawPayload: any): Promise<HrLeaveRequest> {
+    const validated = CancelHrLeaveRequestSchema.parse(rawPayload);
+    const leave = await this.getLeaveRequestById(id, outletId);
+
+    if (leave.status !== 'PENDING') {
+      throw new HrError('HR_LEAVE_NOT_PENDING', 'Leave request is not pending', 409);
+    }
+    if (leave.requestedByUserId !== actorUserId) {
+      throw new HrError('HR_LEAVE_CANCEL_NOT_REQUESTER', 'Only the original requester can cancel this leave request', 403);
+    }
+
+    const now = new Date().toISOString();
+
+    try {
+      const success = await this.hrRepo.cancelLeaveConditional(id, outletId, actorUserId, validated.cancellationReason, now);
+      if (!success) {
+        throw new HrError('HR_LEAVE_STATE_CHANGED', 'Leave request state changed concurrently', 409);
+      }
+
+      const updated = await this.getLeaveRequestById(id, outletId);
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_LEAVE_REQUEST_CANCEL',
+        entityType: 'HR_LEAVE_REQUEST',
+        entityId: id,
+        oldValue: { status: 'PENDING' },
+        newValue: { status: 'CANCELLED', cancelledByUserId: actorUserId, cancellationReason: validated.cancellationReason },
         createdAt: now,
       });
 

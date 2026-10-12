@@ -1527,6 +1527,65 @@ export const OutletServiceProviderAssignmentUpdateSchema = z.object({
   notes: z.string().trim().optional().nullable(),
 }).strict();
 
+export const HrLeaveTypeEnum = z.enum(['CASUAL', 'SICK', 'EARNED', 'UNPAID', 'OTHER']);
+export const HrLeaveStatusEnum = z.enum(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']);
+
+const isValidDateString = (val: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) return false;
+  const [y, m, d] = val.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return (
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() === m - 1 &&
+    date.getUTCDate() === d
+  );
+};
+
+const LeaveDateSchema = z.string().refine(isValidDateString, {
+  message: 'Date must be a valid real calendar date in YYYY-MM-DD format',
+});
+
+export const CreateHrLeaveRequestSchema = z.object({
+  staffId: z.string().min(1, 'Staff ID is required').trim(),
+  leaveType: HrLeaveTypeEnum,
+  fromDate: LeaveDateSchema,
+  toDate: LeaveDateSchema,
+  reason: z.string().min(1, 'Reason is required').trim().max(500, 'Reason cannot exceed 500 characters'),
+  attachmentDocumentId: z.string().trim().nullable().optional(),
+}).strict().refine(data => data.toDate >= data.fromDate, {
+  message: 'toDate must be greater than or equal to fromDate',
+  path: ['toDate'],
+});
+
+export const ApproveHrLeaveRequestSchema = z.object({
+  decisionNotes: z.string().trim().max(500, 'Decision notes cannot exceed 500 characters').optional().nullable(),
+}).strict();
+
+export const RejectHrLeaveRequestSchema = z.object({
+  decisionNotes: z.string().min(1, 'Decision notes are required for rejection').trim().max(500, 'Decision notes cannot exceed 500 characters'),
+}).strict();
+
+export const CancelHrLeaveRequestSchema = z.object({
+  cancellationReason: z.string().min(1, 'Cancellation reason is required').trim().max(500, 'Cancellation reason cannot exceed 500 characters'),
+}).strict();
+
+export const HrLeaveListQuerySchema = z.object({
+  staffId: z.string().optional(),
+  leaveType: HrLeaveTypeEnum.optional(),
+  status: HrLeaveStatusEnum.optional(),
+  fromDate: LeaveDateSchema.optional(),
+  toDate: LeaveDateSchema.optional(),
+}).strict().refine(data => {
+  if (data.fromDate && data.toDate) {
+    return data.toDate >= data.fromDate;
+  }
+  return true;
+}, {
+  message: 'toDate must be greater than or equal to fromDate',
+  path: ['toDate'],
+});
+
+
 
 
 

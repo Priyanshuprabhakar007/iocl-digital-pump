@@ -1,4 +1,5 @@
-import { eq, and, desc, asc, gte, lte, sql, like, or, isNull } from 'drizzle-orm';
+import { eq, and, desc, asc, gte, lte, sql, like, or, isNull, inArray } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { AppDatabase } from '../../db';
 import {
   hrDesignations,
@@ -8,12 +9,14 @@ import {
   hrOutletGeofencePolicies,
   hrAttendanceRecords,
   hrNozzleAssignments,
+  hrLeaveRequests,
   shiftTemplates,
   documents,
   retailOutlets,
   nozzles,
   products,
   dispensers,
+  users,
 } from '../../db/schema';
 import {
   HrDesignation,
@@ -23,6 +26,9 @@ import {
   HrGeofencePolicy,
   HrAttendanceRecord,
   HrNozzleAssignment,
+  HrLeaveRequest,
+  HrLeaveType,
+  HrLeaveStatus,
   HrDesignationStatus,
   HrEmploymentStatus,
   HrRosterStatus,
@@ -1032,4 +1038,232 @@ export class HrRepository {
       .get();
     return row ?? null;
   }
+
+  // ==========================================
+  // LEAVE REQUESTS
+  // ==========================================
+
+  async getLeaveRequestById(id: string): Promise<HrLeaveRequest | null> {
+    const requestedBy = alias(users, 'requested_by');
+    const decisionBy = alias(users, 'decision_by');
+    const cancelledBy = alias(users, 'cancelled_by');
+
+    const row = await this.db
+      .select({
+        record: hrLeaveRequests,
+        staffName: hrStaff.fullName,
+        employeeCode: hrStaff.employeeCode,
+        designationName: hrDesignations.name,
+        designationSkillCategory: hrDesignations.skillCategory,
+        requestedByName: requestedBy.name,
+        decisionByName: decisionBy.name,
+        cancelledByName: cancelledBy.name,
+      })
+      .from(hrLeaveRequests)
+      .innerJoin(hrStaff, eq(hrLeaveRequests.staffId, hrStaff.id))
+      .leftJoin(hrDesignations, eq(hrStaff.designationId, hrDesignations.id))
+      .innerJoin(requestedBy, eq(hrLeaveRequests.requestedByUserId, requestedBy.id))
+      .leftJoin(decisionBy, eq(hrLeaveRequests.decisionByUserId, decisionBy.id))
+      .leftJoin(cancelledBy, eq(hrLeaveRequests.cancelledByUserId, cancelledBy.id))
+      .where(eq(hrLeaveRequests.id, id))
+      .get();
+
+    if (!row) return null;
+
+    return {
+      ...(row.record as HrLeaveRequest),
+      staffName: row.staffName,
+      employeeCode: row.employeeCode,
+      designationName: row.designationName,
+      designationSkillCategory: row.designationSkillCategory,
+      requestedByName: row.requestedByName,
+      decisionByName: row.decisionByName,
+      cancelledByName: row.cancelledByName,
+      calendarDays: calculateCalendarDays(row.record.fromDate, row.record.toDate),
+    };
+  }
+
+  async listLeaveRequests(outletId: string, filters?: {
+    staffId?: string;
+    leaveType?: string;
+    status?: string;
+    fromDate?: string;
+    toDate?: string;
+  }): Promise<HrLeaveRequest[]> {
+    const conditions = [eq(hrLeaveRequests.outletId, outletId)];
+
+    if (filters?.staffId) {
+      conditions.push(eq(hrLeaveRequests.staffId, filters.staffId));
+    }
+    if (filters?.leaveType) {
+      conditions.push(eq(hrLeaveRequests.leaveType, filters.leaveType as any));
+    }
+    if (filters?.status) {
+      conditions.push(eq(hrLeaveRequests.status, filters.status as any));
+    }
+    if (filters?.fromDate) {
+      conditions.push(gte(hrLeaveRequests.toDate, filters.fromDate));
+    }
+    if (filters?.toDate) {
+      conditions.push(lte(hrLeaveRequests.fromDate, filters.toDate));
+    }
+
+    const requestedBy = alias(users, 'requested_by');
+    const decisionBy = alias(users, 'decision_by');
+    const cancelledBy = alias(users, 'cancelled_by');
+
+    const rows = await this.db
+      .select({
+        record: hrLeaveRequests,
+        staffName: hrStaff.fullName,
+        employeeCode: hrStaff.employeeCode,
+        designationName: hrDesignations.name,
+        designationSkillCategory: hrDesignations.skillCategory,
+        requestedByName: requestedBy.name,
+        decisionByName: decisionBy.name,
+        cancelledByName: cancelledBy.name,
+      })
+      .from(hrLeaveRequests)
+      .innerJoin(hrStaff, eq(hrLeaveRequests.staffId, hrStaff.id))
+      .leftJoin(hrDesignations, eq(hrStaff.designationId, hrDesignations.id))
+      .innerJoin(requestedBy, eq(hrLeaveRequests.requestedByUserId, requestedBy.id))
+      .leftJoin(decisionBy, eq(hrLeaveRequests.decisionByUserId, decisionBy.id))
+      .leftJoin(cancelledBy, eq(hrLeaveRequests.cancelledByUserId, cancelledBy.id))
+      .where(and(...conditions))
+      .orderBy(desc(hrLeaveRequests.createdAt))
+      .all();
+
+    return rows.map(row => ({
+      ...(row.record as HrLeaveRequest),
+      staffName: row.staffName,
+      employeeCode: row.employeeCode,
+      designationName: row.designationName,
+      designationSkillCategory: row.designationSkillCategory,
+      requestedByName: row.requestedByName,
+      decisionByName: row.decisionByName,
+      cancelledByName: row.cancelledByName,
+      calendarDays: calculateCalendarDays(row.record.fromDate, row.record.toDate),
+    }));
+  }
+
+  async findOverlappingLeave(staffId: string, fromDate: string, toDate: string, excludeId?: string): Promise<boolean> {
+    const conditions = [
+      eq(hrLeaveRequests.staffId, staffId),
+      inArray(hrLeaveRequests.status, ['PENDING', 'APPROVED']),
+      lte(hrLeaveRequests.fromDate, toDate),
+      gte(hrLeaveRequests.toDate, fromDate),
+    ];
+    if (excludeId) {
+      conditions.push(sql`${hrLeaveRequests.id} <> ${excludeId}`);
+    }
+    const row = await this.db
+      .select({ id: hrLeaveRequests.id })
+      .from(hrLeaveRequests)
+      .where(and(...conditions))
+      .get();
+    return !!row;
+  }
+
+  async createLeaveRequest(data: {
+    id: string;
+    outletId: string;
+    staffId: string;
+    leaveType: HrLeaveType;
+    fromDate: string;
+    toDate: string;
+    reason: string;
+    attachmentDocumentId?: string | null;
+    status: HrLeaveStatus;
+    requestedByUserId: string;
+    createdAt: string;
+    updatedAt: string;
+  }): Promise<HrLeaveRequest> {
+    await this.db.insert(hrLeaveRequests).values({
+      id: data.id,
+      outletId: data.outletId,
+      staffId: data.staffId,
+      leaveType: data.leaveType,
+      fromDate: data.fromDate,
+      toDate: data.toDate,
+      reason: data.reason,
+      attachmentDocumentId: data.attachmentDocumentId ?? null,
+      status: data.status,
+      requestedByUserId: data.requestedByUserId,
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+    }).run();
+
+    return (await this.getLeaveRequestById(data.id))!;
+  }
+
+  async approveLeaveConditional(
+    id: string,
+    outletId: string,
+    decisionByUserId: string,
+    decisionNotes: string | null | undefined,
+    updatedAt: string
+  ): Promise<boolean> {
+    const res = await this.db
+      .update(hrLeaveRequests)
+      .set({
+        status: 'APPROVED',
+        decisionByUserId,
+        decisionAt: updatedAt,
+        decisionNotes: decisionNotes ?? null,
+        updatedAt,
+      })
+      .where(and(eq(hrLeaveRequests.id, id), eq(hrLeaveRequests.outletId, outletId), eq(hrLeaveRequests.status, 'PENDING')))
+      .run();
+    return (res.meta?.changes ?? (res as any).rowsAffected ?? 0) > 0;
+  }
+
+  async rejectLeaveConditional(
+    id: string,
+    outletId: string,
+    decisionByUserId: string,
+    decisionNotes: string,
+    updatedAt: string
+  ): Promise<boolean> {
+    const res = await this.db
+      .update(hrLeaveRequests)
+      .set({
+        status: 'REJECTED',
+        decisionByUserId,
+        decisionAt: updatedAt,
+        decisionNotes,
+        updatedAt,
+      })
+      .where(and(eq(hrLeaveRequests.id, id), eq(hrLeaveRequests.outletId, outletId), eq(hrLeaveRequests.status, 'PENDING')))
+      .run();
+    return (res.meta?.changes ?? (res as any).rowsAffected ?? 0) > 0;
+  }
+
+  async cancelLeaveConditional(
+    id: string,
+    outletId: string,
+    cancelledByUserId: string,
+    cancellationReason: string,
+    updatedAt: string
+  ): Promise<boolean> {
+    const res = await this.db
+      .update(hrLeaveRequests)
+      .set({
+        status: 'CANCELLED',
+        cancelledByUserId,
+        cancelledAt: updatedAt,
+        cancellationReason,
+        updatedAt,
+      })
+      .where(and(eq(hrLeaveRequests.id, id), eq(hrLeaveRequests.outletId, outletId), eq(hrLeaveRequests.status, 'PENDING'), eq(hrLeaveRequests.requestedByUserId, cancelledByUserId)))
+      .run();
+    return (res.meta?.changes ?? (res as any).rowsAffected ?? 0) > 0;
+  }
+}
+
+function calculateCalendarDays(fromDate: string, toDate: string): number {
+  const start = new Date(fromDate + 'T00:00:00Z');
+  const end = new Date(toDate + 'T00:00:00Z');
+  const diffTime = end.getTime() - start.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 ? diffDays + 1 : 1;
 }

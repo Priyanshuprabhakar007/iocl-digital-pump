@@ -1569,6 +1569,39 @@ export const outletServiceProviderAssignments = sqliteTable('outlet_service_prov
   check('chk_osp_dates', sql`${table.effectiveTo} IS NULL OR ${table.effectiveTo} >= ${table.effectiveFrom}`),
 ]);
 
+export const hrLeaveRequests = sqliteTable('hr_leave_requests', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  staffId: text('staff_id').notNull().references(() => hrStaff.id, { onDelete: 'restrict' }),
+  leaveType: text('leave_type', { enum: ['CASUAL', 'SICK', 'EARNED', 'UNPAID', 'OTHER'] }).notNull(),
+  fromDate: text('from_date').notNull(),
+  toDate: text('to_date').notNull(),
+  reason: text('reason').notNull(),
+  attachmentDocumentId: text('attachment_document_id').references(() => documents.id, { onDelete: 'restrict' }),
+  status: text('status', { enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'] }).notNull().default('PENDING'),
+  requestedByUserId: text('requested_by_user_id').notNull().references(() => users.id),
+  decisionByUserId: text('decision_by_user_id').references(() => users.id),
+  decisionAt: text('decision_at'),
+  decisionNotes: text('decision_notes'),
+  cancelledByUserId: text('cancelled_by_user_id').references(() => users.id),
+  cancelledAt: text('cancelled_at'),
+  cancellationReason: text('cancellation_reason'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_hr_leave_outlet_status').on(table.outletId, table.status),
+  index('idx_hr_leave_outlet_staff').on(table.outletId, table.staffId),
+  index('idx_hr_leave_staff_dates').on(table.staffId, table.fromDate, table.toDate),
+  index('idx_hr_leave_outlet_dates').on(table.outletId, table.fromDate, table.toDate),
+  index('idx_hr_leave_requested_by').on(table.requestedByUserId),
+  check('hr_leave_type_check', sql`${table.leaveType} IN ('CASUAL', 'SICK', 'EARNED', 'UNPAID', 'OTHER')`),
+  check('hr_leave_status_check', sql`${table.status} IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')`),
+  check('hr_leave_reason_check', sql`trim(${table.reason}) <> ''`),
+  check('hr_leave_from_date_glob', sql`${table.fromDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+  check('hr_leave_to_date_glob', sql`${table.toDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+  check('hr_leave_date_order', sql`${table.toDate} >= ${table.fromDate}`),
+]);
+
 
 
 

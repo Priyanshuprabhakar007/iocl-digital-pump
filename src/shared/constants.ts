@@ -155,6 +155,11 @@ export const PERMISSIONS = {
   // Phase 2A: Org Masters (Department, Officer, Service Provider)
   ORG_MASTERS_READ: 'org.masters.read',
   ORG_MASTERS_WRITE: 'org.masters.write',
+
+  // Phase 5A: HR Leave & Maker-Checker
+  HR_LEAVE_READ: 'hr.leave.read',
+  HR_LEAVE_REQUEST: 'hr.leave.request',
+  HR_LEAVE_APPROVE: 'hr.leave.approve',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];

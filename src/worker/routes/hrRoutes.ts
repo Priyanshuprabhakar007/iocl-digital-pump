@@ -704,3 +704,175 @@ hrRoutes.patch(
     }
   }
 );
+
+// ============================================================================
+// LEAVE REQUEST ROUTES
+// ============================================================================
+
+hrRoutes.get(
+  '/outlets/:outletId/hr/leave-requests',
+  requirePermission(PERMISSIONS.HR_LEAVE_READ) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const { hrService, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const query = c.req.query();
+      const leaves = await hrService.listLeaveRequests(
+        outletId,
+        Object.keys(query).length > 0 ? query : undefined
+      );
+      return c.json({ success: true, data: leaves, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.post(
+  '/outlets/:outletId/hr/leave-requests',
+  requirePermission(PERMISSIONS.HR_LEAVE_REQUEST) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const user = c.var.user!.user;
+    const { hrService, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const body = await c.req.json();
+      const leave = await hrService.createLeaveRequest(outletId, user.id, body);
+      return c.json({ success: true, data: leave, error: null }, 201);
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.get(
+  '/hr/leave-requests/:id',
+  requirePermission(PERMISSIONS.HR_LEAVE_READ) as any,
+  async (c: AppContext) => {
+    const id = c.req.param('id')!;
+    const { hrService, hrRepo, outletRepo } = getServices(c);
+
+    try {
+      const existing = await hrRepo.getLeaveRequestById(id);
+      if (!existing) {
+        return c.json({
+          success: false,
+          data: null,
+          error: { code: 'HR_LEAVE_NOT_FOUND', message: 'Leave request not found' },
+        }, 404);
+      }
+
+      if (!(await verifyOutletAuthority(c, existing.outletId, outletRepo))) {
+        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+      }
+
+      const leave = await hrService.getLeaveRequestById(id, existing.outletId);
+      return c.json({ success: true, data: leave, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.post(
+  '/hr/leave-requests/:id/approve',
+  requirePermission(PERMISSIONS.HR_LEAVE_APPROVE) as any,
+  async (c: AppContext) => {
+    const id = c.req.param('id')!;
+    const user = c.var.user!.user;
+    const { hrService, hrRepo, outletRepo } = getServices(c);
+
+    try {
+      const existing = await hrRepo.getLeaveRequestById(id);
+      if (!existing) {
+        return c.json({
+          success: false,
+          data: null,
+          error: { code: 'HR_LEAVE_NOT_FOUND', message: 'Leave request not found' },
+        }, 404);
+      }
+
+      if (!(await verifyOutletAuthority(c, existing.outletId, outletRepo))) {
+        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+      }
+
+      const body = await c.req.json();
+      const approved = await hrService.approveLeaveRequest(id, existing.outletId, user.id, body);
+      return c.json({ success: true, data: approved, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.post(
+  '/hr/leave-requests/:id/reject',
+  requirePermission(PERMISSIONS.HR_LEAVE_APPROVE) as any,
+  async (c: AppContext) => {
+    const id = c.req.param('id')!;
+    const user = c.var.user!.user;
+    const { hrService, hrRepo, outletRepo } = getServices(c);
+
+    try {
+      const existing = await hrRepo.getLeaveRequestById(id);
+      if (!existing) {
+        return c.json({
+          success: false,
+          data: null,
+          error: { code: 'HR_LEAVE_NOT_FOUND', message: 'Leave request not found' },
+        }, 404);
+      }
+
+      if (!(await verifyOutletAuthority(c, existing.outletId, outletRepo))) {
+        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+      }
+
+      const body = await c.req.json();
+      const rejected = await hrService.rejectLeaveRequest(id, existing.outletId, user.id, body);
+      return c.json({ success: true, data: rejected, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.post(
+  '/hr/leave-requests/:id/cancel',
+  requirePermission(PERMISSIONS.HR_LEAVE_REQUEST) as any,
+  async (c: AppContext) => {
+    const id = c.req.param('id')!;
+    const user = c.var.user!.user;
+    const { hrService, hrRepo, outletRepo } = getServices(c);
+
+    try {
+      const existing = await hrRepo.getLeaveRequestById(id);
+      if (!existing) {
+        return c.json({
+          success: false,
+          data: null,
+          error: { code: 'HR_LEAVE_NOT_FOUND', message: 'Leave request not found' },
+        }, 404);
+      }
+
+      if (!(await verifyOutletAuthority(c, existing.outletId, outletRepo))) {
+        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+      }
+
+      const body = await c.req.json();
+      const cancelled = await hrService.cancelLeaveRequest(id, existing.outletId, user.id, body);
+      return c.json({ success: true, data: cancelled, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
