@@ -176,23 +176,133 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
   // 3. Maker-Checker Lifecycle
   describe('3. Maker-Checker Lifecycle', () => {
     it('should transition PENDING -> APPROVED', async () => {
-      // Test the happy path
+      const db = getDb(localD1);
+      const staffId = await createTestStaff(OUTLET_ID, 'E-APP', 'Staff App');
+      const now = new Date().toISOString();
+      const leaveId = 'leave-app';
+      
+      await db.insert(hrLeaveRequests).values({
+        id: leaveId, outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+        fromDate: '2026-06-01', toDate: '2026-06-02', reason: 'Test',
+        status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+      }).run();
+
+      await db.update(hrLeaveRequests)
+        .set({ status: 'APPROVED', decisionByUserId: 'user-fo', decisionAt: now, updatedAt: now, decisionNotes: 'Looks good' })
+        .where(eq(hrLeaveRequests.id, leaveId))
+        .run();
+
+      const result = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, leaveId)).get();
+      expect(result?.status).toBe('APPROVED');
+      expect(result?.decisionByUserId).toBe('user-fo');
     });
+
     it('should transition PENDING -> REJECTED', async () => {
-        // Test rejection
+      const db = getDb(localD1);
+      const staffId = await createTestStaff(OUTLET_ID, 'E-REJ', 'Staff Rej');
+      const now = new Date().toISOString();
+      const leaveId = 'leave-rej';
+      
+      await db.insert(hrLeaveRequests).values({
+        id: leaveId, outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+        fromDate: '2026-07-01', toDate: '2026-07-02', reason: 'Test',
+        status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+      }).run();
+
+      await db.update(hrLeaveRequests)
+        .set({ status: 'REJECTED', decisionByUserId: 'user-fo', decisionAt: now, updatedAt: now, decisionNotes: 'Denied' })
+        .where(eq(hrLeaveRequests.id, leaveId))
+        .run();
+
+      const result = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, leaveId)).get();
+      expect(result?.status).toBe('REJECTED');
     });
+
     it('should allow CANCELLATION of APPROVED leave', async () => {
-        // Test cancellation
+      const db = getDb(localD1);
+      const staffId = await createTestStaff(OUTLET_ID, 'E-CAN', 'Staff Can');
+      const now = new Date().toISOString();
+      const leaveId = 'leave-can';
+      
+      await db.insert(hrLeaveRequests).values({
+        id: leaveId, outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+        fromDate: '2026-08-01', toDate: '2026-08-02', reason: 'Test',
+        status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+      }).run();
+
+      await db.update(hrLeaveRequests)
+        .set({ status: 'APPROVED', decisionByUserId: 'user-fo', decisionAt: now, updatedAt: now })
+        .where(eq(hrLeaveRequests.id, leaveId))
+        .run();
+
+      await db.update(hrLeaveRequests)
+        .set({ 
+            status: 'CANCELLED', 
+            cancelledByUserId: 'user-dealer', 
+            cancelledAt: now, 
+            updatedAt: now, 
+            cancellationReason: 'Changed mind',
+            decisionByUserId: null,
+            decisionAt: null
+        })
+        .where(eq(hrLeaveRequests.id, leaveId))
+        .run();
+
+      const result = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, leaveId)).get();
+      expect(result?.status).toBe('CANCELLED');
     });
   });
 
   // 4. Overlap & Integrity
   describe('4. SQL Integrity & Overlap', () => {
     it('should reject overlapping dates for PENDING/APPROVED leave', async () => {
-      // Test overlap logic
+      const db = getDb(localD1);
+      const staffId = await createTestStaff(OUTLET_ID, 'E-OV', 'Staff Ov');
+      const now = new Date().toISOString();
+      
+      await db.insert(hrLeaveRequests).values({
+        id: 'leave-1', outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+        fromDate: '2026-09-01', toDate: '2026-09-02', reason: 'Test',
+        status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+      }).run();
+
+      try {
+        await db.insert(hrLeaveRequests).values({
+            id: 'leave-2', outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+            fromDate: '2026-09-02', toDate: '2026-09-03', reason: 'Test',
+            status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+        }).run();
+        throw new Error('Should have failed due to overlap');
+      } catch (e: any) {
+        const fullError = (e.message || '') + (e.cause ? JSON.stringify(e.cause) : '');
+        expect(fullError).toMatch(/HR_LEAVE_OVERLAP|SQLITE_CONSTRAINT|HR_LEAVE_INVALID_STATE_TRANSITION/);
+      }
     });
+
     it('should allow overlap if previous request is REJECTED or CANCELLED', async () => {
-        // Test overlap allowance
+        const db = getDb(localD1);
+        const staffId = await createTestStaff(OUTLET_ID, 'E-OV-2', 'Staff Ov 2');
+        const now = new Date().toISOString();
+        
+        await db.insert(hrLeaveRequests).values({
+          id: 'leave-rej-1', outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+          fromDate: '2026-10-01', toDate: '2026-10-02', reason: 'Test',
+          status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+        }).run();
+        
+        await db.update(hrLeaveRequests)
+          .set({ status: 'REJECTED', decisionByUserId: 'user-fo', decisionAt: now, updatedAt: now })
+          .where(eq(hrLeaveRequests.id, 'leave-rej-1'))
+          .run();
+  
+        await db.insert(hrLeaveRequests).values({
+              id: 'leave-2', outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+              fromDate: '2026-10-01', toDate: '2026-10-02', reason: 'Test',
+              status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+        }).run();
+
+        const result = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, 'leave-2')).get();
+        expect(result?.id).toBe('leave-2');
     });
   });
 });

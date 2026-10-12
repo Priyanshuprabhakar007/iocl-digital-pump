@@ -137,12 +137,14 @@ BEGIN
             THEN RAISE(ABORT, 'HR_LEAVE_DOCUMENT_NOT_FOUND')
             WHEN NEW.attachment_document_id IS NOT NULL AND (OLD.attachment_document_id IS NULL OR NEW.attachment_document_id IS NOT OLD.attachment_document_id) AND NOT EXISTS (SELECT 1 FROM "documents" WHERE "id" = NEW.attachment_document_id AND "outlet_id" = NEW.outlet_id)
             THEN RAISE(ABORT, 'HR_LEAVE_DOCUMENT_OUTLET_MISMATCH')
-            WHEN OLD.status <> NEW.status AND OLD.status <> 'PENDING'
-            THEN RAISE(ABORT, 'HR_LEAVE_INVALID_STATE_TRANSITION')
-            WHEN OLD.status = 'PENDING' AND NEW.status NOT IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')
+            -- State transitions
+            WHEN OLD.status <> NEW.status AND NOT (
+                (OLD.status = 'PENDING' AND NEW.status IN ('APPROVED', 'REJECTED', 'CANCELLED')) OR
+                (OLD.status = 'APPROVED' AND NEW.status = 'CANCELLED')
+            )
             THEN RAISE(ABORT, 'HR_LEAVE_INVALID_STATE_TRANSITION')
             -- Terminal immutability
-            WHEN OLD.status IN ('APPROVED', 'REJECTED', 'CANCELLED') AND (
+            WHEN OLD.status IN ('APPROVED', 'REJECTED', 'CANCELLED') AND NOT (OLD.status = 'APPROVED' AND NEW.status = 'CANCELLED') AND (
                  (NEW.decision_by_user_id IS NOT OLD.decision_by_user_id) OR
                  (NEW.decision_at IS NOT OLD.decision_at) OR
                  (NEW.decision_notes IS NOT OLD.decision_notes) OR
