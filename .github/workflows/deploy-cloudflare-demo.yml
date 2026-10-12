@@ -229,9 +229,23 @@ jobs:
             --json \
             --yes | jq -r '.[0].results[0].count // 0')
 
-          echo "Invalid Status Count: $INVALID_STATUS_COUNT, Self-Approved Count: $SELF_APPROVED_COUNT"
+          # Detect invalid workflow metadata for PENDING, APPROVED, REJECTED, CANCELLED
+          STATE_CONSISTENCY_VIOLATIONS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM hr_leave_requests WHERE (status = 'PENDING' AND (decision_by_user_id IS NOT NULL OR decision_at IS NOT NULL OR cancelled_by_user_id IS NOT NULL OR cancelled_at IS NOT NULL)) OR (status = 'APPROVED' AND (decision_by_user_id IS NULL OR decision_at IS NULL OR cancelled_by_user_id IS NOT NULL OR cancelled_at IS NOT NULL)) OR (status = 'REJECTED' AND (decision_by_user_id IS NULL OR decision_at IS NULL OR decision_notes IS NULL OR cancelled_by_user_id IS NOT NULL OR cancelled_at IS NOT NULL)) OR (status = 'CANCELLED' AND (decision_by_user_id IS NOT NULL OR decision_at IS NOT NULL OR cancelled_by_user_id IS NULL OR cancelled_at IS NULL OR cancellation_reason IS NULL));" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
 
-          if [ "$INVALID_STATUS_COUNT" -gt 0 ] || [ "$SELF_APPROVED_COUNT" -gt 0 ]; then
+          # Active overlap violations
+          ACTIVE_OVERLAP_VIOLATIONS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM hr_leave_requests a JOIN hr_leave_requests b ON a.staff_id = b.staff_id AND a.id < b.id WHERE a.status IN ('PENDING', 'APPROVED') AND b.status IN ('PENDING', 'APPROVED') AND a.to_date >= b.from_date AND a.from_date <= b.to_date;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "Invalid Status Count: $INVALID_STATUS_COUNT, Self-Approved Count: $SELF_APPROVED_COUNT, State Consistency Violations: $STATE_CONSISTENCY_VIOLATIONS, Active Overlap Violations: $ACTIVE_OVERLAP_VIOLATIONS"
+
+          if [ "$INVALID_STATUS_COUNT" -gt 0 ] || [ "$SELF_APPROVED_COUNT" -gt 0 ] || [ "$STATE_CONSISTENCY_VIOLATIONS" -gt 0 ] || [ "$ACTIVE_OVERLAP_VIOLATIONS" -gt 0 ]; then
             echo "ERROR: HR Leave integrity violation detected."
             exit 1
           fi
