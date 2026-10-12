@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HrDesignation, HrDesignationStatus } from '../../../shared/types';
+import { HrDesignation, HrDesignationStatus, HrSkillCategory } from '../../../shared/types';
 import { apiFetch } from '../../services/api';
 import { canSubmitHrDesignation, getHrErrorMessage } from './hrUi';
 import { X, Tag, Edit, AlertCircle, Loader2 } from 'lucide-react';
@@ -25,6 +25,7 @@ export const HrDesignationModal: React.FC<HrDesignationModalProps> = ({
 
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
+  const [skillCategory, setSkillCategory] = useState<HrSkillCategory | ''>('');
   const [status, setStatus] = useState<HrDesignationStatus>('ACTIVE');
   const [notes, setNotes] = useState('');
 
@@ -37,11 +38,13 @@ export const HrDesignationModal: React.FC<HrDesignationModalProps> = ({
       if (isEdit && designation) {
         setCode(designation.code || '');
         setName(designation.name || '');
+        setSkillCategory(designation.skillCategory || '');
         setStatus(designation.status || 'ACTIVE');
         setNotes(designation.notes || '');
       } else {
         setCode('');
         setName('');
+        setSkillCategory('');
         setStatus('ACTIVE');
         setNotes('');
       }
@@ -50,7 +53,12 @@ export const HrDesignationModal: React.FC<HrDesignationModalProps> = ({
 
   if (!isOpen) return null;
 
-  const canSubmit = canSubmitHrDesignation({ code, name, status }, isEdit);
+  const isLegacyUnclassified = isEdit && !designation?.skillCategory;
+  const canSubmit = canSubmitHrDesignation(
+    { code, name, status, skillCategory: skillCategory || null },
+    isEdit,
+    isLegacyUnclassified
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,11 +70,14 @@ export const HrDesignationModal: React.FC<HrDesignationModalProps> = ({
     try {
       if (isEdit && designation) {
         // PUT /api/v1/hr/designations/:id
-        const payload = {
+        const payload: any = {
           name: name.trim(),
           status,
           notes: notes.trim() ? notes.trim() : null,
         };
+        if (skillCategory) {
+          payload.skillCategory = skillCategory;
+        }
 
         const res = await apiFetch<HrDesignation>(`/api/v1/hr/designations/${designation.id}`, {
           method: 'PUT',
@@ -84,6 +95,7 @@ export const HrDesignationModal: React.FC<HrDesignationModalProps> = ({
         const payload = {
           code: code.trim().toUpperCase(),
           name: name.trim(),
+          skillCategory: skillCategory as HrSkillCategory,
           status,
           notes: notes.trim() ? notes.trim() : null,
         };
@@ -200,6 +212,30 @@ export const HrDesignationModal: React.FC<HrDesignationModalProps> = ({
               className="w-full px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
               required
             />
+          </div>
+
+          {/* Skill Category */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Skill Category <span className="text-rose-400">*</span>
+            </label>
+            <select
+              value={skillCategory}
+              onChange={e => setSkillCategory(e.target.value as HrSkillCategory)}
+              className="w-full px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+              required={!isEdit || isLegacyUnclassified}
+            >
+              <option value="">-- Select Skill Category --</option>
+              <option value="HIGHLY_SKILLED">Highly Skilled</option>
+              <option value="SKILLED">Skilled</option>
+              <option value="SEMI_SKILLED">Semi-Skilled</option>
+              <option value="UNSKILLED">Unskilled</option>
+            </select>
+            {isLegacyUnclassified && (
+              <p className="text-[11px] text-amber-400/90 mt-1">
+                Legacy unclassified designation: Select a skill category before updating.
+              </p>
+            )}
           </div>
 
           {/* Notes */}

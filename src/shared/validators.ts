@@ -1098,7 +1098,7 @@ export const CreateHrDesignationSchema = z.object({
 
 export const UpdateHrDesignationSchema = z.object({
   name: z.string().trim().min(1, 'name cannot be empty').optional(),
-  skillCategory: HrSkillCategoryEnum.optional().nullable(),
+  skillCategory: HrSkillCategoryEnum.optional(),
   status: HrDesignationStatusEnum.optional(),
   notes: z.string().trim().optional().nullable(),
 }).strict();

@@ -4,7 +4,7 @@ import {
   HrManpowerSanction,
   HrDesignation,
 } from '../../../shared/types';
-import { formatDisplayDate } from './hrUi';
+import { formatDisplayDate, formatHrSkillCategory } from './hrUi';
 import {
   Layers,
   Plus,
@@ -97,7 +97,7 @@ export const HrManpowerPanel: React.FC<HrManpowerPanelProps> = ({
             <table className="w-full text-left text-xs text-slate-300">
               <thead className="bg-slate-800/50 text-slate-400 font-semibold border-b border-slate-800">
                 <tr>
-                  <th className="py-3.5 px-4">Designation</th>
+                  <th className="py-3.5 px-4">Designation & Skill</th>
                   <th className="py-3.5 px-4 text-center">Sanctioned</th>
                   <th className="py-3.5 px-4 text-center">Actual Active</th>
                   <th className="py-3.5 px-4 text-center">Variance</th>
@@ -110,17 +110,23 @@ export const HrManpowerPanel: React.FC<HrManpowerPanelProps> = ({
               <tbody className="divide-y divide-slate-800/60">
                 {designationSummaries.map(item => {
                   const sanction = sanctions.find(s => s.designationId === item.designationId);
-                  const isShortage = item.shortageCount > 0;
-                  const isExcess = item.excessCount > 0;
-                  const isBalanced = item.sanctionedCount === item.actualCount && item.sanctionedCount > 0;
+                  const skillCategory = item.skillCategory ?? sanction?.designationSkillCategory ?? null;
+                  const skillDisplay = formatHrSkillCategory(skillCategory);
 
                   return (
                     <tr key={item.designationId} className="hover:bg-slate-800/30 transition">
                       {/* Designation */}
                       <td className="py-3.5 px-4">
                         <div className="font-semibold text-white">{item.designationName}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          {item.designationCode}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {item.designationCode}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-semibold border ${skillDisplay.badgeClass}`}
+                          >
+                            {skillDisplay.label}
+                          </span>
                         </div>
                       </td>
 
@@ -213,13 +219,23 @@ export const HrManpowerPanel: React.FC<HrManpowerPanelProps> = ({
           <div className="md:hidden divide-y divide-slate-800">
             {designationSummaries.map(item => {
               const sanction = sanctions.find(s => s.designationId === item.designationId);
+              const skillCategory = item.skillCategory ?? sanction?.designationSkillCategory ?? null;
+              const skillDisplay = formatHrSkillCategory(skillCategory);
+
               return (
                 <div key={item.designationId} className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="font-bold text-white text-sm">{item.designationName}</div>
-                      <div className="text-xs text-slate-400 font-mono">
-                        {item.designationCode}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs text-slate-400 font-mono">
+                          {item.designationCode}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[9px] font-semibold border ${skillDisplay.badgeClass}`}
+                        >
+                          {skillDisplay.label}
+                        </span>
                       </div>
                     </div>
                     {sanction?.effectiveFrom && (

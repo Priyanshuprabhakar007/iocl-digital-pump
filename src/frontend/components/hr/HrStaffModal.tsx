@@ -10,6 +10,7 @@ import {
   getHrErrorMessage,
   getEligibleStaffDesignations,
   getLocalDateInputValue,
+  formatHrSkillCategory,
 } from './hrUi';
 import { HrDocumentPicker } from './HrDocumentPicker';
 import { X, UserPlus, Edit, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
@@ -280,11 +281,14 @@ export const HrStaffModal: React.FC<HrStaffModalProps> = ({
                 required
               >
                 <option value="">-- Select Designation --</option>
-                {eligibleDesignations.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.code}) {d.status === 'INACTIVE' ? '[Inactive]' : ''}
-                  </option>
-                ))}
+                {eligibleDesignations.map(d => {
+                  const skillLabel = formatHrSkillCategory(d.skillCategory).label;
+                  return (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.code}) • {skillLabel} {d.status === 'INACTIVE' ? '[Inactive]' : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 

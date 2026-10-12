@@ -3,6 +3,7 @@ import { HrStaff, HrDesignation } from '../../../shared/types';
 import {
   formatDisplayDate,
   formatHrEmploymentStatus,
+  formatHrSkillCategory,
   getInitials,
 } from './hrUi';
 import {
@@ -26,6 +27,7 @@ export interface HrStaffPanelProps {
   canWriteStaff: boolean;
   filters: {
     designationId: string;
+    skillCategory?: string;
     employmentStatus: string;
     search: string;
     joinedFrom: string;
@@ -57,6 +59,7 @@ export const HrStaffPanel: React.FC<HrStaffPanelProps> = ({
   const hasActiveFilters = Boolean(
     filters.search ||
       filters.designationId ||
+      filters.skillCategory ||
       filters.employmentStatus ||
       filters.joinedFrom ||
       filters.joinedTo
@@ -91,7 +94,7 @@ export const HrStaffPanel: React.FC<HrStaffPanelProps> = ({
         </div>
 
         {/* Filter Controls Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 pt-2 border-t border-slate-800/80">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5 pt-2 border-t border-slate-800/80">
           {/* Search Input */}
           <div className="relative">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
@@ -117,6 +120,21 @@ export const HrStaffPanel: React.FC<HrStaffPanelProps> = ({
                   {d.name} ({d.code})
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Skill Category Dropdown */}
+          <div>
+            <select
+              value={filters.skillCategory || ''}
+              onChange={e => onFilterChange('skillCategory', e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+            >
+              <option value="">All Skill Categories</option>
+              <option value="HIGHLY_SKILLED">Highly Skilled</option>
+              <option value="SKILLED">Skilled</option>
+              <option value="SEMI_SKILLED">Semi-Skilled</option>
+              <option value="UNSKILLED">Unskilled</option>
             </select>
           </div>
 
@@ -212,7 +230,7 @@ export const HrStaffPanel: React.FC<HrStaffPanelProps> = ({
               <thead className="bg-slate-800/50 text-slate-400 font-semibold border-b border-slate-800">
                 <tr>
                   <th className="py-3.5 px-4">Employee</th>
-                  <th className="py-3.5 px-4">Designation</th>
+                  <th className="py-3.5 px-4">Designation & Skill</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4">Joining Date</th>
                   <th className="py-3.5 px-4">Emergency Contact</th>
@@ -224,6 +242,7 @@ export const HrStaffPanel: React.FC<HrStaffPanelProps> = ({
                 {staffList.map(staff => {
                   const isSelected = staff.id === selectedStaffId;
                   const statusDisplay = formatHrEmploymentStatus(staff.employmentStatus);
+                  const skillDisplay = formatHrSkillCategory(staff.designationSkillCategory);
                   return (
                     <tr
                       key={staff.id}
@@ -246,13 +265,20 @@ export const HrStaffPanel: React.FC<HrStaffPanelProps> = ({
                         </div>
                       </td>
 
-                      {/* Designation */}
+                      {/* Designation & Skill Category */}
                       <td className="py-3.5 px-4">
                         <div className="font-medium text-slate-200">
                           {staff.designationName || '—'}
                         </div>
-                        <div className="text-[10px] text-slate-500 font-mono">
-                          {staff.designationCode || '—'}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {staff.designationCode || '—'}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-semibold border ${skillDisplay.badgeClass}`}
+                          >
+                            {skillDisplay.label}
+                          </span>
                         </div>
                       </td>
 
@@ -334,6 +360,7 @@ export const HrStaffPanel: React.FC<HrStaffPanelProps> = ({
           <div className="md:hidden divide-y divide-slate-800">
             {staffList.map(staff => {
               const statusDisplay = formatHrEmploymentStatus(staff.employmentStatus);
+              const skillDisplay = formatHrSkillCategory(staff.designationSkillCategory);
               return (
                 <div key={staff.id} className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
@@ -345,6 +372,13 @@ export const HrStaffPanel: React.FC<HrStaffPanelProps> = ({
                         <div className="font-bold text-white text-sm">{staff.fullName}</div>
                         <div className="text-xs text-slate-400 font-mono">
                           {staff.employeeCode} • {staff.designationName || '—'}
+                        </div>
+                        <div className="mt-0.5">
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-semibold border ${skillDisplay.badgeClass}`}
+                          >
+                            {skillDisplay.label}
+                          </span>
                         </div>
                       </div>
                     </div>

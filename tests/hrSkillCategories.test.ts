@@ -170,4 +170,36 @@ describe('Phase 4: HR Skill Categories & Workforce Strength Suite', () => {
     expect(nullBucket.actualCount).toBe(0);
     expect(nullBucket.shortageCount).toBe(1);
   });
+
+  it('should reject PUT update with explicit null skillCategory (400 VALIDATION_ERROR)', async () => {
+    const cookie = await loginAs('admin@iocl.in');
+
+    const createRes = await app.request(`/api/v1/outlets/${OUTLET_ID}/hr/designations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+      body: JSON.stringify({ code: 'UPDATE_ROLE', name: 'Update Role', skillCategory: 'SKILLED' }),
+    }, env);
+    expect(createRes.status).toBe(201);
+    const desig = (await createRes.json() as any).data;
+
+    // Reject explicit null
+    const putNullRes = await app.request(`/api/v1/hr/designations/${desig.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+      body: JSON.stringify({ skillCategory: null }),
+    }, env);
+    expect(putNullRes.status).toBe(400);
+    const json = await putNullRes.json() as any;
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+
+    // Allow valid skillCategory update
+    const putValidRes = await app.request(`/api/v1/hr/designations/${desig.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+      body: JSON.stringify({ skillCategory: 'HIGHLY_SKILLED' }),
+    }, env);
+    expect(putValidRes.status).toBe(200);
+    const validJson = await putValidRes.json() as any;
+    expect(validJson.data.skillCategory).toBe('HIGHLY_SKILLED');
+  });
 });

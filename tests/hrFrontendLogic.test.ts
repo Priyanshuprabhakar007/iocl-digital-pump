@@ -127,19 +127,19 @@ describe('Phase 5A-2 HR & Workforce Frontend Logic Test Suite', () => {
   describe('3. Designation Validation', () => {
     it('3.1 should accept valid designation on CREATE', () => {
       expect(
-        canSubmitHrDesignation({ code: 'DSM', name: 'Driveway Sales Master', status: 'ACTIVE' }, false)
+        canSubmitHrDesignation({ code: 'DSM', name: 'Driveway Sales Master', status: 'ACTIVE', skillCategory: 'SKILLED' }, false)
       ).toBe(true);
     });
 
     it('3.2 should reject designation with missing code on CREATE', () => {
       expect(
-        canSubmitHrDesignation({ code: '', name: 'Driveway Sales Master', status: 'ACTIVE' }, false)
+        canSubmitHrDesignation({ code: '', name: 'Driveway Sales Master', status: 'ACTIVE', skillCategory: 'SKILLED' }, false)
       ).toBe(false);
     });
 
     it('3.3 should reject designation with missing name on CREATE', () => {
       expect(
-        canSubmitHrDesignation({ code: 'DSM', name: '  ', status: 'ACTIVE' }, false)
+        canSubmitHrDesignation({ code: 'DSM', name: '  ', status: 'ACTIVE', skillCategory: 'SKILLED' }, false)
       ).toBe(false);
     });
 
@@ -151,8 +151,23 @@ describe('Phase 5A-2 HR & Workforce Frontend Logic Test Suite', () => {
 
     it('3.5 should reject invalid status string', () => {
       expect(
-        canSubmitHrDesignation({ code: 'DSM', name: 'DSM', status: 'PENDING' as any }, false)
+        canSubmitHrDesignation({ code: 'DSM', name: 'DSM', status: 'PENDING' as any, skillCategory: 'SKILLED' }, false)
       ).toBe(false);
+    });
+
+    it('3.6 should reject designation without skillCategory on CREATE', () => {
+      expect(
+        canSubmitHrDesignation({ code: 'DSM', name: 'DSM', status: 'ACTIVE' }, false)
+      ).toBe(false);
+    });
+
+    it('3.7 should require skillCategory on EDIT if isLegacyUnclassified is true', () => {
+      expect(
+        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE' }, true, true)
+      ).toBe(false);
+      expect(
+        canSubmitHrDesignation({ name: 'Senior DSM', status: 'ACTIVE', skillCategory: 'HIGHLY_SKILLED' }, true, true)
+      ).toBe(true);
     });
   });
 

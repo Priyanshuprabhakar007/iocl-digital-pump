@@ -1,6 +1,6 @@
 import React from 'react';
 import { HrDesignation } from '../../../shared/types';
-import { formatHrDesignationStatus } from './hrUi';
+import { formatHrDesignationStatus, formatHrSkillCategory } from './hrUi';
 import {
   Tag,
   Search,
@@ -17,6 +17,7 @@ export interface HrDesignationsPanelProps {
   filters: {
     search: string;
     status: string;
+    skillCategory?: string;
   };
   onFilterChange: (key: string, value: string) => void;
   onClearFilters: () => void;
@@ -34,7 +35,7 @@ export const HrDesignationsPanel: React.FC<HrDesignationsPanelProps> = ({
   onAddDesignation,
   onEditDesignation,
 }) => {
-  const hasActiveFilters = Boolean(filters.search || filters.status);
+  const hasActiveFilters = Boolean(filters.search || filters.status || filters.skillCategory);
 
   return (
     <div className="space-y-4">
@@ -65,7 +66,7 @@ export const HrDesignationsPanel: React.FC<HrDesignationsPanelProps> = ({
         </div>
 
         {/* Filter Controls Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-800/80">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-2 border-t border-slate-800/80">
           {/* Search Input */}
           <div className="relative">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
@@ -76,6 +77,21 @@ export const HrDesignationsPanel: React.FC<HrDesignationsPanelProps> = ({
               onChange={e => onFilterChange('search', e.target.value)}
               className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
             />
+          </div>
+
+          {/* Skill Category Filter */}
+          <div>
+            <select
+              value={filters.skillCategory || ''}
+              onChange={e => onFilterChange('skillCategory', e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+            >
+              <option value="">All Skill Categories</option>
+              <option value="HIGHLY_SKILLED">Highly Skilled</option>
+              <option value="SKILLED">Skilled</option>
+              <option value="SEMI_SKILLED">Semi-Skilled</option>
+              <option value="UNSKILLED">Unskilled</option>
+            </select>
           </div>
 
           {/* Status Dropdown */}
@@ -122,7 +138,7 @@ export const HrDesignationsPanel: React.FC<HrDesignationsPanelProps> = ({
           </h4>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             {hasActiveFilters
-              ? 'Try changing your search terms or status filter.'
+              ? 'Try changing your search terms or filters.'
               : 'Create designations like DSM, Cashier, Manager to assign to your workforce.'}
           </p>
           {canWriteDesignation && !hasActiveFilters && (
@@ -143,6 +159,7 @@ export const HrDesignationsPanel: React.FC<HrDesignationsPanelProps> = ({
                 <tr>
                   <th className="py-3.5 px-4 w-28">Code</th>
                   <th className="py-3.5 px-4">Designation Name</th>
+                  <th className="py-3.5 px-4">Skill Category</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4">Notes</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -151,6 +168,7 @@ export const HrDesignationsPanel: React.FC<HrDesignationsPanelProps> = ({
               <tbody className="divide-y divide-slate-800/60">
                 {designations.map(d => {
                   const statusDisplay = formatHrDesignationStatus(d.status);
+                  const skillCategoryDisplay = formatHrSkillCategory(d.skillCategory);
                   return (
                     <tr key={d.id} className="hover:bg-slate-800/30 transition">
                       {/* Code */}
@@ -161,6 +179,15 @@ export const HrDesignationsPanel: React.FC<HrDesignationsPanelProps> = ({
                       {/* Name */}
                       <td className="py-3.5 px-4 font-semibold text-white">
                         {d.name}
+                      </td>
+
+                      {/* Skill Category */}
+                      <td className="py-3.5 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${skillCategoryDisplay.badgeClass}`}
+                        >
+                          {skillCategoryDisplay.label}
+                        </span>
                       </td>
 
                       {/* Status */}
@@ -200,15 +227,23 @@ export const HrDesignationsPanel: React.FC<HrDesignationsPanelProps> = ({
           <div className="md:hidden divide-y divide-slate-800">
             {designations.map(d => {
               const statusDisplay = formatHrDesignationStatus(d.status);
+              const skillCategoryDisplay = formatHrSkillCategory(d.skillCategory);
               return (
                 <div key={d.id} className="p-4 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono font-bold text-orange-400 text-xs">
                           {d.code}
                         </span>
                         <span className="text-white font-bold text-sm">{d.name}</span>
+                      </div>
+                      <div className="mt-1">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${skillCategoryDisplay.badgeClass}`}
+                        >
+                          {skillCategoryDisplay.label}
+                        </span>
                       </div>
                       {d.notes && (
                         <p className="text-xs text-slate-400 mt-1">{d.notes}</p>
