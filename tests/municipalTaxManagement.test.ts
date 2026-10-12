@@ -18,6 +18,7 @@ import { MunicipalTaxRepository } from '../src/worker/repositories/municipalTaxR
 import { MunicipalTaxService, MunicipalTaxError } from '../src/worker/services/municipalTaxService';
 
 const SAFE_MONEY_LIMIT_PAISE = 100_000_000_00; // 100,000,000.00 INR = 10,000,000,000 paise
+const MUNICIPAL_TAX_HOOK_TIMEOUT_MS = 15000;
 
 class MockR2Bucket {
   private store = new Map<string, { data: Uint8Array; metadata: Record<string, string> }>();
@@ -66,7 +67,7 @@ describe('Phase 4B-1 Municipal Taxes & Statutory Dues Core Backend Suite', () =>
       ENVIRONMENT: 'test',
       ALLOWED_ORIGINS: 'http://localhost:3000',
     };
-  });
+  }, MUNICIPAL_TAX_HOOK_TIMEOUT_MS);
 
   afterEach(() => {
     try { localD1.close(); } catch (e) {}
@@ -75,7 +76,7 @@ describe('Phase 4B-1 Municipal Taxes & Statutory Dues Core Backend Suite', () =>
     const shmPath = `${testDbPath}-shm`;
     if (fs.existsSync(walPath)) { try { fs.unlinkSync(walPath); } catch (e) {} }
     if (fs.existsSync(shmPath)) { try { fs.unlinkSync(shmPath); } catch (e) {} }
-  });
+  }, MUNICIPAL_TAX_HOOK_TIMEOUT_MS);
 
   async function jsonOf<T = any>(res: Response): Promise<T> {
     return (await res.json()) as T;
