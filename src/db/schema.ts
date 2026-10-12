@@ -1600,6 +1600,15 @@ export const hrLeaveRequests = sqliteTable('hr_leave_requests', {
   check('hr_leave_from_date_glob', sql`${table.fromDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
   check('hr_leave_to_date_glob', sql`${table.toDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
   check('hr_leave_date_order', sql`${table.toDate} >= ${table.fromDate}`),
+  check('hr_leave_state_consistency', sql`
+    (${table.status} = 'PENDING' AND ${table.decisionByUserId} IS NULL AND ${table.decisionAt} IS NULL AND ${table.cancelledByUserId} IS NULL AND ${table.cancelledAt} IS NULL)
+    OR
+    (${table.status} = 'APPROVED' AND ${table.decisionByUserId} IS NOT NULL AND ${table.decisionAt} IS NOT NULL AND ${table.cancelledByUserId} IS NULL AND ${table.cancelledAt} IS NULL)
+    OR
+    (${table.status} = 'REJECTED' AND ${table.decisionByUserId} IS NOT NULL AND ${table.decisionAt} IS NOT NULL AND trim(${table.decisionNotes}) <> '' AND ${table.cancelledByUserId} IS NULL AND ${table.cancelledAt} IS NULL)
+    OR
+    (${table.status} = 'CANCELLED' AND ${table.decisionByUserId} IS NULL AND ${table.decisionAt} IS NULL AND ${table.cancelledByUserId} IS NOT NULL AND ${table.cancelledAt} IS NOT NULL AND trim(${table.cancellationReason}) <> '')
+  `),
 ]);
 
 

@@ -97,6 +97,10 @@ BEFORE INSERT ON "hr_leave_requests"
 BEGIN
     SELECT
         CASE
+            WHEN NEW.status IN ('APPROVED', 'REJECTED', 'CANCELLED')
+            THEN RAISE(ABORT, 'HR_LEAVE_INVALID_STATE_TRANSITION')
+            WHEN NEW.status <> 'PENDING'
+            THEN RAISE(ABORT, 'HR_LEAVE_INVALID_STATE_TRANSITION')
             WHEN NOT EXISTS (SELECT 1 FROM "hr_staff" WHERE "id" = NEW.staff_id)
             THEN RAISE(ABORT, 'HR_STAFF_NOT_FOUND')
             WHEN NOT EXISTS (SELECT 1 FROM "hr_staff" WHERE "id" = NEW.staff_id AND "outlet_id" = NEW.outlet_id)
@@ -137,6 +141,16 @@ BEGIN
             THEN RAISE(ABORT, 'HR_LEAVE_INVALID_STATE_TRANSITION')
             WHEN OLD.status = 'PENDING' AND NEW.status NOT IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')
             THEN RAISE(ABORT, 'HR_LEAVE_INVALID_STATE_TRANSITION')
+            -- Terminal immutability
+            WHEN OLD.status IN ('APPROVED', 'REJECTED', 'CANCELLED') AND (
+                 (NEW.decision_by_user_id IS NOT OLD.decision_by_user_id) OR
+                 (NEW.decision_at IS NOT OLD.decision_at) OR
+                 (NEW.decision_notes IS NOT OLD.decision_notes) OR
+                 (NEW.cancelled_by_user_id IS NOT OLD.cancelled_by_user_id) OR
+                 (NEW.cancelled_at IS NOT OLD.cancelled_at) OR
+                 (NEW.cancellation_reason IS NOT OLD.cancellation_reason)
+            )
+            THEN RAISE(ABORT, 'HR_LEAVE_TERMINAL_IMMUTABLE')
             WHEN NEW.status IN ('PENDING', 'APPROVED') AND (OLD.status <> NEW.status OR NEW.from_date <> OLD.from_date OR NEW.to_date <> OLD.to_date) AND EXISTS (
                 SELECT 1 FROM "hr_leave_requests"
                 WHERE "id" <> NEW.id

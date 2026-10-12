@@ -1546,31 +1546,31 @@ const LeaveDateSchema = z.string().refine(isValidDateString, {
 });
 
 export const CreateHrLeaveRequestSchema = z.object({
-  staffId: z.string().min(1, 'Staff ID is required').trim(),
+  staffId: z.string().trim().min(1, 'Staff ID is required'),
   leaveType: HrLeaveTypeEnum,
   fromDate: LeaveDateSchema,
   toDate: LeaveDateSchema,
-  reason: z.string().min(1, 'Reason is required').trim().max(500, 'Reason cannot exceed 500 characters'),
-  attachmentDocumentId: z.string().trim().nullable().optional(),
+  reason: z.string().trim().min(1, 'Reason is required').max(500, 'Reason cannot exceed 500 characters'),
+  attachmentDocumentId: z.string().trim().min(1, 'Document ID cannot be empty').nullable().optional(),
 }).strict().refine(data => data.toDate >= data.fromDate, {
   message: 'toDate must be greater than or equal to fromDate',
   path: ['toDate'],
 });
 
 export const ApproveHrLeaveRequestSchema = z.object({
-  decisionNotes: z.string().trim().max(500, 'Decision notes cannot exceed 500 characters').optional().nullable(),
+  decisionNotes: z.string().trim().min(1, 'Decision notes are required').max(500, 'Decision notes cannot exceed 500 characters').optional().nullable(),
 }).strict();
 
 export const RejectHrLeaveRequestSchema = z.object({
-  decisionNotes: z.string().min(1, 'Decision notes are required for rejection').trim().max(500, 'Decision notes cannot exceed 500 characters'),
+  decisionNotes: z.string().trim().min(1, 'Decision notes are required for rejection').max(500, 'Decision notes cannot exceed 500 characters'),
 }).strict();
 
 export const CancelHrLeaveRequestSchema = z.object({
-  cancellationReason: z.string().min(1, 'Cancellation reason is required').trim().max(500, 'Cancellation reason cannot exceed 500 characters'),
+  cancellationReason: z.string().trim().min(1, 'Cancellation reason is required').max(500, 'Cancellation reason cannot exceed 500 characters'),
 }).strict();
 
 export const HrLeaveListQuerySchema = z.object({
-  staffId: z.string().optional(),
+  staffId: z.string().trim().min(1, 'Staff ID must not be empty').optional(),
   leaveType: HrLeaveTypeEnum.optional(),
   status: HrLeaveStatusEnum.optional(),
   fromDate: LeaveDateSchema.optional(),

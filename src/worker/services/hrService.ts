@@ -37,8 +37,6 @@ import {
   HrNozzleAssignment,
   HrLeaveRequest,
 } from '../../shared/types';
-import { documents } from '../../db/schema';
-import { eq } from 'drizzle-orm';
 
 export function calculateHaversineDistanceMetres(
   lat1: number,
@@ -267,6 +265,9 @@ function handleDbError(err: any): never {
   }
   if (msg.includes('HR_LEAVE_INVALID_STATE_TRANSITION')) {
     throw new HrError('HR_LEAVE_INVALID_STATE_TRANSITION', 'Invalid leave request state transition', 409);
+  }
+  if (msg.includes('HR_LEAVE_TERMINAL_IMMUTABLE')) {
+    throw new HrError('HR_LEAVE_TERMINAL_IMMUTABLE', 'Terminal state metadata is immutable', 409);
   }
   if (msg.includes('HR_LEAVE_NOT_PENDING')) {
     throw new HrError('HR_LEAVE_NOT_PENDING', 'Leave request is not pending', 409);
@@ -1434,16 +1435,15 @@ export class HrService {
       throw new HrError('HR_LEAVE_STAFF_OUTLET_MISMATCH', 'Staff member does not belong to this outlet', 400);
     }
     if (staff.employmentStatus !== 'ACTIVE') {
-      throw new HrError('HR_STAFF_NOT_ACTIVE', 'Staff member is not active', 409);
+      throw new HrError('HR_LEAVE_STAFF_NOT_ACTIVE', 'Staff member is not active', 409);
     }
 
     if (validated.attachmentDocumentId) {
-      const db = (this.hrRepo as any).db;
-      const doc = await db.select().from(documents).where(eq(documents.id, validated.attachmentDocumentId)).get();
+      const doc = await this.hrRepo.getDocumentById(validated.attachmentDocumentId);
       if (!doc) {
         throw new HrError('HR_LEAVE_DOCUMENT_NOT_FOUND', 'Document not found', 400);
       }
-      if (doc.outletId && doc.outletId !== outletId) {
+      if (doc.outletId === null || doc.outletId !== outletId) {
         throw new HrError('HR_LEAVE_DOCUMENT_OUTLET_MISMATCH', 'Document does not belong to this outlet', 400);
       }
     }
