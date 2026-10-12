@@ -218,11 +218,38 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
       expect(result?.status).toBe('REJECTED');
     });
 
-    it('should allow CANCELLATION of APPROVED leave', async () => {
+    it('should transition PENDING -> CANCELLED', async () => {
       const db = getDb(localD1);
-      const staffId = await createTestStaff(OUTLET_ID, 'E-CAN', 'Staff Can');
+      const staffId = await createTestStaff(OUTLET_ID, 'E-PEND-CAN', 'Staff Pending Can');
       const now = new Date().toISOString();
-      const leaveId = 'leave-can';
+      const leaveId = 'leave-pend-can';
+      
+      await db.insert(hrLeaveRequests).values({
+        id: leaveId, outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+        fromDate: '2026-09-01', toDate: '2026-09-02', reason: 'Test',
+        status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+      }).run();
+
+      await db.update(hrLeaveRequests)
+        .set({ 
+            status: 'CANCELLED', 
+            cancelledByUserId: 'user-dealer', 
+            cancelledAt: now, 
+            updatedAt: now, 
+            cancellationReason: 'Changed mind'
+        })
+        .where(eq(hrLeaveRequests.id, leaveId))
+        .run();
+
+      const result = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, leaveId)).get();
+      expect(result?.status).toBe('CANCELLED');
+    });
+
+    it('should NOT allow CANCELLATION of APPROVED leave', async () => {
+      const db = getDb(localD1);
+      const staffId = await createTestStaff(OUTLET_ID, 'E-CAN-BLOCKED', 'Staff Can Blocked');
+      const now = new Date().toISOString();
+      const leaveId = 'leave-can-blocked';
       
       await db.insert(hrLeaveRequests).values({
         id: leaveId, outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
@@ -235,21 +262,22 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
         .where(eq(hrLeaveRequests.id, leaveId))
         .run();
 
-      await db.update(hrLeaveRequests)
-        .set({ 
-            status: 'CANCELLED', 
-            cancelledByUserId: 'user-dealer', 
-            cancelledAt: now, 
-            updatedAt: now, 
-            cancellationReason: 'Changed mind',
-            decisionByUserId: null,
-            decisionAt: null
-        })
-        .where(eq(hrLeaveRequests.id, leaveId))
-        .run();
-
-      const result = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, leaveId)).get();
-      expect(result?.status).toBe('CANCELLED');
+      try {
+        await db.update(hrLeaveRequests)
+          .set({ 
+              status: 'CANCELLED', 
+              cancelledByUserId: 'user-dealer', 
+              cancelledAt: now, 
+              updatedAt: now, 
+              cancellationReason: 'Changed mind'
+          })
+          .where(eq(hrLeaveRequests.id, leaveId))
+          .run();
+        throw new Error('Should have failed to cancel APPROVED leave');
+      } catch (e: any) {
+        const fullError = (e.message || '') + (e.cause ? JSON.stringify(e.cause) : '');
+        expect(fullError).toMatch(/HR_LEAVE_INVALID_STATE_TRANSITION|SQLITE_CONSTRAINT_TRIGGER|SQLITE_CONSTRAINT_CHECK/);
+      }
     });
   });
 
