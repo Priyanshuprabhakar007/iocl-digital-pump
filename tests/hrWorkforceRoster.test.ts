@@ -2861,9 +2861,28 @@ describe('Phase 5A-1 Workforce Master, Manpower Allocation & Shift Roster Suite'
       const logs = await db.select().from(auditLogs).where(eq(auditLogs.entityId, staffId)).all();
       expect(logs.length).toBeGreaterThanOrEqual(1);
       expect(logs[0].action).toBe('HR_STAFF_CREATE');
-      // Verify no 12-digit pattern exists
-      const logStr = JSON.stringify(logs[0]);
-      expect(logStr).not.toMatch(/\b\d{12}\b/);
+      // Verify structural Aadhaar privacy safeguards in audit payload
+      const auditPayload = logs[0].newValueJson
+        ? JSON.parse(logs[0].newValueJson)
+        : null;
+      expect(auditPayload).toBeTruthy();
+      expect(auditPayload.aadhaarLast4).toBe('4444');
+      expect(auditPayload.maskedAadhaar).toBe('XXXX XXXX 4444');
+
+      // Verify no raw/full Aadhaar fields exist
+      expect(auditPayload).not.toHaveProperty('aadhaar');
+      expect(auditPayload).not.toHaveProperty('aadhaarNumber');
+      expect(auditPayload).not.toHaveProperty('fullAadhaar');
+      expect(auditPayload).not.toHaveProperty('aadhaarNo');
+
+      // Verify Aadhaar-related keys are strictly limited to masked fields
+      const aadhaarKeys = Object.keys(auditPayload)
+        .filter(key => key.toLowerCase().includes('aadhaar'))
+        .sort();
+      expect(aadhaarKeys).toEqual(['aadhaarLast4', 'maskedAadhaar']);
+
+      // Ensure payload contains no 12-digit sequence
+      expect(JSON.stringify(auditPayload)).not.toMatch(/\b\d{12}\b/);
     });
 
     it('14.3 records audit log on manpower sanction create and update', async () => {
