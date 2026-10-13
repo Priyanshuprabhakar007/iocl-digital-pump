@@ -115,7 +115,37 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('DEPLOYMENT SAFETY FAILED: One or more operational tables experienced a decrease in row count');
     });
 
-    it('2.4 protected tables list includes all core and specialized operational domains', () => {
+    it('2.4 protected tables list includes all core and specialized operational domains and exact 61 table parity', () => {
+      // Extract TABLES=( ... ) arrays from deployment workflow
+      const matches = deployContent.match(/TABLES=\([\s\S]*?\)/g);
+      expect(matches).not.toBeNull();
+      expect(matches!.length).toBe(2);
+
+      const parseTablesArray = (block: string): string[] => {
+        const lines = block.split('\n');
+        const tables: string[] = [];
+        for (const line of lines) {
+          const m = line.match(/"([^"]+)"/);
+          if (m) {
+            tables.push(m[1]);
+          }
+        }
+        return tables;
+      };
+
+      const preTables = parseTablesArray(matches![0]);
+      const postTables = parseTablesArray(matches![1]);
+
+      expect(preTables.length).toBe(61);
+      expect(postTables.length).toBe(61);
+
+      // Verify unique entries
+      expect(new Set(preTables).size).toBe(61);
+      expect(new Set(postTables).size).toBe(61);
+
+      // Verify pre and post arrays are identical
+      expect(preTables).toEqual(postTables);
+
       const requiredTables = [
         'users',
         'retail_outlets',
@@ -153,8 +183,21 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       ];
 
       for (const table of requiredTables) {
-        expect(deployContent).toContain(`"${table}"`);
+        expect(preTables).toContain(table);
       }
+    });
+
+    it('2.4b release documentation does not contain stale 58 table references and states 61 tables', () => {
+      const releaseReadinessMd = fs.readFileSync(path.resolve(ROOT_DIR, 'docs/RELEASE_READINESS.md'), 'utf-8');
+      const runbookMd = fs.readFileSync(path.resolve(ROOT_DIR, 'docs/PRODUCTION_RELEASE_RUNBOOK.md'), 'utf-8');
+
+      expect(releaseReadinessMd).not.toContain('58 tables');
+      expect(releaseReadinessMd).not.toContain('58 operational');
+      expect(releaseReadinessMd).toContain('61 tables');
+      expect(releaseReadinessMd).toContain('61 operational');
+
+      expect(runbookMd).not.toContain('58 operational tables');
+      expect(runbookMd).toContain('61 protected operational');
     });
 
     it('2.5 deployment workflow verifies PRAGMA foreign_key_check and aborts on violation', () => {
