@@ -97,7 +97,7 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
             rolePermissionMap.get(rp.roleId)?.add(rp.permissionId);
         }
 
-        const role = (code: string) => rolesData.find(r => r.code === code)?.id;
+        const role = (id: string) => rolesData.find(r => r.id === id)?.id;
         const perm = (code: string) => permissionsData.find(p => p.code === code)?.id;
 
         const check = (roleCode: string, permCode: string, allowed: boolean) => {
@@ -125,8 +125,9 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
 
     it('should save correctly in audit log for approval', async () => {
         const db = getDb(localD1);
+        const { HrService } = await import('../src/worker/services/hrService');
+        const hrService = new HrService(db);
         const staffId = await createTestStaff(OUTLET_ID, 'E-AUDIT', 'Staff Audit');
-        const now = new Date().toISOString();
         const leaveId = 'leave-audit';
         const notes = 'Approved for emergency';
         const checkerId = 'user-fo';
@@ -134,13 +135,10 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
         await db.insert(hrLeaveRequests).values({
             id: leaveId, outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
             fromDate: '2026-11-01', toDate: '2026-11-02', reason: 'Test',
-            status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+            status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
         }).run();
   
-        await db.update(hrLeaveRequests)
-            .set({ status: 'APPROVED', decisionByUserId: checkerId, decisionAt: now, updatedAt: now, decisionNotes: notes })
-            .where(eq(hrLeaveRequests.id, leaveId))
-            .run();
+        await hrService.approveLeaveRequest(leaveId, OUTLET_ID, checkerId, { decisionNotes: notes });
   
         const auditRecord = await db.select().from(auditLogs).where(eq(auditLogs.entityId, leaveId)).orderBy(auditLogs.createdAt).all();
         const approveRecord = auditRecord.find(r => r.action === 'HR_LEAVE_REQUEST_APPROVE');
