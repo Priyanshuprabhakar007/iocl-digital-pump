@@ -368,6 +368,68 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
             const fullError = (e.message || '') + (e.cause ? JSON.stringify(e.cause) : '');
             expect(fullError).toMatch(/HR_MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN|SQLITE_CONSTRAINT_TRIGGER/);
         }
+
+        const leaveAfter = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, leaveId)).get();
+        expect(leaveAfter?.status).toBe('PENDING');
+    });
+
+    it('should NOT allow maker to reject own leave', async () => {
+        const db = getDb(localD1);
+        const staffId = await createTestStaff(OUTLET_ID, 'E-SELF-REJ', 'Staff Self Rej');
+        const now = new Date().toISOString();
+        const leaveId = 'leave-self-rej';
+        const userId = 'user-dealer';
+        
+        await db.insert(hrLeaveRequests).values({
+            id: leaveId, outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+            fromDate: '2026-08-12', toDate: '2026-08-13', reason: 'Test',
+            status: 'PENDING', requestedByUserId: userId, createdAt: now, updatedAt: now
+        }).run();
+
+        try {
+            await db.update(hrLeaveRequests)
+                .set({ status: 'REJECTED', decisionByUserId: userId, decisionAt: now, decisionNotes: 'Self reject attempt', updatedAt: now })
+                .where(eq(hrLeaveRequests.id, leaveId))
+                .run();
+            throw new Error('Should have failed due to self-rejection');
+        } catch (e: any) {
+            const fullError = (e.message || '') + (e.cause ? JSON.stringify(e.cause) : '');
+            expect(fullError).toMatch(/HR_MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN|SQLITE_CONSTRAINT_TRIGGER/);
+        }
+
+        const leaveAfter = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, leaveId)).get();
+        expect(leaveAfter?.status).toBe('PENDING');
+    });
+
+    it('should NOT allow non-requester to cancel leave request', async () => {
+        const db = getDb(localD1);
+        const staffId = await createTestStaff(OUTLET_ID, 'E-NON-REQ-CAN', 'Staff Non Req Can');
+        const now = new Date().toISOString();
+        const leaveId = 'leave-non-req-can';
+        const requesterId = 'user-dealer';
+        const otherUserId = 'user-fo';
+        
+        await db.insert(hrLeaveRequests).values({
+            id: leaveId, outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+            fromDate: '2026-08-15', toDate: '2026-08-16', reason: 'Test',
+            status: 'PENDING', requestedByUserId: requesterId, createdAt: now, updatedAt: now
+        }).run();
+
+        try {
+            await db.update(hrLeaveRequests)
+                .set({ status: 'CANCELLED', cancelledByUserId: otherUserId, cancelledAt: now, cancellationReason: 'Unauthorized cancel attempt', updatedAt: now })
+                .where(eq(hrLeaveRequests.id, leaveId))
+                .run();
+            throw new Error('Should have failed due to non-requester cancellation');
+        } catch (e: any) {
+            const fullError = (e.message || '') + (e.cause ? JSON.stringify(e.cause) : '');
+            expect(fullError).toMatch(/HR_LEAVE_CANCEL_NOT_REQUESTER|SQLITE_CONSTRAINT_TRIGGER/);
+        }
+
+        const leaveAfter = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, leaveId)).get();
+        expect(leaveAfter?.status).toBe('PENDING');
+        expect(leaveAfter?.cancelledByUserId).toBeNull();
+        expect(leaveAfter?.cancelledAt).toBeNull();
     });
   });
 
@@ -405,9 +467,26 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
                 expect(fullError).toMatch(/HR_LEAVE_OVERLAP|SQLITE_CONSTRAINT_TRIGGER/);
             }
         }
+
+        // Prove non-overlapping ranges BEFORE (2026-11-08 -> 2026-11-09) and AFTER (2026-11-13 -> 2026-11-14) succeed
+        const nonOverlaps = [
+            ['2026-11-08', '2026-11-09'],
+            ['2026-11-13', '2026-11-14']
+        ];
+
+        for (const [from, to] of nonOverlaps) {
+            const res = await db.insert(hrLeaveRequests).values({
+                id: `leave-${from}-${to}`, outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+                fromDate: from, toDate: to, reason: 'Non-overlap test',
+                status: 'PENDING', requestedByUserId: 'user-dealer', createdAt: now, updatedAt: now
+            }).run();
+            expect(res).toBeDefined();
+            const inserted = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, `leave-${from}-${to}`)).get();
+            expect(inserted?.id).toBe(`leave-${from}-${to}`);
+        }
     });
 
-    it('should allow overlap if previous request is REJECTED or CANCELLED', async () => {
+    it('should allow overlap if previous request is REJECTED', async () => {
         const db = getDb(localD1);
         const staffId = await createTestStaff(OUTLET_ID, 'E-OV-2', 'Staff Ov 2');
         const now = new Date().toISOString();
@@ -432,11 +511,39 @@ describe('Phase 5A: Maker-Checker Foundation & Leave Management Suite', () => {
         const result = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, 'leave-2')).get();
         expect(result?.id).toBe('leave-2');
     });
+
+    it('should allow new leave for same dates if previous request is CANCELLED', async () => {
+        const db = getDb(localD1);
+        const staffId = await createTestStaff(OUTLET_ID, 'E-OV-CAN', 'Staff Ov Can');
+        const now = new Date().toISOString();
+        const requesterId = 'user-dealer';
+        
+        await db.insert(hrLeaveRequests).values({
+          id: 'leave-can-1', outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+          fromDate: '2026-10-05', toDate: '2026-10-06', reason: 'Test cancel release',
+          status: 'PENDING', requestedByUserId: requesterId, createdAt: now, updatedAt: now
+        }).run();
+        
+        await db.update(hrLeaveRequests)
+          .set({ status: 'CANCELLED', cancelledByUserId: requesterId, cancelledAt: now, cancellationReason: 'No longer needed', updatedAt: now })
+          .where(eq(hrLeaveRequests.id, 'leave-can-1'))
+          .run();
+  
+        await db.insert(hrLeaveRequests).values({
+          id: 'leave-can-2', outletId: OUTLET_ID, staffId, leaveType: 'CASUAL',
+          fromDate: '2026-10-05', toDate: '2026-10-06', reason: 'New request same dates',
+          status: 'PENDING', requestedByUserId: requesterId, createdAt: now, updatedAt: now
+        }).run();
+
+        const result = await db.select().from(hrLeaveRequests).where(eq(hrLeaveRequests.id, 'leave-can-2')).get();
+        expect(result?.id).toBe('leave-can-2');
+        expect(result?.status).toBe('PENDING');
+    });
   });
 
   // 5. Additional Hardening
   describe('5. Additional Hardening', () => {
-    it('should save decision notes in audit log', async () => {
+    it('should persist approval decision notes on leave record', async () => {
         const db = getDb(localD1);
         const staffId = await createTestStaff(OUTLET_ID, 'E-NOTES', 'Staff Notes');
         const now = new Date().toISOString();
