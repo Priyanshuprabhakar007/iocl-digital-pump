@@ -77,3 +77,9 @@ The **IOCL Digital Pump Manager** is an enterprise-grade, multi-role retail outl
 | **General Production Release** | **NOT YET APPROVED** |
 
 *Note: The software codebase and release candidate pipeline are fully frozen and verified. General production release remains pending human UI and operational acceptance sign-off.*
+
+## Release Candidate
+
+Current release candidate documentation:
+
+`docs/RELEASE_CANDIDATE_RC1.md`
