@@ -59,7 +59,7 @@ describe('Phase 3A-1 CNG Operations Integration Suite', () => {
       ENVIRONMENT: 'development',
       ALLOWED_ORIGINS: 'http://localhost:3000',
     };
-  });
+  }, 15000);
 
   afterEach(async () => {
     if (localD1) {

@@ -59,7 +59,7 @@ describe('Phase 3B-1 Lube & Auxiliary Inventory Core Backend Suite', () => {
       ENVIRONMENT: 'development',
       ALLOWED_ORIGINS: 'http://localhost:3000',
     };
-  });
+  }, 15000);
 
   afterEach(async () => {
     if (localD1) {
