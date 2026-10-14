@@ -1,8 +1,8 @@
 # IOCL Digital Pump Manager
 
 **Current Status:** Release Candidate / Final Freeze (Stage F4)  
-**Verified CI Pipeline:** Pipeline #95 = SUCCESS  
-**Automated Baseline:** 1,495+ tests passing, 0 failures across 36 test suites  
+**Verified CI Pipeline:** Pipeline #97 = SUCCESS  
+**Automated Baseline:** 1,511 tests passing, 0 failures across 37 test suites  
 
 ---
 
@@ -68,14 +68,12 @@ The **IOCL Digital Pump Manager** is an enterprise-grade, multi-role retail outl
 
 | Gate | Status |
 | :--- | :---: |
-| **Engineering Baseline / Code Freeze** | **PASS** |
-| **Automated Test Suite (1,495+ tests)** | **PASS** |
-| **F1 Cross-Module Regression** | **PASS** |
-| **F2 Automated Business UAT** | **PASS** |
-| **F3 Production Release Readiness** | **PASS** |
-| **F4 Release Candidate Gate** | **PASS** |
+| **Engineering / Development** | **COMPLETE** |
+| **Automated Release Gates (F1–F4)** | **PASS** |
+| **Release Candidate** | **READY** |
 | **Manual Desktop / Tablet / Mobile UI UAT** | **PENDING** |
 | **Production UAT Smoke Test** | **NOT STARTED** |
+| **Formal Release Approval** | **PENDING** |
 | **General Production Release** | **NOT YET APPROVED** |
 
 *Note: The software codebase and release candidate pipeline are fully frozen and verified. General production release remains pending human UI and operational acceptance sign-off.*
