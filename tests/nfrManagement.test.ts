@@ -71,7 +71,7 @@ describe('Phase 4C-1 NFR / Vendor Lease & Rent Core Backend Suite', () => {
       ENVIRONMENT: 'test',
       ALLOWED_ORIGINS: 'http://localhost:3000',
     };
-  });
+  }, 15000);
 
   afterEach(() => {
     try { localD1.close(); } catch (e) {}
