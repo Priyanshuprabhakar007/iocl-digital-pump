@@ -13,9 +13,9 @@
 This Stage F4 Final Release Candidate document certifies that the IOCL Digital Pump Manager codebase has successfully completed all automated engineering, regression, business UAT, release readiness, and release-candidate verification phases.
 
 * **Automated Test Baseline:** 1,511 tests passing, 0 failures, 5,064 `expect()` assertions across 37 test suites.
-* **Migration Inventory:** 26 sequential migrations (`0001` through `0026`), zero gaps, no migration `0027`.
+* **Migration Inventory:** 27 sequential migrations (`0001` through `0027`), zero gaps, no migration `0028`.
 * **Protected Table Inventory:** Exactly 61 unique operational tables protected by pre/post row-count preservation checks.
-* **Engineering Status:** **PASS (READY FOR MANUAL ACCEPTANCE)**
+* **Engineering Status:** **PASS (READY FOR MANUAL ACCEPTANCE FOR RC2)**
 
 ---
 
@@ -31,7 +31,7 @@ This Stage F4 Final Release Candidate document certifies that the IOCL Digital P
 | **F2 Automated Business UAT** | **PASS** | Yes | `tests/uatBusinessJourneys.test.ts` (25/25 journeys passing) | Automated UAT |
 | **F3 Production Safety Audit** | **PASS** | Yes | `tests/releaseReadiness.test.ts` (31/31 assertions passing) | Release Security |
 | **F4 Release Candidate Gate** | **PASS** | Yes | `tests/finalReleaseGate.test.ts` (16/16 checks passing) | Release Governance |
-| **Migration Inventory** | **PASS** | Yes | Exactly 26 migrations (`0001`–`0026`), terminal is `0026` | Schema Inspector |
+| **Migration Inventory** | **PASS** | Yes | Exactly 27 migrations (`0001`–`0027`), terminal is `0027` | Schema Inspector |
 | **Foreign-Key Integrity** | **PASS** | Yes | `PRAGMA foreign_key_check;` reports 0 violations | SQLite Engine |
 | **61-Table Row Preservation**| **PASS** | Yes | Pre/post migration non-decrease check across 61 tables | CI Deployment Guard |
 | **Secret Hygiene** | **PASS** | Yes | Zero hardcoded keys, tokens, or credentials in git index | Git Secret Scan |

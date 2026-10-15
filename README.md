@@ -82,4 +82,4 @@ The **IOCL Digital Pump Manager** is an enterprise-grade, multi-role retail outl
 
 Current release candidate documentation:
 
-`docs/RELEASE_CANDIDATE_RC1.md`
+`docs/RELEASE_CANDIDATE_RC2.md` (Release Candidate 2 — 27 Migrations Baseline)

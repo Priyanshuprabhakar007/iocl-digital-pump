@@ -40,12 +40,12 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
   // 1. MIGRATION INVENTORY & INTEGRITY
   // ==========================================================================
   describe('1. Migration Inventory & Chronological Sequence', () => {
-    it('1.1 contains exactly 26 migrations numbered sequentially 0001 to 0026 without gaps', () => {
+    it('1.1 contains exactly 27 migrations numbered sequentially 0001 to 0027 without gaps', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR)
         .filter(f => f.endsWith('.sql'))
         .sort();
 
-      expect(files.length).toBe(26);
+      expect(files.length).toBe(27);
 
       const numbers = files.map(f => {
         const match = f.match(/^(\d{4})_/);
@@ -53,21 +53,21 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
         return parseInt(match![1], 10);
       });
 
-      for (let i = 1; i <= 26; i++) {
+      for (let i = 1; i <= 27; i++) {
         expect(numbers[i - 1]).toBe(i);
       }
     });
 
-    it('1.2 does not contain any migration 0027 or higher beyond the frozen baseline', () => {
+    it('1.2 does not contain any migration 0028 or higher beyond the frozen baseline', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql'));
-      const hasPost0026 = files.some(f => {
+      const hasPost0027 = files.some(f => {
         const num = parseInt(f.slice(0, 4), 10);
-        return num > 26;
+        return num > 27;
       });
-      expect(hasPost0026).toBe(false);
+      expect(hasPost0027).toBe(false);
     });
 
-    it('1.3 all 26 migration files are non-empty and have valid SQL contents', () => {
+    it('1.3 all 27 migration files are non-empty and have valid SQL contents', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql'));
       for (const file of files) {
         const filePath = path.join(MIGRATIONS_DIR, file);
@@ -78,13 +78,12 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       }
     });
 
-    it('1.4 frozen terminal migration 0026 corresponds to HR Leave Maker-Checker', () => {
-      const file0026 = path.join(MIGRATIONS_DIR, '0026_phase5a_hr_leave_maker_checker.sql');
-      expect(fs.existsSync(file0026)).toBe(true);
-      const content = fs.readFileSync(file0026, 'utf-8');
-      expect(content).toContain('hr_leave_requests');
-      expect(content).toContain('trg_hr_leave_update_integrity');
-      expect(content).toContain('trg_hr_leave_delete_forbidden');
+    it('1.4 frozen terminal migration 0027 corresponds to Retail Outlet Directory Visibility', () => {
+      const file0027 = path.join(MIGRATIONS_DIR, '0027_outlet_directory_visibility.sql');
+      expect(fs.existsSync(file0027)).toBe(true);
+      const content = fs.readFileSync(file0027, 'utf-8');
+      expect(content).toContain('directory_hidden');
+      expect(content).toContain('retail_outlets');
     });
   });
 
@@ -206,10 +205,10 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('ERROR: Remote database contains foreign-key violations.');
     });
 
-    it('2.6 deployment workflow verifies recorded migration count is at least 26', () => {
+    it('2.6 deployment workflow verifies recorded migration count is at least 27', () => {
       expect(deployContent).toContain('SELECT COUNT(*) AS count FROM d1_migrations;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "26" ]; then');
-      expect(deployContent).toContain('ERROR: Expected all 26 migrations to be recorded.');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "27" ]; then');
+      expect(deployContent).toContain('ERROR: Expected all 27 migrations to be recorded.');
     });
 
     it('2.7 deployment workflow verifies production administrator account exists', () => {

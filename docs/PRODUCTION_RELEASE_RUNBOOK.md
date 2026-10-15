@@ -97,13 +97,13 @@ This runbook outlines the required step-by-step procedure for deploying the IOCL
 ## Phase F: Verify Migration Inventory
 
 1. **Verify Filesystem Migrations:**
-   * Confirm local `migrations/` folder contains exactly migrations `0001` through `0026`.
-   * Confirm no migration `0027` or higher exists.
+   * Confirm local `migrations/` folder contains exactly migrations `0001` through `0027`.
+   * Confirm no migration `0028` or higher exists.
 2. **Check Migration Sequence:**
    ```bash
    ls -1 migrations/*.sql | sort
    ```
-   * Confirm all 26 migration filenames match the expected naming convention.
+   * Confirm all 27 migration filenames match the expected naming convention, terminating at `0027_outlet_directory_visibility.sql`.
 
 ---
 
@@ -116,11 +116,11 @@ This runbook outlines the required step-by-step procedure for deploying the IOCL
    ```
 2. **Determine Pending Migrations:**
    * Compare remote `d1_migrations` with local `migrations/`.
-   * If any migration from `0001` to `0026` is missing, apply it individually in sequential order:
+   * If any migration from `0001` to `0027` is missing, apply it individually in sequential order:
    ```bash
    # Example for single pending migration:
-   npx wrangler d1 execute iocl-pump-manager-d1 --remote --file=migrations/0026_phase5a_hr_leave_maker_checker.sql
-   npx wrangler d1 execute iocl-pump-manager-d1 --remote --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0026_phase5a_hr_leave_maker_checker.sql');"
+   npx wrangler d1 execute iocl-pump-manager-d1 --remote --file=migrations/0027_outlet_directory_visibility.sql
+   npx wrangler d1 execute iocl-pump-manager-d1 --remote --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0027_outlet_directory_visibility.sql');"
    ```
    * **Note:** The deployment workflow automates this via an idempotent check-before-apply loop.
 
@@ -134,8 +134,8 @@ This runbook outlines the required step-by-step procedure for deploying the IOCL
      --command "SELECT COUNT(*) AS count FROM d1_migrations;"
    ```
 2. **Validation Rule:**
-   * Count must be **at least 26**.
-   * If count is `< 26`, halt release and investigate missing migration entries.
+   * Count must be **at least 27**.
+   * If count is `< 27`, halt release and investigate missing migration entries.
 
 ---
 

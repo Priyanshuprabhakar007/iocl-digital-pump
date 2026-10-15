@@ -36,15 +36,15 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
   });
 
   // ==========================================================================
-  // 2. MIGRATION FREEZE CONTRACT (0001 - 0026)
+  // 2. MIGRATION FREEZE CONTRACT (0001 - 0027)
   // ==========================================================================
   describe('2. Migration Freeze & Sequence Integrity', () => {
-    it('2.1 exactly 26 migrations exist, ordered sequentially 0001 to 0026 without gaps or 0027', () => {
+    it('2.1 exactly 27 migrations exist, ordered sequentially 0001 to 0027 without gaps or 0028', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR)
         .filter(f => f.endsWith('.sql'))
         .sort();
 
-      expect(files.length).toBe(26);
+      expect(files.length).toBe(27);
 
       const numbers = files.map(f => {
         const match = f.match(/^(\d{4})_/);
@@ -52,20 +52,20 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
         return parseInt(match![1], 10);
       });
 
-      for (let i = 1; i <= 26; i++) {
+      for (let i = 1; i <= 27; i++) {
         expect(numbers[i - 1]).toBe(i);
       }
 
-      const hasPost0026 = files.some(f => parseInt(f.slice(0, 4), 10) > 26);
-      expect(hasPost0026).toBe(false);
+      const hasPost0027 = files.some(f => parseInt(f.slice(0, 4), 10) > 27);
+      expect(hasPost0027).toBe(false);
     });
 
-    it('2.2 terminal migration 0026 is hr_leave_maker_checker', () => {
-      const file0026 = path.join(MIGRATIONS_DIR, '0026_phase5a_hr_leave_maker_checker.sql');
-      expect(fs.existsSync(file0026)).toBe(true);
-      const content = fs.readFileSync(file0026, 'utf-8');
-      expect(content).toContain('hr_leave_requests');
-      expect(content).toContain('trg_hr_leave_update_integrity');
+    it('2.2 terminal migration 0027 is outlet_directory_visibility', () => {
+      const file0027 = path.join(MIGRATIONS_DIR, '0027_outlet_directory_visibility.sql');
+      expect(fs.existsSync(file0027)).toBe(true);
+      const content = fs.readFileSync(file0027, 'utf-8');
+      expect(content).toContain('directory_hidden');
+      expect(content).toContain('retail_outlets');
     });
   });
 
@@ -106,9 +106,9 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       expect(pre).toEqual(post);
     });
 
-    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 26, and admin existence', () => {
+    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 27, and admin existence', () => {
       expect(deployContent).toContain('PRAGMA foreign_key_check;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "26" ]; then');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "27" ]; then');
       expect(deployContent).toContain("SELECT COUNT(*) AS count FROM users WHERE email = 'admin@iocl.in';");
       expect(deployContent).toContain('if [ "$POST_CNT" -lt "$PRE_CNT" ]; then');
     });
