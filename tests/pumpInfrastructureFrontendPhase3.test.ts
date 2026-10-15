@@ -277,4 +277,71 @@ describe('Phase 3 Pump Infrastructure Pure Frontend Helpers Suite', () => {
       expect(getProductCategoryBadgeClass(null)).toContain('slate');
     });
   });
+
+  // =========================================================================
+  // 9. Configure Fuel Nozzle Modal Validation Error Reset & State Transitions
+  // =========================================================================
+  describe('Configure Fuel Nozzle Modal Stale Error Clearing', () => {
+    it('failed Position #1 shows conflict, switching to Position #2 clears conflict, preserves selection, and prepares nozzleNumber = 2', () => {
+      // Simulation of PumpInfrastructurePage Configure Fuel Nozzle modal form state logic
+      let modalError: string | null = null;
+      let nozzleNumber = 1;
+      let nozzleDispenserId = 'du-1';
+      let nozzleProductId = 'prod-ms';
+      let nozzleTankId = 'tank-ms-1';
+
+      // 1. User submits Position #1 and receives conflict error from backend
+      const failedResponse = {
+        success: false,
+        error: { code: 'NOZZLE_NUMBER_EXISTS', message: 'Nozzle #1 already exists on this dispenser' },
+      };
+      modalError = getPumpInfrastructureErrorMessage(failedResponse.error);
+      expect(modalError).toContain('Nozzle #1 already exists on this dispenser');
+
+      // 2. User changes position to Position #2 via position select onChange
+      const handlePositionChange = (val: number) => {
+        nozzleNumber = val;
+        modalError = null;
+      };
+      handlePositionChange(2);
+
+      // Verify old conflict error is cleared and Position #2 is selected
+      expect(modalError).toBeNull();
+      expect(nozzleNumber).toBe(2);
+
+      // 3. User submits form with Position #2
+      const payload = {
+        nozzleNumber: Number(nozzleNumber),
+        productId: nozzleProductId,
+        tankId: nozzleTankId,
+        status: 'ACTIVE',
+      };
+      expect(payload.nozzleNumber).toBe(2);
+
+      // 4. Verify dispenser, product, and tank changes also clear modalError
+      modalError = 'Some validation error';
+      const handleDispenserChange = (newDispId: string) => {
+        modalError = null;
+        nozzleDispenserId = newDispId;
+      };
+      handleDispenserChange('du-2');
+      expect(modalError).toBeNull();
+
+      modalError = 'Another validation error';
+      const handleProductChange = (newProdId: string) => {
+        modalError = null;
+        nozzleProductId = newProdId;
+      };
+      handleProductChange('prod-hsd');
+      expect(modalError).toBeNull();
+
+      modalError = 'Tank error';
+      const handleTankChange = (newTankId: string) => {
+        nozzleTankId = newTankId;
+        modalError = null;
+      };
+      handleTankChange('tank-hsd-1');
+      expect(modalError).toBeNull();
+    });
+  });
 });

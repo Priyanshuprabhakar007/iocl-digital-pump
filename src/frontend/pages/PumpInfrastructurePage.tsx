@@ -308,6 +308,7 @@ export const PumpInfrastructurePage: React.FC = () => {
   };
 
   const handleNozzleDispenserChange = (newDispId: string) => {
+    setModalError(null);
     setNozzleDispenserId(newDispId);
     const selectedDisp = dispensers.find(d => d.id === newDispId);
     const duNozzles = nozzles.filter(n => n.dispenserId === newDispId);
@@ -316,6 +317,7 @@ export const PumpInfrastructurePage: React.FC = () => {
   };
 
   const handleNozzleProductChange = (newProdId: string) => {
+    setModalError(null);
     setNozzleProductId(newProdId);
     const matchingTanks = getTanksForProduct(tanks, newProdId).filter(t => t.status === 'ACTIVE');
     const isCurrentValid = matchingTanks.some(t => t.id === nozzleTankId);
@@ -1429,7 +1431,10 @@ export const PumpInfrastructurePage: React.FC = () => {
                   ) : (
                     <select
                       value={nozzleNumber}
-                      onChange={(e) => setNozzleNumber(Number(e.target.value))}
+                      onChange={(e) => {
+                        setNozzleNumber(Number(e.target.value));
+                        setModalError(null);
+                      }}
                       className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold font-mono"
                     >
                       {availablePositions.map(pos => (
@@ -1474,7 +1479,10 @@ export const PumpInfrastructurePage: React.FC = () => {
                   ) : (
                     <select
                       value={nozzleTankId}
-                      onChange={(e) => setNozzleTankId(e.target.value)}
+                      onChange={(e) => {
+                        setNozzleTankId(e.target.value);
+                        setModalError(null);
+                      }}
                       className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
                     >
                       {matchingTanks.map(t => (
