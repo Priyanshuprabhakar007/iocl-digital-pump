@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { UserScopeAssignment, User, State, Division, SalesArea, RetailOutlet } from '../../shared/types';
 import { PERMISSIONS, SCOPE_LEVELS, ScopeLevel } from '../../shared/constants';
 import { MapPin, Plus, Trash2, AlertCircle, CheckCircle2, Building2 } from 'lucide-react';
+import { buildScopeAssignmentPayload } from './scopesUiHelper';
 
 export const ScopesPage: React.FC = () => {
   const { hasPermission } = useAuth();
@@ -55,18 +56,23 @@ export const ScopesPage: React.FC = () => {
     e.preventDefault();
     setErrorMsg(null);
 
-    const payload = {
+    const validation = buildScopeAssignmentPayload({
       userId: selectedUserId,
       scopeLevel,
-      stateId: stateId || null,
-      divisionId: divisionId || null,
-      salesAreaId: salesAreaId || null,
-      outletId: outletId || null,
-    };
+      stateId,
+      divisionId,
+      salesAreaId,
+      outletId,
+    });
+
+    if (!validation.valid) {
+      setErrorMsg(validation.errorMessage || 'Invalid scope configuration');
+      return;
+    }
 
     const res = await apiFetch<UserScopeAssignment>('/api/v1/scopes', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(validation.payload),
     });
 
     if (res.success) {
@@ -198,7 +204,10 @@ export const ScopesPage: React.FC = () => {
                 <select
                   required
                   value={selectedUserId}
-                  onChange={e => setSelectedUserId(e.target.value)}
+                  onChange={e => {
+                    setSelectedUserId(e.target.value);
+                    setErrorMsg(null);
+                  }}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                 >
                   <option value="">-- Choose User --</option>
@@ -212,7 +221,10 @@ export const ScopesPage: React.FC = () => {
                 <label className="block text-slate-300 font-semibold mb-1">Scope Level</label>
                 <select
                   value={scopeLevel}
-                  onChange={e => setScopeLevel(e.target.value as ScopeLevel)}
+                  onChange={e => {
+                    setScopeLevel(e.target.value as ScopeLevel);
+                    setErrorMsg(null);
+                  }}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                 >
                   <option value="GLOBAL">GLOBAL (All India)</option>
@@ -233,6 +245,7 @@ export const ScopesPage: React.FC = () => {
                       setDivisionId('');
                       setSalesAreaId('');
                       setOutletId('');
+                      setErrorMsg(null);
                     }}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                   >
@@ -251,6 +264,7 @@ export const ScopesPage: React.FC = () => {
                       setDivisionId(e.target.value);
                       setSalesAreaId('');
                       setOutletId('');
+                      setErrorMsg(null);
                     }}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                   >
@@ -268,6 +282,7 @@ export const ScopesPage: React.FC = () => {
                     onChange={e => {
                       setSalesAreaId(e.target.value);
                       setOutletId('');
+                      setErrorMsg(null);
                     }}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                   >
@@ -282,7 +297,10 @@ export const ScopesPage: React.FC = () => {
                   <label className="block text-slate-300 font-semibold mb-1">Retail Outlet</label>
                   <select
                     value={outletId}
-                    onChange={e => setOutletId(e.target.value)}
+                    onChange={e => {
+                      setOutletId(e.target.value);
+                      setErrorMsg(null);
+                    }}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                   >
                     <option value="">-- Select Outlet --</option>
