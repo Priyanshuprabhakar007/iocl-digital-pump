@@ -235,6 +235,77 @@ outlets.patch('/:id', requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any, requ
   });
 });
 
+outlets.patch('/:id/directory-visibility', requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any, requireOutletAccess('id') as any, async (c: AppContext) => {
+  const id = c.req.param('id') as string;
+  const body = await c.req.json().catch(() => ({}));
+
+  if (typeof body.hidden !== 'boolean') {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid payload: "hidden" boolean is required.',
+      },
+    }, 400);
+  }
+
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+  const auditRepo = new AuditRepository(db);
+
+  const currentOutlet = await outletRepo.findById(id);
+  if (!currentOutlet) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'NOT_FOUND', message: 'Retail outlet not found' },
+    }, 404);
+  }
+
+  const nowIso = new Date().toISOString();
+  const userId = c.var.user.user.id;
+
+  if (body.hidden) {
+    await outletRepo.updateOutlet(id, {
+      directoryHidden: true,
+      directoryHiddenAt: nowIso,
+      directoryHiddenBy: userId,
+      updatedAt: nowIso,
+    });
+  } else {
+    await outletRepo.updateOutlet(id, {
+      directoryHidden: false,
+      directoryHiddenAt: null,
+      directoryHiddenBy: null,
+      updatedAt: nowIso,
+    });
+  }
+
+  const updatedOutlet = await outletRepo.findById(id);
+
+  const auditAction = body.hidden ? 'OUTLET_DIRECTORY_HIDE' : 'OUTLET_DIRECTORY_RESTORE';
+
+  await auditRepo.logAction({
+    id: `aud-${crypto.randomUUID()}`,
+    userId,
+    action: auditAction,
+    entityType: 'RETAIL_OUTLET',
+    entityId: id,
+    oldValue: currentOutlet as unknown as Record<string, unknown>,
+    newValue: updatedOutlet as unknown as Record<string, unknown>,
+    ipAddress: c.req.header('cf-connecting-ip') || null,
+    userAgent: c.req.header('user-agent') || null,
+    createdAt: nowIso,
+  });
+
+  return c.json({
+    success: true,
+    data: updatedOutlet,
+    error: null,
+  });
+});
+
 outlets.post('/:id/assignments', requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any, requireOutletAccess('id') as any, async (c: AppContext) => {
   const outletId = c.req.param('id');
   const body = await c.req.json().catch(() => ({}));

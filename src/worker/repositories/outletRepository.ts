@@ -202,6 +202,9 @@ export class OutletRepository {
     latitude: number | null;
     longitude: number | null;
     status: 'ACTIVE' | 'INACTIVE';
+    directoryHidden: boolean;
+    directoryHiddenAt: string | null;
+    directoryHiddenBy: string | null;
     updatedAt: string;
   }>): Promise<void> {
     await this.db

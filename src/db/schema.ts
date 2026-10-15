@@ -95,6 +95,9 @@ export const retailOutlets = sqliteTable('retail_outlets', {
   latitude: real('latitude'),
   longitude: real('longitude'),
   status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  directoryHidden: integer('directory_hidden', { mode: 'boolean' }).notNull().default(false),
+  directoryHiddenAt: text('directory_hidden_at'),
+  directoryHiddenBy: text('directory_hidden_by'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [
@@ -102,6 +105,7 @@ export const retailOutlets = sqliteTable('retail_outlets', {
   index('idx_outlets_state_id').on(table.stateId),
   index('idx_outlets_division_id').on(table.divisionId),
   index('idx_outlets_sales_area_id').on(table.salesAreaId),
+  index('idx_outlets_directory_hidden').on(table.directoryHidden),
 ]);
 
 export const outletUserAssignments = sqliteTable('outlet_user_assignments', {

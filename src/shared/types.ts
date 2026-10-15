@@ -100,6 +100,9 @@ export interface RetailOutlet {
   latitude?: number | null;
   longitude?: number | null;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  directoryHidden?: boolean;
+  directoryHiddenAt?: string | null;
+  directoryHiddenBy?: string | null;
   createdAt: string;
   updatedAt: string;
   salesAreaName?: string;
