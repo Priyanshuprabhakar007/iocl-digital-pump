@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import { normalizeSearchText, matchesSearch } from '../src/frontend/utils/searchUtils';
 import {
   filterOutletsForSearch,
@@ -6,6 +8,7 @@ import {
   filterScopesForSearch,
   filterPermissionsForSearch
 } from '../src/frontend/utils/sectionSearchHelpers';
+import { getUserPermissionRestriction } from '../src/frontend/pages/rbacUiHelper';
 
 describe('Hierarchy-Aware Section Search Production Helpers & Security Tests', () => {
   it('1. normalization and partial matching helpers work correctly', () => {
@@ -88,5 +91,29 @@ describe('Hierarchy-Aware Section Search Production Helpers & Security Tests', (
     // D. User dataset without admin searching admin@iocl.in returns []
     const userDataset = [{ name: 'Field Officer', empCode: 'FO-1', email: 'fo@iocl.in', roles: ['FIELD_OFFICER'] }];
     expect(filterUsersForSearch(userDataset, 'admin@iocl.in')).toEqual([]);
+  });
+
+  it('7. getUserPermissionRestriction security rules test', () => {
+    // A. selectedUserId absent -> disabled
+    expect(getUserPermissionRestriction({ currentUserId: 'admin-1', selectedUserId: null, selectedUserRoles: ['FIELD_OFFICER'] }).isDisabled).toBe(true);
+
+    // B. selectedUserId === currentUserId -> disabled
+    expect(getUserPermissionRestriction({ currentUserId: 'admin-1', selectedUserId: 'admin-1', selectedUserRoles: ['ADMIN'] }).isDisabled).toBe(true);
+
+    // C. selected user has ADMIN role -> disabled
+    expect(getUserPermissionRestriction({ currentUserId: 'admin-1', selectedUserId: 'admin-2', selectedUserRoles: ['ADMIN'] }).isDisabled).toBe(true);
+
+    // D. normal other selected user -> NOT disabled
+    expect(getUserPermissionRestriction({ currentUserId: 'admin-1', selectedUserId: 'fo-2', selectedUserRoles: ['FIELD_OFFICER'] }).isDisabled).toBe(false);
+  });
+
+  it('8. RbacPage source verification: uses correct PATCH permission override endpoint and no grant/revoke endpoints', () => {
+    const rbacSourcePath = path.join(process.cwd(), 'src/frontend/pages/RbacPage.tsx');
+    const sourceCode = fs.readFileSync(rbacSourcePath, 'utf8');
+
+    expect(sourceCode).toContain('PATCH');
+    expect(sourceCode).toContain('permissions/${encodeURIComponent(permissionCode)}');
+    expect(sourceCode).not.toContain('/permissions/grant');
+    expect(sourceCode).not.toContain('/permissions/revoke');
   });
 });

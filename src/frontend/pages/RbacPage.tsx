@@ -111,7 +111,8 @@ export const RbacPage: React.FC = () => {
       return (
         (u.name && u.name.toLowerCase().includes(q)) ||
         (u.empCode && u.empCode.toLowerCase().includes(q)) ||
-        (u.email && u.email.toLowerCase().includes(q))
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (Array.isArray(u.roles) && u.roles.some((r: any) => String(r).toLowerCase().includes(q)))
       );
     });
   }, [userList, userSearch, showInactiveUsers]);
@@ -122,41 +123,50 @@ export const RbacPage: React.FC = () => {
 
   const restriction = useMemo(() => {
     return getUserPermissionRestriction({
-      selectedUserRoles: selectedUserDetails?.roleCodes || selectedUserMeta?.roles || [],
       currentUserId: userCtx?.user?.id,
+      selectedUserId,
+      selectedUserRoles:
+        selectedUserDetails?.roleCodes ||
+        selectedUserMeta?.roles ||
+        [],
     });
-  }, [selectedUserDetails, selectedUserMeta]);
+  }, [
+    userCtx?.user?.id,
+    selectedUserId,
+    selectedUserDetails,
+    selectedUserMeta,
+  ]);
 
   const filteredPermissions = useMemo(() => {
     return filterPermissionsForSearch(permissions, permissionSearch, roles);
   }, [permissions, permissionSearch, roles]);
 
   const handleTogglePermission = async (permissionCode: string, targetEnabled: boolean) => {
-    if (!selectedUserId || restriction.isDisabled) return;
+    if (
+      !selectedUserId ||
+      restriction.isDisabled ||
+      savingPermCodes.has(permissionCode)
+    ) {
+      return;
+    }
     setSavingPermCodes((prev) => new Set(prev).add(permissionCode));
     setFeedback(null);
 
-    const endpoint = targetEnabled
-      ? `/api/v1/users/${selectedUserId}/permissions/grant`
-      : `/api/v1/users/${selectedUserId}/permissions/revoke`;
+    const endpoint = `/api/v1/users/${selectedUserId}/permissions/${encodeURIComponent(permissionCode)}`;
 
     const res = await apiFetch<UserPermissionsDetails>(endpoint, {
-      method: 'POST',
-      body: JSON.stringify({ permissionCode }),
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ enabled: targetEnabled }),
     });
 
     if (res.success && res.data) {
-      setSelectedUserDetails((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          effectivePermissionCodes: res.data!.effectivePermissionCodes,
-          overrides: res.data!.overrides,
-        };
-      });
+      setSelectedUserDetails(res.data);
       setFeedback({
         type: 'success',
-        message: `Updated "${permissionCode}" to ${targetEnabled ? 'ENABLED' : 'DISABLED'} for ${selectedUserDetails?.user?.name || 'user'}.`,
+        message: `Updated "${permissionCode}" to ${targetEnabled ? 'ENABLED' : 'DISABLED'} for ${selectedUserDetails?.user?.name || selectedUserMeta?.name || 'user'}.`,
       });
     } else {
       setFeedback({

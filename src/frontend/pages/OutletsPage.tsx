@@ -397,6 +397,18 @@ export const OutletsPage: React.FC = () => {
     }
   };
 
+  const visibilityFilteredOutlets = useMemo(() => {
+    return showHidden ? outlets : outlets.filter((o) => !o.directoryHidden);
+  }, [outlets, showHidden]);
+
+  const displayedOutlets = useMemo(() => {
+    return filterOutletsForSearch(
+      visibilityFilteredOutlets,
+      searchQuery,
+      showHidden
+    );
+  }, [visibilityFilteredOutlets, searchQuery, showHidden]);
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -437,15 +449,6 @@ export const OutletsPage: React.FC = () => {
       )}
 
       {/* Scope Banner & Show Hidden Controls */}
-      {(() => {
-        const visibilityFilteredOutlets = useMemo(() => {
-          return showHidden ? outlets : outlets.filter(o => !o.directoryHidden);
-        }, [outlets, showHidden]);
-
-        const displayedOutlets = useMemo(() => {
-          return filterOutletsForSearch(visibilityFilteredOutlets, searchQuery, showHidden);
-        }, [visibilityFilteredOutlets, searchQuery, showHidden]);
-        return (
           <>
             <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-slate-300">
@@ -626,8 +629,6 @@ export const OutletsPage: React.FC = () => {
               </div>
             )}
           </>
-        );
-      })()}
 
       {/* Register New Outlet Modal */}
       {modalOpen && (
