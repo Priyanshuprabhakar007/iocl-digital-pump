@@ -23,6 +23,7 @@ import { MunicipalTaxesPage } from './frontend/pages/MunicipalTaxesPage';
 import { NfrOperationsPage } from './frontend/pages/NfrOperationsPage';
 import { WorkforceOperationsPage } from './frontend/pages/WorkforceOperationsPage';
 import { OrganizationMastersPage } from './frontend/pages/OrganizationMastersPage';
+import { ReportsPage } from './frontend/pages/ReportsPage';
 
 function MainAppContent() {
   const { userCtx, loading } = useAuth();
@@ -64,6 +65,7 @@ function MainAppContent() {
       {activeTab === 'municipal-taxes' && <MunicipalTaxesPage />}
       {activeTab === 'nfr-ops' && <NfrOperationsPage />}
       {activeTab === 'financials' && <FinancialOperationsPage />}
+      {activeTab === 'reports' && <ReportsPage />}
       {activeTab === 'users' && <UsersPage />}
       {activeTab === 'scopes' && <ScopesPage />}
       {activeTab === 'hierarchy' && <HierarchyPage />}

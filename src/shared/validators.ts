@@ -1585,6 +1585,42 @@ export const HrLeaveListQuerySchema = z.object({
   path: ['toDate'],
 });
 
+export const CreateDgDailyLogSchema = z.object({
+  outletId: z.string().trim().min(1, 'Outlet ID is required'),
+  equipmentId: z.string().trim().min(1, 'Equipment ID is required'),
+  logDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'logDate must be in YYYY-MM-DD format'),
+  openingRunHours: z.number().min(0, 'Opening run hours cannot be negative'),
+  closingRunHours: z.number().min(0, 'Closing run hours cannot be negative'),
+  dieselConsumedLitres: z.number().min(0, 'Diesel consumed cannot be negative'),
+  unitsGeneratedKwh: z.number().min(0).nullable().optional(),
+  openingDieselBalanceLitres: z.number().min(0, 'Opening diesel balance cannot be negative'),
+  dieselAddedLitres: z.number().min(0, 'Diesel added cannot be negative').default(0),
+  gridFailureDurationMinutes: z.number().min(0, 'Grid failure duration cannot be negative').default(0),
+  powerCutEventsCount: z.number().min(0, 'Power cut events cannot be negative').default(0),
+  remarks: z.string().trim().max(1000).nullable().optional(),
+}).refine(data => data.closingRunHours >= data.openingRunHours, {
+  message: 'Closing run hours must be greater than or equal to opening run hours',
+  path: ['closingRunHours'],
+});
+
+export const UpdateDgDailyLogSchema = z.object({
+  openingRunHours: z.number().min(0).optional(),
+  closingRunHours: z.number().min(0).optional(),
+  dieselConsumedLitres: z.number().min(0).optional(),
+  unitsGeneratedKwh: z.number().min(0).nullable().optional(),
+  openingDieselBalanceLitres: z.number().min(0).optional(),
+  dieselAddedLitres: z.number().min(0).optional(),
+  gridFailureDurationMinutes: z.number().min(0).optional(),
+  powerCutEventsCount: z.number().min(0).optional(),
+  remarks: z.string().trim().max(1000).nullable().optional(),
+});
+
+export const MonthlyOperationsReportQuerySchema = z.object({
+  outletId: z.string().trim().min(1, 'Outlet ID is required'),
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'Month must be in YYYY-MM format'),
+});
+
+
 
 
 

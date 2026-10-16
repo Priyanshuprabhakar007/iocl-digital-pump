@@ -23,6 +23,7 @@ import {
   Zap,
   Landmark,
   Store,
+  FileText,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -124,6 +125,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Financials',
       icon: Banknote,
       perm: PERMISSIONS.FINANCIAL_RECONCILIATION_READ,
+    },
+    {
+      id: 'reports',
+      label: 'Monthly Reports',
+      icon: FileText,
+      perm: PERMISSIONS.EQUIPMENT_READ,
     },
     {
       id: 'users',

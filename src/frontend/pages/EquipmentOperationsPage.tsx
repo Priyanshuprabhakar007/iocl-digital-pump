@@ -9,7 +9,8 @@ import {
   Layers,
   Plus,
   ActivitySquare,
-  Cpu
+  Cpu,
+  Activity
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/api';
@@ -24,6 +25,7 @@ import {
 import { EquipmentHealthPanel } from '../components/equipment/EquipmentHealthPanel';
 import { EquipmentTicketsPanel } from '../components/equipment/EquipmentTicketsPanel';
 import { EquipmentAssetsPanel } from '../components/equipment/EquipmentAssetsPanel';
+import { DgDailyLogPanel } from '../components/equipment/DgDailyLogPanel';
 import { EquipmentTicketCreateModal } from '../components/equipment/EquipmentTicketCreateModal';
 import { getEquipmentErrorMessage } from '../components/equipment/equipmentUi';
 
@@ -55,7 +57,7 @@ export const EquipmentOperationsPage: React.FC = () => {
   const [filterEquipmentType, setFilterEquipmentType] = useState<string>('');
 
   const [loadingData, setLoadingData] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'tickets' | 'assets'>('tickets');
+  const [activeTab, setActiveTab] = useState<'tickets' | 'assets' | 'dg_logs'>('tickets');
 
   // Create Modal
   const [isCreateTicketOpen, setIsCreateTicketOpen] = useState<boolean>(false);
@@ -441,6 +443,18 @@ export const EquipmentOperationsPage: React.FC = () => {
                 </span>
               )}
             </button>
+
+            <button
+              onClick={() => setActiveTab('dg_logs')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                activeTab === 'dg_logs'
+                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+              <span>DG Daily Operations</span>
+            </button>
           </div>
 
           {/* Tab Content */}
@@ -477,6 +491,10 @@ export const EquipmentOperationsPage: React.FC = () => {
                   handleRefreshAssetsAndTargets();
                 }}
               />
+            )}
+
+            {activeTab === 'dg_logs' && (
+              <DgDailyLogPanel outletId={selectedOutletId} />
             )}
           </div>
         </>

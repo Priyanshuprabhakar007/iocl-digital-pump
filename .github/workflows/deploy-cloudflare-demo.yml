@@ -125,6 +125,8 @@ jobs:
             "user_permission_overrides"
             "documents"
             "audit_logs"
+            "dg_daily_logs"
+            "dg_run_intervals"
           )
 
           TABLES_RESULT=$(npx wrangler d1 execute iocl-pump-manager-d1 --remote --command "SELECT name FROM sqlite_master WHERE type='table';" --json --yes)
@@ -163,6 +165,7 @@ jobs:
             "migrations/0025_phase4_hr_skill_categories.sql"
             "migrations/0026_phase5a_hr_leave_maker_checker.sql"
             "migrations/0027_outlet_directory_visibility.sql"
+            "migrations/0028_dg_daily_operations_reporting.sql"
           )
 
           for FILE in "${MIGRATIONS[@]}"; do
@@ -220,8 +223,8 @@ jobs:
 
           echo "Recorded migrations: $COUNT"
 
-          if [ "$COUNT" -lt "27" ]; then
-            echo "ERROR: Expected all 27 migrations to be recorded."
+          if [ "$COUNT" -lt "28" ]; then
+            echo "ERROR: Expected all 28 migrations to be recorded."
             exit 1
           fi
 
@@ -478,6 +481,8 @@ jobs:
             "user_permission_overrides"
             "documents"
             "audit_logs"
+            "dg_daily_logs"
+            "dg_run_intervals"
           )
 
           for T in "${TABLES[@]}"; do

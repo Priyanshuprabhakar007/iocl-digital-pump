@@ -132,6 +132,9 @@ export async function seedDatabase(db: AppDatabase) {
     { id: 'perm-hr-uniform-issue-w', code: PERMISSIONS.HR_UNIFORM_ISSUE_WRITE, name: 'Write Uniform Issues', description: 'Issue, return and replace staff uniforms' },
     { id: 'perm-org-r', code: PERMISSIONS.ORG_MASTERS_READ, name: 'Read Org Masters', description: 'View departments, officers, officer postings and service providers' },
     { id: 'perm-org-w', code: PERMISSIONS.ORG_MASTERS_WRITE, name: 'Write Org Masters', description: 'Manage departments, officers, officer postings and service providers' },
+    { id: 'perm-dg-r', code: PERMISSIONS.DG_OPERATIONS_READ, name: 'Read DG Operations', description: 'View DG set daily logs and reports' },
+    { id: 'perm-dg-w', code: PERMISSIONS.DG_OPERATIONS_WRITE, name: 'Write DG Operations', description: 'Record and update DG set daily logs' },
+    { id: 'perm-rep-r', code: PERMISSIONS.REPORTS_READ, name: 'Read Reports', description: 'View monthly operations and performance reports' },
   ];
   await db.insert(schema.permissions).values(permissionsList).onConflictDoNothing();
 

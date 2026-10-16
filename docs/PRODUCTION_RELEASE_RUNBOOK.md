@@ -158,7 +158,7 @@ This runbook outlines the required step-by-step procedure for deploying the IOCL
    * Verify that for every protected table:
      $$\text{Post-Migration Count} \ge \text{Pre-Migration Count}$$
 2. **Validation Rule:**
-   * Zero row count decrease across all 61 protected operational and business tables.
+   * Zero row count decrease across all 63 protected operational and business tables.
    * If any table row count decreased, **HALT IMMEDIATELY**.
 
 ---

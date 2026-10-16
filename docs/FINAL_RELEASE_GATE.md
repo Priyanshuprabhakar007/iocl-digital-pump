@@ -31,9 +31,9 @@ This Stage F4 Final Release Candidate document certifies that the IOCL Digital P
 | **F2 Automated Business UAT** | **PASS** | Yes | `tests/uatBusinessJourneys.test.ts` (25/25 journeys passing) | Automated UAT |
 | **F3 Production Safety Audit** | **PASS** | Yes | `tests/releaseReadiness.test.ts` (31/31 assertions passing) | Release Security |
 | **F4 Release Candidate Gate** | **PASS** | Yes | `tests/finalReleaseGate.test.ts` (16/16 checks passing) | Release Governance |
-| **Migration Inventory** | **PASS** | Yes | Exactly 27 migrations (`0001`–`0027`), terminal is `0027` | Schema Inspector |
+| **Migration Inventory** | **PASS** | Yes | Exactly 28 migrations (`0001`–`0027`), terminal is `0027` | Schema Inspector |
 | **Foreign-Key Integrity** | **PASS** | Yes | `PRAGMA foreign_key_check;` reports 0 violations | SQLite Engine |
-| **61-Table Row Preservation**| **PASS** | Yes | Pre/post migration non-decrease check across 61 tables | CI Deployment Guard |
+| **63-Table Row Preservation**| **PASS** | Yes | Pre/post migration non-decrease check across 63 tables | CI Deployment Guard |
 | **Secret Hygiene** | **PASS** | Yes | Zero hardcoded keys, tokens, or credentials in git index | Git Secret Scan |
 | **Aadhaar/Privacy Safeguards**| **PASS** | Yes | Masked Aadhaar storage (`XXXX XXXX 4444`), sanitized audit logs | Privacy Auditor |
 | **Audit Logging** | **PASS** | Yes | Tamper-evident audit trail active across mutating domains | Audit Repository |

@@ -1937,6 +1937,87 @@ export interface OutletServiceProviderAssignment {
   providerCode?: string;
 }
 
+export interface DgDailyLog {
+  id: string;
+  outletId: string;
+  equipmentId: string;
+  logDate: string;
+  openingRunHours: number;
+  closingRunHours: number;
+  totalRunHours: number;
+  dieselConsumedLitres: number;
+  unitsGeneratedKwh?: number | null;
+  openingDieselBalanceLitres: number;
+  dieselAddedLitres: number;
+  closingDieselBalanceLitres: number;
+  gridFailureDurationMinutes: number;
+  powerCutEventsCount: number;
+  operatorUserId: string;
+  remarks?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  outletName?: string;
+  equipmentName?: string;
+  equipmentCode?: string;
+  operatorName?: string;
+}
+
+export interface CreateDgDailyLogInput {
+  outletId: string;
+  equipmentId: string;
+  logDate: string;
+  openingRunHours: number;
+  closingRunHours: number;
+  dieselConsumedLitres: number;
+  unitsGeneratedKwh?: number | null;
+  openingDieselBalanceLitres: number;
+  dieselAddedLitres?: number;
+  gridFailureDurationMinutes?: number;
+  powerCutEventsCount?: number;
+  remarks?: string;
+}
+
+export interface UpdateDgDailyLogInput {
+  openingRunHours?: number;
+  closingRunHours?: number;
+  dieselConsumedLitres?: number;
+  unitsGeneratedKwh?: number | null;
+  openingDieselBalanceLitres?: number;
+  dieselAddedLitres?: number;
+  gridFailureDurationMinutes?: number;
+  powerCutEventsCount?: number;
+  remarks?: string;
+}
+
+export interface MonthlyOperationsReport {
+  outletId: string;
+  outletName: string;
+  month: string; // YYYY-MM
+  dgSummary: {
+    totalLogs: number;
+    totalRunHours: number;
+    totalDieselConsumedLitres: number;
+    totalUnitsGeneratedKwh: number;
+    totalGridFailureMinutes: number;
+    totalPowerCutEvents: number;
+    averageDailyRunHours: number;
+  };
+  fuelSummary: {
+    totalShiftsCount: number;
+    totalSalesPaise: number;
+  };
+  breakdownSummary: {
+    totalTickets: number;
+    openTickets: number;
+    resolvedTickets: number;
+  };
+  hrSummary: {
+    totalStaff: number;
+    presentDaysCount: number;
+  };
+}
+
+
 
 
 

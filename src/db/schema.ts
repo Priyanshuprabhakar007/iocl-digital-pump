@@ -1615,6 +1615,41 @@ export const hrLeaveRequests = sqliteTable('hr_leave_requests', {
   `),
 ]);
 
+export const dgDailyLogs = sqliteTable('dg_daily_logs', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  equipmentId: text('equipment_id').notNull().references(() => equipmentAssets.id, { onDelete: 'restrict' }),
+  logDate: text('log_date').notNull(),
+  openingRunHours: real('opening_run_hours').notNull(),
+  closingRunHours: real('closing_run_hours').notNull(),
+  totalRunHours: real('total_run_hours').notNull(),
+  dieselConsumedLitres: real('diesel_consumed_litres').notNull(),
+  unitsGeneratedKwh: real('units_generated_kwh'),
+  openingDieselBalanceLitres: real('opening_diesel_balance_litres').notNull(),
+  dieselAddedLitres: real('diesel_added_litres').notNull().default(0),
+  closingDieselBalanceLitres: real('closing_diesel_balance_litres').notNull(),
+  gridFailureDurationMinutes: integer('grid_failure_duration_minutes').notNull().default(0),
+  powerCutEventsCount: integer('power_cut_events_count').notNull().default(0),
+  operatorUserId: text('operator_user_id').notNull().references(() => users.id),
+  remarks: text('remarks'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_dg_daily_logs_outlet_date').on(table.outletId, table.logDate),
+  index('idx_dg_daily_logs_equipment').on(table.equipmentId),
+  index('idx_dg_daily_logs_operator').on(table.operatorUserId),
+  check('dg_log_closing_run_hours_check', sql`${table.closingRunHours} >= ${table.openingRunHours}`),
+  check('dg_log_total_run_hours_check', sql`${table.totalRunHours} >= 0`),
+  check('dg_log_diesel_consumed_check', sql`${table.dieselConsumedLitres} >= 0`),
+  check('dg_log_opening_diesel_check', sql`${table.openingDieselBalanceLitres} >= 0`),
+  check('dg_log_diesel_added_check', sql`${table.dieselAddedLitres} >= 0`),
+  check('dg_log_closing_diesel_check', sql`${table.closingDieselBalanceLitres} >= 0`),
+  check('dg_log_grid_failure_check', sql`${table.gridFailureDurationMinutes} >= 0`),
+  check('dg_log_power_cut_check', sql`${table.powerCutEventsCount} >= 0`),
+  check('dg_log_date_glob', sql`${table.logDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+]);
+
+
 
 
 

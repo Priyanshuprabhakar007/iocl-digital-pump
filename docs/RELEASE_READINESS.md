@@ -15,7 +15,7 @@ This Stage F3 Production Data Safety & Release Readiness audit validates whether
 
 **Core Findings:**
 1. **Automated Engineering Readiness:** **PASS** (100% test passing rate across 36 test suites, zero TypeScript errors, clean production bundle).
-2. **Production Data Protection:** **VERIFIED** (Automated pre/post-migration row count validation protects 61 operational and business tables against accidental data loss).
+2. **Production Data Protection:** **VERIFIED** (Automated pre/post-migration row count validation protects 63 operational and business tables against accidental data loss).
 3. **Database Integrity:** **VERIFIED** (Foreign key constraint enforcement verified via `PRAGMA foreign_key_check;` with 0 violations; no destructive migrations).
 4. **Zero Remote Seeding Invariant:** **ENFORCED** (Production workflows strictly prevent demo seeds or test runners from writing to remote D1).
 5. **Release Status:** **NOT YET APPROVED FOR GENERAL PRODUCTION** — Requires completion of Phase UAT manual UI sign-off and final change authorization.
@@ -35,7 +35,7 @@ This Stage F3 Production Data Safety & Release Readiness audit validates whether
 | **Migration Sequence & Inventory**| **PASS** | 27 sequential migrations (`0001`–`0027`), zero gaps, no `0028` | Yes |
 | **Foreign Key Integrity** | **PASS** | `PRAGMA foreign_key_check;` reports 0 violations | Yes |
 | **Zero Remote Demo Seeding** | **PASS** | No seed scripts present in deployment workflows | Yes |
-| **Row Count Preservation** | **PASS** | Pre/post migration non-decrease check across 61 tables | Yes |
+| **Row Count Preservation** | **PASS** | Pre/post migration non-decrease check across 63 tables | Yes |
 | **Production Admin Check** | **PASS** | Deployment validates `admin@iocl.in` count == 1 | Yes |
 | **Secret Hygiene** | **PASS** | Zero hardcoded keys, tokens, or credentials tracked in git | Yes |
 | **Repository Hygiene** | **PASS** | Zero `.sqlite`, `.db`, or temporary artifacts committed | Yes |
@@ -111,7 +111,7 @@ The Cloudflare deployment workflow (`.github/workflows/deploy-cloudflare-demo.ym
    $$\text{Post-Migration Count} \ge \text{Pre-Migration Count}$$
 3. **Hard Failure Barrier:** If any protected table experiences a decrease in row count, the deployment immediately halts with `exit 1` and prevents Worker deployment.
 
-### Protected Tables Inventory (61 Tables)
+### Protected Tables Inventory (63 Tables)
 * **IAM & Organizations:** `users`, `user_roles`, `user_permission_overrides`, `org_departments`, `org_officers`, `org_officer_postings`, `service_providers`, `outlet_service_provider_assignments`
 * **Fuel Topology:** `retail_outlets`, `products`, `outlet_products`, `tanks`, `dispensers`, `nozzles`, `tank_calibration_points`, `quality_tolerance_settings`
 * **Fuel Operations:** `operational_shifts`, `nozzle_meter_readings`, `tank_stock_readings`, `fuel_receipts`, `fuel_receipt_tank_lines`, `shift_stock_reconciliations`

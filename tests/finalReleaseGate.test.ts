@@ -36,15 +36,15 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
   });
 
   // ==========================================================================
-  // 2. MIGRATION FREEZE CONTRACT (0001 - 0027)
+  // 2. MIGRATION FREEZE CONTRACT (0001 - 0028)
   // ==========================================================================
   describe('2. Migration Freeze & Sequence Integrity', () => {
-    it('2.1 exactly 27 migrations exist, ordered sequentially 0001 to 0027 without gaps or 0028', () => {
+    it('2.1 exactly 28 migrations exist, ordered sequentially 0001 to 0028 without gaps or 0028', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR)
         .filter(f => f.endsWith('.sql'))
         .sort();
 
-      expect(files.length).toBe(27);
+      expect(files.length).toBe(28);
 
       const numbers = files.map(f => {
         const match = f.match(/^(\d{4})_/);
@@ -52,25 +52,25 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
         return parseInt(match![1], 10);
       });
 
-      for (let i = 1; i <= 27; i++) {
+      for (let i = 1; i <= 28; i++) {
         expect(numbers[i - 1]).toBe(i);
       }
 
-      const hasPost0027 = files.some(f => parseInt(f.slice(0, 4), 10) > 27);
-      expect(hasPost0027).toBe(false);
+      const hasPost0028 = files.some(f => parseInt(f.slice(0, 4), 10) > 28);
+      expect(hasPost0028).toBe(false);
     });
 
-    it('2.2 terminal migration 0027 is outlet_directory_visibility', () => {
-      const file0027 = path.join(MIGRATIONS_DIR, '0027_outlet_directory_visibility.sql');
-      expect(fs.existsSync(file0027)).toBe(true);
-      const content = fs.readFileSync(file0027, 'utf-8');
+    it('2.2 terminal migration 0028 is outlet_directory_visibility', () => {
+      const file0028 = path.join(MIGRATIONS_DIR, '0028_dg_daily_operations_reporting.sql');
+      expect(fs.existsSync(file0028)).toBe(true);
+      const content = fs.readFileSync(file0028, 'utf-8');
       expect(content).toContain('directory_hidden');
       expect(content).toContain('retail_outlets');
     });
   });
 
   // ==========================================================================
-  // 3. DEPLOYMENT SAFETY & 61-TABLE INVARIANT
+  // 3. DEPLOYMENT SAFETY & 63-TABLE INVARIANT
   // ==========================================================================
   describe('3. Production Deployment Safety & Row Preservation Contract', () => {
     const deployContent = fs.readFileSync(DEPLOY_WORKFLOW_PATH, 'utf-8');
@@ -81,7 +81,7 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       expect(deployContent).toContain('PRODUCTION DATA SAFETY MODE:');
     });
 
-    it('3.2 deployment workflow contains exactly two TABLES arrays with 61 unique protected tables each', () => {
+    it('3.2 deployment workflow contains exactly two TABLES arrays with 63 unique protected tables each', () => {
       const matches = deployContent.match(/TABLES=\([\s\S]*?\)/g);
       expect(matches).not.toBeNull();
       expect(matches!.length).toBe(2);
@@ -99,16 +99,16 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       const pre = parseTables(matches![0]);
       const post = parseTables(matches![1]);
 
-      expect(pre.length).toBe(61);
-      expect(post.length).toBe(61);
-      expect(new Set(pre).size).toBe(61);
-      expect(new Set(post).size).toBe(61);
+      expect(pre.length).toBe(63);
+      expect(post.length).toBe(63);
+      expect(new Set(pre).size).toBe(63);
+      expect(new Set(post).size).toBe(63);
       expect(pre).toEqual(post);
     });
 
-    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 27, and admin existence', () => {
+    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 28, and admin existence', () => {
       expect(deployContent).toContain('PRAGMA foreign_key_check;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "27" ]; then');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "28" ]; then');
       expect(deployContent).toContain("SELECT COUNT(*) AS count FROM users WHERE email = 'admin@iocl.in';");
       expect(deployContent).toContain('if [ "$POST_CNT" -lt "$PRE_CNT" ]; then');
     });
