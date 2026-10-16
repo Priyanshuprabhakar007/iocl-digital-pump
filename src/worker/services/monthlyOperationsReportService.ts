@@ -5,7 +5,7 @@ import {
   DgRunInterval,
   ProductMonthlyReport,
 } from '../../shared/types';
-import { eq, and, gte, lte, asc, inArray } from 'drizzle-orm';
+import { eq, and, gte, lte, asc, inArray, desc } from 'drizzle-orm';
 import {
   retailOutlets,
   dgDailyLogs,
@@ -23,7 +23,8 @@ export class MonthlyOperationsReportService {
     db: any,
     outletId: string,
     month: string,
-    cutoffMode: CutoffMode = 'MONTH_END'
+    cutoffMode: 'MONTH_END' | 'SELECTED_DATE' | 'LATEST_DATA' = 'MONTH_END',
+    cutoffDate?: string
   ): Promise<MonthlyOperationsReport> {
     // 1. Verify outlet
     const outletRows = await db
@@ -36,13 +37,46 @@ export class MonthlyOperationsReportService {
     }
     const outlet = outletRows[0];
 
-    // Compute month start and end dates YYYY-MM-01 to YYYY-MM-31
+    // Compute month start
     const startDate = `${month}-01`;
     const [yearStr, monthStr] = month.split('-');
     const year = parseInt(yearStr, 10);
     const m = parseInt(monthStr, 10);
     const lastDayNum = new Date(year, m, 0).getDate();
-    const endDate = `${month}-${lastDayNum.toString().padStart(2, '0')}`;
+    let resolvedCutoffDate: string;
+
+    if (cutoffMode === 'SELECTED_DATE') {
+      if (!cutoffDate) throw new Error('cutoffDate required for SELECTED_DATE');
+      resolvedCutoffDate = cutoffDate;
+    } else if (cutoffMode === 'LATEST_DATA') {
+      const latestShift = await db
+        .select({ date: operationalShifts.businessDate })
+        .from(operationalShifts)
+        .where(eq(operationalShifts.outletId, outletId))
+        .orderBy(desc(operationalShifts.businessDate))
+        .limit(1);
+      const latestShiftDate = latestShift[0]?.date || null;
+      
+      const latestDg = await db
+        .select({ date: dgDailyLogs.businessDate })
+        .from(dgDailyLogs)
+        .where(eq(dgDailyLogs.outletId, outletId))
+        .orderBy(desc(dgDailyLogs.businessDate))
+        .limit(1);
+      const latestDgDate = latestDg[0]?.date || null;
+      
+      const latest = [latestShiftDate, latestDgDate].filter(Boolean).sort().pop();
+      if (!latest) {
+          // Empty period
+          return this.getEmptyReport(outletId, month, cutoffMode, null);
+      }
+      resolvedCutoffDate = latest;
+    } else { // MONTH_END
+      const lastDayNum = new Date(year, m, 0).getDate();
+      resolvedCutoffDate = `${month}-${lastDayNum.toString().padStart(2, '0')}`;
+    }
+    
+    const endDate = resolvedCutoffDate;
 
     // 2. Fetch DG Daily Logs for month
     const logRows = await db
@@ -101,6 +135,7 @@ export class MonthlyOperationsReportService {
       totalHsdConsumedMilliunits += log.hsdConsumedMilliunits || 0;
       totalAmountPaise += log.amountPaise || 0;
     }
+    // ...
 
     const totalLogs = logRows.length;
     const totalRunHours = Math.round((totalRunningMinutes / 60) * 100) / 100;
@@ -275,6 +310,28 @@ export class MonthlyOperationsReportService {
         totalStaff: staffList.filter((s: any) => s.status === 'ACTIVE').length,
         presentDaysCount: presentDays,
       },
+    };
+  }
+
+  static getEmptyReport(
+    outletId: string,
+    month: string,
+    cutoffMode: 'MONTH_END' | 'SELECTED_DATE' | 'LATEST_DATA',
+    latestDataDate: string | null
+  ): MonthlyOperationsReport {
+    return {
+      outletId,
+      outletName: 'Unknown',
+      month,
+      cutoffMode,
+      cutoffDate: '',
+      latestDataDate,
+      productSections: [],
+      dgSection: { rows: [], totals: { totalRunningMinutes: 0, totalRunningHoursStr: '0:00', totalHsdConsumedMilliunits: 0, totalHsdConsumedStr: '0.000', totalAmountPaise: 0, totalAmountStr: '0.00' } },
+      dgSummary: { totalLogs: 0, totalRunHours: 0, totalDieselConsumedLitres: 0, averageDailyRunHours: 0, totalGridFailureMinutes: 0, totalRunningMinutes: 0, totalRunningHoursStr: '0:00' },
+      fuelSummary: { totalShiftsCount: 0, totalSalesPaise: 0 },
+      breakdownSummary: { totalTickets: 0, openTickets: 0, resolvedTickets: 0 },
+      hrSummary: { totalStaff: 0, presentDaysCount: 0 },
     };
   }
 }

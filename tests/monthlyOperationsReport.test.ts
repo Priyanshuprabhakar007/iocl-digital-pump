@@ -61,7 +61,7 @@ describe('Monthly Operations Report Suite', () => {
       'user-admin'
     );
 
-    const report = await MonthlyOperationsReportService.generateReport(db, outletId, month);
+    const report = await MonthlyOperationsReportService.generateReport(db, outletId, month, 'MONTH_END');
     expect(report.outletId).toBe(outletId);
     expect(report.dgSummary.totalRunHours).toBe(5);
     expect(report.dgSummary.totalDieselConsumedLitres).toBe(10);
@@ -70,9 +70,9 @@ describe('Monthly Operations Report Suite', () => {
     expect(report.dgSection.totals.totalRunningHoursStr).toBe('5:00');
     expect(report.dgSection.totals.totalHsdConsumedStr).toBe('10.000');
 
-    // Test API route
+    // Test API route with new parameters
     const res = await app.request(
-      `/api/v1/reports/monthly-operations?outletId=${outletId}&month=${month}`,
+      `/api/v1/outlets/${outletId}/reports/monthly-operations?month=${month}&cutoffMode=MONTH_END`,
       {
         headers: {
           Authorization: `Bearer ${adminToken}`,

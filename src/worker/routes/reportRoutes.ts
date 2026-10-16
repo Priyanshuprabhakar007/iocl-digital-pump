@@ -46,7 +46,8 @@ const handleMonthlyOperations = async (c: any) => {
       db,
       parseResult.data.outletId,
       parseResult.data.month,
-      cutoffMode as any
+      parseResult.data.cutoffMode,
+      parseResult.data.cutoffDate
     );
     return c.json({
       success: true,

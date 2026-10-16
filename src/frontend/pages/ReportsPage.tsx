@@ -20,6 +20,8 @@ export const ReportsPage: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>(
     new Date().toISOString().substring(0, 7) // YYYY-MM
   );
+  const [cutoffMode, setCutoffMode] = useState<'MONTH_END' | 'SELECTED_DATE' | 'LATEST_DATA'>('MONTH_END');
+  const [cutoffDate, setCutoffDate] = useState<string>('');
   const [report, setReport] = useState<MonthlyOperationsReport | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export const ReportsPage: React.FC = () => {
 
     try {
       const res = await apiFetch<MonthlyOperationsReport>(
-        `/api/v1/reports/monthly-operations?outletId=${selectedOutletId}&month=${selectedMonth}`
+        `/api/v1/outlets/${selectedOutletId}/reports/monthly-operations?month=${selectedMonth}&cutoffMode=${cutoffMode}${cutoffDate ? `&cutoffDate=${cutoffDate}` : ''}`
       );
       if (res.success && res.data) {
         setReport(res.data);
@@ -105,6 +107,25 @@ export const ReportsPage: React.FC = () => {
               className="bg-transparent text-white font-medium focus:outline-none cursor-pointer"
             />
           </div>
+          
+          <select
+              value={cutoffMode}
+              onChange={(e) => setCutoffMode(e.target.value as any)}
+              className="bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg text-xs text-white"
+            >
+              <option value="MONTH_END">Complete Month</option>
+              <option value="SELECTED_DATE">Selected Date</option>
+              <option value="LATEST_DATA">Latest Data</option>
+            </select>
+            
+            {cutoffMode === 'SELECTED_DATE' && (
+                <input
+                  type="date"
+                  value={cutoffDate}
+                  onChange={(e) => setCutoffDate(e.target.value)}
+                  className="bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg text-xs text-white"
+                />
+            )}
 
           <button
             onClick={fetchReport}
