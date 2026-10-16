@@ -213,6 +213,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-eq-r', 'perm-eq-as-w', 'perm-eq-t-c',
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-nozz-w',
     'perm-hr-uniform-r', 'perm-hr-uniform-inv-w', 'perm-hr-uniform-issue-w',
+    'perm-dg-r', 'perm-dg-w', 'perm-rep-r',
   ].map(pId => ({ roleId: 'role-dealer', permissionId: pId }));
 
   const cspPerms = [
@@ -234,6 +235,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-eq-r', 'perm-eq-as-w', 'perm-eq-t-c',
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-nozz-w',
     'perm-hr-uniform-r',
+    'perm-dg-r', 'perm-dg-w', 'perm-rep-r',
   ].map(pId => ({ roleId: 'role-csp', permissionId: pId }));
 
   await db.insert(schema.rolePermissions).values([
@@ -676,4 +678,56 @@ export async function seedDatabase(db: AppDatabase) {
     }
   }
   await db.insert(schema.outletProductPrices).values(priceData).onConflictDoNothing();
+
+  // 20. Equipment Assets (DG Sets, Compressors, ATGs)
+  await db.insert(schema.equipmentAssets).values([
+    {
+      id: 'eq-ro1-dg1',
+      outletId: 'ro-1001',
+      assetCode: 'DG-01',
+      equipmentType: 'DG_SET',
+      name: 'Diesel Generator Set 1',
+      manufacturer: 'Kirloskar Oil Engines',
+      model: 'KG1-62.5WS',
+      serialNumber: 'KOEL-DG-1001-01',
+      status: 'ACTIVE',
+      commissionedAt: '2023-01-15T00:00:00.000Z',
+      notes: 'Primary backup DG set for Park Street RO',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'eq-ro2-dg1',
+      outletId: 'ro-1002',
+      assetCode: 'DG-01',
+      equipmentType: 'DG_SET',
+      name: 'Diesel Generator Set 1',
+      manufacturer: 'Cummins India',
+      model: 'C62D5P',
+      serialNumber: 'CUM-DG-1002-01',
+      status: 'ACTIVE',
+      commissionedAt: '2023-03-20T00:00:00.000Z',
+      notes: 'Backup DG set for Salt Lake RO',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'eq-ro3-dg1',
+      outletId: 'ro-1003',
+      assetCode: 'DG-01',
+      equipmentType: 'DG_SET',
+      name: 'Diesel Generator Set 1',
+      manufacturer: 'Mahindra Powerol',
+      model: 'MP-62.5',
+      serialNumber: 'MAH-DG-1003-01',
+      status: 'ACTIVE',
+      commissionedAt: '2023-05-10T00:00:00.000Z',
+      notes: 'Backup DG set for Howrah RO',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]).onConflictDoNothing();
 }

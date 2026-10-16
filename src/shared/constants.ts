@@ -161,10 +161,14 @@ export const PERMISSIONS = {
   HR_LEAVE_REQUEST: 'hr.leave.request',
   HR_LEAVE_APPROVE: 'hr.leave.approve',
 
-  // Phase 1: DG Daily Operations & Monthly Reports
-  DG_OPERATIONS_READ: 'dg_operations.read',
-  DG_OPERATIONS_WRITE: 'dg_operations.write',
+  // Phase 1: DG Daily Operations & Monthly Reporting
+  DG_LOG_READ: 'dg_log.read',
+  DG_LOG_WRITE: 'dg_log.write',
   REPORTS_READ: 'reports.read',
+  REPORTS_GENERATE: 'reports.generate',
+  // Backward compatibility aliases
+  DG_OPERATIONS_READ: 'dg_log.read',
+  DG_OPERATIONS_WRITE: 'dg_log.write',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];

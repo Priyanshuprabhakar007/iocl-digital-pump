@@ -1,37 +1,127 @@
-import { eq, and, gte, lte, desc } from 'drizzle-orm';
-import { dgDailyLogs, retailOutlets, equipmentAssets, users } from '../../db/schema';
-import { DgDailyLog, CreateDgDailyLogInput, UpdateDgDailyLogInput } from '../../shared/types';
+import { eq, and, gte, lte, desc, asc, inArray } from 'drizzle-orm';
+import { dgDailyLogs, dgRunIntervals, retailOutlets, equipmentAssets, users } from '../../db/schema';
+import {
+  DgDailyLog,
+  DgRunInterval,
+  CreateDgDailyLogInput,
+  UpdateDgDailyLogInput,
+} from '../../shared/types';
+
+export interface CalculatedIntervalData {
+  sequenceNo: number;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  remarks?: string | null;
+}
 
 export class DgOperationsRepository {
-  static async create(db: any, input: CreateDgDailyLogInput & { operatorUserId: string }): Promise<DgDailyLog> {
+  private static formatLogWithIntervals(
+    logRow: any,
+    intervals: DgRunInterval[]
+  ): DgDailyLog {
+    const totalRunningMinutes = intervals.reduce(
+      (sum, iv) => sum + (iv.durationMinutes || 0),
+      0
+    );
+    const runHours = Math.floor(totalRunningMinutes / 60);
+    const runMins = totalRunningMinutes % 60;
+    const totalRunningHoursStr = `${runHours}:${runMins.toString().padStart(2, '0')}`;
+
+    const hsdConsumedMilliunits = logRow.hsdConsumedMilliunits ?? 0;
+    const hsdConsumedStr = (hsdConsumedMilliunits / 1000).toFixed(3);
+    const hsdRateStr =
+      logRow.hsdRatePaisePerLitre != null
+        ? (logRow.hsdRatePaisePerLitre / 100).toFixed(2)
+        : null;
+    const amountStr =
+      logRow.amountPaise != null
+        ? (logRow.amountPaise / 100).toFixed(2)
+        : null;
+
+    return {
+      id: logRow.id,
+      outletId: logRow.outletId,
+      equipmentAssetId: logRow.equipmentAssetId,
+      businessDate: logRow.businessDate,
+      meterReadingFromMilliunits: logRow.meterReadingFromMilliunits ?? null,
+      meterReadingToMilliunits: logRow.meterReadingToMilliunits ?? null,
+      hsdConsumedMilliunits,
+      hsdRatePaisePerLitre: logRow.hsdRatePaisePerLitre ?? null,
+      amountPaise: logRow.amountPaise ?? null,
+      remarks: logRow.remarks ?? null,
+      status: logRow.status as 'DRAFT' | 'FINAL',
+      recordedByUserId: logRow.recordedByUserId,
+      updatedByUserId: logRow.updatedByUserId,
+      createdAt: logRow.createdAt,
+      updatedAt: logRow.updatedAt,
+      intervals,
+      totalRunningMinutes,
+      totalRunningHoursStr,
+      hsdConsumedStr,
+      hsdRateStr,
+      amountStr,
+      equipmentName: logRow.equipmentName ?? undefined,
+      equipmentCode: logRow.equipmentCode ?? undefined,
+      outletName: logRow.outletName ?? undefined,
+      recordedByName: logRow.recordedByName ?? undefined,
+    };
+  }
+
+  static async create(
+    db: any,
+    params: {
+      outletId: string;
+      equipmentAssetId: string;
+      businessDate: string;
+      meterReadingFromMilliunits?: number | null;
+      meterReadingToMilliunits?: number | null;
+      hsdConsumedMilliunits?: number;
+      hsdRatePaisePerLitre?: number | null;
+      amountPaise?: number | null;
+      remarks?: string | null;
+      status?: 'DRAFT' | 'FINAL';
+      intervals?: CalculatedIntervalData[];
+      recordedByUserId: string;
+    }
+  ): Promise<DgDailyLog> {
     const id = `dgl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
-    const totalRunHours = input.closingRunHours - input.openingRunHours;
-    const dieselAdded = input.dieselAddedLitres ?? 0;
-    const closingBalance = input.openingDieselBalanceLitres + dieselAdded - input.dieselConsumedLitres;
 
-    const row = {
+    const insertLogRow = {
       id,
-      outletId: input.outletId,
-      equipmentId: input.equipmentId,
-      logDate: input.logDate,
-      openingRunHours: input.openingRunHours,
-      closingRunHours: input.closingRunHours,
-      totalRunHours,
-      dieselConsumedLitres: input.dieselConsumedLitres,
-      unitsGeneratedKwh: input.unitsGeneratedKwh ?? null,
-      openingDieselBalanceLitres: input.openingDieselBalanceLitres,
-      dieselAddedLitres: dieselAdded,
-      closingDieselBalanceLitres: Math.max(0, closingBalance),
-      gridFailureDurationMinutes: input.gridFailureDurationMinutes ?? 0,
-      powerCutEventsCount: input.powerCutEventsCount ?? 0,
-      operatorUserId: input.operatorUserId,
-      remarks: input.remarks ?? null,
+      outletId: params.outletId,
+      equipmentAssetId: params.equipmentAssetId,
+      businessDate: params.businessDate,
+      meterReadingFromMilliunits: params.meterReadingFromMilliunits ?? null,
+      meterReadingToMilliunits: params.meterReadingToMilliunits ?? null,
+      hsdConsumedMilliunits: params.hsdConsumedMilliunits ?? 0,
+      hsdRatePaisePerLitre: params.hsdRatePaisePerLitre ?? null,
+      amountPaise: params.amountPaise ?? null,
+      remarks: params.remarks ?? null,
+      status: params.status ?? 'DRAFT',
+      recordedByUserId: params.recordedByUserId,
+      updatedByUserId: params.recordedByUserId,
       createdAt: now,
       updatedAt: now,
     };
 
-    await db.insert(dgDailyLogs).values(row);
+    await db.insert(dgDailyLogs).values(insertLogRow);
+
+    if (params.intervals && params.intervals.length > 0) {
+      const intervalRows = params.intervals.map((iv, idx) => ({
+        id: `dgri_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+        dgDailyLogId: id,
+        sequenceNo: iv.sequenceNo ?? idx + 1,
+        startTime: iv.startTime,
+        endTime: iv.endTime,
+        durationMinutes: iv.durationMinutes,
+        remarks: iv.remarks ?? null,
+        createdAt: now,
+      }));
+      await db.insert(dgRunIntervals).values(intervalRows);
+    }
+
     return (await this.getById(db, id))!;
   }
 
@@ -40,151 +130,225 @@ export class DgOperationsRepository {
       .select({
         id: dgDailyLogs.id,
         outletId: dgDailyLogs.outletId,
-        equipmentId: dgDailyLogs.equipmentId,
-        logDate: dgDailyLogs.logDate,
-        openingRunHours: dgDailyLogs.openingRunHours,
-        closingRunHours: dgDailyLogs.closingRunHours,
-        totalRunHours: dgDailyLogs.totalRunHours,
-        dieselConsumedLitres: dgDailyLogs.dieselConsumedLitres,
-        unitsGeneratedKwh: dgDailyLogs.unitsGeneratedKwh,
-        openingDieselBalanceLitres: dgDailyLogs.openingDieselBalanceLitres,
-        dieselAddedLitres: dgDailyLogs.dieselAddedLitres,
-        closingDieselBalanceLitres: dgDailyLogs.closingDieselBalanceLitres,
-        gridFailureDurationMinutes: dgDailyLogs.gridFailureDurationMinutes,
-        powerCutEventsCount: dgDailyLogs.powerCutEventsCount,
-        operatorUserId: dgDailyLogs.operatorUserId,
+        equipmentAssetId: dgDailyLogs.equipmentAssetId,
+        businessDate: dgDailyLogs.businessDate,
+        meterReadingFromMilliunits: dgDailyLogs.meterReadingFromMilliunits,
+        meterReadingToMilliunits: dgDailyLogs.meterReadingToMilliunits,
+        hsdConsumedMilliunits: dgDailyLogs.hsdConsumedMilliunits,
+        hsdRatePaisePerLitre: dgDailyLogs.hsdRatePaisePerLitre,
+        amountPaise: dgDailyLogs.amountPaise,
         remarks: dgDailyLogs.remarks,
+        status: dgDailyLogs.status,
+        recordedByUserId: dgDailyLogs.recordedByUserId,
+        updatedByUserId: dgDailyLogs.updatedByUserId,
         createdAt: dgDailyLogs.createdAt,
         updatedAt: dgDailyLogs.updatedAt,
         outletName: retailOutlets.name,
         equipmentName: equipmentAssets.name,
         equipmentCode: equipmentAssets.assetCode,
-        operatorName: users.name,
+        recordedByName: users.name,
       })
       .from(dgDailyLogs)
       .leftJoin(retailOutlets, eq(dgDailyLogs.outletId, retailOutlets.id))
-      .leftJoin(equipmentAssets, eq(dgDailyLogs.equipmentId, equipmentAssets.id))
-      .leftJoin(users, eq(dgDailyLogs.operatorUserId, users.id))
+      .leftJoin(equipmentAssets, eq(dgDailyLogs.equipmentAssetId, equipmentAssets.id))
+      .leftJoin(users, eq(dgDailyLogs.recordedByUserId, users.id))
       .where(eq(dgDailyLogs.id, id));
 
-    return rows[0] || null;
+    if (!rows || rows.length === 0) return null;
+
+    const intervalRows = await db
+      .select()
+      .from(dgRunIntervals)
+      .where(eq(dgRunIntervals.dgDailyLogId, id))
+      .orderBy(asc(dgRunIntervals.sequenceNo));
+
+    return this.formatLogWithIntervals(rows[0], intervalRows);
+  }
+
+  static async getByAssetAndDate(
+    db: any,
+    equipmentAssetId: string,
+    businessDate: string
+  ): Promise<DgDailyLog | null> {
+    const rows = await db
+      .select({ id: dgDailyLogs.id })
+      .from(dgDailyLogs)
+      .where(
+        and(
+          eq(dgDailyLogs.equipmentAssetId, equipmentAssetId),
+          eq(dgDailyLogs.businessDate, businessDate)
+        )
+      )
+      .limit(1);
+
+    if (!rows || rows.length === 0) return null;
+    return this.getById(db, rows[0].id);
+  }
+
+  static async getByOutletAndDate(
+    db: any,
+    outletId: string,
+    businessDate: string
+  ): Promise<DgDailyLog | null> {
+    const rows = await db
+      .select({ id: dgDailyLogs.id })
+      .from(dgDailyLogs)
+      .where(
+        and(
+          eq(dgDailyLogs.outletId, outletId),
+          eq(dgDailyLogs.businessDate, businessDate)
+        )
+      )
+      .limit(1);
+
+    if (!rows || rows.length === 0) return null;
+    return this.getById(db, rows[0].id);
   }
 
   static async listByOutlet(
     db: any,
     outletId: string,
-    startDate?: string,
-    endDate?: string
+    options?: {
+      month?: string;
+      startDate?: string;
+      endDate?: string;
+    }
   ): Promise<DgDailyLog[]> {
     const conditions = [eq(dgDailyLogs.outletId, outletId)];
-    if (startDate) conditions.push(gte(dgDailyLogs.logDate, startDate));
-    if (endDate) conditions.push(lte(dgDailyLogs.logDate, endDate));
 
-    const rows = await db
+    if (options?.month) {
+      const monthStart = `${options.month}-01`;
+      const [yearStr, monthStr] = options.month.split('-');
+      const y = parseInt(yearStr, 10);
+      const m = parseInt(monthStr, 10);
+      const lastDay = new Date(y, m, 0).getDate();
+      const monthEnd = `${options.month}-${lastDay.toString().padStart(2, '0')}`;
+      conditions.push(gte(dgDailyLogs.businessDate, monthStart));
+      conditions.push(lte(dgDailyLogs.businessDate, monthEnd));
+    } else {
+      if (options?.startDate) conditions.push(gte(dgDailyLogs.businessDate, options.startDate));
+      if (options?.endDate) conditions.push(lte(dgDailyLogs.businessDate, options.endDate));
+    }
+
+    const logRows = await db
       .select({
         id: dgDailyLogs.id,
         outletId: dgDailyLogs.outletId,
-        equipmentId: dgDailyLogs.equipmentId,
-        logDate: dgDailyLogs.logDate,
-        openingRunHours: dgDailyLogs.openingRunHours,
-        closingRunHours: dgDailyLogs.closingRunHours,
-        totalRunHours: dgDailyLogs.totalRunHours,
-        dieselConsumedLitres: dgDailyLogs.dieselConsumedLitres,
-        unitsGeneratedKwh: dgDailyLogs.unitsGeneratedKwh,
-        openingDieselBalanceLitres: dgDailyLogs.openingDieselBalanceLitres,
-        dieselAddedLitres: dgDailyLogs.dieselAddedLitres,
-        closingDieselBalanceLitres: dgDailyLogs.closingDieselBalanceLitres,
-        gridFailureDurationMinutes: dgDailyLogs.gridFailureDurationMinutes,
-        powerCutEventsCount: dgDailyLogs.powerCutEventsCount,
-        operatorUserId: dgDailyLogs.operatorUserId,
+        equipmentAssetId: dgDailyLogs.equipmentAssetId,
+        businessDate: dgDailyLogs.businessDate,
+        meterReadingFromMilliunits: dgDailyLogs.meterReadingFromMilliunits,
+        meterReadingToMilliunits: dgDailyLogs.meterReadingToMilliunits,
+        hsdConsumedMilliunits: dgDailyLogs.hsdConsumedMilliunits,
+        hsdRatePaisePerLitre: dgDailyLogs.hsdRatePaisePerLitre,
+        amountPaise: dgDailyLogs.amountPaise,
         remarks: dgDailyLogs.remarks,
+        status: dgDailyLogs.status,
+        recordedByUserId: dgDailyLogs.recordedByUserId,
+        updatedByUserId: dgDailyLogs.updatedByUserId,
         createdAt: dgDailyLogs.createdAt,
         updatedAt: dgDailyLogs.updatedAt,
         outletName: retailOutlets.name,
         equipmentName: equipmentAssets.name,
         equipmentCode: equipmentAssets.assetCode,
-        operatorName: users.name,
+        recordedByName: users.name,
       })
       .from(dgDailyLogs)
       .leftJoin(retailOutlets, eq(dgDailyLogs.outletId, retailOutlets.id))
-      .leftJoin(equipmentAssets, eq(dgDailyLogs.equipmentId, equipmentAssets.id))
-      .leftJoin(users, eq(dgDailyLogs.operatorUserId, users.id))
+      .leftJoin(equipmentAssets, eq(dgDailyLogs.equipmentAssetId, equipmentAssets.id))
+      .leftJoin(users, eq(dgDailyLogs.recordedByUserId, users.id))
       .where(and(...conditions))
-      .orderBy(desc(dgDailyLogs.logDate), desc(dgDailyLogs.createdAt));
+      .orderBy(desc(dgDailyLogs.businessDate));
 
-    return rows;
+    if (logRows.length === 0) return [];
+
+    const logIds = logRows.map((r: any) => r.id);
+    const allIntervals = await db
+      .select()
+      .from(dgRunIntervals)
+      .where(inArray(dgRunIntervals.dgDailyLogId, logIds))
+      .orderBy(asc(dgRunIntervals.sequenceNo));
+
+    const intervalMap = new Map<string, DgRunInterval[]>();
+    for (const iv of allIntervals) {
+      const list = intervalMap.get(iv.dgDailyLogId) || [];
+      list.push(iv);
+      intervalMap.set(iv.dgDailyLogId, list);
+    }
+
+    return logRows.map((r: any) =>
+      this.formatLogWithIntervals(r, intervalMap.get(r.id) || [])
+    );
   }
 
-  static async update(db: any, id: string, input: UpdateDgDailyLogInput): Promise<DgDailyLog | null> {
+  static async update(
+    db: any,
+    id: string,
+    params: {
+      equipmentAssetId?: string;
+      meterReadingFromMilliunits?: number | null;
+      meterReadingToMilliunits?: number | null;
+      hsdConsumedMilliunits?: number;
+      hsdRatePaisePerLitre?: number | null;
+      amountPaise?: number | null;
+      remarks?: string | null;
+      status?: 'DRAFT' | 'FINAL';
+      intervals?: CalculatedIntervalData[];
+      updatedByUserId: string;
+    }
+  ): Promise<DgDailyLog | null> {
     const existing = await this.getById(db, id);
     if (!existing) return null;
 
-    const opening = input.openingRunHours ?? existing.openingRunHours;
-    const closing = input.closingRunHours ?? existing.closingRunHours;
-    const totalRunHours = closing - opening;
-
-    const openingDiesel = input.openingDieselBalanceLitres ?? existing.openingDieselBalanceLitres;
-    const dieselAdded = input.dieselAddedLitres ?? existing.dieselAddedLitres;
-    const dieselConsumed = input.dieselConsumedLitres ?? existing.dieselConsumedLitres;
-    const closingBalance = Math.max(0, openingDiesel + dieselAdded - dieselConsumed);
-
     const now = new Date().toISOString();
+    const updateValues: Record<string, any> = {
+      updatedByUserId: params.updatedByUserId,
+      updatedAt: now,
+    };
 
-    await db
-      .update(dgDailyLogs)
-      .set({
-        ...(input.openingRunHours !== undefined && { openingRunHours: input.openingRunHours }),
-        ...(input.closingRunHours !== undefined && { closingRunHours: input.closingRunHours }),
-        totalRunHours,
-        ...(input.dieselConsumedLitres !== undefined && { dieselConsumedLitres: input.dieselConsumedLitres }),
-        ...(input.unitsGeneratedKwh !== undefined && { unitsGeneratedKwh: input.unitsGeneratedKwh }),
-        ...(input.openingDieselBalanceLitres !== undefined && { openingDieselBalanceLitres: input.openingDieselBalanceLitres }),
-        ...(input.dieselAddedLitres !== undefined && { dieselAddedLitres: input.dieselAddedLitres }),
-        closingDieselBalanceLitres: closingBalance,
-        ...(input.gridFailureDurationMinutes !== undefined && { gridFailureDurationMinutes: input.gridFailureDurationMinutes }),
-        ...(input.powerCutEventsCount !== undefined && { powerCutEventsCount: input.powerCutEventsCount }),
-        ...(input.remarks !== undefined && { remarks: input.remarks }),
-        updatedAt: now,
-      })
-      .where(eq(dgDailyLogs.id, id));
+    if (params.equipmentAssetId !== undefined) updateValues.equipmentAssetId = params.equipmentAssetId;
+    if (params.meterReadingFromMilliunits !== undefined) updateValues.meterReadingFromMilliunits = params.meterReadingFromMilliunits;
+    if (params.meterReadingToMilliunits !== undefined) updateValues.meterReadingToMilliunits = params.meterReadingToMilliunits;
+    if (params.hsdConsumedMilliunits !== undefined) updateValues.hsdConsumedMilliunits = params.hsdConsumedMilliunits;
+    if (params.hsdRatePaisePerLitre !== undefined) updateValues.hsdRatePaisePerLitre = params.hsdRatePaisePerLitre;
+    if (params.amountPaise !== undefined) updateValues.amountPaise = params.amountPaise;
+    if (params.remarks !== undefined) updateValues.remarks = params.remarks;
+    if (params.status !== undefined) updateValues.status = params.status;
+
+    await db.update(dgDailyLogs).set(updateValues).where(eq(dgDailyLogs.id, id));
+
+    if (params.intervals !== undefined) {
+      await db.delete(dgRunIntervals).where(eq(dgRunIntervals.dgDailyLogId, id));
+
+      if (params.intervals.length > 0) {
+        const intervalRows = params.intervals.map((iv, idx) => ({
+          id: `dgri_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+          dgDailyLogId: id,
+          sequenceNo: iv.sequenceNo ?? idx + 1,
+          startTime: iv.startTime,
+          endTime: iv.endTime,
+          durationMinutes: iv.durationMinutes,
+          remarks: iv.remarks ?? null,
+          createdAt: now,
+        }));
+        await db.insert(dgRunIntervals).values(intervalRows);
+      }
+    }
 
     return await this.getById(db, id);
   }
 
-  static async delete(db: any, id: string): Promise<boolean> {
-    const existing = await this.getById(db, id);
-    if (!existing) return false;
-    await db.delete(dgDailyLogs).where(eq(dgDailyLogs.id, id));
-    return true;
-  }
-
-  static async getLatestForEquipment(db: any, equipmentId: string): Promise<DgDailyLog | null> {
+  static async getLatestForEquipment(
+    db: any,
+    equipmentAssetId: string
+  ): Promise<DgDailyLog | null> {
     const rows = await db
-      .select({
-        id: dgDailyLogs.id,
-        outletId: dgDailyLogs.outletId,
-        equipmentId: dgDailyLogs.equipmentId,
-        logDate: dgDailyLogs.logDate,
-        openingRunHours: dgDailyLogs.openingRunHours,
-        closingRunHours: dgDailyLogs.closingRunHours,
-        totalRunHours: dgDailyLogs.totalRunHours,
-        dieselConsumedLitres: dgDailyLogs.dieselConsumedLitres,
-        unitsGeneratedKwh: dgDailyLogs.unitsGeneratedKwh,
-        openingDieselBalanceLitres: dgDailyLogs.openingDieselBalanceLitres,
-        dieselAddedLitres: dgDailyLogs.dieselAddedLitres,
-        closingDieselBalanceLitres: dgDailyLogs.closingDieselBalanceLitres,
-        gridFailureDurationMinutes: dgDailyLogs.gridFailureDurationMinutes,
-        powerCutEventsCount: dgDailyLogs.powerCutEventsCount,
-        operatorUserId: dgDailyLogs.operatorUserId,
-        remarks: dgDailyLogs.remarks,
-        createdAt: dgDailyLogs.createdAt,
-        updatedAt: dgDailyLogs.updatedAt,
-      })
+      .select({ id: dgDailyLogs.id })
       .from(dgDailyLogs)
-      .where(eq(dgDailyLogs.equipmentId, equipmentId))
-      .orderBy(desc(dgDailyLogs.logDate), desc(dgDailyLogs.createdAt))
+      .where(eq(dgDailyLogs.equipmentAssetId, equipmentAssetId))
+      .orderBy(desc(dgDailyLogs.businessDate))
       .limit(1);
 
-    return rows[0] || null;
+    if (!rows || rows.length === 0) return null;
+    return this.getById(db, rows[0].id);
   }
 }

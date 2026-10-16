@@ -1937,70 +1937,164 @@ export interface OutletServiceProviderAssignment {
   providerCode?: string;
 }
 
+export interface DgRunInterval {
+  id: string;
+  dgDailyLogId: string;
+  sequenceNo: number;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  remarks?: string | null;
+  createdAt: string;
+}
+
+export interface DgRunIntervalInput {
+  sequenceNo?: number;
+  startTime: string;
+  endTime: string;
+  remarks?: string | null;
+}
+
 export interface DgDailyLog {
   id: string;
   outletId: string;
-  equipmentId: string;
-  logDate: string;
-  openingRunHours: number;
-  closingRunHours: number;
-  totalRunHours: number;
-  dieselConsumedLitres: number;
-  unitsGeneratedKwh?: number | null;
-  openingDieselBalanceLitres: number;
-  dieselAddedLitres: number;
-  closingDieselBalanceLitres: number;
-  gridFailureDurationMinutes: number;
-  powerCutEventsCount: number;
-  operatorUserId: string;
-  remarks?: string | null;
+  equipmentAssetId: string;
+  businessDate: string;
+  meterReadingFromMilliunits: number | null;
+  meterReadingToMilliunits: number | null;
+  hsdConsumedMilliunits: number;
+  hsdRatePaisePerLitre: number | null;
+  amountPaise: number | null;
+  remarks: string | null;
+  status: 'DRAFT' | 'FINAL';
+  recordedByUserId: string;
+  updatedByUserId: string;
   createdAt: string;
   updatedAt: string;
-  outletName?: string;
+  intervals: DgRunInterval[];
+  totalRunningMinutes: number;
+  totalRunningHoursStr: string;
+  hsdConsumedStr: string;
+  hsdRateStr: string | null;
+  amountStr: string | null;
   equipmentName?: string;
   equipmentCode?: string;
-  operatorName?: string;
+  outletName?: string;
+  recordedByName?: string;
 }
 
 export interface CreateDgDailyLogInput {
-  outletId: string;
-  equipmentId: string;
-  logDate: string;
-  openingRunHours: number;
-  closingRunHours: number;
-  dieselConsumedLitres: number;
-  unitsGeneratedKwh?: number | null;
-  openingDieselBalanceLitres: number;
-  dieselAddedLitres?: number;
-  gridFailureDurationMinutes?: number;
-  powerCutEventsCount?: number;
-  remarks?: string;
+  outletId?: string;
+  equipmentAssetId: string;
+  businessDate: string;
+  meterReadingFromMilliunits?: number | null;
+  meterReadingToMilliunits?: number | null;
+  hsdConsumedMilliunits?: number;
+  hsdRatePaisePerLitre?: number | null;
+  status?: 'DRAFT' | 'FINAL';
+  remarks?: string | null;
+  intervals?: DgRunIntervalInput[];
 }
 
 export interface UpdateDgDailyLogInput {
-  openingRunHours?: number;
-  closingRunHours?: number;
-  dieselConsumedLitres?: number;
-  unitsGeneratedKwh?: number | null;
-  openingDieselBalanceLitres?: number;
-  dieselAddedLitres?: number;
-  gridFailureDurationMinutes?: number;
-  powerCutEventsCount?: number;
-  remarks?: string;
+  equipmentAssetId?: string;
+  meterReadingFromMilliunits?: number | null;
+  meterReadingToMilliunits?: number | null;
+  hsdConsumedMilliunits?: number;
+  hsdRatePaisePerLitre?: number | null;
+  status?: 'DRAFT' | 'FINAL';
+  remarks?: string | null;
+  intervals?: DgRunIntervalInput[];
+}
+
+export type CutoffMode = 'MONTH_END' | 'SELECTED_DATE' | 'LATEST_DATA';
+export type DayEntryStatus = 'COMPLETE' | 'PARTIAL' | 'NO_ENTRY';
+
+export interface DailyProductRow {
+  businessDate: string;
+  status: DayEntryStatus;
+  missingFields: string[];
+  shiftsCount: number;
+  rspPaise: number[];
+  changedWithinDay: boolean;
+  tankOpeningStockL: number;
+  tankClosingStockL: number;
+  receiptsL: number;
+  meterSalesL: number;
+  testingL: number;
+  grossSalesL: number;
+  netSalesL: number;
+  dailySalesL: number;
+  cumulativeSalesL: number;
+  theoreticalClosingL: number;
+  physicalClosingL: number;
+  varianceL: number;
+}
+
+export interface ProductMonthlyReport {
+  productId: string;
+  productCode: string;
+  productName: string;
+  rows: DailyProductRow[];
+  totals: {
+    totalMeterSalesL: number;
+    totalTestingL: number;
+    totalNetSalesL: number;
+    totalReceiptsL: number;
+    totalVarianceL: number;
+  };
+}
+
+export interface DailyDgRow {
+  businessDate: string;
+  status: DayEntryStatus;
+  equipmentAssetId: string | null;
+  equipmentName: string | null;
+  meterReadingFromMilliunits: number | null;
+  meterReadingToMilliunits: number | null;
+  meterReadingFromStr: string | null;
+  meterReadingToStr: string | null;
+  intervals: DgRunInterval[];
+  totalRunningMinutes: number;
+  totalRunningHoursStr: string;
+  hsdConsumedMilliunits: number;
+  hsdConsumedStr: string;
+  hsdRatePaisePerLitre: number | null;
+  hsdRateStr: string | null;
+  amountPaise: number | null;
+  amountStr: string | null;
+  remarks: string | null;
+}
+
+export interface DgMonthlyReport {
+  rows: DailyDgRow[];
+  totals: {
+    totalRunningMinutes: number;
+    totalRunningHoursStr: string;
+    totalHsdConsumedMilliunits: number;
+    totalHsdConsumedStr: string;
+    totalAmountPaise: number;
+    totalAmountStr: string;
+  };
 }
 
 export interface MonthlyOperationsReport {
   outletId: string;
   outletName: string;
   month: string; // YYYY-MM
+  cutoffMode: CutoffMode;
+  cutoffDate: string;
+  latestDataDate: string | null;
+  productSections: ProductMonthlyReport[];
+  dgSection: DgMonthlyReport;
   dgSummary: {
     totalLogs: number;
     totalRunHours: number;
     totalDieselConsumedLitres: number;
-    totalUnitsGeneratedKwh: number;
-    totalGridFailureMinutes: number;
-    totalPowerCutEvents: number;
     averageDailyRunHours: number;
+    totalGridFailureMinutes: number;
+    totalRunningMinutes?: number;
+    totalRunningHoursStr?: string;
   };
   fuelSummary: {
     totalShiftsCount: number;
@@ -2016,6 +2110,7 @@ export interface MonthlyOperationsReport {
     presentDaysCount: number;
   };
 }
+
 
 
 

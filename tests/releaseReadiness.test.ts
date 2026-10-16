@@ -58,7 +58,7 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       }
     });
 
-    it('1.2 does not contain any migration 0028 or higher beyond the frozen baseline', () => {
+    it('1.2 does not contain any migration 0029 or higher beyond the frozen baseline', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql'));
       const hasPost0028 = files.some(f => {
         const num = parseInt(f.slice(0, 4), 10);
@@ -78,12 +78,21 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       }
     });
 
-    it('1.4 frozen terminal migration 0028 corresponds to DG Daily Operations & Monthly Register', () => {
+    it('1.4 terminal migration 0028 is DG Daily Operations & Monthly Reporting', () => {
       const file0028 = path.join(MIGRATIONS_DIR, '0028_dg_daily_operations_reporting.sql');
       expect(fs.existsSync(file0028)).toBe(true);
       const content = fs.readFileSync(file0028, 'utf-8');
       expect(content).toContain('dg_daily_logs');
       expect(content).toContain('dg_run_intervals');
+      expect(content).not.toContain('directory_hidden');
+    });
+
+    it('1.5 migration 0027 corresponds to Retail Outlet Directory Visibility', () => {
+      const file0027 = path.join(MIGRATIONS_DIR, '0027_outlet_directory_visibility.sql');
+      expect(fs.existsSync(file0027)).toBe(true);
+      const content = fs.readFileSync(file0027, 'utf-8');
+      expect(content).toContain('directory_hidden');
+      expect(content).toContain('retail_outlets');
     });
   });
 
@@ -114,7 +123,7 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('DEPLOYMENT SAFETY FAILED: One or more operational tables experienced a decrease in row count');
     });
 
-    it('2.4 protected tables list includes all core and specialized operational domains and exact 63 table parity', () => {
+    it('2.4 protected tables list includes all core and specialized operational domains and exact 61 table parity', () => {
       // Extract TABLES=( ... ) arrays from deployment workflow
       const matches = deployContent.match(/TABLES=\([\s\S]*?\)/g);
       expect(matches).not.toBeNull();
@@ -135,12 +144,12 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       const preTables = parseTablesArray(matches![0]);
       const postTables = parseTablesArray(matches![1]);
 
-      expect(preTables.length).toBe(63);
-      expect(postTables.length).toBe(63);
+      expect(preTables.length).toBe(61);
+      expect(postTables.length).toBe(61);
 
       // Verify unique entries
-      expect(new Set(preTables).size).toBe(63);
-      expect(new Set(postTables).size).toBe(63);
+      expect(new Set(preTables).size).toBe(61);
+      expect(new Set(postTables).size).toBe(61);
 
       // Verify pre and post arrays are identical
       expect(preTables).toEqual(postTables);
@@ -186,17 +195,17 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       }
     });
 
-    it('2.4b release documentation does not contain stale 58 table references and states 63 tables', () => {
+    it('2.4b release documentation does not contain stale 58 table references and states 61 tables', () => {
       const releaseReadinessMd = fs.readFileSync(path.resolve(ROOT_DIR, 'docs/RELEASE_READINESS.md'), 'utf-8');
       const runbookMd = fs.readFileSync(path.resolve(ROOT_DIR, 'docs/PRODUCTION_RELEASE_RUNBOOK.md'), 'utf-8');
 
       expect(releaseReadinessMd).not.toContain('58 tables');
       expect(releaseReadinessMd).not.toContain('58 operational');
-      expect(releaseReadinessMd).toContain('63 tables');
-      expect(releaseReadinessMd).toContain('63 operational');
+      expect(releaseReadinessMd).toContain('61 tables');
+      expect(releaseReadinessMd).toContain('61 operational');
 
       expect(runbookMd).not.toContain('58 operational tables');
-      expect(runbookMd).toContain('63 protected operational');
+      expect(runbookMd).toContain('61 protected operational');
     });
 
     it('2.5 deployment workflow verifies PRAGMA foreign_key_check and aborts on violation', () => {
@@ -205,7 +214,7 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('ERROR: Remote database contains foreign-key violations.');
     });
 
-    it('2.6 deployment workflow verifies recorded migration count is at least 27', () => {
+    it('2.6 deployment workflow verifies recorded migration count is at least 28', () => {
       expect(deployContent).toContain('SELECT COUNT(*) AS count FROM d1_migrations;');
       expect(deployContent).toContain('if [ "$COUNT" -lt "28" ]; then');
       expect(deployContent).toContain('ERROR: Expected all 28 migrations to be recorded.');
