@@ -116,4 +116,41 @@ describe('Hierarchy-Aware Section Search Production Helpers & Security Tests', (
     expect(sourceCode).not.toContain('/permissions/grant');
     expect(sourceCode).not.toContain('/permissions/revoke');
   });
+
+  it('9. RBAC state merge test: permission toggle response preserves selected user metadata', () => {
+    const existingUserDetails = {
+      user: { id: 'u-1', name: 'Rakesh FO', empCode: 'FO-001', email: 'rakesh@iocl.in' },
+      roleCodes: ['FIELD_OFFICER'],
+      inheritedPermissionCodes: ['OUTLETS_VIEW', 'OUTLETS_READ'],
+      scopes: [{ scopeLevel: 'SALES_AREA', salesAreaId: 'sa-cen' }],
+      effectivePermissionCodes: ['OUTLETS_VIEW', 'OUTLETS_READ'],
+      overrides: []
+    };
+
+    const toggleResponse = {
+      permissionCode: 'INDENTS_CREATE',
+      enabled: true,
+      effect: 'ALLOW' as const,
+      effectivePermissionCodes: ['OUTLETS_VIEW', 'OUTLETS_READ', 'INDENTS_CREATE'],
+      overrides: [{ permissionCode: 'INDENTS_CREATE', effect: 'ALLOW' as const }]
+    };
+
+    const mergeState = (prev: typeof existingUserDetails | null, patchData: typeof toggleResponse) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        effectivePermissionCodes: patchData.effectivePermissionCodes,
+        overrides: patchData.overrides
+      };
+    };
+
+    const merged = mergeState(existingUserDetails, toggleResponse)!;
+
+    expect(merged.user).toEqual(existingUserDetails.user);
+    expect(merged.roleCodes).toEqual(existingUserDetails.roleCodes);
+    expect(merged.inheritedPermissionCodes).toEqual(existingUserDetails.inheritedPermissionCodes);
+    expect(merged.scopes).toEqual(existingUserDetails.scopes);
+    expect(merged.effectivePermissionCodes).toEqual(['OUTLETS_VIEW', 'OUTLETS_READ', 'INDENTS_CREATE']);
+    expect(merged.overrides).toEqual([{ permissionCode: 'INDENTS_CREATE', effect: 'ALLOW' }]);
+  });
 });

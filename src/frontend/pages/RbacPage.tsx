@@ -11,7 +11,7 @@ import {
   Info,
   CheckCircle2,
 } from 'lucide-react';
-import { UserPermissionsDetails } from '../../shared/types';
+import { UserPermissionsDetails, PermissionCode } from '../../shared/types';
 import { SectionSearchBar } from '../components/common/SectionSearchBar';
 import { filterPermissionsForSearch } from '../utils/sectionSearchHelpers';
 import {
@@ -19,6 +19,16 @@ import {
   getUserPermissionRestriction,
 } from './rbacUiHelper';
 
+type PermissionToggleResponse = {
+  permissionCode: PermissionCode;
+  enabled: boolean;
+  effect: 'ALLOW' | 'DENY' | null;
+  effectivePermissionCodes: PermissionCode[];
+  overrides: Array<{
+    permissionCode: PermissionCode;
+    effect: 'ALLOW' | 'DENY';
+  }>;
+};
 export const RbacPage: React.FC = () => {
   const { userCtx } = useAuth();
   const isGlobalAdmin = userCtx?.isGlobalAdmin ?? false;
@@ -154,7 +164,7 @@ export const RbacPage: React.FC = () => {
 
     const endpoint = `/api/v1/users/${selectedUserId}/permissions/${encodeURIComponent(permissionCode)}`;
 
-    const res = await apiFetch<UserPermissionsDetails>(endpoint, {
+    const res = await apiFetch<PermissionToggleResponse>(endpoint, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -163,7 +173,14 @@ export const RbacPage: React.FC = () => {
     });
 
     if (res.success && res.data) {
-      setSelectedUserDetails(res.data);
+      setSelectedUserDetails((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          effectivePermissionCodes: res.data!.effectivePermissionCodes,
+          overrides: res.data!.overrides,
+        };
+      });
       setFeedback({
         type: 'success',
         message: `Updated "${permissionCode}" to ${targetEnabled ? 'ENABLED' : 'DISABLED'} for ${selectedUserDetails?.user?.name || selectedUserMeta?.name || 'user'}.`,
