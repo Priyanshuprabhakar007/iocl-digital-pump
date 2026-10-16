@@ -253,15 +253,41 @@ describe('Retail Outlet Directory Visibility / Soft-Hide & Restore Lifecycle', (
   });
 
   it('9. Unauthorized scoped user cannot hide a foreign outlet -> 403', async () => {
+    const foLogin = await loginAs('fo.central@iocl.in');
+    const foCookie = foLogin.cookie;
+
+    const db = getDb(localD1);
+    const beforeRows = await db.select().from(schema.retailOutlets).where(eq(schema.retailOutlets.id, 'ro-1002'));
+    expect(beforeRows.length).toBe(1);
+    expect(beforeRows[0].directoryHidden).toBe(false);
+    expect(beforeRows[0].directoryHiddenAt).toBeNull();
+    expect(beforeRows[0].directoryHiddenBy).toBeNull();
+
     const res = await app.fetch(
-      new Request(`http://localhost/api/v1/outlets/unknown-foreign-outlet/directory-visibility`, {
+      new Request(`http://localhost/api/v1/outlets/ro-1002/directory-visibility`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Cookie: dealerCookie, Origin: 'http://localhost:3000' },
+        headers: { 'Content-Type': 'application/json', Cookie: foCookie, Origin: 'http://localhost:3000' },
         body: JSON.stringify({ hidden: true }),
       }),
       env
     );
-    expect([403, 404]).toContain(res.status);
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as any;
+    expect(json.success).toBe(false);
+
+    const afterRows = await db.select().from(schema.retailOutlets).where(eq(schema.retailOutlets.id, 'ro-1002'));
+    expect(afterRows.length).toBe(1);
+    expect(afterRows[0].directoryHidden).toBe(false);
+    expect(afterRows[0].directoryHiddenAt).toBeNull();
+    expect(afterRows[0].directoryHiddenBy).toBeNull();
+
+    const audits = await db.select().from(schema.auditLogs).where(
+      and(
+        eq(schema.auditLogs.action, 'OUTLET_DIRECTORY_HIDE'),
+        eq(schema.auditLogs.entityId, 'ro-1002')
+      )
+    );
+    expect(audits.length).toBe(0);
   });
 
   it('10. Invalid payload is rejected (missing hidden or non-boolean hidden -> 400 VALIDATION_ERROR)', async () => {
