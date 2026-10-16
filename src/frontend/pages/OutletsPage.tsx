@@ -3,6 +3,8 @@ import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { RetailOutlet, User, State, Division, SalesArea } from '../../shared/types';
 import { PERMISSIONS } from '../../shared/constants';
+import { SectionSearchBar } from '../components/common/SectionSearchBar';
+import { matchesSearch } from '../utils/searchUtils';
 import {
   Building2,
   Plus,
@@ -30,9 +32,9 @@ export const OutletsPage: React.FC = () => {
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedOutlet, setSelectedOutlet] = useState<RetailOutlet | null>(null);
   const [editingOutlet, setEditingOutlet] = useState<RetailOutlet | null>(null);
-
   // Soft-hide / visibility management states
   const [showHidden, setShowHidden] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [hideModalOpen, setHideModalOpen] = useState(false);
   const [outletToHide, setOutletToHide] = useState<RetailOutlet | null>(null);
   const [hidingLoading, setHidingLoading] = useState(false);
