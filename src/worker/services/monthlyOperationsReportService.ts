@@ -43,6 +43,9 @@ export class MonthlyOperationsReportService {
     const year = parseInt(yearStr, 10);
     const m = parseInt(monthStr, 10);
     const lastDayNum = new Date(year, m, 0).getDate();
+    
+    // Default endDate to end of month for initial latest data lookup
+    let endDate = `${month}-${lastDayNum.toString().padStart(2, '0')}`;
     let resolvedCutoffDate: string;
 
     if (cutoffMode === 'SELECTED_DATE') {
@@ -52,7 +55,13 @@ export class MonthlyOperationsReportService {
       const latestShift = await db
         .select({ date: operationalShifts.businessDate })
         .from(operationalShifts)
-        .where(eq(operationalShifts.outletId, outletId))
+        .where(
+          and(
+            eq(operationalShifts.outletId, outletId),
+            gte(operationalShifts.businessDate, startDate),
+            lte(operationalShifts.businessDate, endDate)
+          )
+        )
         .orderBy(desc(operationalShifts.businessDate))
         .limit(1);
       const latestShiftDate = latestShift[0]?.date || null;
@@ -60,23 +69,27 @@ export class MonthlyOperationsReportService {
       const latestDg = await db
         .select({ date: dgDailyLogs.businessDate })
         .from(dgDailyLogs)
-        .where(eq(dgDailyLogs.outletId, outletId))
+        .where(
+          and(
+            eq(dgDailyLogs.outletId, outletId),
+            gte(dgDailyLogs.businessDate, startDate),
+            lte(dgDailyLogs.businessDate, endDate)
+          )
+        )
         .orderBy(desc(dgDailyLogs.businessDate))
         .limit(1);
       const latestDgDate = latestDg[0]?.date || null;
       
       const latest = [latestShiftDate, latestDgDate].filter(Boolean).sort().pop();
       if (!latest) {
-          // Empty period
           return this.getEmptyReport(outletId, month, cutoffMode, null);
       }
       resolvedCutoffDate = latest;
     } else { // MONTH_END
-      const lastDayNum = new Date(year, m, 0).getDate();
       resolvedCutoffDate = `${month}-${lastDayNum.toString().padStart(2, '0')}`;
     }
     
-    const endDate = resolvedCutoffDate;
+    endDate = resolvedCutoffDate;
 
     // 2. Fetch DG Daily Logs for month
     const logRows = await db
@@ -147,9 +160,10 @@ export class MonthlyOperationsReportService {
     const totalHsdConsumedStr = totalDieselConsumedLitres.toFixed(3);
     const totalAmountStr = (totalAmountPaise / 100).toFixed(2);
 
-    // Build daily rows for each calendar day
+    // Build daily rows for each calendar day up to cutoff
     const dailyDgRows: DailyDgRow[] = [];
-    for (let day = 1; day <= lastDayNum; day++) {
+    const cutoffDay = parseInt(endDate.split('-')[2], 10);
+    for (let day = 1; day <= cutoffDay; day++) {
       const dateStr = `${month}-${day.toString().padStart(2, '0')}`;
       const log = logByDate.get(dateStr);
       if (log) {

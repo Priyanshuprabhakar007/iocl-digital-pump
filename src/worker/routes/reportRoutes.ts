@@ -18,15 +18,16 @@ const handleMonthlyOperations = async (c: any) => {
   const outletId = c.req.query('outletId') || c.req.param('outletId');
   const month = c.req.query('month');
   const cutoffMode = c.req.query('cutoffMode');
+  const cutoffDate = c.req.query('cutoffDate');
 
-  const parseResult = MonthlyOperationsReportQuerySchema.safeParse({ outletId, month });
+  const parseResult = MonthlyOperationsReportQuerySchema.safeParse({ outletId, month, cutoffMode, cutoffDate });
   if (!parseResult.success) {
     return c.json({
       success: false,
       data: null,
       error: {
         code: 'VALIDATION_ERROR',
-        message: 'Invalid report parameters. outletId and month (YYYY-MM) are required.',
+        message: 'Invalid report parameters.',
         details: parseResult.error.format(),
       },
     }, 400);

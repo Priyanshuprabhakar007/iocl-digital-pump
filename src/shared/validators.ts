@@ -1636,7 +1636,7 @@ export const MonthlyOperationsReportQuerySchema = z.object({
   outletId: z.string().trim().min(1, 'Outlet ID is required'),
   month: z.string().regex(/^\d{4}-\d{2}$/, 'Month must be in YYYY-MM format'),
   cutoffMode: z.enum(['MONTH_END', 'SELECTED_DATE', 'LATEST_DATA']).default('MONTH_END'),
-  cutoffDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Cutoff date must be in YYYY-MM-DD format').optional(),
+  cutoffDate: StrictDateOnlySchema.optional(),
 }).refine((data) => {
   if (data.cutoffMode === 'SELECTED_DATE') {
     return !!data.cutoffDate;
