@@ -13,8 +13,8 @@
 This Stage F4 Final Release Candidate document certifies that the IOCL Digital Pump Manager codebase has successfully completed all automated engineering, regression, business UAT, release readiness, and release-candidate verification phases.
 
 * **Automated Test Baseline:** 1,511 tests passing, 0 failures, 5,064 `expect()` assertions across 37 test suites.
-* **Migration Inventory:** 27 sequential migrations (`0001` through `0027`), zero gaps, no migration `0028`.
-* **Protected Table Inventory:** Exactly 61 unique operational tables protected by pre/post row-count preservation checks.
+* **Migration Inventory:** 28 sequential migrations (`0001` through `0028`), zero gaps, terminal is `0028_dg_daily_operations_reporting.sql`.
+* **Protected Table Inventory:** Exactly 63 unique operational tables protected by pre/post row-count preservation checks.
 * **Engineering Status:** **PASS (READY FOR MANUAL ACCEPTANCE FOR RC2)**
 
 ---
@@ -31,7 +31,7 @@ This Stage F4 Final Release Candidate document certifies that the IOCL Digital P
 | **F2 Automated Business UAT** | **PASS** | Yes | `tests/uatBusinessJourneys.test.ts` (25/25 journeys passing) | Automated UAT |
 | **F3 Production Safety Audit** | **PASS** | Yes | `tests/releaseReadiness.test.ts` (31/31 assertions passing) | Release Security |
 | **F4 Release Candidate Gate** | **PASS** | Yes | `tests/finalReleaseGate.test.ts` (16/16 checks passing) | Release Governance |
-| **Migration Inventory** | **PASS** | Yes | Exactly 28 migrations (`0001`–`0027`), terminal is `0027` | Schema Inspector |
+| **Migration Inventory** | **PASS** | Yes | Exactly 28 migrations (`0001`–`0028`), terminal is `0028` | Schema Inspector |
 | **Foreign-Key Integrity** | **PASS** | Yes | `PRAGMA foreign_key_check;` reports 0 violations | SQLite Engine |
 | **63-Table Row Preservation**| **PASS** | Yes | Pre/post migration non-decrease check across 63 tables | CI Deployment Guard |
 | **Secret Hygiene** | **PASS** | Yes | Zero hardcoded keys, tokens, or credentials in git index | Git Secret Scan |
@@ -94,8 +94,8 @@ Refer to `docs/UAT_EXECUTION_CHECKLIST.md` for complete testing steps. The minim
 8. **Expect() Assertions:** 5,064 assertions.
 9. **TypeScript Result:** `PASS` (zero compilation errors in strict mode).
 10. **Build Result:** `PASS` (optimized client production bundle generated via Vite).
-11. **Migration Count:** Exactly 26 migrations (`0001`–`0026`).
-12. **Protected Table Count:** Exactly 61 unique operational tables.
+11. **Migration Count:** Exactly 28 migrations (`0001`–`0028`).
+12. **Protected Table Count:** Exactly 63 unique operational tables.
 13. **Repository Hygiene Result:** `PASS` (zero local `.db`, `.sqlite`, or temp artifacts tracked).
 14. **Secret Scan Result:** `PASS` (zero hardcoded secrets or private keys in git repository).
 15. **README Updated:** `PASS` (reflects accurate F4 Release Candidate status).

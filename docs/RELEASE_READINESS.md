@@ -118,7 +118,7 @@ The Cloudflare deployment workflow (`.github/workflows/deploy-cloudflare-demo.ym
 * **Financial Operations:** `outlet_product_prices`, `credit_parties`, `credit_parties_v2`, `shift_collections`, `shift_collections_v2`, `cash_handover_logs`, `cash_handover_logs_v2`, `bank_deposits`, `bank_deposits_v2`, `shift_financial_reconciliations`
 * **CNG Operations:** `cng_shift_logs`, `cng_pressure_readings`
 * **Lube Operations:** `lube_skus`, `lube_sku_prices`, `lube_stock_transactions`, `lube_shift_sales`
-* **Equipment Breakdowns:** `equipment_assets`, `equipment_breakdown_tickets`, `equipment_breakdown_events`
+* **Equipment & DG Operations:** `equipment_assets`, `equipment_breakdown_tickets`, `equipment_breakdown_events`, `dg_daily_logs`, `dg_run_intervals`
 * **Utilities & Municipal:** `utility_electricity_accounts`, `utility_electricity_bills`, `utility_sub_meters`, `utility_sub_meter_readings`, `municipal_tax_dues`
 * **NFR Commercial:** `nfr_spaces`, `nfr_vendors`, `nfr_leases`, `nfr_rent_dues`, `nfr_rent_payments`
 * **HR Workforce:** `hr_designations`, `hr_staff`, `hr_manpower_sanctions`, `hr_roster_assignments`, `hr_attendance_records`, `hr_outlet_geofence_policies`, `hr_nozzle_assignments`, `hr_leave_requests`

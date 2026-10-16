@@ -123,7 +123,7 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('DEPLOYMENT SAFETY FAILED: One or more operational tables experienced a decrease in row count');
     });
 
-    it('2.4 protected tables list includes all core and specialized operational domains and exact 61 table parity', () => {
+    it('2.4 protected tables list includes all core and specialized operational domains and exact 63 table parity', () => {
       // Extract TABLES=( ... ) arrays from deployment workflow
       const matches = deployContent.match(/TABLES=\([\s\S]*?\)/g);
       expect(matches).not.toBeNull();
@@ -144,12 +144,12 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       const preTables = parseTablesArray(matches![0]);
       const postTables = parseTablesArray(matches![1]);
 
-      expect(preTables.length).toBe(61);
-      expect(postTables.length).toBe(61);
+      expect(preTables.length).toBe(63);
+      expect(postTables.length).toBe(63);
 
       // Verify unique entries
-      expect(new Set(preTables).size).toBe(61);
-      expect(new Set(postTables).size).toBe(61);
+      expect(new Set(preTables).size).toBe(63);
+      expect(new Set(postTables).size).toBe(63);
 
       // Verify pre and post arrays are identical
       expect(preTables).toEqual(postTables);
@@ -178,6 +178,8 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
         'lube_stock_transactions',
         'equipment_assets',
         'equipment_breakdown_tickets',
+        'dg_daily_logs',
+        'dg_run_intervals',
         'utility_electricity_accounts',
         'municipal_tax_dues',
         'nfr_spaces',
@@ -195,17 +197,17 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       }
     });
 
-    it('2.4b release documentation does not contain stale 58 table references and states 61 tables', () => {
+    it('2.4b release documentation does not contain stale 58 table references and states 63 tables', () => {
       const releaseReadinessMd = fs.readFileSync(path.resolve(ROOT_DIR, 'docs/RELEASE_READINESS.md'), 'utf-8');
       const runbookMd = fs.readFileSync(path.resolve(ROOT_DIR, 'docs/PRODUCTION_RELEASE_RUNBOOK.md'), 'utf-8');
 
       expect(releaseReadinessMd).not.toContain('58 tables');
       expect(releaseReadinessMd).not.toContain('58 operational');
-      expect(releaseReadinessMd).toContain('61 tables');
-      expect(releaseReadinessMd).toContain('61 operational');
+      expect(releaseReadinessMd).toContain('63 tables');
+      expect(releaseReadinessMd).toContain('63 operational');
 
       expect(runbookMd).not.toContain('58 operational tables');
-      expect(runbookMd).toContain('61 protected operational');
+      expect(runbookMd).toContain('63 protected operational');
     });
 
     it('2.5 deployment workflow verifies PRAGMA foreign_key_check and aborts on violation', () => {

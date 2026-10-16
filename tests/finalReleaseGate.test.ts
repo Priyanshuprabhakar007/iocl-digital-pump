@@ -79,7 +79,7 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
   });
 
   // ==========================================================================
-  // 3. DEPLOYMENT SAFETY & 61-TABLE INVARIANT
+  // 3. DEPLOYMENT SAFETY & 63-TABLE INVARIANT
   // ==========================================================================
   describe('3. Production Deployment Safety & Row Preservation Contract', () => {
     const deployContent = fs.readFileSync(DEPLOY_WORKFLOW_PATH, 'utf-8');
@@ -90,7 +90,7 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       expect(deployContent).toContain('PRODUCTION DATA SAFETY MODE:');
     });
 
-    it('3.2 deployment workflow contains exactly two TABLES arrays with 61 unique protected tables each', () => {
+    it('3.2 deployment workflow contains exactly two TABLES arrays with 63 unique protected tables each', () => {
       const matches = deployContent.match(/TABLES=\([\s\S]*?\)/g);
       expect(matches).not.toBeNull();
       expect(matches!.length).toBe(2);
@@ -108,11 +108,13 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       const pre = parseTables(matches![0]);
       const post = parseTables(matches![1]);
 
-      expect(pre.length).toBe(61);
-      expect(post.length).toBe(61);
-      expect(new Set(pre).size).toBe(61);
-      expect(new Set(post).size).toBe(61);
+      expect(pre.length).toBe(63);
+      expect(post.length).toBe(63);
+      expect(new Set(pre).size).toBe(63);
+      expect(new Set(post).size).toBe(63);
       expect(pre).toEqual(post);
+      expect(pre).toContain('dg_daily_logs');
+      expect(pre).toContain('dg_run_intervals');
     });
 
     it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 28, and admin existence', () => {
