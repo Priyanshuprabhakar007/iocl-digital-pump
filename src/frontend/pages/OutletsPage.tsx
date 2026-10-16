@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { RetailOutlet, User, State, Division, SalesArea } from '../../shared/types';
 import { PERMISSIONS } from '../../shared/constants';
 import { SectionSearchBar } from '../components/common/SectionSearchBar';
-import { matchesSearch } from '../utils/searchUtils';
+import { filterOutletsForSearch } from '../utils/sectionSearchHelpers';
 import {
   Building2,
   Plus,
@@ -438,7 +438,13 @@ export const OutletsPage: React.FC = () => {
 
       {/* Scope Banner & Show Hidden Controls */}
       {(() => {
-        const displayedOutlets = showHidden ? outlets : outlets.filter(o => !o.directoryHidden);
+        const visibilityFilteredOutlets = useMemo(() => {
+          return showHidden ? outlets : outlets.filter(o => !o.directoryHidden);
+        }, [outlets, showHidden]);
+
+        const displayedOutlets = useMemo(() => {
+          return filterOutletsForSearch(visibilityFilteredOutlets, searchQuery, showHidden);
+        }, [visibilityFilteredOutlets, searchQuery, showHidden]);
         return (
           <>
             <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -465,10 +471,19 @@ export const OutletsPage: React.FC = () => {
                 </label>
 
                 <span className="text-[11px] font-mono text-slate-400 border-l border-slate-800 pl-4">
-                  Showing {displayedOutlets.length} accessible record(s)
+                  {searchQuery.trim()
+                    ? `Showing ${displayedOutlets.length} of ${visibilityFilteredOutlets.length} accessible records`
+                    : `Showing ${displayedOutlets.length} accessible record(s)`}
                 </span>
               </div>
             </div>
+            <SectionSearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search outlet name, RO code, city, sales area..."
+              resultCount={displayedOutlets.length}
+              totalCount={visibilityFilteredOutlets.length}
+            />
 
             {/* Outlet Cards / Table */}
             {loading ? (
@@ -478,7 +493,7 @@ export const OutletsPage: React.FC = () => {
             ) : displayedOutlets.length === 0 ? (
               <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl p-8 bg-slate-900/50 space-y-3">
                 <Building2 className="w-10 h-10 text-slate-600 mx-auto" />
-                <p className="text-sm font-semibold text-slate-300">No Retail Outlets Accessible</p>
+                <p className="text-sm font-semibold text-slate-300">{searchQuery.trim() ? 'No matching retail outlets within your authorized scope.' : 'No Retail Outlets Accessible'}</p>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
                   {showHidden
                     ? `No retail outlets match your assigned organizational scope (${userCtx?.primaryScope}).`

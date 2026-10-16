@@ -8,6 +8,7 @@ interface SectionSearchBarProps {
   resultCount?: number;
   totalCount?: number;
   className?: string;
+  'aria-label'?: string;
 }
 
 export const SectionSearchBar: React.FC<SectionSearchBarProps> = ({
@@ -17,7 +18,14 @@ export const SectionSearchBar: React.FC<SectionSearchBarProps> = ({
   resultCount,
   totalCount,
   className = '',
+  'aria-label': ariaLabel = 'Section search',
 }) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      onChange('');
+    }
+  };
+
   return (
     <div className={`space-y-1.5 ${className}`}>
       <div className="relative flex items-center">
@@ -28,14 +36,18 @@ export const SectionSearchBar: React.FC<SectionSearchBarProps> = ({
           type="text"
           value={value}
           onChange={e => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
+          autoFocus={false}
+          aria-label={ariaLabel}
           className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-10 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all shadow-inner"
         />
         {value && (
           <button
             type="button"
             onClick={() => onChange('')}
-            title="Clear search"
+            title="Clear search (Esc)"
+            aria-label="Clear search"
             className="absolute right-3 text-slate-400 hover:text-slate-200 p-1 rounded-md transition-colors"
           >
             <X className="w-4 h-4" />

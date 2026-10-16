@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { UserScopeAssignment, User, State, Division, SalesArea, RetailOutlet } from '../../shared/types';
 import { PERMISSIONS, SCOPE_LEVELS, ScopeLevel } from '../../shared/constants';
+import { SectionSearchBar } from '../components/common/SectionSearchBar';
+import { filterScopesForSearch } from '../utils/sectionSearchHelpers';
 import { MapPin, Plus, Trash2, AlertCircle, CheckCircle2, Building2 } from 'lucide-react';
 import { buildScopeAssignmentPayload } from './scopesUiHelper';
 
@@ -14,8 +16,8 @@ export const ScopesPage: React.FC = () => {
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [salesAreas, setSalesAreas] = useState<SalesArea[]>([]);
   const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -37,14 +39,12 @@ export const ScopesPage: React.FC = () => {
       apiFetch<SalesArea[]>('/api/v1/hierarchy/sales-areas'),
       apiFetch<RetailOutlet[]>('/api/v1/outlets'),
     ]);
-
     if (scopesRes.data) setScopes(scopesRes.data);
     if (usersRes.data) setUsers(usersRes.data);
     if (statesRes.data) setStates(statesRes.data);
     if (divRes.data) setDivisions(divRes.data);
     if (saRes.data) setSalesAreas(saRes.data);
     if (outletRes.data) setOutlets(outletRes.data);
-
     setLoading(false);
   };
 
@@ -52,10 +52,13 @@ export const ScopesPage: React.FC = () => {
     fetchAllData();
   }, []);
 
+  const filteredScopes = useMemo(() => {
+    return filterScopesForSearch(scopes, searchQuery, users, states, divisions, salesAreas, outlets);
+  }, [scopes, searchQuery, users, states, divisions, salesAreas, outlets]);
+
   const handleCreateScope = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-
     const validation = buildScopeAssignmentPayload({
       userId: selectedUserId,
       scopeLevel,
@@ -64,17 +67,14 @@ export const ScopesPage: React.FC = () => {
       salesAreaId,
       outletId,
     });
-
     if (!validation.valid) {
       setErrorMsg(validation.errorMessage || 'Invalid scope configuration');
       return;
     }
-
     const res = await apiFetch<UserScopeAssignment>('/api/v1/scopes', {
       method: 'POST',
       body: JSON.stringify(validation.payload),
     });
-
     if (res.success) {
       setModalOpen(false);
       fetchAllData();
@@ -100,14 +100,13 @@ export const ScopesPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <MapPin className="w-6 h-6 text-orange-500" />
-            <h1 className="text-xl font-extrabold text-white">User Organizational Scope Assignments</h1>
+            <MapPin className="w-6 h-6 text-orange-400" />
+            <h1 className="text-xl font-extrabold text-white">Organizational Scope Assignments</h1>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Defines records access boundary for each user. Validated server-side against parent hierarchy.
+            Map system users to administrative and operational organizational boundaries.
           </p>
         </div>
-
         {hasPermission(PERMISSIONS.SCOPES_ASSIGN) && (
           <button
             onClick={() => {
@@ -117,15 +116,28 @@ export const ScopesPage: React.FC = () => {
             className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-xs font-bold rounded-lg shadow-lg shadow-orange-500/20 flex items-center gap-2 self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
-            <span>Assign User Scope</span>
+            <span>Assign Scope</span>
           </button>
         )}
       </div>
 
-      {/* Scopes List */}
+      {/* Search Bar */}
+      <SectionSearchBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search user, employee code, scope or organizational unit..."
+        resultCount={filteredScopes.length}
+        totalCount={scopes.length}
+      />
+
+      {/* Table */}
       {loading ? (
         <div className="py-12 text-center text-xs text-slate-400 font-mono animate-pulse">
           Loading scope assignments...
+        </div>
+      ) : filteredScopes.length === 0 ? (
+        <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl p-8 bg-slate-900/50 space-y-2">
+          <p className="text-sm font-semibold text-slate-300">No matching scope assignments within your authorized organizational boundary.</p>
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
@@ -141,19 +153,17 @@ export const ScopesPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-slate-200">
-                {scopes.map((s) => (
+                {filteredScopes.map((s) => (
                   <tr key={s.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="p-4">
                       <div className="font-bold text-white">{s.userName}</div>
                       <div className="text-[11px] text-slate-400 font-mono">{s.userId}</div>
                     </td>
-
                     <td className="p-4">
                       <span className="px-2.5 py-1 rounded text-[10px] font-mono font-bold bg-orange-500/10 text-orange-400 border border-orange-500/30">
                         {s.scopeLevel}
                       </span>
                     </td>
-
                     <td className="p-4 font-mono text-slate-300">
                       {s.scopeLevel === 'GLOBAL' && <span className="text-purple-400 font-semibold">ALL-INDIA GLOBAL ACCESS</span>}
                       {s.scopeLevel === 'STATE' && <span>State: <strong className="text-white">{s.stateName || s.stateId}</strong></span>}
@@ -161,11 +171,9 @@ export const ScopesPage: React.FC = () => {
                       {s.scopeLevel === 'SALES_AREA' && <span>Sales Area: <strong className="text-white">{s.salesAreaName || s.salesAreaId}</strong></span>}
                       {s.scopeLevel === 'OUTLET' && <span>Outlet: <strong className="text-white">{s.outletName || s.outletId}</strong></span>}
                     </td>
-
                     <td className="p-4 font-mono text-[11px] text-slate-400">
                       {s.createdBy}
                     </td>
-
                     <td className="p-4 text-right">
                       {hasPermission(PERMISSIONS.SCOPES_ASSIGN) && (
                         <button
@@ -190,14 +198,12 @@ export const ScopesPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-white">Assign User Scope</h2>
-
             {errorMsg && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
             )}
-
             <form onSubmit={handleCreateScope} className="space-y-3 text-xs">
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Select User</label>
@@ -216,7 +222,6 @@ export const ScopesPage: React.FC = () => {
                   ))}
                 </select>
               </div>
-
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Scope Level</label>
                 <select
@@ -234,7 +239,6 @@ export const ScopesPage: React.FC = () => {
                   <option value="OUTLET">OUTLET (Single Outlet Boundary)</option>
                 </select>
               </div>
-
               {scopeLevel !== 'GLOBAL' && (
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">State Office</label>
@@ -254,7 +258,6 @@ export const ScopesPage: React.FC = () => {
                   </select>
                 </div>
               )}
-
               {(scopeLevel === 'DIVISION' || scopeLevel === 'SALES_AREA' || scopeLevel === 'OUTLET') && (
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Divisional Office</label>
@@ -273,7 +276,6 @@ export const ScopesPage: React.FC = () => {
                   </select>
                 </div>
               )}
-
               {(scopeLevel === 'SALES_AREA' || scopeLevel === 'OUTLET') && (
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Sales Area</label>
@@ -291,7 +293,6 @@ export const ScopesPage: React.FC = () => {
                   </select>
                 </div>
               )}
-
               {scopeLevel === 'OUTLET' && (
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Retail Outlet</label>
@@ -308,7 +309,6 @@ export const ScopesPage: React.FC = () => {
                   </select>
                 </div>
               )}
-
               <div className="pt-3 flex items-center justify-end gap-3">
                 <button
                   type="button"
@@ -328,7 +328,6 @@ export const ScopesPage: React.FC = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };

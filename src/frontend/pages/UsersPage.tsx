@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { User, RoleCode } from '../../shared/types';
 import { PERMISSIONS, ROLES } from '../../shared/constants';
+import { SectionSearchBar } from '../components/common/SectionSearchBar';
+import { filterUsersForSearch } from '../utils/sectionSearchHelpers';
 import { Users, UserPlus, Shield, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 
 export const UsersPage = () => {
@@ -11,6 +13,7 @@ export const UsersPage = () => {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [form, setForm] = useState({
     empCode: '',
@@ -35,15 +38,17 @@ export const UsersPage = () => {
     fetchUsers();
   }, []);
 
+  const filteredUsers = useMemo(() => {
+    return filterUsersForSearch(users, searchQuery);
+  }, [users, searchQuery]);
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-
     const res = await apiFetch('/api/v1/users', {
       method: 'POST',
       body: JSON.stringify(form),
     });
-
     if (res.success) {
       setModalOpen(false);
       fetchUsers();
@@ -58,7 +63,6 @@ export const UsersPage = () => {
       method: 'PATCH',
       body: JSON.stringify({ status: nextStatus }),
     });
-
     if (res.success) {
       fetchUsers();
     }
@@ -77,7 +81,6 @@ export const UsersPage = () => {
             Enterprise IOCL Personnel • Scoped by: <span className="font-mono text-orange-400 font-bold">{userCtx?.primaryScope}</span>
           </p>
         </div>
-
         {hasPermission(PERMISSIONS.USERS_CREATE) && (
           <button
             onClick={() => {
@@ -92,13 +95,29 @@ export const UsersPage = () => {
         )}
       </div>
 
+      {/* Search Bar */}
+      <SectionSearchBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search employee name, code, email, role or scope..."
+        resultCount={filteredUsers.length}
+        totalCount={users.length}
+      />
+
       {/* Table */}
       {loading ? (
         <div className="py-12 text-center text-xs text-slate-400 font-mono animate-pulse">
           Loading user directory...
         </div>
+      ) : filteredUsers.length === 0 ? (
+        <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl p-8 bg-slate-900/50 space-y-2">
+          <p className="text-sm font-semibold text-slate-300">No matching users within your authorized scope.</p>
+        </div>
       ) : (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          <div className="text-xs text-slate-400 px-4 py-2 bg-slate-800/40 border-b border-slate-800 font-mono flex items-center justify-between">
+            <span>Showing {filteredUsers.length} of {users.length} users within your authorized scope</span>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-800/80 text-slate-400 font-mono uppercase text-[10px] tracking-wider border-b border-slate-700/80">
@@ -111,7 +130,7 @@ export const UsersPage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-slate-200">
-                {users.map((u) => {
+                {filteredUsers.map((u) => {
                   const userScope = u.scopes?.[0]?.scopeLevel || 'UNASSIGNED';
                   return (
                     <tr key={u.id} className="hover:bg-slate-800/40 transition-colors">
@@ -121,7 +140,6 @@ export const UsersPage = () => {
                           {u.empCode} • {u.email}
                         </div>
                       </td>
-
                       <td className="p-4">
                         <div className="flex flex-wrap gap-1">
                           {u.roles?.map((r: string) => (
@@ -131,11 +149,9 @@ export const UsersPage = () => {
                           ))}
                         </div>
                       </td>
-
                       <td className="p-4 font-mono font-bold text-orange-400">
                         {userScope}
                       </td>
-
                       <td className="p-4">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 w-max ${
                           u.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'
@@ -144,7 +160,6 @@ export const UsersPage = () => {
                           <span>{u.status}</span>
                         </span>
                       </td>
-
                       <td className="p-4 text-right">
                         {hasPermission(PERMISSIONS.USERS_UPDATE) && (
                           <button
@@ -169,14 +184,12 @@ export const UsersPage = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-white">Provision IOCL User</h2>
-
             {errorMsg && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
             )}
-
             <form onSubmit={handleCreateUser} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -190,7 +203,6 @@ export const UsersPage = () => {
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                   />
                 </div>
-
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Full Name</label>
                   <input
@@ -203,7 +215,6 @@ export const UsersPage = () => {
                   />
                 </div>
               </div>
-
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Official Email</label>
                 <input
@@ -215,7 +226,6 @@ export const UsersPage = () => {
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                 />
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Phone Number</label>
@@ -228,7 +238,6 @@ export const UsersPage = () => {
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                   />
                 </div>
-
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Password</label>
                   <input
@@ -241,7 +250,6 @@ export const UsersPage = () => {
                   />
                 </div>
               </div>
-
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Assign System Role</label>
                 <select
@@ -257,7 +265,6 @@ export const UsersPage = () => {
                   <option value={ROLES.CSP}>CSP</option>
                 </select>
               </div>
-
               <div className="pt-3 flex items-center justify-end gap-3">
                 <button
                   type="button"
@@ -277,7 +284,6 @@ export const UsersPage = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };

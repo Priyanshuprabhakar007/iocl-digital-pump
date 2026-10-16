@@ -10,9 +10,10 @@ import {
   Loader2,
   Info,
   CheckCircle2,
-  XCircle,
 } from 'lucide-react';
 import { UserPermissionsDetails } from '../../shared/types';
+import { SectionSearchBar } from '../components/common/SectionSearchBar';
+import { filterPermissionsForSearch } from '../utils/sectionSearchHelpers';
 import {
   computeUserPermissionCellState,
   getUserPermissionRestriction,
@@ -21,7 +22,6 @@ import {
 export const RbacPage: React.FC = () => {
   const { userCtx } = useAuth();
   const isGlobalAdmin = userCtx?.isGlobalAdmin ?? false;
-
   const [roles, setRoles] = useState<any[]>([]);
   const [permissions, setPermissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +30,7 @@ export const RbacPage: React.FC = () => {
   const [userList, setUserList] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [userSearch, setUserSearch] = useState('');
+  const [permissionSearch, setPermissionSearch] = useState('');
   const [showInactiveUsers, setShowInactiveUsers] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [selectedUserDetails, setSelectedUserDetails] = useState<UserPermissionsDetails | null>(null);
@@ -39,7 +40,6 @@ export const RbacPage: React.FC = () => {
   const [savingPermCodes, setSavingPermCodes] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Initial load: roles, role-permissions, and accessible users (for global admins)
   useEffect(() => {
     const fetchRbac = async () => {
       setLoading(true);
@@ -47,25 +47,19 @@ export const RbacPage: React.FC = () => {
         apiFetch<any[]>('/api/v1/roles'),
         apiFetch<any[]>('/api/v1/roles/permissions'),
       ]);
-
       if (rolesRes.data) setRoles(rolesRes.data);
       if (permsRes.data) setPermissions(permsRes.data);
-
       setLoading(false);
     };
-
     fetchRbac();
   }, []);
 
-  // Load user list if user is a global administrator
   useEffect(() => {
     if (!isGlobalAdmin) return;
-
     const fetchUsers = async () => {
       setLoadingUsers(true);
       const res = await apiFetch<any[]>('/api/v1/users');
       if (res.success && Array.isArray(res.data)) {
-        // Sort users alphabetically by name
         const sorted = [...res.data].sort((a, b) =>
           (a.name || '').localeCompare(b.name || '')
         );
@@ -73,26 +67,21 @@ export const RbacPage: React.FC = () => {
       }
       setLoadingUsers(false);
     };
-
     fetchUsers();
   }, [isGlobalAdmin]);
 
-  // Load details and overrides whenever selectedUserId changes
   useEffect(() => {
     if (!selectedUserId || !isGlobalAdmin) {
       setSelectedUserDetails(null);
       return;
     }
-
     let isCurrent = true;
     const fetchSelectedUserPermissions = async () => {
       setLoadingUserDetails(true);
       setFeedback(null);
-
       const res = await apiFetch<UserPermissionsDetails>(
         `/api/v1/users/${selectedUserId}/permissions`
       );
-
       if (isCurrent) {
         if (res.success && res.data) {
           setSelectedUserDetails(res.data);
@@ -106,15 +95,12 @@ export const RbacPage: React.FC = () => {
         setLoadingUserDetails(false);
       }
     };
-
     fetchSelectedUserPermissions();
-
     return () => {
       isCurrent = false;
     };
   }, [selectedUserId, isGlobalAdmin]);
 
-  // Filtered user list for dropdown search
   const filteredUsers = useMemo(() => {
     return userList.filter((u) => {
       if (!showInactiveUsers && u.status !== 'ACTIVE') {
@@ -122,89 +108,55 @@ export const RbacPage: React.FC = () => {
       }
       if (!userSearch.trim()) return true;
       const q = userSearch.toLowerCase();
-      const name = (u.name || '').toLowerCase();
-      const code = (u.empCode || '').toLowerCase();
-      const email = (u.email || '').toLowerCase();
-      const rolesStr = (u.roles || []).join(' ').toLowerCase();
       return (
-        name.includes(q) ||
-        code.includes(q) ||
-        email.includes(q) ||
-        rolesStr.includes(q)
+        (u.name && u.name.toLowerCase().includes(q)) ||
+        (u.empCode && u.empCode.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q))
       );
     });
   }, [userList, userSearch, showInactiveUsers]);
 
-  // Selected user info
   const selectedUserMeta = useMemo(() => {
-    if (!selectedUserId) return null;
-    return userList.find((u) => u.id === selectedUserId) || null;
+    return userList.find((u) => u.id === selectedUserId);
   }, [userList, selectedUserId]);
 
-  // Check restriction for selected user
   const restriction = useMemo(() => {
     return getUserPermissionRestriction({
-      currentUserId: userCtx?.user?.id,
-      selectedUserId,
       selectedUserRoles: selectedUserDetails?.roleCodes || selectedUserMeta?.roles || [],
+      currentUserId: userCtx?.user?.id,
     });
-  }, [userCtx?.user?.id, selectedUserId, selectedUserDetails, selectedUserMeta]);
-
-  // Primary scope label derivation
-  const selectedUserScopeLabel = useMemo(() => {
-    if (!selectedUserDetails?.scopes || selectedUserDetails.scopes.length === 0) {
-      if (selectedUserMeta?.scopes && selectedUserMeta.scopes.length > 0) {
-        return selectedUserMeta.scopes[0].scopeLevel;
-      }
-      return 'None';
-    }
-    const levels = selectedUserDetails.scopes.map((s) => s.scopeLevel);
-    if (levels.includes('GLOBAL')) return 'GLOBAL';
-    if (levels.includes('STATE')) return 'STATE';
-    if (levels.includes('DIVISION')) return 'DIVISION';
-    if (levels.includes('SALES_AREA')) return 'SALES_AREA';
-    if (levels.includes('OUTLET')) return 'OUTLET';
-    return levels[0] || 'OUTLET';
   }, [selectedUserDetails, selectedUserMeta]);
 
-  // Toggle permission handler
-  const handleTogglePermission = async (permissionCode: string, targetEnabled: boolean) => {
-    if (!selectedUserId || restriction.isDisabled || savingPermCodes.has(permissionCode)) {
-      return;
-    }
+  const filteredPermissions = useMemo(() => {
+    return filterPermissionsForSearch(permissions, permissionSearch, roles);
+  }, [permissions, permissionSearch, roles]);
 
+  const handleTogglePermission = async (permissionCode: string, targetEnabled: boolean) => {
+    if (!selectedUserId || restriction.isDisabled) return;
     setSavingPermCodes((prev) => new Set(prev).add(permissionCode));
     setFeedback(null);
 
-    const res = await apiFetch<any>(
-      `/api/v1/users/${selectedUserId}/permissions/${encodeURIComponent(permissionCode)}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: targetEnabled }),
-      }
-    );
+    const endpoint = targetEnabled
+      ? `/api/v1/users/${selectedUserId}/permissions/grant`
+      : `/api/v1/users/${selectedUserId}/permissions/revoke`;
 
-    setSavingPermCodes((prev) => {
-      const next = new Set(prev);
-      next.delete(permissionCode);
-      return next;
+    const res = await apiFetch<UserPermissionsDetails>(endpoint, {
+      method: 'POST',
+      body: JSON.stringify({ permissionCode }),
     });
 
     if (res.success && res.data) {
-      // Immediately update local effective permission codes and overrides
       setSelectedUserDetails((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
-          effectivePermissionCodes: res.data.effectivePermissionCodes,
-          overrides: res.data.overrides,
+          effectivePermissionCodes: res.data!.effectivePermissionCodes,
+          overrides: res.data!.overrides,
         };
       });
-
       setFeedback({
         type: 'success',
-        message: `Updated "${permissionCode}" to ${targetEnabled ? 'ENABLED' : 'DISABLED'} for ${selectedUserDetails?.user.name || 'user'}.`,
+        message: `Updated "${permissionCode}" to ${targetEnabled ? 'ENABLED' : 'DISABLED'} for ${selectedUserDetails?.user?.name || 'user'}.`,
       });
     } else {
       setFeedback({
@@ -212,6 +164,12 @@ export const RbacPage: React.FC = () => {
         message: res.error?.message || 'Unable to update user permission.',
       });
     }
+
+    setSavingPermCodes((prev) => {
+      const next = new Set(prev);
+      next.delete(permissionCode);
+      return next;
+    });
   };
 
   return (
@@ -235,144 +193,57 @@ export const RbacPage: React.FC = () => {
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <div className="flex items-center gap-2">
               <UserIcon className="w-5 h-5 text-purple-400" />
-              <h2 className="text-sm font-bold text-white tracking-wide">
-                Manage User Permissions
-              </h2>
+              <span className="font-bold text-sm text-white">User Permission Inspection & Overrides</span>
             </div>
-            {selectedUserId && (
-              <button
-                onClick={() => {
-                  setSelectedUserId('');
-                  setSelectedUserDetails(null);
-                  setFeedback(null);
-                }}
-                className="text-[11px] text-slate-400 hover:text-white hover:underline transition-colors"
+            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showInactiveUsers}
+                onChange={(e) => setShowInactiveUsers(e.target.checked)}
+                className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-purple-500 focus:ring-purple-500"
+              />
+              <span>Show Inactive Users</span>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">Search User Accounts</label>
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                <input
+                  type="text"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder="Filter by name, emp code, or email..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">Select Personnel</label>
+              <select
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-purple-500"
               >
-                Clear User Selection
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-            {/* User Selector Dropdown & Filter */}
-            <div className="lg:col-span-5 space-y-2">
-              <label className="block text-xs font-semibold text-slate-300">
-                Select User to View & Customize Access:
-              </label>
-              <div className="space-y-2">
-                <div className="relative">
-                  <select
-                    value={selectedUserId}
-                    onChange={(e) => setSelectedUserId(e.target.value)}
-                    disabled={loadingUsers}
-                    className="w-full pl-3 pr-8 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 cursor-pointer disabled:opacity-50"
-                  >
-                    <option value="">-- Choose a user to inspect and customize access --</option>
-                    {filteredUsers.map((u) => {
-                      const roleStr = Array.isArray(u.roles) && u.roles.length > 0 ? u.roles.join(', ') : 'No Role';
-                      return (
-                        <option key={u.id} value={u.id}>
-                          {u.name} ({u.empCode}) • {roleStr} {u.status !== 'ACTIVE' ? `[${u.status}]` : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                {/* Filter Search Input */}
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      placeholder="Filter by name, code, email, role..."
-                      value={userSearch}
-                      onChange={(e) => setUserSearch(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 bg-slate-950/70 border border-slate-800 rounded-lg text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={showInactiveUsers}
-                      onChange={(e) => setShowInactiveUsers(e.target.checked)}
-                      className="rounded border-slate-700 bg-slate-950 text-purple-500 focus:ring-0 w-3.5 h-3.5"
-                    />
-                    <span>Include Inactive</span>
-                  </label>
-                </div>
-              </div>
+                <option value="">-- Choose User for Permission Override --</option>
+                {filteredUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.empCode}) — {u.status} [{u.scopes?.[0]?.scopeLevel || 'UNASSIGNED'}]
+                  </option>
+                ))}
+              </select>
             </div>
-
-            {/* Selected User Metadata Card */}
-            {selectedUserId && (
-              <div className="lg:col-span-7 bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
-                {loadingUserDetails ? (
-                  <div className="flex items-center gap-2 text-xs text-slate-400 py-4 justify-center">
-                    <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                    <span>Loading permissions for selected user...</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-bold text-white">
-                          {selectedUserDetails?.user.name || selectedUserMeta?.name || 'User'}
-                        </span>
-                        <span className="ml-2 font-mono text-[11px] text-purple-400">
-                          {selectedUserDetails?.user.empCode || selectedUserMeta?.empCode}
-                        </span>
-                      </div>
-                      <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border ${
-                          (selectedUserDetails?.user.status || selectedUserMeta?.status) === 'ACTIVE'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                        }`}
-                      >
-                        {selectedUserDetails?.user.status || selectedUserMeta?.status || 'ACTIVE'}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1 border-t border-slate-800/80">
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Email</span>
-                        <span className="text-slate-300 truncate block">
-                          {selectedUserDetails?.user.email || selectedUserMeta?.email || '—'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Role(s)</span>
-                        <span className="text-slate-200 font-semibold truncate block">
-                          {(selectedUserDetails?.roleCodes || selectedUserMeta?.roles || []).join(', ') || 'None'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Primary Scope</span>
-                        <span className="text-slate-200 font-mono truncate block">
-                          {selectedUserScopeLabel}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Overrides</span>
-                        <span className="text-amber-400 font-mono font-bold block">
-                          {selectedUserDetails?.overrides?.length ?? 0} active
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Restriction Alert (Self-edit or Admin target) */}
-                    {restriction.isDisabled && restriction.message && (
-                      <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs mt-2">
-                        <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
-                        <span>{restriction.message}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
           </div>
+
+          {/* Restriction Notice */}
+          {selectedUserId && restriction.isDisabled && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+              <Info className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>{restriction.message}</span>
+            </div>
+          )}
 
           {/* Feedback Toast Banner */}
           {feedback && (
@@ -402,10 +273,23 @@ export const RbacPage: React.FC = () => {
         </div>
       )}
 
+      {/* Search Bar for Permissions */}
+      <SectionSearchBar
+        value={permissionSearch}
+        onChange={setPermissionSearch}
+        placeholder="Search permission code, description or role..."
+        resultCount={filteredPermissions.length}
+        totalCount={permissions.length}
+      />
+
       {/* RBAC Matrix Table */}
       {loading ? (
         <div className="py-12 text-center text-xs text-slate-400 font-mono animate-pulse">
           Loading system RBAC configuration...
+        </div>
+      ) : filteredPermissions.length === 0 ? (
+        <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl p-8 bg-slate-900/50">
+          <p className="text-sm font-semibold text-slate-300">No matching permissions or roles found.</p>
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
@@ -420,7 +304,6 @@ export const RbacPage: React.FC = () => {
                       {r.code}
                     </th>
                   ))}
-
                   {/* Selected User Access Column Header */}
                   {selectedUserId && (
                     <th className="p-4 text-center bg-purple-950/40 text-purple-200 border-l border-purple-800/60 min-w-[200px]">
@@ -428,15 +311,14 @@ export const RbacPage: React.FC = () => {
                         USER ACCESS
                       </div>
                       <div className="text-[10px] font-normal text-purple-200/80 truncate max-w-[180px] mx-auto mt-0.5">
-                        {selectedUserDetails?.user.name || selectedUserMeta?.name || 'Selected User'}
+                        {selectedUserDetails?.user?.name || selectedUserMeta?.name || 'Selected User'}
                       </div>
                     </th>
                   )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-slate-200">
-                {permissions.map((p) => {
-                  // User permission cell calculations
+                {filteredPermissions.map((p) => {
                   const cellState = selectedUserId && selectedUserDetails
                     ? computeUserPermissionCellState({
                         permissionCode: p.code,
@@ -446,9 +328,7 @@ export const RbacPage: React.FC = () => {
                         roleCodes: selectedUserDetails.roleCodes,
                       })
                     : null;
-
                   const isRowSaving = savingPermCodes.has(p.code);
-
                   return (
                     <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="p-4 font-mono font-bold text-orange-400 whitespace-nowrap">
@@ -457,13 +337,11 @@ export const RbacPage: React.FC = () => {
                       <td className="p-4 text-slate-300">
                         {p.description}
                       </td>
-
                       {/* Read-only Role Columns */}
                       {roles.map((r) => {
                         const hasPerm =
                           r.code === 'ADMIN' ||
                           r.permissions?.some((pItem: any) => pItem.code === p.code);
-
                         return (
                           <td key={r.id} className="p-4 text-center">
                             {hasPerm ? (
@@ -484,7 +362,6 @@ export const RbacPage: React.FC = () => {
                           </td>
                         );
                       })}
-
                       {/* Clickable Selected User Column */}
                       {selectedUserId && (
                         <td className="p-4 text-center bg-purple-500/5 border-l border-purple-900/40">
@@ -525,7 +402,6 @@ export const RbacPage: React.FC = () => {
                                   </div>
                                 </button>
                               )}
-
                               {/* Subtle Override Indicator Badge */}
                               {cellState.badgeText && (
                                 <span
@@ -548,11 +424,4 @@ export const RbacPage: React.FC = () => {
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+              </tbody></table></div></div>)}</div>);};
