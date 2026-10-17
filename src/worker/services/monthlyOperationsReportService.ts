@@ -463,6 +463,35 @@ export class MonthlyOperationsReportService {
         }
     }
     
+    for (const report of productMap.values()) {
+      let totalMeterSalesL = 0;
+      let totalTestingL = 0;
+      let totalNetSalesL = 0;
+      let totalReceiptsL = 0;
+      let totalVarianceL = 0;
+
+      for (const row of report.rows) {
+        totalMeterSalesL += row.meterSalesL;
+        totalTestingL += row.testingL;
+        totalNetSalesL += row.netSalesL;
+        totalReceiptsL += row.receiptsL;
+      }
+
+      const nonNoEntryRows = report.rows.filter((r: any) => r.status !== "NO_ENTRY");
+      if (nonNoEntryRows.length > 0) {
+        const latestRow = nonNoEntryRows[nonNoEntryRows.length - 1];
+        totalVarianceL = latestRow.varianceL;
+      }
+
+      report.totals = {
+        totalMeterSalesL,
+        totalTestingL,
+        totalNetSalesL,
+        totalReceiptsL,
+        totalVarianceL,
+      };
+    }
+
     return Array.from(productMap.values());
   }
 
