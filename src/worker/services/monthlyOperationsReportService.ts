@@ -289,17 +289,29 @@ export class MonthlyOperationsReportService {
       }
     }
 
+    const latestDgDataDate =
+      logRows.length > 0
+        ? logRows[logRows.length - 1].businessDate
+        : null;
+
+    const latestShiftDataDate =
+      shifts.length > 0
+        ? shifts.map((s: any) => s.businessDate).sort().pop() ?? null
+        : null;
+
+    const actualLatestDataDate =
+      [latestDgDataDate, latestShiftDataDate]
+        .filter((date): date is string => Boolean(date))
+        .sort()
+        .pop() ?? null;
+
     return {
       outletId,
       outletName: outlet.name,
       month,
       cutoffMode,
       cutoffDate: endDate,
-      latestDataDate: logRows.length > 0
-  ? logRows[logRows.length - 1].businessDate
-  : (shifts.length > 0
-      ? shifts.map((s: any) => s.businessDate).sort().pop() ?? null
-      : null),
+      latestDataDate: actualLatestDataDate,
       productSections,
       dgSection: {
         rows: dailyDgRows,
