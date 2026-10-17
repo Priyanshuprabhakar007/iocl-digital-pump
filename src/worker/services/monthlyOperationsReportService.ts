@@ -295,7 +295,11 @@ export class MonthlyOperationsReportService {
       month,
       cutoffMode,
       cutoffDate: endDate,
-      latestDataDate: resolvedCutoffDate,
+      latestDataDate: logRows.length > 0
+  ? logRows[logRows.length - 1].businessDate
+  : (shifts.length > 0
+      ? shifts.map((s: any) => s.businessDate).sort().pop() ?? null
+      : null),
       productSections,
       dgSection: {
         rows: dailyDgRows,
