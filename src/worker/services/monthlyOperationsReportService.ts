@@ -552,6 +552,26 @@ export class MonthlyOperationsReportService {
               if (closingRecon.length === 0) {
                   missingFields.push("No closing tank reading");
               }
+              for (const shift of applicableProductShifts) {
+                  const expectedNozzles = nozzleSnapshots.filter(
+                    (n: any) =>
+                      n.operationalShiftId === shift.id &&
+                      n.productId === productId
+                  );
+                  for (const nozzle of expectedNozzles) {
+                      const reading = nozzleReadings.find(
+                        (r: any) =>
+                          r.operationalShiftId === shift.id &&
+                          r.nozzleId === nozzle.nozzleId
+                      );
+                      if (!reading) {
+                          const msg = `DU ${nozzle.dispenserNumber} / Nozzle ${nozzle.nozzleNumber} missing meter reading`;
+                          if (!missingFields.includes(msg)) {
+                              missingFields.push(msg);
+                          }
+                      }
+                  }
+              }
           }
 
           const status =
