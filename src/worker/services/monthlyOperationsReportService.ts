@@ -455,6 +455,10 @@ export class MonthlyOperationsReportService {
     const productPrices = await db.select().from(operationalShiftProductPrices).where(inArray(operationalShiftProductPrices.operationalShiftId, shiftIds));
     const nozzleSnapshots = await db.select().from(operationalShiftNozzles).where(inArray(operationalShiftNozzles.operationalShiftId, shiftIds));
     const nozzleReadings = await db.select().from(nozzleMeterReadings).where(inArray(nozzleMeterReadings.operationalShiftId, shiftIds));
+    const tankSnapshots = await db
+      .select()
+      .from(operationalShiftTanks)
+      .where(inArray(operationalShiftTanks.operationalShiftId, shiftIds));
 
     const cumulativeByProduct = new Map<string, number>();
     const startDateObj = new Date(startDate);
@@ -465,11 +469,38 @@ export class MonthlyOperationsReportService {
         const dayShifts = shiftsByDate.get(dateStr) || [];
         
         for (const [productId, report] of productMap.entries()) {
+          const applicableProductShifts = dayShifts.filter((shift: any) => {
+            const shiftId = shift.id;
+
+            return (
+              productPrices.some(
+                (p: any) =>
+                  p.operationalShiftId === shiftId &&
+                  p.productId === productId
+              ) ||
+              nozzleSnapshots.some(
+                (n: any) =>
+                  n.operationalShiftId === shiftId &&
+                  n.productId === productId
+              ) ||
+              tankSnapshots.some(
+                (t: any) =>
+                  t.operationalShiftId === shiftId &&
+                  t.productId === productId
+              ) ||
+              stockReconciliations.some(
+                (r: any) =>
+                  r.operationalShiftId === shiftId &&
+                  r.productId === productId
+              )
+            );
+          });
+
           let grossSalesQuantityMilliunits = 0;
           let netSalesQuantityMilliunits = 0;
           let testingQuantityMilliunits = 0;
-          
-          for (const shift of dayShifts) {
+
+          for (const shift of applicableProductShifts) {
               const nozzles = nozzleSnapshots.filter((n: any) => n.operationalShiftId === shift.id && n.productId === productId);
               for (const nozzle of nozzles) {
                   const reading = nozzleReadings.find((r: any) => r.operationalShiftId === shift.id && r.nozzleId === nozzle.nozzleId);
@@ -480,61 +511,61 @@ export class MonthlyOperationsReportService {
                   }
               }
           }
-          
-          const reconciliations = stockReconciliations.filter((r: any) => dayShifts.some((s: any) => s.id === r.operationalShiftId) && r.productId === productId);
-          
+
+          const reconciliations = stockReconciliations.filter((r: any) => applicableProductShifts.some((s: any) => s.id === r.operationalShiftId) && r.productId === productId);
+
           const opening = reconciliations
-              .filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === 0)
+              .filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === 0)
               .reduce((sum: number, r: any) => sum + r.openingStockMilliunits, 0);
-              
+
           const closing = reconciliations
-              .filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === dayShifts.length - 1)
+              .filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === applicableProductShifts.length - 1)
               .reduce((sum: number, r: any) => sum + r.physicalClosingStockMilliunits, 0);
-          
+
           const receipts = reconciliations.reduce((sum: number, r: any) => sum + r.receiptQuantityMilliunits, 0);
-          
+
           const theoreticalClosing = reconciliations
-              .filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === dayShifts.length - 1)
+              .filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === applicableProductShifts.length - 1)
               .reduce((sum: number, r: any) => sum + r.theoreticalClosingStockMilliunits, 0);
-              
+
           const variance = reconciliations
-              .filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === dayShifts.length - 1)
+              .filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === applicableProductShifts.length - 1)
               .reduce((sum: number, r: any) => sum + r.varianceMilliunits, 0);
 
           const previousCumulative = cumulativeByProduct.get(productId) ?? 0;
           const currentCumulative = previousCumulative + netSalesQuantityMilliunits;
           cumulativeByProduct.set(productId, currentCumulative);
-          
-          const prices = productPrices.filter((p: any) => dayShifts.some((s: any) => s.id === p.operationalShiftId) && p.productId === productId);
+
+          const prices = productPrices.filter((p: any) => applicableProductShifts.some((s: any) => s.id === p.operationalShiftId) && p.productId === productId);
           const uniquePrices = Array.from(new Set(prices.map((p: any) => p.pricePaisePerUnit)));
 
           const missingFields: string[] = [];
-          if (dayShifts.length > 0) {
+          if (applicableProductShifts.length > 0) {
               if (uniquePrices.length === 0) {
-                  missingFields.push('No RSP snapshot');
+                  missingFields.push("No RSP snapshot");
               }
-              const openingRecon = reconciliations.filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === 0);
+              const openingRecon = reconciliations.filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === 0);
               if (openingRecon.length === 0) {
-                  missingFields.push('No opening tank reading');
+                  missingFields.push("No opening tank reading");
               }
-              const closingRecon = reconciliations.filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === dayShifts.length - 1);
+              const closingRecon = reconciliations.filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === applicableProductShifts.length - 1);
               if (closingRecon.length === 0) {
-                  missingFields.push('No closing tank reading');
+                  missingFields.push("No closing tank reading");
               }
           }
 
           const status =
-            dayShifts.length === 0
-              ? 'NO_ENTRY'
+            applicableProductShifts.length === 0
+              ? "NO_ENTRY"
               : missingFields.length > 0
-                ? 'PARTIAL'
-                : 'COMPLETE';
+                ? "PARTIAL"
+                : "COMPLETE";
 
           report.rows.push({
               businessDate: dateStr,
               status,
               missingFields,
-              shiftsCount: dayShifts.length,
+              shiftsCount: applicableProductShifts.length,
               rspPaise: uniquePrices as number[],
               changedWithinDay: uniquePrices.length > 1,
               tankOpeningStockL: opening / 1000,
