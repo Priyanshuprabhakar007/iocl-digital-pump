@@ -359,21 +359,73 @@ export class MonthlyOperationsReportService {
     const shiftIds = shifts.map(s => s.id);
     if (shiftIds.length === 0) return [];
 
-    // Discover products from historical shifts
-    const productSnapshots = await db
-      .select({ 
-        productId: operationalShiftProductPrices.productId, 
-        productCode: operationalShiftProductPrices.productCode, 
-        productName: operationalShiftProductPrices.productName 
+    // Discover products from historical shifts (UNION of prices, nozzles, and tanks)
+    const discoveredProducts = new Map<string, { productId: string; productCode: string; productName: string }>();
+
+    // 1. From operationalShiftProductPrices
+    const priceProducts = await db
+      .select({
+        productId: operationalShiftProductPrices.productId,
+        productCode: operationalShiftProductPrices.productCode,
+        productName: operationalShiftProductPrices.productName,
       })
       .from(operationalShiftProductPrices)
-      .where(inArray(operationalShiftProductPrices.operationalShiftId, shiftIds))
-      .groupBy(operationalShiftProductPrices.productId);
-      
+      .where(inArray(operationalShiftProductPrices.operationalShiftId, shiftIds));
+
+    for (const p of priceProducts) {
+      if (p.productId && !discoveredProducts.has(p.productId)) {
+        discoveredProducts.set(p.productId, {
+          productId: p.productId,
+          productCode: p.productCode || "",
+          productName: p.productName || "",
+        });
+      }
+    }
+
+    // 2. From operationalShiftNozzles
+    const nozzleProducts = await db
+      .select({
+        productId: operationalShiftNozzles.productId,
+        productCode: operationalShiftNozzles.productCode,
+        productName: operationalShiftNozzles.productName,
+      })
+      .from(operationalShiftNozzles)
+      .where(inArray(operationalShiftNozzles.operationalShiftId, shiftIds));
+
+    for (const p of nozzleProducts) {
+      if (p.productId && !discoveredProducts.has(p.productId)) {
+        discoveredProducts.set(p.productId, {
+          productId: p.productId,
+          productCode: p.productCode || "",
+          productName: p.productName || "",
+        });
+      }
+    }
+
+    // 3. From operationalShiftTanks
+    const tankProducts = await db
+      .select({
+        productId: operationalShiftTanks.productId,
+        productCode: operationalShiftTanks.productCode,
+        productName: operationalShiftTanks.productName,
+      })
+      .from(operationalShiftTanks)
+      .where(inArray(operationalShiftTanks.operationalShiftId, shiftIds));
+
+    for (const p of tankProducts) {
+      if (p.productId && !discoveredProducts.has(p.productId)) {
+        discoveredProducts.set(p.productId, {
+          productId: p.productId,
+          productCode: p.productCode || "",
+          productName: p.productName || "",
+        });
+      }
+    }
+
     // Create a map to hold the report structure
     const productMap = new Map<string, ProductMonthlyReport>();
-    
-    for (const p of productSnapshots) {
+
+    for (const p of discoveredProducts.values()) {
       productMap.set(p.productId, {
         productId: p.productId,
         productCode: p.productCode,
@@ -385,7 +437,7 @@ export class MonthlyOperationsReportService {
           totalNetSalesL: 0,
           totalReceiptsL: 0,
           totalVarianceL: 0,
-        }
+        },
       });
     }
 
