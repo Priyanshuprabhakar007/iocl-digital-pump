@@ -456,10 +456,32 @@ export class MonthlyOperationsReportService {
           const prices = productPrices.filter((p: any) => dayShifts.some((s: any) => s.id === p.operationalShiftId) && p.productId === productId);
           const uniquePrices = Array.from(new Set(prices.map((p: any) => p.pricePaisePerUnit)));
 
+          const missingFields: string[] = [];
+          if (dayShifts.length > 0) {
+              if (uniquePrices.length === 0) {
+                  missingFields.push('No RSP snapshot');
+              }
+              const openingRecon = reconciliations.filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === 0);
+              if (openingRecon.length === 0) {
+                  missingFields.push('No opening tank reading');
+              }
+              const closingRecon = reconciliations.filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === dayShifts.length - 1);
+              if (closingRecon.length === 0) {
+                  missingFields.push('No closing tank reading');
+              }
+          }
+
+          const status =
+            dayShifts.length === 0
+              ? 'NO_ENTRY'
+              : missingFields.length > 0
+                ? 'PARTIAL'
+                : 'COMPLETE';
+
           report.rows.push({
               businessDate: dateStr,
-              status: dayShifts.length > 0 ? 'COMPLETE' : 'NO_ENTRY',
-              missingFields: [],
+              status,
+              missingFields,
               shiftsCount: dayShifts.length,
               rspPaise: uniquePrices as number[],
               changedWithinDay: uniquePrices.length > 1,
