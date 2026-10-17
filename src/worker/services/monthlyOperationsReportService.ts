@@ -178,7 +178,7 @@ export class MonthlyOperationsReportService {
         const dayM = dayMinutes % 60;
         dailyDgRows.push({
           businessDate: dateStr,
-          status: 'COMPLETE',
+          status: log.status === 'FINAL' ? 'COMPLETE' : 'PARTIAL',
           equipmentAssetId: log.equipmentAssetId,
           equipmentName: log.equipmentName || null,
           meterReadingFromMilliunits: log.meterReadingFromMilliunits ?? null,
