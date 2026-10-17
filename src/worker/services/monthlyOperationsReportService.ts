@@ -388,7 +388,7 @@ export class MonthlyOperationsReportService {
     const nozzleSnapshots = await db.select().from(operationalShiftNozzles).where(inArray(operationalShiftNozzles.operationalShiftId, shiftIds));
     const nozzleReadings = await db.select().from(nozzleMeterReadings).where(inArray(nozzleMeterReadings.operationalShiftId, shiftIds));
 
-    let cumulativeMilliunits = 0;
+    const cumulativeByProduct = new Map<string, number>();
     const startDateObj = new Date(startDate);
     const endDateObj = new Date(endDate);
 
@@ -433,7 +433,9 @@ export class MonthlyOperationsReportService {
               .filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === dayShifts.length - 1)
               .reduce((sum: number, r: any) => sum + r.varianceMilliunits, 0);
 
-          cumulativeMilliunits += netSalesQuantityMilliunits;
+          const previousCumulative = cumulativeByProduct.get(productId) ?? 0;
+          const currentCumulative = previousCumulative + netSalesQuantityMilliunits;
+          cumulativeByProduct.set(productId, currentCumulative);
           
           const prices = productPrices.filter((p: any) => dayShifts.some((s: any) => s.id === p.operationalShiftId) && p.productId === productId);
           const uniquePrices = Array.from(new Set(prices.map((p: any) => p.pricePaisePerUnit)));
@@ -453,7 +455,7 @@ export class MonthlyOperationsReportService {
               grossSalesL: grossSalesQuantityMilliunits / 1000,
               netSalesL: netSalesQuantityMilliunits / 1000,
               dailySalesL: netSalesQuantityMilliunits / 1000,
-              cumulativeSalesL: cumulativeMilliunits / 1000,
+              cumulativeSalesL: currentCumulative / 1000,
               theoreticalClosingL: theoreticalClosing / 1000,
               physicalClosingL: closing / 1000,
               varianceL: variance / 1000
