@@ -496,6 +496,19 @@ export class MonthlyOperationsReportService {
             );
           });
 
+          const earliestApplicableShift =
+            applicableProductShifts.length > 0
+              ? applicableProductShifts[0]
+              : null;
+
+          const latestApplicableShift =
+            applicableProductShifts.length > 0
+              ? applicableProductShifts[applicableProductShifts.length - 1]
+              : null;
+
+          const earliestShiftId = earliestApplicableShift?.id ?? null;
+          const latestShiftId = latestApplicableShift?.id ?? null;
+
           let grossSalesQuantityMilliunits = 0;
           let netSalesQuantityMilliunits = 0;
           let testingQuantityMilliunits = 0;
@@ -514,23 +527,23 @@ export class MonthlyOperationsReportService {
 
           const reconciliations = stockReconciliations.filter((r: any) => applicableProductShifts.some((s: any) => s.id === r.operationalShiftId) && r.productId === productId);
 
-          const opening = reconciliations
-              .filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === 0)
-              .reduce((sum: number, r: any) => sum + r.openingStockMilliunits, 0);
+          const openingRecon = reconciliations.filter(
+            (r: any) => earliestShiftId !== null && r.operationalShiftId === earliestShiftId
+          );
 
-          const closing = reconciliations
-              .filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === applicableProductShifts.length - 1)
-              .reduce((sum: number, r: any) => sum + r.physicalClosingStockMilliunits, 0);
+          const closingRecon = reconciliations.filter(
+            (r: any) => latestShiftId !== null && r.operationalShiftId === latestShiftId
+          );
+
+          const opening = openingRecon.reduce((sum: number, r: any) => sum + r.openingStockMilliunits, 0);
+
+          const closing = closingRecon.reduce((sum: number, r: any) => sum + r.physicalClosingStockMilliunits, 0);
 
           const receipts = reconciliations.reduce((sum: number, r: any) => sum + r.receiptQuantityMilliunits, 0);
 
-          const theoreticalClosing = reconciliations
-              .filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === applicableProductShifts.length - 1)
-              .reduce((sum: number, r: any) => sum + r.theoreticalClosingStockMilliunits, 0);
+          const theoreticalClosing = closingRecon.reduce((sum: number, r: any) => sum + r.theoreticalClosingStockMilliunits, 0);
 
-          const variance = reconciliations
-              .filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === applicableProductShifts.length - 1)
-              .reduce((sum: number, r: any) => sum + r.varianceMilliunits, 0);
+          const variance = closingRecon.reduce((sum: number, r: any) => sum + r.varianceMilliunits, 0);
 
           const previousCumulative = cumulativeByProduct.get(productId) ?? 0;
           const currentCumulative = previousCumulative + netSalesQuantityMilliunits;
@@ -544,11 +557,9 @@ export class MonthlyOperationsReportService {
               if (uniquePrices.length === 0) {
                   missingFields.push("No RSP snapshot");
               }
-              const openingRecon = reconciliations.filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === 0);
               if (openingRecon.length === 0) {
                   missingFields.push("No opening tank reading");
               }
-              const closingRecon = reconciliations.filter((r: any) => applicableProductShifts.indexOf(applicableProductShifts.find((s: any) => s.id === r.operationalShiftId)!) === applicableProductShifts.length - 1);
               if (closingRecon.length === 0) {
                   missingFields.push("No closing tank reading");
               }
