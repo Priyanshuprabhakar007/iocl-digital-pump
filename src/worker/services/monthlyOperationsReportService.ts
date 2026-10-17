@@ -19,6 +19,8 @@ import {
   operationalShiftProductPrices,
   operationalShiftNozzles,
   operationalShiftTanks,
+  shiftStockReconciliations,
+  nozzleMeterReadings,
 } from '../../db/schema';
 
 export class MonthlyOperationsReportService {
@@ -85,7 +87,7 @@ export class MonthlyOperationsReportService {
       
       const latest = [latestShiftDate, latestDgDate].filter(Boolean).sort().pop();
       if (!latest) {
-          return this.getEmptyReport(outletId, month, cutoffMode, null);
+          return this.getEmptyReport(outletId, outlet.name, month, cutoffMode, null);
       }
       resolvedCutoffDate = latest;
     } else { // MONTH_END
@@ -226,38 +228,10 @@ export class MonthlyOperationsReportService {
             lte(operationalShifts.businessDate, endDate)
         )
     );
-    const shiftIds: string[] = shifts.map((s: any) => s.id);
-    if (shiftIds.length === 0) {
-        return this.getEmptyReport(outletId, month, cutoffMode, null);
-    }
+    const shiftIds = shifts.map((s: any) => s.id);
+    const productSections = await this.aggregateProductData(db, outletId, shifts, startDate, endDate);
     
-    // Discover products from historical shifts
-    const productSnapshots = await db
-      .select({ 
-        productId: operationalShiftProductPrices.productId, 
-        productCode: operationalShiftProductPrices.productCode, 
-        productName: operationalShiftProductPrices.productName 
-      })
-      .from(operationalShiftProductPrices)
-      .where(inArray(operationalShiftProductPrices.operationalShiftId, shiftIds))
-      .groupBy(operationalShiftProductPrices.productId);
-      
-    const productSections: ProductMonthlyReport[] = productSnapshots.map((p: any) => ({
-        productId: p.productId,
-        productCode: p.productCode,
-        productName: p.productName,
-        rows: [],
-        totals: {
-          totalMeterSalesL: 0,
-          totalTestingL: 0,
-          totalNetSalesL: 0,
-          totalReceiptsL: 0,
-          totalVarianceL: 0,
-        }
-    }));
-    
-    // ... logic to populate dailyRows for each product ...
-    // This is too big for a single replacement, I will implement it in sections
+    // 4. Operational Shifts & Sales Summary
     
     // 4. Operational Shifts & Sales Summary
     let totalSalesPaise = 0;
@@ -321,22 +295,8 @@ export class MonthlyOperationsReportService {
       month,
       cutoffMode,
       cutoffDate: endDate,
-      latestDataDate: logRows.length > 0 ? logRows[logRows.length - 1].businessDate : null,
-      productSections: [
-        {
-          productId: 'placeholder-product-id',
-          productCode: 'MS',
-          productName: 'Motor Spirit',
-          rows: [],
-          totals: {
-            totalMeterSalesL: 0,
-            totalTestingL: 0,
-            totalNetSalesL: 0,
-            totalReceiptsL: 0,
-            totalVarianceL: 0,
-          }
-        }
-      ],
+      latestDataDate: resolvedCutoffDate,
+      productSections,
       dgSection: {
         rows: dailyDgRows,
         totals: {
@@ -373,15 +333,147 @@ export class MonthlyOperationsReportService {
     };
   }
 
+  private static async aggregateProductData(
+    db: any,
+    outletId: string,
+    shifts: any[],
+    startDate: string,
+    endDate: string
+  ): Promise<ProductMonthlyReport[]> {
+    const shiftIds = shifts.map(s => s.id);
+    if (shiftIds.length === 0) return [];
+
+    // Discover products from historical shifts
+    const productSnapshots = await db
+      .select({ 
+        productId: operationalShiftProductPrices.productId, 
+        productCode: operationalShiftProductPrices.productCode, 
+        productName: operationalShiftProductPrices.productName 
+      })
+      .from(operationalShiftProductPrices)
+      .where(inArray(operationalShiftProductPrices.operationalShiftId, shiftIds))
+      .groupBy(operationalShiftProductPrices.productId);
+      
+    // Create a map to hold the report structure
+    const productMap = new Map<string, ProductMonthlyReport>();
+    
+    for (const p of productSnapshots) {
+      productMap.set(p.productId, {
+        productId: p.productId,
+        productCode: p.productCode,
+        productName: p.productName,
+        rows: [],
+        totals: {
+          totalMeterSalesL: 0,
+          totalTestingL: 0,
+          totalNetSalesL: 0,
+          totalReceiptsL: 0,
+          totalVarianceL: 0,
+        }
+      });
+    }
+
+    // Sort shifts and group by businessDate
+    const shiftsByDate = new Map<string, any[]>();
+    for (const shift of shifts) {
+      const list = shiftsByDate.get(shift.businessDate) || [];
+      list.push(shift);
+      list.sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+      shiftsByDate.set(shift.businessDate, list);
+    }
+    
+    // Fetch all necessary historical data
+    const stockReconciliations = await db.select().from(shiftStockReconciliations).where(inArray(shiftStockReconciliations.operationalShiftId, shiftIds));
+    const productPrices = await db.select().from(operationalShiftProductPrices).where(inArray(operationalShiftProductPrices.operationalShiftId, shiftIds));
+    const nozzleSnapshots = await db.select().from(operationalShiftNozzles).where(inArray(operationalShiftNozzles.operationalShiftId, shiftIds));
+    const nozzleReadings = await db.select().from(nozzleMeterReadings).where(inArray(nozzleMeterReadings.operationalShiftId, shiftIds));
+
+    let cumulativeMilliunits = 0;
+    const startDateObj = new Date(startDate);
+    const endDateObj = new Date(endDate);
+
+    for (let d = new Date(startDateObj); d <= endDateObj; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        const dayShifts = shiftsByDate.get(dateStr) || [];
+        
+        for (const [productId, report] of productMap.entries()) {
+          let grossSalesQuantityMilliunits = 0;
+          let netSalesQuantityMilliunits = 0;
+          let testingQuantityMilliunits = 0;
+          
+          for (const shift of dayShifts) {
+              const nozzles = nozzleSnapshots.filter((n: any) => n.operationalShiftId === shift.id && n.productId === productId);
+              for (const nozzle of nozzles) {
+                  const reading = nozzleReadings.find((r: any) => r.operationalShiftId === shift.id && r.nozzleId === nozzle.nozzleId);
+                  if (reading) {
+                      grossSalesQuantityMilliunits += reading.grossSalesQuantityMilliunits || 0;
+                      netSalesQuantityMilliunits += reading.netSalesQuantityMilliunits || 0;
+                      testingQuantityMilliunits += reading.testingQuantityMilliunits || 0;
+                  }
+              }
+          }
+          
+          const reconciliations = stockReconciliations.filter((r: any) => dayShifts.some((s: any) => s.id === r.operationalShiftId) && r.productId === productId);
+          
+          const opening = reconciliations
+              .filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === 0)
+              .reduce((sum: number, r: any) => sum + r.openingStockMilliunits, 0);
+              
+          const closing = reconciliations
+              .filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === dayShifts.length - 1)
+              .reduce((sum: number, r: any) => sum + r.physicalClosingStockMilliunits, 0);
+          
+          const receipts = reconciliations.reduce((sum: number, r: any) => sum + r.receiptQuantityMilliunits, 0);
+          
+          const theoreticalClosing = reconciliations
+              .filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === dayShifts.length - 1)
+              .reduce((sum: number, r: any) => sum + r.theoreticalClosingStockMilliunits, 0);
+              
+          const variance = reconciliations
+              .filter((r: any) => dayShifts.indexOf(dayShifts.find((s: any) => s.id === r.operationalShiftId)!) === dayShifts.length - 1)
+              .reduce((sum: number, r: any) => sum + r.varianceMilliunits, 0);
+
+          cumulativeMilliunits += netSalesQuantityMilliunits;
+          
+          const prices = productPrices.filter((p: any) => dayShifts.some((s: any) => s.id === p.operationalShiftId) && p.productId === productId);
+          const uniquePrices = Array.from(new Set(prices.map((p: any) => p.pricePaisePerUnit)));
+
+          report.rows.push({
+              businessDate: dateStr,
+              status: dayShifts.length > 0 ? 'COMPLETE' : 'NO_ENTRY',
+              missingFields: [],
+              shiftsCount: dayShifts.length,
+              rspPaise: uniquePrices as number[],
+              changedWithinDay: uniquePrices.length > 1,
+              tankOpeningStockL: opening / 1000,
+              tankClosingStockL: closing / 1000,
+              receiptsL: receipts / 1000,
+              meterSalesL: netSalesQuantityMilliunits / 1000,
+              testingL: testingQuantityMilliunits / 1000,
+              grossSalesL: grossSalesQuantityMilliunits / 1000,
+              netSalesL: netSalesQuantityMilliunits / 1000,
+              dailySalesL: netSalesQuantityMilliunits / 1000,
+              cumulativeSalesL: cumulativeMilliunits / 1000,
+              theoreticalClosingL: theoreticalClosing / 1000,
+              physicalClosingL: closing / 1000,
+              varianceL: variance / 1000
+          });
+        }
+    }
+    
+    return Array.from(productMap.values());
+  }
+
   static getEmptyReport(
     outletId: string,
+    outletName: string,
     month: string,
     cutoffMode: 'MONTH_END' | 'SELECTED_DATE' | 'LATEST_DATA',
     latestDataDate: string | null
   ): MonthlyOperationsReport {
     return {
       outletId,
-      outletName: 'Unknown',
+      outletName,
       month,
       cutoffMode,
       cutoffDate: '',
