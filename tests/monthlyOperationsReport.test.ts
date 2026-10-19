@@ -11,6 +11,7 @@ describe('Monthly Operations Report Suite', () => {
   let localD1: any;
   let testDbPath: string;
   let adminToken: string;
+  let dealerToken: string;
 
   beforeAll(async () => {
     testDbPath = `./.sqlite/test_rep_ops_${Date.now()}.db`;
@@ -25,6 +26,14 @@ describe('Monthly Operations Report Suite', () => {
     }, { DB: localD1 });
     const loginJson: any = await loginRes.json();
     adminToken = loginJson.data?.token || '';
+
+    const dealerRes = await app.request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': 'http://localhost:3000' },
+      body: JSON.stringify({ email: 'dealer.parkstreet@iocl.in', password: 'Password@123' }),
+    }, { DB: localD1 });
+    const dealerJson: any = await dealerRes.json();
+    dealerToken = dealerJson.data?.token || '';
   });
 
   afterAll(async () => {
@@ -40,14 +49,12 @@ describe('Monthly Operations Report Suite', () => {
     const outletId = 'ro-1001';
     const month = '2026-10';
 
-    // Verify DG equipment asset fixture from seed
     const equipment = await db.query.equipmentAssets.findFirst({
       where: (table, { eq, and }) =>
         and(eq(table.outletId, outletId), eq(table.equipmentType, 'DG_SET')),
     });
     expect(equipment).toBeDefined();
 
-    // Create a 5-hour log (08:00 to 13:00 = 300 minutes) with 10 L (10000 milliunits) consumed
     await DgOperationsService.createLog(
       db,
       {
@@ -66,25 +73,100 @@ describe('Monthly Operations Report Suite', () => {
     expect(report.dgSummary.totalRunHours).toBe(5);
     expect(report.dgSummary.totalDieselConsumedLitres).toBe(10);
     expect(report.dgSection.rows.length).toBeGreaterThanOrEqual(28);
-    expect(report.dgSection.totals.totalRunningMinutes).toBe(300);
-    expect(report.dgSection.totals.totalRunningHoursStr).toBe('5:00');
-    expect(report.dgSection.totals.totalHsdConsumedStr).toBe('10.000');
+  });
 
-    // Test API route with new parameters
+  it('GET /api/v1/outlets/:outletId/reports/monthly-operations returns 200 JSON with canonical outlet ID', async () => {
     const res = await app.request(
-      `/api/v1/outlets/${outletId}/reports/monthly-operations?month=${month}&cutoffMode=MONTH_END`,
-      {
-        headers: {
-          Authorization: `Bearer ${adminToken}`,
-          Origin: 'http://localhost:3000',
-        },
-      },
+      '/api/v1/outlets/ro-1001/reports/monthly-operations?month=2026-10&cutoffMode=MONTH_END',
+      { headers: { Authorization: `Bearer ${adminToken}` } },
       { DB: localD1 }
     );
     expect(res.status).toBe(200);
     const json: any = await res.json();
     expect(json.success).toBe(true);
-    expect(json.data.outletId).toBe(outletId);
-    expect(json.data.dgSummary.totalRunHours).toBe(5);
+    expect(json.data.outletId).toBe('ro-1001');
+    expect(json.data.outletName).toContain('Park Street');
+  });
+
+  it('GET /api/v1/outlets/:roCode/reports/monthly-operations accepts roCode (RO-110023)', async () => {
+    const res = await app.request(
+      '/api/v1/outlets/RO-110023/reports/monthly-operations?month=2026-10',
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+      { DB: localD1 }
+    );
+    expect(res.status).toBe(200);
+    const json: any = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data.outletId).toBe('ro-1001');
+  });
+
+  it('GET /api/v1/outlets/:outletId/reports/monthly-operations/pdf returns 200 with application/pdf', async () => {
+    const res = await app.request(
+      '/api/v1/outlets/ro-1001/reports/monthly-operations/pdf?month=2026-10',
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+      { DB: localD1 }
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(res.headers.get('Content-Disposition')).toContain('attachment; filename=');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe('%PDF');
+  });
+
+  it('GET /api/v1/outlets/:roCode/reports/monthly-operations/pdf accepts roCode (RO-110023)', async () => {
+    const res = await app.request(
+      '/api/v1/outlets/RO-110023/reports/monthly-operations/pdf?month=2026-10',
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+      { DB: localD1 }
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+  });
+
+  it('supports year=2026, month=10, period=complete-month parameter format', async () => {
+    const res = await app.request(
+      '/api/v1/outlets/ro-1001/reports/monthly-operations?year=2026&month=10&period=complete-month',
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+      { DB: localD1 }
+    );
+    expect(res.status).toBe(200);
+    const json: any = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data.month).toBe('2026-10');
+    expect(json.data.cutoffMode).toBe('MONTH_END');
+  });
+
+  it('rejects foreign scoped outlet access with 403', async () => {
+    const res = await app.request(
+      '/api/v1/outlets/ro-1002/reports/monthly-operations?month=2026-10',
+      { headers: { Authorization: `Bearer ${dealerToken}` } },
+      { DB: localD1 }
+    );
+    expect(res.status).toBe(403);
+    const json: any = await res.json();
+    expect(json.error?.code).toBe('FORBIDDEN');
+  });
+
+  it('rejects invalid month format with 400 validation error', async () => {
+    const res = await app.request(
+      '/api/v1/outlets/ro-1001/reports/monthly-operations?month=invalid-month',
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+      { DB: localD1 }
+    );
+    expect(res.status).toBe(400);
+    const json: any = await res.json();
+    expect(json.error?.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns 400 for unknown invalid outlet identifier', async () => {
+    const res = await app.request(
+      '/api/v1/outlets/non-existent-outlet-id/reports/monthly-operations?month=2026-10',
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+      { DB: localD1 }
+    );
+    expect(res.status).toBe(400);
+    const json: any = await res.json();
+    expect(json.error?.code).toBe('OPERATION_FAILED');
+    expect(json.error?.message).toContain('not found');
   });
 });

@@ -132,6 +132,7 @@ app.route('/api/v1/auth', authRoutes);
 app.route('/api/v1/users', userRoutes);
 app.route('/api/v1/roles', roleRoutes);
 app.route('/api/v1/hierarchy', hierarchyRoutes);
+app.route('/api/v1/outlets', reportRoutes);
 app.route('/api/v1/outlets', outletRoutes);
 app.route('/api/v1/scopes', scopeRoutes);
 app.route('/api/v1/audit-logs', auditLogRoutes);

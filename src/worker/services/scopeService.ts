@@ -93,9 +93,10 @@ export class ScopeService {
     if (userCtx.isGlobalScope) return true;
     if (userCtx.accessibleOutletIds.includes(outletId)) return true;
 
-    const outlet = await outletRepo.findById(outletId);
+    const outlet = await outletRepo.findByIdOrCode(outletId);
     if (!outlet) return false;
 
+    if (userCtx.accessibleOutletIds.includes(outlet.id)) return true;
     if (userCtx.accessibleSalesAreaIds.includes(outlet.salesAreaId)) return true;
     if (userCtx.accessibleDivisionIds.includes(outlet.divisionId)) return true;
     if (userCtx.accessibleStateIds.includes(outlet.stateId)) return true;

@@ -7,7 +7,7 @@ import {
   DailyTankReadingDetail,
   DailyNozzleReadingDetail,
 } from '../../shared/types';
-import { eq, and, gte, lte, asc, inArray, desc } from 'drizzle-orm';
+import { eq, and, gte, lte, asc, inArray, desc, or } from 'drizzle-orm';
 import {
   retailOutlets,
   dgDailyLogs,
@@ -34,16 +34,17 @@ export class MonthlyOperationsReportService {
     cutoffMode: 'MONTH_END' | 'SELECTED_DATE' | 'LATEST_DATA' = 'MONTH_END',
     cutoffDate?: string
   ): Promise<MonthlyOperationsReport> {
-    // 1. Verify outlet
+    // 1. Verify outlet by id or roCode
     const outletRows = await db
       .select()
       .from(retailOutlets)
-      .where(eq(retailOutlets.id, outletId))
+      .where(or(eq(retailOutlets.id, outletId), eq(retailOutlets.roCode, outletId)))
       .limit(1);
     if (!outletRows || outletRows.length === 0) {
       throw new Error(`Retail outlet ${outletId} not found`);
     }
     const outlet = outletRows[0];
+    const canonicalOutletId = outlet.id;
 
     // Compute month start
     const startDate = `${month}-01`;
@@ -65,7 +66,7 @@ export class MonthlyOperationsReportService {
         .from(operationalShifts)
         .where(
           and(
-            eq(operationalShifts.outletId, outletId),
+            eq(operationalShifts.outletId, canonicalOutletId),
             gte(operationalShifts.businessDate, startDate),
             lte(operationalShifts.businessDate, endDate)
           )
@@ -79,7 +80,7 @@ export class MonthlyOperationsReportService {
         .from(dgDailyLogs)
         .where(
           and(
-            eq(dgDailyLogs.outletId, outletId),
+            eq(dgDailyLogs.outletId, canonicalOutletId),
             gte(dgDailyLogs.businessDate, startDate),
             lte(dgDailyLogs.businessDate, endDate)
           )
@@ -90,7 +91,7 @@ export class MonthlyOperationsReportService {
       
       const latest = [latestShiftDate, latestDgDate].filter(Boolean).sort().pop();
       if (!latest) {
-          return this.getEmptyReport(outletId, outlet.name, month, cutoffMode, null);
+          return this.getEmptyReport(canonicalOutletId, outlet.name, month, cutoffMode, null);
       }
       resolvedCutoffDate = latest;
     } else { // MONTH_END
@@ -99,7 +100,6 @@ export class MonthlyOperationsReportService {
     
     endDate = resolvedCutoffDate;
 
-    // 2. Fetch DG Daily Logs for month
     // 2. Fetch DG Daily Logs for month
     const logRows = await db
       .select({
@@ -120,7 +120,7 @@ export class MonthlyOperationsReportService {
       .leftJoin(equipmentAssets, eq(dgDailyLogs.equipmentAssetId, equipmentAssets.id))
       .where(
         and(
-          eq(dgDailyLogs.outletId, outletId),
+          eq(dgDailyLogs.outletId, canonicalOutletId),
           gte(dgDailyLogs.businessDate, startDate),
           lte(dgDailyLogs.businessDate, endDate)
         )
@@ -226,15 +226,13 @@ export class MonthlyOperationsReportService {
     // 3. Aggregate Product Data
     const shifts = await db.select().from(operationalShifts).where(
         and(
-            eq(operationalShifts.outletId, outletId),
+            eq(operationalShifts.outletId, canonicalOutletId),
             gte(operationalShifts.businessDate, startDate),
             lte(operationalShifts.businessDate, endDate)
         )
     );
     const shiftIds = shifts.map((s: any) => s.id);
-    const productSections = await this.aggregateProductData(db, outletId, shifts, startDate, endDate);
-    
-    // 4. Operational Shifts & Sales Summary
+    const productSections = await this.aggregateProductData(db, canonicalOutletId, shifts, startDate, endDate);
     
     // 4. Operational Shifts & Sales Summary
     let totalSalesPaise = 0;
@@ -242,7 +240,7 @@ export class MonthlyOperationsReportService {
       const reconRows = await db
         .select()
         .from(shiftFinancialReconciliations)
-        .where(eq(shiftFinancialReconciliations.outletId, outletId));
+        .where(eq(shiftFinancialReconciliations.outletId, canonicalOutletId));
 
       for (const recon of reconRows) {
         if (shiftIds.includes(recon.shiftId)) {
@@ -257,7 +255,7 @@ export class MonthlyOperationsReportService {
       .from(equipmentBreakdownTickets)
       .where(
         and(
-          eq(equipmentBreakdownTickets.outletId, outletId),
+          eq(equipmentBreakdownTickets.outletId, canonicalOutletId),
           gte(equipmentBreakdownTickets.createdAt, `${startDate}T00:00:00.000Z`)
         )
       );
@@ -273,13 +271,13 @@ export class MonthlyOperationsReportService {
     }
 
     // 6. HR Staff & Attendance
-    const staffList = await db.select().from(hrStaff).where(eq(hrStaff.outletId, outletId));
+    const staffList = await db.select().from(hrStaff).where(eq(hrStaff.outletId, canonicalOutletId));
     const attendanceRecords = await db
       .select()
       .from(hrAttendanceRecords)
       .where(
         and(
-          eq(hrAttendanceRecords.outletId, outletId),
+          eq(hrAttendanceRecords.outletId, canonicalOutletId),
           gte(hrAttendanceRecords.attendanceDate, startDate),
           lte(hrAttendanceRecords.attendanceDate, endDate)
         )
@@ -309,7 +307,7 @@ export class MonthlyOperationsReportService {
         .pop() ?? null;
 
     return {
-      outletId,
+      outletId: canonicalOutletId,
       outletName: outlet.name,
       month,
       cutoffMode,

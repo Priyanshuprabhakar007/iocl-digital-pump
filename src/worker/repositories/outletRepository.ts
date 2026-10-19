@@ -1,6 +1,6 @@
 import { AppDatabase } from '../../db';
 import * as schema from '../../db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, or } from 'drizzle-orm';
 import { RetailOutlet, OutletUserAssignment } from '../../shared/types';
 
 export class OutletRepository {
@@ -136,6 +136,30 @@ export class OutletRepository {
       .innerJoin(schema.divisions, eq(schema.retailOutlets.divisionId, schema.divisions.id))
       .innerJoin(schema.salesAreas, eq(schema.retailOutlets.salesAreaId, schema.salesAreas.id))
       .where(eq(schema.retailOutlets.id, id))
+      .limit(1);
+
+    if (res.length === 0) return null;
+    return {
+      ...res[0].outlet,
+      stateName: res[0].stateName,
+      divisionName: res[0].divisionName,
+      salesAreaName: res[0].salesAreaName,
+    };
+  }
+
+  async findByIdOrCode(idOrCode: string): Promise<RetailOutlet | null> {
+    const res = await this.db
+      .select({
+        outlet: schema.retailOutlets,
+        stateName: schema.states.name,
+        divisionName: schema.divisions.name,
+        salesAreaName: schema.salesAreas.name,
+      })
+      .from(schema.retailOutlets)
+      .innerJoin(schema.states, eq(schema.retailOutlets.stateId, schema.states.id))
+      .innerJoin(schema.divisions, eq(schema.retailOutlets.divisionId, schema.divisions.id))
+      .innerJoin(schema.salesAreas, eq(schema.retailOutlets.salesAreaId, schema.salesAreas.id))
+      .where(or(eq(schema.retailOutlets.id, idOrCode), eq(schema.retailOutlets.roCode, idOrCode)))
       .limit(1);
 
     if (res.length === 0) return null;
