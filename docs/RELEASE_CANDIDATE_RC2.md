@@ -1,4 +1,4 @@
-# IOCL Digital Pump Manager — Release Candidate 2
+# IOCL Digital Outlet Manager — Release Candidate 2
 
 **Release:** v1.0.0-rc2  
 **Status:** Engineering Frozen / Ready for Manual Acceptance / Includes Migration 0027

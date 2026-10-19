@@ -118,7 +118,7 @@ async function exportDemoSeed() {
   console.log('');
 
   let sqlOutput = `-- ======================================================================\n`;
-  sqlOutput += `-- IOCL Digital Pump Manager - Remote Demo Seed SQL (FK Sorted)\n`;
+  sqlOutput += `-- IOCL Digital Outlet Manager - Remote Demo Seed SQL (FK Sorted)\n`;
   sqlOutput += `-- Generated automatically by scripts/exportDemoSeedSql.ts\n`;
   sqlOutput += `-- ======================================================================\n\n`;
   sqlOutput += `PRAGMA defer_foreign_keys = ON;\n\n`;

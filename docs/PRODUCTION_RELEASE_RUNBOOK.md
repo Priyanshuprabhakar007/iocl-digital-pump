@@ -1,4 +1,4 @@
-# IOCL Digital Pump Manager — Production Release Runbook
+# IOCL Digital Outlet Manager — Production Release Runbook
 
 **Document Version:** 1.0.0 (Stage F3 Final Freeze)  
 **Target Environment:** Cloudflare Production (Workers + D1 + R2)  
@@ -9,7 +9,7 @@
 
 ## Overview & Safety First Policy
 
-This runbook outlines the required step-by-step procedure for deploying the IOCL Digital Pump Manager into production. 
+This runbook outlines the required step-by-step procedure for deploying the IOCL Digital Outlet Manager into production. 
 
 **CRITICAL SAFETY DIRECTIVES:**
 * **NO DEMO SEEDING:** Remote production databases must **never** be seeded with mock or demo data.

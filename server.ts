@@ -157,7 +157,7 @@ async function startServer() {
   server.use(vite.middlewares);
 
   server.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 IOCL Digital Pump Manager server running on http://0.0.0.0:${port}`);
+    console.log(`🚀 IOCL Digital Outlet Manager server running on http://0.0.0.0:${port}`);
   });
 }
 

@@ -36,7 +36,7 @@ function MainAppContent() {
           IOC
         </div>
         <div className="text-sm font-bold text-white tracking-wide">
-          IOCL <span className="text-orange-500">Digital Pump Manager</span>
+          IOCL <span className="text-orange-500">Digital Outlet Manager</span>
         </div>
         <div className="text-xs text-slate-400 font-mono mt-1">
           Authenticating Worker Session...

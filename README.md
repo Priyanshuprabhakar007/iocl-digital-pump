@@ -1,4 +1,4 @@
-# IOCL Digital Pump Manager
+# IOCL Digital Outlet Manager
 
 **Current Status:** Release Candidate / Final Freeze (Stage F4)  
 **Verified CI Pipeline:** Pipeline #97 = SUCCESS  
@@ -8,7 +8,7 @@
 
 ## Project Overview
 
-The **IOCL Digital Pump Manager** is an enterprise-grade, multi-role retail outlet management and operational governance platform built for Indian Oil Corporation Limited (IOCL). It provides end-to-end digital oversight of petroleum retail outlets, covering fuel infrastructure, shift operations, tank stock reconciliation, financial settlements, CNG and Lube operations, equipment maintenance, utility monitoring, municipal taxes, NFR leases, organization master data, HR workforce management, attendance geofencing, nozzle assignments, uniform inventory, and Maker-Checker leave approvals.
+The **IOCL Digital Outlet Manager** is an enterprise-grade, multi-role retail outlet management and operational governance platform built for Indian Oil Corporation Limited (IOCL). It provides end-to-end digital oversight of petroleum retail outlets, covering fuel infrastructure, shift operations, tank stock reconciliation, financial settlements, CNG and Lube operations, equipment maintenance, utility monitoring, municipal taxes, NFR leases, organization master data, HR workforce management, attendance geofencing, nozzle assignments, uniform inventory, and Maker-Checker leave approvals.
 
 ---
 

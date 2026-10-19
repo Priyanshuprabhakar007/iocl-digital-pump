@@ -122,7 +122,7 @@ app.use('*', async (c, next) => {
 app.get('/api/health', (c) => {
   return c.json({
     status: 'HEALTHY',
-    service: 'IOCL Digital Pump Manager Worker API',
+    service: 'IOCL Digital Outlet Manager Worker API',
     timestamp: new Date().toISOString(),
   });
 });

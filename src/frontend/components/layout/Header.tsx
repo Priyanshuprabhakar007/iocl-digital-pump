@@ -61,7 +61,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
             />
             <div>
               <div className="flex items-center gap-1.5 font-bold text-white tracking-wide text-sm sm:text-base">
-                IOCL <span className="text-orange-500">Digital Pump Manager</span>
+                IOCL <span className="text-orange-500">Digital Outlet Manager</span>
               </div>
               <div className="text-[11px] text-slate-400 font-mono hidden sm:block">
                 Indian Oil Corporation Limited • Enterprise Gateway

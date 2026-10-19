@@ -58,7 +58,7 @@ export const LoginPage: React.FC = () => {
             />
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-white tracking-wide">
-                IOCL <span className="text-orange-500">Digital Pump Manager</span>
+                IOCL <span className="text-orange-500">Digital Outlet Manager</span>
               </h1>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
                 Indian Oil Corporation Limited • Enterprise Gateway

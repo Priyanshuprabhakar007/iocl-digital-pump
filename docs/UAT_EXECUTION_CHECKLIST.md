@@ -1,4 +1,4 @@
-# IOCL Digital Pump Manager — UAT Execution Checklist (Stage F2)
+# IOCL Digital Outlet Manager — UAT Execution Checklist (Stage F2)
 
 ## UAT Status Summary
 

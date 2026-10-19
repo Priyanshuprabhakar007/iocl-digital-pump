@@ -1,6 +1,6 @@
-# IOCL Digital Pump Manager — Final Release Gate (Stage F4)
+# IOCL Digital Outlet Manager — Final Release Gate (Stage F4)
 
-**Project:** IOCL Digital Pump Manager (`iocl-digital-pump`)  
+**Project:** IOCL Digital Outlet Manager (`iocl-digital-pump`)  
 **Stage:** F4 — Final Release Candidate Gate  
 **Release Candidate Commit:** `5103009516bd798cf1471ef249b6fc2fbbb2c0ef`  
 **Verified CI Baseline:** Pipeline #97 = SUCCESS  
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-This Stage F4 Final Release Candidate document certifies that the IOCL Digital Pump Manager codebase has successfully completed all automated engineering, regression, business UAT, release readiness, and release-candidate verification phases.
+This Stage F4 Final Release Candidate document certifies that the IOCL Digital Outlet Manager codebase has successfully completed all automated engineering, regression, business UAT, release readiness, and release-candidate verification phases.
 
 * **Automated Test Baseline:** 1,511 tests passing, 0 failures, 5,064 `expect()` assertions across 37 test suites.
 * **Migration Inventory:** 28 sequential migrations (`0001` through `0028`), zero gaps, terminal is `0028_dg_daily_operations_reporting.sql`.

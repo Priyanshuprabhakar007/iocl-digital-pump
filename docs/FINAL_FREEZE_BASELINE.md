@@ -1,7 +1,7 @@
-# IOCL Digital Pump Manager — Final Freeze Baseline (Stage F1)
+# IOCL Digital Outlet Manager — Final Freeze Baseline (Stage F1)
 
 ## Project Information
-- **Project**: IOCL Digital Pump Manager
+- **Project**: IOCL Digital Outlet Manager
 - **Baseline Commit before F1**: `1e59512d7a264994c6a9bcf1f6c2c1f91d7dfaf0`
 - **Starting CI Status**: Pipeline #90 = SUCCESS
 - **Starting Validation Metrics**:

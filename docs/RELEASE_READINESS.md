@@ -1,6 +1,6 @@
-# IOCL Digital Pump Manager — Release Readiness Audit (Stage F3)
+# IOCL Digital Outlet Manager — Release Readiness Audit (Stage F3)
 
-**Project:** IOCL Digital Pump Manager (`iocl-digital-pump`)  
+**Project:** IOCL Digital Outlet Manager (`iocl-digital-pump`)  
 **Stage:** F3 — Production Data Safety & Release Readiness Audit  
 **Target Platform:** Cloudflare Workers + Cloudflare D1 (SQLite) + Cloudflare R2  
 **Target Environment:** Production (`iocl-pump-manager-d1`)  

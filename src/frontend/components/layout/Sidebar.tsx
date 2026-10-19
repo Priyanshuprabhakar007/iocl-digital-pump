@@ -199,7 +199,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <img src="/indianoil-logo.svg" alt="IndianOil" className="h-10 w-auto object-contain shrink-0" />
         <div>
           <div className="text-xs font-bold text-white leading-tight">IndianOil</div>
-          <div className="text-[10px] text-slate-400 font-mono">Digital Pump Manager</div>
+          <div className="text-[10px] text-slate-400 font-mono">Digital Outlet Manager</div>
         </div>
       </div>
 
@@ -251,7 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer Info */}
       <div className="pt-4 border-t border-slate-800 text-[10px] text-slate-500 font-mono">
-        <div>IOCL Digital Pump Manager v1.0</div>
+        <div>IOCL Digital Outlet Manager v1.0</div>
         <div>Cloudflare Worker + D1 Engine</div>
       </div>
     </div>

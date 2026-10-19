@@ -656,7 +656,7 @@ export async function seedDatabase(db: AppDatabase) {
     entityType: 'SYSTEM',
     entityId: 'SYSTEM',
     oldValueJson: null,
-    newValueJson: JSON.stringify({ message: 'IOCL Digital Pump Manager database seeded successfully with Phase 1, 2A & 2B infrastructure' }),
+    newValueJson: JSON.stringify({ message: 'IOCL Digital Outlet Manager database seeded successfully with Phase 1, 2A & 2B infrastructure' }),
     ipAddress: '127.0.0.1',
     userAgent: 'D1 Seeder Engine',
     createdAt: now,

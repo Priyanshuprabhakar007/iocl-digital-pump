@@ -1,6 +1,6 @@
 {
-  "name": "IOCL Digital Pump Manager",
-  "description": "Enterprise-grade retail outlet, organizational hierarchy, RBAC and audit management system for Indian Oil Corporation Limited.",
+  "name": "IOCL Digital Outlet Manager",
+  "description": "Enterprise-grade digital retail outlet operations, organizational hierarchy, RBAC, audit, infrastructure, workforce, sales and reporting system for Indian Oil Corporation Limited.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
