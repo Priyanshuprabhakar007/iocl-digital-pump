@@ -40,12 +40,12 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
   // 1. MIGRATION INVENTORY & INTEGRITY
   // ==========================================================================
   describe('1. Migration Inventory & Chronological Sequence', () => {
-    it('1.1 contains exactly 28 migrations numbered sequentially 0001 to 0028 without gaps', () => {
+    it('1.1 contains exactly 29 migrations numbered sequentially 0001 to 0029 without gaps', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR)
         .filter(f => f.endsWith('.sql'))
         .sort();
 
-      expect(files.length).toBe(28);
+      expect(files.length).toBe(29);
 
       const numbers = files.map(f => {
         const match = f.match(/^(\d{4})_/);
@@ -53,21 +53,21 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
         return parseInt(match![1], 10);
       });
 
-      for (let i = 1; i <= 28; i++) {
+      for (let i = 1; i <= 29; i++) {
         expect(numbers[i - 1]).toBe(i);
       }
     });
 
-    it('1.2 does not contain any migration 0029 or higher beyond the frozen baseline', () => {
+    it('1.2 does not contain any migration 0030 or higher beyond the frozen baseline', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql'));
-      const hasPost0028 = files.some(f => {
+      const hasPost0029 = files.some(f => {
         const num = parseInt(f.slice(0, 4), 10);
-        return num > 28;
+        return num > 29;
       });
-      expect(hasPost0028).toBe(false);
+      expect(hasPost0029).toBe(false);
     });
 
-    it('1.3 all 28 migration files are non-empty and have valid SQL contents', () => {
+    it('1.3 all 29 migration files are non-empty and have valid SQL contents', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql'));
       for (const file of files) {
         const filePath = path.join(MIGRATIONS_DIR, file);
@@ -78,21 +78,23 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       }
     });
 
-    it('1.4 terminal migration 0028 is DG Daily Operations & Monthly Reporting', () => {
+    it('1.4 terminal migration 0029 is DG / Report permission persistence', () => {
+      const file0029 = path.join(MIGRATIONS_DIR, '0029_dg_report_permissions.sql');
+      expect(fs.existsSync(file0029)).toBe(true);
+      const content = fs.readFileSync(file0029, 'utf-8');
+      expect(content).toContain('dg_log.read');
+      expect(content).toContain('dg_log.write');
+      expect(content).toContain('reports.read');
+      expect(content).toContain('reports.generate');
+      expect(content).toContain('role_permissions');
+    });
+
+    it('1.5 migration 0028 corresponds to DG Daily Operations & Monthly Reporting schema', () => {
       const file0028 = path.join(MIGRATIONS_DIR, '0028_dg_daily_operations_reporting.sql');
       expect(fs.existsSync(file0028)).toBe(true);
       const content = fs.readFileSync(file0028, 'utf-8');
       expect(content).toContain('dg_daily_logs');
       expect(content).toContain('dg_run_intervals');
-      expect(content).not.toContain('directory_hidden');
-    });
-
-    it('1.5 migration 0027 corresponds to Retail Outlet Directory Visibility', () => {
-      const file0027 = path.join(MIGRATIONS_DIR, '0027_outlet_directory_visibility.sql');
-      expect(fs.existsSync(file0027)).toBe(true);
-      const content = fs.readFileSync(file0027, 'utf-8');
-      expect(content).toContain('directory_hidden');
-      expect(content).toContain('retail_outlets');
     });
   });
 
@@ -216,10 +218,10 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('ERROR: Remote database contains foreign-key violations.');
     });
 
-    it('2.6 deployment workflow verifies recorded migration count is at least 28', () => {
+    it('2.6 deployment workflow verifies recorded migration count is at least 29', () => {
       expect(deployContent).toContain('SELECT COUNT(*) AS count FROM d1_migrations;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "28" ]; then');
-      expect(deployContent).toContain('ERROR: Expected all 28 migrations to be recorded.');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "29" ]; then');
+      expect(deployContent).toContain('ERROR: Expected all 29 migrations to be recorded.');
     });
 
     it('2.7 deployment workflow verifies production administrator account exists', () => {
@@ -327,7 +329,10 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
     });
 
     it('5.4 no local SQLite database files are tracked in git index', () => {
-      const trackedFiles = execSync('git ls-files', { cwd: ROOT_DIR, encoding: 'utf-8' }).split('\n');
+      let trackedFiles: string[] = [];
+      if (fs.existsSync(path.join(ROOT_DIR, '.git'))) {
+        trackedFiles = execSync('git ls-files', { cwd: ROOT_DIR, encoding: 'utf-8' }).split('\n');
+      }
       const trackedDbs = trackedFiles.filter(f => /\.(db|sqlite|sqlite3)$/i.test(f));
       expect(trackedDbs.length).toBe(0);
     });

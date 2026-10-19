@@ -165,6 +165,8 @@ jobs:
             "migrations/0025_phase4_hr_skill_categories.sql"
             "migrations/0026_phase5a_hr_leave_maker_checker.sql"
             "migrations/0027_outlet_directory_visibility.sql"
+            "migrations/0028_dg_daily_operations_reporting.sql"
+            "migrations/0029_dg_report_permissions.sql"
           )
 
           for FILE in "${MIGRATIONS[@]}"; do
@@ -222,10 +224,59 @@ jobs:
 
           echo "Recorded migrations: $COUNT"
 
-          if [ "$COUNT" -lt "28" ]; then
-            echo "ERROR: Expected all 28 migrations to be recorded."
+          if [ "$COUNT" -lt "29" ]; then
+            echo "ERROR: Expected all 29 migrations to be recorded."
             exit 1
           fi
+
+      - name: Verify Remote DG and Report Permission Integrity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          echo "=== VERIFYING REMOTE DG & REPORT PERMISSIONS ==="
+
+          PERMS_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT code FROM permissions WHERE code IN ('dg_log.read', 'dg_log.write', 'reports.read', 'reports.generate');" \
+            --json \
+            --yes)
+
+          PERM_COUNT=$(echo "$PERMS_RES" | jq -r '.[0].results | length')
+          echo "Found permission codes count: $PERM_COUNT (expected 4)"
+
+          if [ "$PERM_COUNT" -lt "4" ]; then
+            echo "ERROR: One or more required permission codes (dg_log.read, dg_log.write, reports.read, reports.generate) are missing."
+            exit 1
+          fi
+
+          GEN_PERMS_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT r.code AS role_code FROM role_permissions rp JOIN roles r ON rp.role_id = r.id JOIN permissions p ON rp.permission_id = p.id WHERE p.code = 'reports.generate';" \
+            --json \
+            --yes)
+
+          HAS_SO=$(echo "$GEN_PERMS_RES" | jq -r '.[0].results | map(select(.role_code == "STATE_OFFICE")) | length')
+          HAS_DO=$(echo "$GEN_PERMS_RES" | jq -r '.[0].results | map(select(.role_code == "DIVISIONAL_OFFICE")) | length')
+          HAS_BM=$(echo "$GEN_PERMS_RES" | jq -r '.[0].results | map(select(.role_code == "BUSINESS_MANAGER")) | length')
+          HAS_FO=$(echo "$GEN_PERMS_RES" | jq -r '.[0].results | map(select(.role_code == "FIELD_OFFICER")) | length')
+          HAS_DLR=$(echo "$GEN_PERMS_RES" | jq -r '.[0].results | map(select(.role_code == "DEALER")) | length')
+          HAS_CSP=$(echo "$GEN_PERMS_RES" | jq -r '.[0].results | map(select(.role_code == "CSP")) | length')
+
+          echo "reports.generate role mapping checks: SO=$HAS_SO, DO=$HAS_DO, BM=$HAS_BM, FO=$HAS_FO, DEALER=$HAS_DLR, CSP=$HAS_CSP"
+
+          if [ "$HAS_SO" -eq 0 ] || [ "$HAS_DO" -eq 0 ] || [ "$HAS_BM" -eq 0 ] || [ "$HAS_FO" -eq 0 ] || [ "$HAS_DLR" -eq 0 ]; then
+            echo "ERROR: One or more supervisory or dealer roles are missing reports.generate permission."
+            exit 1
+          fi
+
+          if [ "$HAS_CSP" -gt 0 ]; then
+            echo "ERROR: CSP role unexpectedly has reports.generate permission."
+            exit 1
+          fi
+
+          echo "Remote DG and Report permissions verified successfully."
 
       - name: Verify Phase 4 HR Skill Category Integrity
         env:
