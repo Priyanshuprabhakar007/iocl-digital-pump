@@ -9,12 +9,19 @@ import {
   Wrench,
   Users,
   Calendar,
-  Download
+  Download,
+  Eye,
+  Loader2
 } from 'lucide-react';
-import { apiFetch } from '../services/api';
+import { apiFetch, apiFetchBlob } from '../services/api';
 import { RetailOutlet, MonthlyOperationsReport } from '../../shared/types';
+import { useAuth } from '../context/AuthContext';
+import { PERMISSIONS } from '../../shared/constants';
 
 export const ReportsPage: React.FC = () => {
+  const { hasPermission } = useAuth();
+  const canGeneratePdf = hasPermission(PERMISSIONS.REPORTS_GENERATE);
+
   const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
   const [selectedOutletId, setSelectedOutletId] = useState<string>('');
   const [selectedMonth, setSelectedMonth] = useState<string>(
@@ -25,6 +32,10 @@ export const ReportsPage: React.FC = () => {
   const [report, setReport] = useState<MonthlyOperationsReport | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // PDF UI State
+  const [pdfLoading, setPdfLoading] = useState<boolean>(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   // Load Outlets on Mount
   useEffect(() => {
@@ -42,14 +53,42 @@ export const ReportsPage: React.FC = () => {
     fetchOutlets();
   }, []);
 
+  // Canonical Report & PDF URL parameters
+  const buildPdfUrl = useCallback(() => {
+    if (!selectedOutletId || !selectedMonth) return null;
+    if (cutoffMode === 'SELECTED_DATE' && !cutoffDate) return null;
+
+    const params = new URLSearchParams({
+      month: selectedMonth,
+      cutoffMode,
+    });
+
+    if (cutoffMode === 'SELECTED_DATE' && cutoffDate) {
+      params.set('cutoffDate', cutoffDate);
+    }
+
+    return `/api/v1/outlets/${selectedOutletId}/reports/monthly-operations/pdf?${params.toString()}`;
+  }, [selectedOutletId, selectedMonth, cutoffMode, cutoffDate]);
+
   const fetchReport = useCallback(async () => {
     if (!selectedOutletId || !selectedMonth) return;
+    if (cutoffMode === 'SELECTED_DATE' && !cutoffDate) return;
+
     setLoading(true);
     setError(null);
 
     try {
+      const params = new URLSearchParams({
+        month: selectedMonth,
+        cutoffMode,
+      });
+
+      if (cutoffMode === 'SELECTED_DATE' && cutoffDate) {
+        params.set('cutoffDate', cutoffDate);
+      }
+
       const res = await apiFetch<MonthlyOperationsReport>(
-        `/api/v1/outlets/${selectedOutletId}/reports/monthly-operations?month=${selectedMonth}&cutoffMode=${cutoffMode}${cutoffDate ? `&cutoffDate=${cutoffDate}` : ''}`
+        `/api/v1/outlets/${selectedOutletId}/reports/monthly-operations?${params.toString()}`
       );
       if (res.success && res.data) {
         setReport(res.data);
@@ -61,16 +100,94 @@ export const ReportsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedOutletId, selectedMonth]);
+  }, [selectedOutletId, selectedMonth, cutoffMode, cutoffDate]);
 
   useEffect(() => {
+    if (cutoffMode === 'SELECTED_DATE' && !cutoffDate) {
+      return; // Wait until a valid cutoff date is selected before auto-fetching
+    }
     fetchReport();
-  }, [selectedOutletId, selectedMonth, fetchReport]);
+  }, [selectedOutletId, selectedMonth, cutoffMode, cutoffDate, fetchReport]);
+
+  const isPdfDisabled =
+    !canGeneratePdf ||
+    !selectedOutletId ||
+    !selectedMonth ||
+    pdfLoading ||
+    (cutoffMode === 'SELECTED_DATE' && !cutoffDate);
+
+  const handlePreviewPdf = async () => {
+    if (isPdfDisabled) return;
+    const pdfEndpoint = buildPdfUrl();
+    if (!pdfEndpoint) {
+      setPdfError('Invalid report parameters. Please select a valid cutoff date.');
+      return;
+    }
+
+    setPdfLoading(true);
+    setPdfError(null);
+
+    try {
+      const res = await apiFetchBlob(pdfEndpoint);
+      if (!res.success || !res.blob) {
+        setPdfError(res.error?.message || 'Failed to generate monthly operations report PDF.');
+        return;
+      }
+
+      const previewUrl = URL.createObjectURL(res.blob);
+      window.open(previewUrl, '_blank', 'noopener,noreferrer');
+
+      setTimeout(() => {
+        URL.revokeObjectURL(previewUrl);
+      }, 60000);
+    } catch (err: any) {
+      setPdfError(err.message || 'Failed to generate monthly operations report PDF.');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (isPdfDisabled) return;
+    const pdfEndpoint = buildPdfUrl();
+    if (!pdfEndpoint) {
+      setPdfError('Invalid report parameters. Please select a valid cutoff date.');
+      return;
+    }
+
+    setPdfLoading(true);
+    setPdfError(null);
+
+    try {
+      const res = await apiFetchBlob(pdfEndpoint);
+      if (!res.success || !res.blob) {
+        setPdfError(res.error?.message || 'Failed to generate monthly operations report PDF.');
+        return;
+      }
+
+      const downloadUrl = URL.createObjectURL(res.blob);
+      const filename =
+        res.filename || `monthly-operations-${selectedOutletId}-${selectedMonth}.pdf`;
+
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err: any) {
+      setPdfError(err.message || 'Failed to generate monthly operations report PDF.');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900/80 p-5 rounded-2xl border border-slate-800 shadow-lg">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-slate-900/80 p-5 rounded-2xl border border-slate-800 shadow-lg">
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
             <FileText className="w-6 h-6 text-orange-500" />
@@ -81,8 +198,8 @@ export const ReportsPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+        {/* Filters and Actions */}
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
           <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg text-xs">
             <Building2 className="w-4 h-4 text-orange-400 shrink-0" />
             <select
@@ -109,38 +226,101 @@ export const ReportsPage: React.FC = () => {
           </div>
           
           <select
-              value={cutoffMode}
-              onChange={(e) => setCutoffMode(e.target.value as any)}
+            value={cutoffMode}
+            onChange={(e) => setCutoffMode(e.target.value as any)}
+            className="bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg text-xs text-white"
+          >
+            <option value="MONTH_END">Complete Month</option>
+            <option value="SELECTED_DATE">Selected Date</option>
+            <option value="LATEST_DATA">Latest Data</option>
+          </select>
+          
+          {cutoffMode === 'SELECTED_DATE' && (
+            <input
+              type="date"
+              value={cutoffDate}
+              onChange={(e) => setCutoffDate(e.target.value)}
               className="bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg text-xs text-white"
-            >
-              <option value="MONTH_END">Complete Month</option>
-              <option value="SELECTED_DATE">Selected Date</option>
-              <option value="LATEST_DATA">Latest Data</option>
-            </select>
-            
-            {cutoffMode === 'SELECTED_DATE' && (
-                <input
-                  type="date"
-                  value={cutoffDate}
-                  onChange={(e) => setCutoffDate(e.target.value)}
-                  className="bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg text-xs text-white"
-                />
-            )}
+            />
+          )}
 
           <button
             onClick={fetchReport}
             disabled={loading}
+            title="Refresh Report Data"
             className="p-2 text-slate-300 hover:text-white rounded-lg bg-slate-800 hover:bg-slate-700 transition"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
+
+          {/* PDF Preview & Download Actions */}
+          {canGeneratePdf && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePreviewPdf}
+                disabled={isPdfDisabled}
+                title={
+                  !canGeneratePdf
+                    ? 'You do not have permission to generate reports.'
+                    : isPdfDisabled
+                    ? 'Please select required filters'
+                    : 'Preview PDF report in new browser tab'
+                }
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 text-slate-200 text-xs font-medium rounded-lg transition"
+              >
+                {pdfLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                ) : (
+                  <Eye className="w-4 h-4 text-slate-300" />
+                )}
+                <span>{pdfLoading ? 'Generating PDF...' : 'Preview PDF'}</span>
+              </button>
+
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isPdfDisabled}
+                title={
+                  !canGeneratePdf
+                    ? 'You do not have permission to generate reports.'
+                    : isPdfDisabled
+                    ? 'Please select required filters'
+                    : 'Download PDF report'
+                }
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed border border-orange-500/50 text-white text-xs font-medium rounded-lg transition shadow-sm"
+              >
+                {pdfLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <Download className="w-4 h-4 text-white" />
+                )}
+                <span>{pdfLoading ? 'Generating PDF...' : 'Download PDF'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* JSON Report Error */}
       {error && (
         <div className="p-4 bg-red-900/30 border border-red-700/50 rounded-xl flex items-center gap-3 text-red-300 text-xs shadow-md">
-          <AlertCircle className="w-5 h-5 shrink-0" />
+          <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* PDF Error Display */}
+      {pdfError && (
+        <div className="p-4 bg-red-900/30 border border-red-700/50 rounded-xl flex items-center justify-between gap-3 text-red-300 text-xs shadow-md">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
+            <span>{pdfError}</span>
+          </div>
+          <button
+            onClick={() => setPdfError(null)}
+            className="text-red-400 hover:text-red-200 text-xs underline cursor-pointer"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
