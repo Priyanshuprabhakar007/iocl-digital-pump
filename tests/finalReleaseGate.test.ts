@@ -36,15 +36,15 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
   });
 
   // ==========================================================================
-  // 2. MIGRATION FREEZE CONTRACT (0001 - 0028)
+  // 2. MIGRATION FREEZE CONTRACT (0001 - 0029)
   // ==========================================================================
   describe('2. Migration Freeze & Sequence Integrity', () => {
-    it('2.1 exactly 28 migrations exist, ordered sequentially 0001 to 0028 without gaps or migrations beyond 0028', () => {
+    it('2.1 exactly 29 migrations exist, ordered sequentially 0001 to 0029 without gaps or migrations beyond 0029', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR)
         .filter(f => f.endsWith('.sql'))
         .sort();
 
-      expect(files.length).toBe(28);
+      expect(files.length).toBe(29);
 
       const numbers = files.map(f => {
         const match = f.match(/^(\d{4})_/);
@@ -52,15 +52,17 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
         return parseInt(match![1], 10);
       });
 
-      for (let i = 1; i <= 28; i++) {
+      for (let i = 1; i <= 29; i++) {
         expect(numbers[i - 1]).toBe(i);
       }
 
-      const hasPost0028 = files.some(f => parseInt(f.slice(0, 4), 10) > 28);
-      expect(hasPost0028).toBe(false);
+      const hasPost0029 = files.some(
+        f => parseInt(f.slice(0, 4), 10) > 29
+      );
+      expect(hasPost0029).toBe(false);
     });
 
-    it('2.2 terminal migration 0028 is DG Daily Operations & Monthly Reporting', () => {
+    it('2.2 migration 0028 is DG Daily Operations & Monthly Reporting', () => {
       const file0028 = path.join(MIGRATIONS_DIR, '0028_dg_daily_operations_reporting.sql');
       expect(fs.existsSync(file0028)).toBe(true);
       const content = fs.readFileSync(file0028, 'utf-8');
@@ -69,7 +71,27 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       expect(content).not.toContain('directory_hidden');
     });
 
-    it('2.3 migration 0027 corresponds to Retail Outlet Directory Visibility', () => {
+    it('2.3 terminal migration 0029 persists DG and report permissions', () => {
+      const file0029 = path.join(
+        MIGRATIONS_DIR,
+        '0029_dg_report_permissions.sql'
+      );
+
+      expect(fs.existsSync(file0029)).toBe(true);
+
+      const content = fs.readFileSync(file0029, 'utf-8');
+
+      expect(content).toContain('dg_log.read');
+      expect(content).toContain('dg_log.write');
+      expect(content).toContain('reports.read');
+      expect(content).toContain('reports.generate');
+      expect(content).toContain('role_permissions');
+
+      expect(content).not.toMatch(/\bDROP\s+TABLE\b/i);
+      expect(content).not.toMatch(/\bDELETE\s+FROM\b/i);
+    });
+
+    it('2.4 migration 0027 corresponds to Retail Outlet Directory Visibility', () => {
       const file0027 = path.join(MIGRATIONS_DIR, '0027_outlet_directory_visibility.sql');
       expect(fs.existsSync(file0027)).toBe(true);
       const content = fs.readFileSync(file0027, 'utf-8');
@@ -117,9 +139,10 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       expect(pre).toContain('dg_run_intervals');
     });
 
-    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 28, and admin existence', () => {
+    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 29, and admin existence', () => {
       expect(deployContent).toContain('PRAGMA foreign_key_check;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "28" ]; then');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "29" ]; then');
+      expect(deployContent).toContain('ERROR: Expected all 29 migrations to be recorded.');
       expect(deployContent).toContain("SELECT COUNT(*) AS count FROM users WHERE email = 'admin@iocl.in';");
       expect(deployContent).toContain('if [ "$POST_CNT" -lt "$PRE_CNT" ]; then');
     });
