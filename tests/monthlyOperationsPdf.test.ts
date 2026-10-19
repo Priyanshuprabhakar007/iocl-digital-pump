@@ -68,6 +68,75 @@ describe("Monthly Operations Register PDF Endpoint & Generation", () => {
     } catch (e) {}
   });
 
+  // Source Regression Guard
+  it("Regression Guard: monthlyOperationsPdfService.ts does NOT contain unintended escaped interpolations \\${", () => {
+    const serviceContent = fs.readFileSync("src/worker/services/monthlyOperationsPdfService.ts", "utf8");
+    expect(serviceContent.includes("\\${")).toBe(false);
+  });
+
+  // Role Permissions Test
+  it("Seeded DB role-permission mappings match specification", async () => {
+    const db = getDb(localD1);
+    const roles = await db.select().from(schema.roles);
+    const permissions = await db.select().from(schema.permissions);
+    const rolePerms = await db.select().from(schema.rolePermissions);
+
+    const permMap = new Map(permissions.map((p) => [p.id, p.code]));
+    const rolePermCodesMap = new Map<string, Set<string>>();
+
+    for (const r of roles) {
+      rolePermCodesMap.set(r.code, new Set());
+    }
+
+    for (const rp of rolePerms) {
+      const permCode = permMap.get(rp.permissionId);
+      const role = roles.find((r) => r.id === rp.roleId);
+      if (role && permCode) {
+        rolePermCodesMap.get(role.code)?.add(permCode);
+      }
+    }
+
+    const supervisoryRoles = ["STATE_OFFICE", "DIVISIONAL_OFFICE", "BUSINESS_MANAGER", "FIELD_OFFICER"];
+    for (const roleCode of supervisoryRoles) {
+      const perms = rolePermCodesMap.get(roleCode);
+      expect(perms?.has("dg_log.read")).toBe(true);
+      expect(perms?.has("reports.read")).toBe(true);
+      expect(perms?.has("reports.generate")).toBe(true);
+    }
+
+    const dealerPerms = rolePermCodesMap.get("DEALER");
+    expect(dealerPerms?.has("dg_log.read")).toBe(true);
+    expect(dealerPerms?.has("dg_log.write")).toBe(true);
+    expect(dealerPerms?.has("reports.read")).toBe(true);
+    expect(dealerPerms?.has("reports.generate")).toBe(true);
+
+    const cspPerms = rolePermCodesMap.get("CSP");
+    expect(cspPerms?.has("dg_log.read")).toBe(true);
+    expect(cspPerms?.has("dg_log.write")).toBe(true);
+    expect(cspPerms?.has("reports.read")).toBe(true);
+    expect(cspPerms?.has("reports.generate")).toBe(false);
+  });
+
+  // Dealer PDF Success Test
+  it("Dealer assigned to ro-1001 can request PDF successfully", async () => {
+    const res = await app.request(
+      "/api/v1/outlets/ro-1001/reports/monthly-operations/pdf?month=2026-10&cutoffMode=MONTH_END",
+      {
+        headers: {
+          Authorization: `Bearer ${dealerToken}`,
+          Origin: "http://localhost:3000",
+        },
+      },
+      { DB: localD1 }
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("application/pdf");
+    const arrayBuffer = await res.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("%PDF");
+  });
+
   // 1-4. Authorized admin receives HTTP 200, Content-Type application/pdf, %PDF magic bytes, non-empty
   it("1-4. Authorized admin receives HTTP 200 with non-empty application/pdf starting with %PDF", async () => {
     const res = await app.request(

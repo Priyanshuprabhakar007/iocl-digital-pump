@@ -225,7 +225,7 @@ export class MonthlyOperationsPdfService {
         color: COLOR_PRIMARY,
       });
 
-      const subTitle = `Outlet: \${report.outletName} | Month: \${report.month} | Product: \${product.productCode} - \${product.productName} | Cutoff: \${report.cutoffDate || "-"}`;
+      const subTitle = `Outlet: ${report.outletName} | Month: ${report.month} | Product: ${product.productCode} - ${product.productName} | Cutoff: ${report.cutoffDate || "-"}`;
       currentPage.drawText(sanitizeText(subTitle), {
         x: margin,
         y: height - 42,
@@ -406,7 +406,7 @@ export class MonthlyOperationsPdfService {
       let detailY = height - 40;
 
       const drawDetailHeader = (currPage: any) => {
-        currPage.drawText(`PRODUCT DETAIL: TANK & NOZZLE READINGS (\${product.productCode} - \${product.productName})`, {
+        currPage.drawText(`PRODUCT DETAIL: TANK & NOZZLE READINGS (${product.productCode} - ${product.productName})`, {
           x: margin,
           y: height - 28,
           size: 11,
@@ -414,7 +414,7 @@ export class MonthlyOperationsPdfService {
           color: COLOR_PRIMARY,
         });
 
-        currPage.drawText(`Outlet: \${report.outletName} | Month: \${report.month} | Historical Shift Readings`, {
+        currPage.drawText(`Outlet: ${report.outletName} | Month: ${report.month} | Historical Shift Readings`, {
           x: margin,
           y: height - 40,
           size: 8,
@@ -439,7 +439,7 @@ export class MonthlyOperationsPdfService {
         }
 
         // Date Header
-        page.drawText(`Business Date: \${row.businessDate}  (Status: \${row.status})`, {
+        page.drawText(`Business Date: ${row.businessDate}  (Status: ${row.status})`, {
           x: margin,
           y: detailY - 10,
           size: 8.5,
@@ -462,7 +462,7 @@ export class MonthlyOperationsPdfService {
           tankY -= 12;
 
           for (const t of row.tankReadings) {
-            const tText = `Tank \${t.tankNumber} [\${t.readingType}]: Dip \${(t.productDipMmMilliunits / 1000).toFixed(1)} mm | Water \${(t.waterDipMmMilliunits / 1000).toFixed(1)} mm | Vol \${(t.netProductVolumeMilliunits / 1000).toFixed(3)} L`;
+            const tText = `Tank ${t.tankNumber} [${t.readingType}]: Dip ${(t.productDipMmMilliunits / 1000).toFixed(1)} mm | Water ${(t.waterDipMmMilliunits / 1000).toFixed(1)} mm | Vol ${(t.netProductVolumeMilliunits / 1000).toFixed(3)} L`;
             page.drawText(sanitizeText(tText), {
               x: margin + 8,
               y: tankY,
@@ -490,7 +490,7 @@ export class MonthlyOperationsPdfService {
             const openStr = n.openingTotalizerMilliunits != null ? (n.openingTotalizerMilliunits / 1000).toFixed(3) : "NULL";
             const closeStr = n.closingTotalizerMilliunits != null ? (n.closingTotalizerMilliunits / 1000).toFixed(3) : "NULL";
             const netStr = (n.netSalesQuantityMilliunits / 1000).toFixed(3);
-            const nText = `DU \${n.dispenserNumber}/N\${n.nozzleNumber}: Start \${openStr} -> End \${closeStr} | Net: \${netStr} L`;
+            const nText = `DU ${n.dispenserNumber}/N${n.nozzleNumber}: Start ${openStr} -> End ${closeStr} | Net: ${netStr} L`;
             page.drawText(sanitizeText(nText), {
               x: colRightX + 8,
               y: nozzY,
@@ -541,7 +541,7 @@ export class MonthlyOperationsPdfService {
         color: COLOR_PRIMARY,
       });
 
-      const subTitle = `Outlet: \${report.outletName} | Month: \${report.month} | Total Run: \${report.dgSummary.totalRunningHoursStr} | Diesel: \${report.dgSummary.totalDieselConsumedLitres.toFixed(3)} L | Cutoff: \${report.cutoffDate || "-"}`;
+      const subTitle = `Outlet: ${report.outletName} | Month: ${report.month} | Total Run: ${report.dgSummary.totalRunningHoursStr} | Diesel: ${report.dgSummary.totalDieselConsumedLitres.toFixed(3)} L | Cutoff: ${report.cutoffDate || "-"}`;
       currPage.drawText(sanitizeText(subTitle), {
         x: margin,
         y: height - 42,
@@ -580,10 +580,10 @@ export class MonthlyOperationsPdfService {
       // Build intervals string if present
       let intervalStr = "";
       if (row.intervals && row.intervals.length > 0) {
-        intervalStr = row.intervals.map((i) => `\${i.startTime}-\${i.endTime}`).join(", ");
+        intervalStr = row.intervals.map((i) => `${i.startTime}-${i.endTime}`).join(", ");
       }
       if (row.remarks) {
-        intervalStr = intervalStr ? `\${intervalStr} (\${row.remarks})` : row.remarks;
+        intervalStr = intervalStr ? `${intervalStr} (${row.remarks})` : row.remarks;
       }
 
       const rowHeight = 14;

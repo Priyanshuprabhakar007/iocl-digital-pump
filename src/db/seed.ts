@@ -155,6 +155,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-hr-att-r',
     'perm-hr-uniform-r',
     'perm-org-r',
+    'perm-dg-r', 'perm-rep-r', 'perm-rep-g',
   ].map(pId => ({ roleId: 'role-so', permissionId: pId }));
 
   const divOfficePerms = [
@@ -169,6 +170,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-hr-att-r',
     'perm-hr-uniform-r',
     'perm-org-r',
+    'perm-dg-r', 'perm-rep-r', 'perm-rep-g',
   ].map(pId => ({ roleId: 'role-do', permissionId: pId }));
 
   const bmPerms = [
@@ -181,6 +183,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-geo-w', 'perm-hr-nozz-w',
     'perm-hr-uniform-r', 'perm-hr-uniform-inv-w', 'perm-hr-uniform-issue-w',
     'perm-org-r',
+    'perm-dg-r', 'perm-rep-r', 'perm-rep-g',
   ].map(pId => ({ roleId: 'role-bm', permissionId: pId }));
 
   const fieldOfficerPerms = [
@@ -193,6 +196,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-geo-w', 'perm-hr-nozz-w',
     'perm-hr-uniform-r', 'perm-hr-uniform-inv-w', 'perm-hr-uniform-issue-w',
     'perm-org-r',
+    'perm-dg-r', 'perm-rep-r', 'perm-rep-g',
   ].map(pId => ({ roleId: 'role-fo', permissionId: pId }));
 
   const dealerPerms = [
