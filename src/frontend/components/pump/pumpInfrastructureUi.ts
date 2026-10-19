@@ -67,6 +67,86 @@ export function getActiveLiquidOutletProducts(
   });
 }
 
+export interface ResolvedNozzleFormState {
+  dispenserId: string;
+  selectedDispenser: Dispenser | null;
+  availablePositions: number[];
+  nozzleNumber: number;
+  activeLiquidProducts: OutletProduct[];
+  productId: string;
+  matchingTanks: Tank[];
+  tankId: string;
+}
+
+export function resolveNozzleFormState(
+  dispensers?: Dispenser[] | null,
+  nozzles?: Nozzle[] | null,
+  outletProducts?: OutletProduct[] | null,
+  tanks?: Tank[] | null,
+  currentSelection?: {
+    dispenserId?: string | null;
+    nozzleNumber?: number | null;
+    productId?: string | null;
+    tankId?: string | null;
+  }
+): ResolvedNozzleFormState {
+  const dispList = Array.isArray(dispensers) ? dispensers : [];
+  const nozzList = Array.isArray(nozzles) ? nozzles : [];
+  const tankList = Array.isArray(tanks) ? tanks : [];
+  const activeLiquidProducts = getActiveLiquidOutletProducts(outletProducts);
+
+  let selectedDispenser: Dispenser | null = null;
+  if (currentSelection?.dispenserId) {
+    selectedDispenser = dispList.find(d => d && d.id === currentSelection.dispenserId) || null;
+  }
+  if (!selectedDispenser && dispList.length > 0) {
+    selectedDispenser =
+      dispList.find(d => {
+        const duNozzles = nozzList.filter(n => n && n.dispenserId === d.id);
+        return getAvailableNozzleNumbers(d.nozzleCapacity, duNozzles).length > 0;
+      }) || dispList[0];
+  }
+
+  const dispenserId = selectedDispenser?.id || '';
+  const duNozzles = nozzList.filter(n => n && n.dispenserId === dispenserId);
+  const availablePositions = getAvailableNozzleNumbers(selectedDispenser?.nozzleCapacity, duNozzles);
+
+  const requestedNozzleNum = Number(currentSelection?.nozzleNumber);
+  const nozzleNumber = availablePositions.includes(requestedNozzleNum)
+    ? requestedNozzleNum
+    : (availablePositions[0] ?? (requestedNozzleNum > 0 ? requestedNozzleNum : 1));
+
+  let productId = '';
+  if (
+    currentSelection?.productId &&
+    activeLiquidProducts.some(op => op.productId === currentSelection.productId)
+  ) {
+    productId = currentSelection.productId;
+  } else {
+    const withActiveTank = activeLiquidProducts.find(op =>
+      getTanksForProduct(tankList, op.productId).some(t => t.status === 'ACTIVE')
+    );
+    productId = withActiveTank?.productId || activeLiquidProducts[0]?.productId || '';
+  }
+
+  const matchingTanks = getTanksForProduct(tankList, productId).filter(t => t.status === 'ACTIVE');
+  const tankId =
+    currentSelection?.tankId && matchingTanks.some(t => t.id === currentSelection.tankId)
+      ? currentSelection.tankId
+      : (matchingTanks[0]?.id || '');
+
+  return {
+    dispenserId,
+    selectedDispenser,
+    availablePositions,
+    nozzleNumber,
+    activeLiquidProducts,
+    productId,
+    matchingTanks,
+    tankId,
+  };
+}
+
 // =========================================================================
 // 3. DU UTILIZATION
 // =========================================================================
@@ -381,6 +461,9 @@ export function getPumpInfrastructureErrorMessage(error: any): string {
     case 'NOZZLE_OUTLET_PRODUCT_NOT_MAPPED':
       return 'Product is not mapped to this retail outlet.';
 
+    case 'NOZZLE_TOPOLOGY_INTEGRITY_ERROR':
+      return 'An existing nozzle record for this position has broken topology references. Please repair the existing nozzle configuration instead of creating a duplicate.';
+
     case 'PRODUCT_IN_USE':
       return 'Product cannot be deactivated because active tanks or nozzles depend on it.';
 
@@ -433,6 +516,9 @@ export function getPumpInfrastructureErrorMessage(error: any): string {
   // Check raw message for known triggers or constraints
   const combined = `${code} ${rawMessage}`.toUpperCase();
 
+  if (combined.includes('NOZZLE_TOPOLOGY_INTEGRITY_ERROR')) {
+    return 'An existing nozzle record for this position has broken topology references. Please repair the existing nozzle configuration instead of creating a duplicate.';
+  }
   if (combined.includes('NOZZLE_CAPACITY_EXCEEDED')) {
     return 'Nozzle number exceeds the physical nozzle capacity of this Dispensing Unit (DU).';
   }

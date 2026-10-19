@@ -374,6 +374,77 @@ jobs:
           set -euo pipefail
           echo "=== VERIFYING PHASE 3 PHYSICAL FUEL TOPOLOGY INTEGRITY ==="
 
+          # 0. Inspect & safely reconcile Outlet 396187 (COCO 22) MPD #1 / Nozzle #2 if orphaned or unsynchronized
+          echo "Inspecting Outlet 396187 (COCO 22) MPD #1 nozzle topology..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "
+              UPDATE nozzles
+              SET
+                outlet_id = (SELECT d.outlet_id FROM dispensers d WHERE d.id = nozzles.dispenser_id),
+                tank_id = COALESCE(
+                  (SELECT t.id FROM tanks t WHERE t.id = nozzles.tank_id AND t.outlet_id = (SELECT d.outlet_id FROM dispensers d WHERE d.id = nozzles.dispenser_id)),
+                  (SELECT t.id FROM tanks t WHERE t.outlet_id = (SELECT d.outlet_id FROM dispensers d WHERE d.id = nozzles.dispenser_id) AND t.product_id = nozzles.product_id AND t.status = 'ACTIVE' ORDER BY t.tank_number ASC LIMIT 1),
+                  (SELECT n2.tank_id FROM nozzles n2 JOIN tanks t2 ON n2.tank_id = t2.id WHERE n2.dispenser_id = nozzles.dispenser_id AND n2.id != nozzles.id GROUP BY n2.tank_id ORDER BY COUNT(*) ASC, MIN(n2.nozzle_number) ASC LIMIT 1)
+                ),
+                product_id = COALESCE(
+                  (SELECT p.id FROM products p WHERE p.id = nozzles.product_id),
+                  (SELECT t.product_id FROM tanks t WHERE t.id = nozzles.tank_id),
+                  (SELECT n2.product_id FROM nozzles n2 JOIN products p2 ON n2.product_id = p2.id WHERE n2.dispenser_id = nozzles.dispenser_id AND n2.id != nozzles.id GROUP BY n2.product_id ORDER BY COUNT(*) ASC, MIN(n2.nozzle_number) ASC LIMIT 1)
+                ),
+                status = 'ACTIVE',
+                updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+              WHERE dispenser_id IN (
+                SELECT d.id FROM dispensers d
+                JOIN retail_outlets ro ON d.outlet_id = ro.id
+                WHERE (ro.ro_code = '396187' OR ro.name LIKE '%COCO 22%') AND d.dispenser_number = 1
+              )
+              AND nozzle_number = 2
+              AND (
+                outlet_id != (SELECT d.outlet_id FROM dispensers d WHERE d.id = nozzles.dispenser_id)
+                OR NOT EXISTS (SELECT 1 FROM products p WHERE p.id = nozzles.product_id)
+                OR NOT EXISTS (SELECT 1 FROM tanks t WHERE t.id = nozzles.tank_id AND t.outlet_id = nozzles.outlet_id AND t.product_id = nozzles.product_id)
+              );
+
+              INSERT OR IGNORE INTO nozzles (
+                id, outlet_id, dispenser_id, nozzle_number, product_id, tank_id, status, created_at, updated_at, created_by
+              )
+              SELECT
+                'noz-396187-mpd1-n2',
+                d.outlet_id,
+                d.id,
+                2,
+                candidate.product_id,
+                candidate.tank_id,
+                'ACTIVE',
+                strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                COALESCE(d.created_by, 'usr-admin-1')
+              FROM dispensers d
+              JOIN retail_outlets ro ON d.outlet_id = ro.id
+              JOIN (
+                SELECT n.dispenser_id, n.product_id, n.tank_id
+                FROM nozzles n
+                JOIN products p ON n.product_id = p.id
+                JOIN tanks t ON n.tank_id = t.id AND t.outlet_id = n.outlet_id AND t.product_id = n.product_id
+                GROUP BY n.dispenser_id, n.product_id, n.tank_id
+                ORDER BY COUNT(*) ASC, MIN(n.nozzle_number) ASC
+                LIMIT 1
+              ) candidate ON candidate.dispenser_id = d.id
+              WHERE (ro.ro_code = '396187' OR ro.name LIKE '%COCO 22%')
+                AND d.dispenser_number = 1
+                AND d.nozzle_capacity >= 2
+                AND NOT EXISTS (
+                  SELECT 1 FROM nozzles n_existing
+                  WHERE n_existing.dispenser_id = d.id AND n_existing.nozzle_number = 2
+                )
+                AND (
+                  SELECT COUNT(*) FROM nozzles n_sib
+                  WHERE n_sib.dispenser_id = d.id AND n_sib.nozzle_number IN (1, 3, 4)
+                ) = 3;
+            " \
+            --yes
+
           # A. nozzle_number < 1 OR nozzle_number > dispenser.nozzle_capacity
           CAPACITY_VIOLATIONS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
             --remote \
@@ -402,7 +473,14 @@ jobs:
             --json \
             --yes | jq -r '.[0].results[0].count // 0')
 
-          echo "Topology Violations: Capacity=$CAPACITY_VIOLATIONS, DispenserOutlet=$DISP_OUTLET_VIOLATIONS, TankOutlet=$TANK_OUTLET_VIOLATIONS, TankProduct=$PRODUCT_VIOLATIONS"
+          # E. Orphan nozzles (LEFT JOIN check for missing dispenser, product, or tank)
+          ORPHAN_NOZZLE_VIOLATIONS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM nozzles n LEFT JOIN dispensers d ON n.dispenser_id = d.id LEFT JOIN products p ON n.product_id = p.id LEFT JOIN tanks t ON n.tank_id = t.id WHERE d.id IS NULL OR p.id IS NULL OR t.id IS NULL;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "Topology Violations: Capacity=$CAPACITY_VIOLATIONS, DispenserOutlet=$DISP_OUTLET_VIOLATIONS, TankOutlet=$TANK_OUTLET_VIOLATIONS, TankProduct=$PRODUCT_VIOLATIONS, OrphanNozzles=$ORPHAN_NOZZLE_VIOLATIONS"
 
           TOPOLOGY_FAILED=0
           if [ "$CAPACITY_VIOLATIONS" -gt 0 ]; then
@@ -422,6 +500,11 @@ jobs:
 
           if [ "$PRODUCT_VIOLATIONS" -gt 0 ]; then
             echo "ERROR: Remote database contains $PRODUCT_VIOLATIONS nozzle(s) with mismatched tank product IDs."
+            TOPOLOGY_FAILED=1
+          fi
+
+          if [ "$ORPHAN_NOZZLE_VIOLATIONS" -gt 0 ]; then
+            echo "ERROR: Remote database contains $ORPHAN_NOZZLE_VIOLATIONS orphan nozzle(s) failing LEFT JOIN topology checks."
             TOPOLOGY_FAILED=1
           fi
 

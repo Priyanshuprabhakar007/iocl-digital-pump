@@ -606,4 +606,231 @@ describe('Phase 3 DU Nozzle Capacity & Fuel Topology Hardened Suite', () => {
     expect(listJson[0].dispenserNumber).toBe(3);
     expect(listJson[0].tankNumber).toBe(4);
   });
+
+  // =========================================================================
+  // 8. NOZZLE TOPOLOGY DIAGNOSTICS, ORPHAN DETECTION & COCO 22 (396187) SYNC
+  // =========================================================================
+
+  it('17. Outlet 396187 (COCO 22) MPD #1 / Nozzle #2: detects hidden/orphan nozzle via LEFT JOIN diagnostics, returns NOZZLE_TOPOLOGY_INTEGRITY_ERROR on duplicate POST, and repairs in-place preserving nozzle ID', async () => {
+    const db = getDb(localD1);
+    const now = new Date().toISOString();
+
+    const [ro1] = await db.select().from(schema.retailOutlets).where(eq(schema.retailOutlets.id, 'ro-1001'));
+    expect(ro1).toBeDefined();
+
+    // 1. Seed Outlet 396187 — COCO 22 with 2 products (MS, HSD), 2 tanks, and 4 MPDs (4 nozzles each = 16 total slots)
+    const cocoOutletId = 'ro-396187';
+    await db.insert(schema.retailOutlets).values({
+      id: cocoOutletId,
+      roCode: '396187',
+      name: 'COCO 22',
+      outletType: 'COCO',
+      stateId: ro1.stateId,
+      divisionId: ro1.divisionId,
+      salesAreaId: ro1.salesAreaId,
+      address: 'Sector 22',
+      city: 'Chandigarh',
+      district: 'Chandigarh',
+      pincode: '160022',
+      status: 'ACTIVE',
+      lifecycleStatus: 'ACTIVE',
+      isArchived: false,
+      directoryHidden: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await db.insert(schema.outletProducts).values([
+      { id: 'op-coco-ms', outletId: cocoOutletId, productId: 'prod-ms', status: 'ACTIVE', createdAt: now, updatedAt: now, createdBy: 'user-admin' },
+      { id: 'op-coco-hsd', outletId: cocoOutletId, productId: 'prod-hsd', status: 'ACTIVE', createdAt: now, updatedAt: now, createdBy: 'user-admin' },
+    ]);
+
+    await db.insert(schema.tanks).values([
+      {
+        id: 'tank-coco-1',
+        outletId: cocoOutletId,
+        tankNumber: 1,
+        name: 'Tank 1 - MS (20 KL)',
+        productId: 'prod-ms',
+        capacityLitres: 20000,
+        safeFillCapacityLitres: 19000,
+        minimumOperatingLevelLitres: 1000,
+        currentVolumeLitres: 12000,
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+        createdBy: 'user-admin',
+      },
+      {
+        id: 'tank-coco-2',
+        outletId: cocoOutletId,
+        tankNumber: 2,
+        name: 'Tank 2 - HSD (20 KL)',
+        productId: 'prod-hsd',
+        capacityLitres: 20000,
+        safeFillCapacityLitres: 19000,
+        minimumOperatingLevelLitres: 1000,
+        currentVolumeLitres: 15000,
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+        createdBy: 'user-admin',
+      },
+      {
+        id: 'tank-coco-stale',
+        outletId: cocoOutletId,
+        tankNumber: 99,
+        name: 'Stale Tank',
+        productId: 'prod-ms',
+        capacityLitres: 10000,
+        safeFillCapacityLitres: 9500,
+        minimumOperatingLevelLitres: 500,
+        currentVolumeLitres: 0,
+        status: 'INACTIVE',
+        createdAt: now,
+        updatedAt: now,
+        createdBy: 'user-admin',
+      },
+    ]);
+
+    for (let dNum = 1; dNum <= 4; dNum++) {
+      await db.insert(schema.dispensers).values({
+        id: `disp-coco-${dNum}`,
+        outletId: cocoOutletId,
+        dispenserNumber: dNum,
+        name: `MPD #${dNum}`,
+        manufacturer: 'Gilbarco',
+        model: 'Encore 500S',
+        serialNumber: `SN-COCO-${dNum}`,
+        nozzleCapacity: 4,
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+        createdBy: 'user-admin',
+      });
+
+      for (let nNum = 1; nNum <= 4; nNum++) {
+        // Skip MPD #1 / Nozzle 2 initially to simulate the broken/orphan record
+        if (dNum === 1 && nNum === 2) continue;
+        const isMs = nNum <= 2;
+        await db.insert(schema.nozzles).values({
+          id: `noz-coco-d${dNum}-n${nNum}`,
+          outletId: cocoOutletId,
+          dispenserId: `disp-coco-${dNum}`,
+          nozzleNumber: nNum,
+          productId: isMs ? 'prod-ms' : 'prod-hsd',
+          tankId: isMs ? 'tank-coco-1' : 'tank-coco-2',
+          status: 'ACTIVE',
+          createdAt: now,
+          updatedAt: now,
+          createdBy: 'user-admin',
+        });
+      }
+    }
+
+    // Insert MPD #1 / Nozzle #2 pointing to tank-coco-stale, then corrupt tank-coco-stale's outlet_id so Nozzle #2 becomes an orphan
+    const preservedNozzleId = 'noz-coco-d1-n2-orphan';
+    await db.insert(schema.nozzles).values({
+      id: preservedNozzleId,
+      outletId: cocoOutletId,
+      dispenserId: 'disp-coco-1',
+      nozzleNumber: 2,
+      productId: 'prod-ms',
+      tankId: 'tank-coco-stale',
+      status: 'ACTIVE',
+      createdAt: now,
+      updatedAt: now,
+      createdBy: 'user-admin',
+    });
+
+    await localD1.prepare(`UPDATE tanks SET outlet_id = 'ro-1001' WHERE id = 'tank-coco-stale'`).run();
+
+    // 2. Verify normal operational GET /api/v1/outlets/ro-396187/nozzles shows 15 valid nozzles (MPD #1 has 1, 3, 4; Nozzle 2 hidden from shift operations)
+    const opListRes = await app.fetch(
+      new Request(`http://localhost/api/v1/outlets/${cocoOutletId}/nozzles`, {
+        method: 'GET',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(opListRes.status).toBe(200);
+    const opNozzles = ((await opListRes.json()) as any).data;
+    expect(opNozzles.length).toBe(15);
+    const mpd1OpNums = opNozzles.filter((n: any) => n.dispenserId === 'disp-coco-1').map((n: any) => n.nozzleNumber);
+    expect(mpd1OpNums).toEqual([1, 3, 4]);
+
+    // 3. Verify GET /api/v1/outlets/ro-396187/nozzles/diagnostics detects the 16th raw nozzle (MPD #1 / Nozzle 2) as MISSING_TANK
+    const diagRes = await app.fetch(
+      new Request(`http://localhost/api/v1/outlets/${cocoOutletId}/nozzles/diagnostics`, {
+        method: 'GET',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(diagRes.status).toBe(200);
+    const diag = ((await diagRes.json()) as any).data;
+    expect(diag.rawNozzlesCount).toBe(16);
+    expect(diag.validNozzlesCount).toBe(15);
+    expect(diag.orphanNozzlesCount).toBe(1);
+    expect(diag.orphanNozzles[0].id).toBe(preservedNozzleId);
+    expect(diag.orphanNozzles[0].nozzleNumber).toBe(2);
+    expect(diag.orphanNozzles[0].integrityStatus).toBe('MISSING_TANK');
+
+    // 4. Verify POST /api/v1/dispensers/disp-coco-1/nozzles for Nozzle #2 returns 409 NOZZLE_TOPOLOGY_INTEGRITY_ERROR instead of generic duplicate
+    const postDupRes = await app.fetch(
+      new Request('http://localhost/api/v1/dispensers/disp-coco-1/nozzles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          nozzleNumber: 2,
+          productId: 'prod-ms',
+          tankId: 'tank-coco-1',
+          status: 'ACTIVE',
+        }),
+      }),
+      env
+    );
+    expect(postDupRes.status).toBe(409);
+    const postDupJson = (await postDupRes.json()) as any;
+    expect(postDupJson.error.code).toBe('NOZZLE_TOPOLOGY_INTEGRITY_ERROR');
+    expect(postDupJson.error.details.existingNozzleId).toBe(preservedNozzleId);
+    expect(postDupJson.error.details.integrityStatus).toBe('MISSING_TANK');
+
+    // 5. Repair MPD #1 / Nozzle #2 via POST /api/v1/dispensers/disp-coco-1/nozzles/reconcile preserving the existing nozzle ID
+    const reconcileRes = await app.fetch(
+      new Request('http://localhost/api/v1/dispensers/disp-coco-1/nozzles/reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          nozzleNumber: 2,
+          productId: 'prod-ms',
+          tankId: 'tank-coco-1',
+          status: 'ACTIVE',
+        }),
+      }),
+      env
+    );
+    expect(reconcileRes.status).toBe(200);
+    const reconcileJson = (await reconcileRes.json()) as any;
+    expect(reconcileJson.data.action).toBe('REPAIRED');
+    expect(reconcileJson.data.nozzle.id).toBe(preservedNozzleId);
+    expect(reconcileJson.data.nozzle.nozzleNumber).toBe(2);
+    expect(reconcileJson.data.nozzle.tankId).toBe('tank-coco-1');
+    expect(reconcileJson.data.nozzle.productId).toBe('prod-ms');
+    expect(reconcileJson.data.nozzle.integrityStatus).toBe('VALID');
+
+    // 6. Verify operational GET /api/v1/outlets/ro-396187/nozzles now returns all 16 valid nozzles and MPD #1 shows 1, 2, 3, 4
+    const afterListRes = await app.fetch(
+      new Request(`http://localhost/api/v1/outlets/${cocoOutletId}/nozzles`, {
+        method: 'GET',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(afterListRes.status).toBe(200);
+    const afterNozzles = ((await afterListRes.json()) as any).data;
+    expect(afterNozzles.length).toBe(16);
+    const mpd1AfterNums = afterNozzles.filter((n: any) => n.dispenserId === 'disp-coco-1').map((n: any) => n.nozzleNumber);
+    expect(mpd1AfterNums).toEqual([1, 2, 3, 4]);
+  });
 });

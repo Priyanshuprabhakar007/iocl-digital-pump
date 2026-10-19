@@ -8,6 +8,8 @@ import {
   Tank,
   Dispenser,
   Nozzle,
+  NozzleDiagnosticItem,
+  OutletNozzleDiagnosticsReport,
   ShiftTemplate,
 } from '../../shared/types';
 import {
@@ -36,6 +38,7 @@ import {
   getAvailableNozzleNumbers,
   getTanksForProduct,
   getActiveLiquidOutletProducts,
+  resolveNozzleFormState,
   getDuUtilization,
   buildFuelMappingTree,
   getPumpInfrastructureErrorMessage,
@@ -57,6 +60,7 @@ export const PumpInfrastructurePage: React.FC = () => {
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [dispensers, setDispensers] = useState<Dispenser[]>([]);
   const [nozzles, setNozzles] = useState<Nozzle[]>([]);
+  const [nozzleDiagnostics, setNozzleDiagnostics] = useState<OutletNozzleDiagnosticsReport | null>(null);
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
 
   const [loadingData, setLoadingData] = useState(false);
@@ -128,11 +132,12 @@ export const PumpInfrastructurePage: React.FC = () => {
     setLoadingData(true);
     setError(null);
 
-    const [pRes, tRes, dRes, nRes, sRes] = await Promise.all([
+    const [pRes, tRes, dRes, nRes, diagRes, sRes] = await Promise.all([
       apiFetch<OutletProduct[]>(`/api/v1/outlets/${selectedOutletId}/products`),
       apiFetch<Tank[]>(`/api/v1/outlets/${selectedOutletId}/tanks`),
       apiFetch<Dispenser[]>(`/api/v1/outlets/${selectedOutletId}/dispensers`),
       apiFetch<Nozzle[]>(`/api/v1/outlets/${selectedOutletId}/nozzles`),
+      apiFetch<OutletNozzleDiagnosticsReport>(`/api/v1/outlets/${selectedOutletId}/nozzles/diagnostics`),
       apiFetch<ShiftTemplate[]>(`/api/v1/outlets/${selectedOutletId}/shift-templates`),
     ]);
 
@@ -140,6 +145,7 @@ export const PumpInfrastructurePage: React.FC = () => {
     if (tRes.success && tRes.data) setTanks(tRes.data);
     if (dRes.success && dRes.data) setDispensers(dRes.data);
     if (nRes.success && nRes.data) setNozzles(nRes.data);
+    if (diagRes.success && diagRes.data) setNozzleDiagnostics(diagRes.data);
     if (sRes.success && sRes.data) setShiftTemplates(sRes.data);
 
     setLoadingData(false);
@@ -285,35 +291,33 @@ export const PumpInfrastructurePage: React.FC = () => {
     }
   };
 
-  const openAddNozzleModal = () => {
+  const openAddNozzleModal = (preferredDispenserId?: string, preferredNozzleNumber?: number) => {
     if (dispensers.length === 0 || tanks.length === 0) {
       setError('Please add at least one Dispenser (DU) and Underground Tank first');
       return;
     }
-    const initialDisp = dispensers[0];
-    const initialDispId = initialDisp.id;
-    const duNozzles = nozzles.filter(n => n.dispenserId === initialDispId);
-    const available = getAvailableNozzleNumbers(initialDisp.nozzleCapacity, duNozzles);
+    const resolved = resolveNozzleFormState(dispensers, nozzles, outletProducts, tanks, {
+      dispenserId: preferredDispenserId || null,
+      nozzleNumber: preferredNozzleNumber || null,
+    });
 
-    const activeLiquidOps = getActiveLiquidOutletProducts(outletProducts);
-    const initialProdId = activeLiquidOps[0]?.productId || '';
-    const matchingTanks = getTanksForProduct(tanks, initialProdId).filter(t => t.status === 'ACTIVE');
-
-    setNozzleDispenserId(initialDispId);
-    setNozzleNumber(available[0] || 1);
-    setNozzleProductId(initialProdId);
-    setNozzleTankId(matchingTanks[0]?.id || '');
+    setNozzleDispenserId(resolved.dispenserId);
+    setNozzleNumber(resolved.nozzleNumber);
+    setNozzleProductId(resolved.productId);
+    setNozzleTankId(resolved.tankId);
     setModalError(null);
     setModalType('addNozzle');
   };
 
   const handleNozzleDispenserChange = (newDispId: string) => {
     setModalError(null);
-    setNozzleDispenserId(newDispId);
-    const selectedDisp = dispensers.find(d => d.id === newDispId);
-    const duNozzles = nozzles.filter(n => n.dispenserId === newDispId);
-    const available = getAvailableNozzleNumbers(selectedDisp?.nozzleCapacity, duNozzles);
-    setNozzleNumber(available[0] || 1);
+    const resolved = resolveNozzleFormState(dispensers, nozzles, outletProducts, tanks, {
+      dispenserId: newDispId,
+      productId: nozzleProductId,
+      tankId: nozzleTankId,
+    });
+    setNozzleDispenserId(resolved.dispenserId);
+    setNozzleNumber(resolved.nozzleNumber);
   };
 
   const handleNozzleProductChange = (newProdId: string) => {
@@ -331,20 +335,40 @@ export const PumpInfrastructurePage: React.FC = () => {
     setModalSubmitting(true);
     setModalError(null);
 
-    const res = await apiFetch(`/api/v1/dispensers/${nozzleDispenserId}/nozzles`, {
+    const resolved = resolveNozzleFormState(dispensers, nozzles, outletProducts, tanks, {
+      dispenserId: nozzleDispenserId,
+      nozzleNumber: Number(nozzleNumber),
+      productId: nozzleProductId,
+      tankId: nozzleTankId,
+    });
+
+    const hasOrphanAtSlot = nozzleDiagnostics?.orphanNozzles?.some(
+      o => o.dispenserId === resolved.dispenserId && o.nozzleNumber === resolved.nozzleNumber
+    );
+
+    const endpoint = hasOrphanAtSlot
+      ? `/api/v1/dispensers/${resolved.dispenserId}/nozzles/reconcile`
+      : `/api/v1/dispensers/${resolved.dispenserId}/nozzles`;
+
+    const res = await apiFetch(endpoint, {
       method: 'POST',
       body: JSON.stringify({
-        nozzleNumber: Number(nozzleNumber),
-        productId: nozzleProductId,
-        tankId: nozzleTankId,
+        nozzleNumber: resolved.nozzleNumber,
+        productId: resolved.productId,
+        tankId: resolved.tankId,
         status: 'ACTIVE',
+        ...(hasOrphanAtSlot ? { repairOrphan: true } : {}),
       }),
     });
 
     setModalSubmitting(false);
     if (res.success) {
       setModalType(null);
-      setSuccessMsg('Nozzle configured successfully');
+      setSuccessMsg(
+        hasOrphanAtSlot
+          ? `Nozzle #${resolved.nozzleNumber} topology repaired and synchronized`
+          : `Nozzle #${resolved.nozzleNumber} configured successfully`
+      );
       setTimeout(() => setSuccessMsg(null), 3000);
       loadOutletData();
     } else {
@@ -758,24 +782,69 @@ export const PumpInfrastructurePage: React.FC = () => {
               Fuel Delivery Nozzles
             </h2>
             <button
-              onClick={() => {
-                if (dispensers.length === 0 || tanks.length === 0) {
-                  setError('Please add at least one Dispenser and Tank first');
-                  return;
-                }
-                setNozzleDispenserId(dispensers[0].id);
-                setNozzleNumber(1);
-                setNozzleProductId(outletProducts[0]?.productId || '');
-                setNozzleTankId(tanks[0]?.id || '');
-                setModalError(null);
-                setModalType('addNozzle');
-              }}
+              onClick={() => openAddNozzleModal()}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Configure Nozzle</span>
             </button>
           </div>
+
+          {nozzleDiagnostics && nozzleDiagnostics.orphanNozzlesCount > 0 && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl space-y-2">
+              <div className="flex items-center gap-2 text-amber-400 text-xs font-bold font-mono">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>
+                  HIDDEN / ORPHAN NOZZLE TOPOLOGY DETECTED ({nozzleDiagnostics.orphanNozzlesCount})
+                </span>
+              </div>
+              <div className="space-y-2">
+                {nozzleDiagnostics.orphanNozzles.map((orp: NozzleDiagnosticItem) => (
+                  <div
+                    key={orp.id}
+                    className="flex flex-wrap items-center justify-between gap-2 bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono"
+                  >
+                    <div className="text-slate-300">
+                      <span className="font-bold text-amber-400">
+                        MPD #{orp.dispenserNumber || '?'} / Nozzle {orp.nozzleNumber}
+                      </span>{' '}
+                      • Status: <span className="text-rose-400">{orp.integrityStatus}</span>{' '}
+                      {orp.brokenRelations?.length > 0 && `(${orp.brokenRelations.join(', ')})`}
+                    </div>
+                    <button
+                      onClick={() => openAddNozzleModal(orp.dispenserId, orp.nozzleNumber)}
+                      className="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[11px] font-bold"
+                    >
+                      Repair Nozzle #{orp.nozzleNumber}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {dispensers.some(d => {
+            const duNozzles = nozzles.filter(n => n.dispenserId === d.id);
+            return getAvailableNozzleNumbers(d.nozzleCapacity, duNozzles).length > 0;
+          }) && (
+            <div className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-slate-400 font-mono text-[11px] mr-1">Unconfigured DU Positions:</span>
+              {dispensers.map(d => {
+                const duNozzles = nozzles.filter(n => n.dispenserId === d.id);
+                const missingNums = getAvailableNozzleNumbers(d.nozzleCapacity, duNozzles);
+                return missingNums.map(num => (
+                  <button
+                    key={`${d.id}-${num}`}
+                    onClick={() => openAddNozzleModal(d.id, num)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 font-mono text-[11px] font-bold transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>MPD #{d.dispenserNumber} / Nozzle {num}</span>
+                  </button>
+                ));
+              })}
+            </div>
+          )}
 
           <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl">
             <table className="w-full text-left text-xs">
@@ -1386,11 +1455,16 @@ export const PumpInfrastructurePage: React.FC = () => {
 
       {/* Add Nozzle Modal (Product-First Flow with Position Selection) */}
       {modalType === 'addNozzle' && (() => {
-        const selectedDu = dispensers.find(d => d.id === nozzleDispenserId) || dispensers[0];
-        const duNozzlesList = nozzles.filter(n => n.dispenserId === (selectedDu?.id || ''));
-        const availablePositions = getAvailableNozzleNumbers(selectedDu?.nozzleCapacity, duNozzlesList);
-        const activeLiquidOps = getActiveLiquidOutletProducts(outletProducts);
-        const matchingTanks = getTanksForProduct(tanks, nozzleProductId).filter(t => t.status === 'ACTIVE');
+        const resolved = resolveNozzleFormState(dispensers, nozzles, outletProducts, tanks, {
+          dispenserId: nozzleDispenserId,
+          nozzleNumber: Number(nozzleNumber),
+          productId: nozzleProductId,
+          tankId: nozzleTankId,
+        });
+        const selectedDu = resolved.selectedDispenser;
+        const availablePositions = resolved.availablePositions;
+        const activeLiquidOps = resolved.activeLiquidProducts;
+        const matchingTanks = resolved.matchingTanks;
         const isNoPositionsAvailable = availablePositions.length === 0;
 
         return (
@@ -1407,7 +1481,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                     1. Select Dispensing Unit (DU)
                   </label>
                   <select
-                    value={nozzleDispenserId}
+                    value={resolved.dispenserId}
                     onChange={(e) => handleNozzleDispenserChange(e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
                   >
@@ -1430,7 +1504,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                     </div>
                   ) : (
                     <select
-                      value={nozzleNumber}
+                      value={resolved.nozzleNumber}
                       onChange={(e) => {
                         setNozzleNumber(Number(e.target.value));
                         setModalError(null);
@@ -1452,7 +1526,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                     3. Select Fuel Product (Active Liquid Grades)
                   </label>
                   <select
-                    value={nozzleProductId}
+                    value={resolved.productId}
                     onChange={(e) => handleNozzleProductChange(e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
                   >
@@ -1478,7 +1552,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                     </div>
                   ) : (
                     <select
-                      value={nozzleTankId}
+                      value={resolved.tankId}
                       onChange={(e) => {
                         setNozzleTankId(e.target.value);
                         setModalError(null);

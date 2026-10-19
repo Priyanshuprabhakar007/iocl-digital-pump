@@ -4,6 +4,7 @@ import {
   getAvailableNozzleNumbers,
   getTanksForProduct,
   getActiveLiquidOutletProducts,
+  resolveNozzleFormState,
   getDuUtilization,
   buildFuelMappingTree,
   getPumpInfrastructureErrorMessage,
@@ -342,6 +343,46 @@ describe('Phase 3 Pump Infrastructure Pure Frontend Helpers Suite', () => {
       };
       handleTankChange('tank-hsd-1');
       expect(modalError).toBeNull();
+    });
+
+    it('resolveNozzleFormState resolves MPD #1 / Position #2 when Nozzles 1, 3, 4 are already configured (COCO 22 scenario)', () => {
+      const dispensers: Dispenser[] = [
+        { id: 'disp-1', outletId: 'ro-396187', dispenserNumber: 1, name: 'MPD #1', nozzleCapacity: 4, status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '' },
+        { id: 'disp-2', outletId: 'ro-396187', dispenserNumber: 2, name: 'MPD #2', nozzleCapacity: 4, status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '' },
+      ];
+      const nozzles: Nozzle[] = [
+        { id: 'n1', outletId: 'ro-396187', dispenserId: 'disp-1', nozzleNumber: 1, productId: 'prod-ms', tankId: 'tank-1', status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '' },
+        { id: 'n3', outletId: 'ro-396187', dispenserId: 'disp-1', nozzleNumber: 3, productId: 'prod-hsd', tankId: 'tank-2', status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '' },
+        { id: 'n4', outletId: 'ro-396187', dispenserId: 'disp-1', nozzleNumber: 4, productId: 'prod-hsd', tankId: 'tank-2', status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '' },
+      ];
+      const outletProducts: OutletProduct[] = [
+        { id: 'op-1', outletId: 'ro-396187', productId: 'prod-ms', status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '', product: { id: 'prod-ms', code: 'MS', name: 'Motor Spirit', category: 'MS', unit: 'LITRE', status: 'ACTIVE', createdAt: '', updatedAt: '' } },
+      ];
+      const tanks: Tank[] = [
+        { id: 'tank-1', outletId: 'ro-396187', tankNumber: 1, name: 'Tank 1 MS', productId: 'prod-ms', capacityLitres: 20000, safeFillCapacityLitres: 19000, minimumOperatingLevelLitres: 1000, currentVolumeLitres: 10000, status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '' },
+      ];
+
+      // Even if React state holds stale nozzleNumber: 1 or empty strings, resolveNozzleFormState resolves Position #2
+      const resolved = resolveNozzleFormState(dispensers, nozzles, outletProducts, tanks, {
+        dispenserId: '',
+        nozzleNumber: 1,
+        productId: '',
+        tankId: '',
+      });
+
+      expect(resolved.dispenserId).toBe('disp-1');
+      expect(resolved.availablePositions).toEqual([2]);
+      expect(resolved.nozzleNumber).toBe(2);
+      expect(resolved.productId).toBe('prod-ms');
+      expect(resolved.tankId).toBe('tank-1');
+    });
+
+    it('formats NOZZLE_TOPOLOGY_INTEGRITY_ERROR with clear actionable guidance', () => {
+      const msg = getPumpInfrastructureErrorMessage({
+        code: 'NOZZLE_TOPOLOGY_INTEGRITY_ERROR',
+        message: 'Nozzle #2 already exists on this dispenser but has broken topology references (MISSING_TANK).',
+      });
+      expect(msg).toContain('broken topology references');
     });
   });
 });

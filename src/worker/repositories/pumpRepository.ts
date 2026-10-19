@@ -1,12 +1,16 @@
 import { AppDatabase } from '../../db';
 import * as schema from '../../db/schema';
-import { eq, and, desc, asc, sql, ne, inArray, lte } from 'drizzle-orm';
+import { eq, and, or, desc, asc, sql, ne, inArray, lte } from 'drizzle-orm';
 import {
   Product,
   OutletProduct,
   Tank,
   Dispenser,
   Nozzle,
+  NozzleIntegrityStatus,
+  NozzleDiagnosticItem,
+  NozzleSlotDiagnostic,
+  OutletNozzleDiagnosticsReport,
   ShiftTemplate,
   OperationalShift,
   OperationalShiftNozzleSnapshot,
@@ -285,21 +289,17 @@ export class PumpRepository {
       .where(eq(schema.dispensers.outletId, outletId))
       .orderBy(schema.dispensers.dispenserNumber);
 
-    const withCount = await Promise.all(
-      dispList.map(async (d) => {
-        const nozzCount = await this.db
-          .select({ count: sql<number>`count(*)` })
-          .from(schema.nozzles)
-          .where(eq(schema.nozzles.dispenserId, d.id));
-        return {
-          ...d,
-          status: d.status as any,
-          nozzlesCount: Number(nozzCount[0]?.count || 0),
-        };
-      })
-    );
+    const validNozzles = await this.listNozzlesByOutlet(outletId);
+    const validCountByDisp = new Map<string, number>();
+    for (const n of validNozzles) {
+      validCountByDisp.set(n.dispenserId, (validCountByDisp.get(n.dispenserId) || 0) + 1);
+    }
 
-    return withCount;
+    return dispList.map((d) => ({
+      ...d,
+      status: d.status as any,
+      nozzlesCount: validCountByDisp.get(d.id) || 0,
+    }));
   }
 
   async findDispenserById(id: string): Promise<Dispenser | null> {
@@ -369,7 +369,271 @@ export class PumpRepository {
   // 5. NOZZLES
   // ==========================================
 
-  async listNozzlesByOutlet(outletId: string): Promise<Nozzle[]> {
+  private evaluateNozzleRowIntegrity(
+    row: {
+      nozzle: typeof schema.nozzles.$inferSelect;
+      dispenser: typeof schema.dispensers.$inferSelect | null;
+      product: typeof schema.products.$inferSelect | null;
+      tank: typeof schema.tanks.$inferSelect | null;
+    },
+    expectedOutletId?: string
+  ): NozzleDiagnosticItem {
+    const targetOutletId = expectedOutletId || row.nozzle.outletId;
+    const brokenRelations: string[] = [];
+
+    if (!row.dispenser) {
+      brokenRelations.push('MISSING_DISPENSER');
+    } else {
+      if (row.dispenser.outletId !== targetOutletId || row.nozzle.outletId !== row.dispenser.outletId) {
+        brokenRelations.push('DISPENSER_OUTLET_MISMATCH');
+      }
+      const cap = row.dispenser.nozzleCapacity || 6;
+      if (row.nozzle.nozzleNumber < 1 || row.nozzle.nozzleNumber > cap) {
+        brokenRelations.push('NOZZLE_CAPACITY_EXCEEDED');
+      }
+    }
+
+    if (!row.product) {
+      brokenRelations.push('MISSING_PRODUCT');
+    }
+
+    if (!row.tank) {
+      brokenRelations.push('MISSING_TANK');
+    } else {
+      if (row.tank.outletId !== targetOutletId || row.nozzle.outletId !== row.tank.outletId) {
+        brokenRelations.push('TANK_OUTLET_MISMATCH');
+      }
+      if (row.tank.productId !== row.nozzle.productId) {
+        brokenRelations.push('TANK_PRODUCT_MISMATCH');
+      }
+    }
+
+    let integrityStatus: NozzleIntegrityStatus = 'VALID';
+    if (
+      brokenRelations.includes('MISSING_DISPENSER') ||
+      brokenRelations.includes('DISPENSER_OUTLET_MISMATCH') ||
+      brokenRelations.includes('NOZZLE_CAPACITY_EXCEEDED')
+    ) {
+      integrityStatus = 'MISSING_DISPENSER';
+    } else if (brokenRelations.includes('MISSING_PRODUCT')) {
+      integrityStatus = 'MISSING_PRODUCT';
+    } else if (
+      brokenRelations.includes('MISSING_TANK') ||
+      brokenRelations.includes('TANK_OUTLET_MISMATCH') ||
+      brokenRelations.includes('TANK_PRODUCT_MISMATCH')
+    ) {
+      integrityStatus = 'MISSING_TANK';
+    }
+
+    return {
+      ...row.nozzle,
+      status: row.nozzle.status as any,
+      dispenserNumber: row.dispenser?.dispenserNumber,
+      dispenserName: row.dispenser?.name,
+      productName: row.product?.name,
+      productCode: row.product?.code,
+      tankNumber: row.tank?.tankNumber,
+      tankName: row.tank?.name,
+      integrityStatus,
+      brokenRelations,
+    };
+  }
+
+  async inspectNozzlesByOutlet(outletId: string): Promise<NozzleDiagnosticItem[]> {
+    const rows = await this.db
+      .select({
+        nozzle: schema.nozzles,
+        dispenser: schema.dispensers,
+        product: schema.products,
+        tank: schema.tanks,
+      })
+      .from(schema.nozzles)
+      .leftJoin(schema.dispensers, eq(schema.nozzles.dispenserId, schema.dispensers.id))
+      .leftJoin(schema.products, eq(schema.nozzles.productId, schema.products.id))
+      .leftJoin(schema.tanks, eq(schema.nozzles.tankId, schema.tanks.id))
+      .where(
+        or(
+          eq(schema.nozzles.outletId, outletId),
+          eq(schema.dispensers.outletId, outletId)
+        )
+      );
+
+    const items = rows.map(r => this.evaluateNozzleRowIntegrity(r, outletId));
+    items.sort((a, b) => {
+      const dispA = a.dispenserNumber ?? 999999;
+      const dispB = b.dispenserNumber ?? 999999;
+      if (dispA !== dispB) return dispA - dispB;
+      return a.nozzleNumber - b.nozzleNumber;
+    });
+    return items;
+  }
+
+  async inspectNozzlesByDispenser(dispenserId: string): Promise<NozzleDiagnosticItem[]> {
+    const disp = await this.findDispenserById(dispenserId);
+    const rows = await this.db
+      .select({
+        nozzle: schema.nozzles,
+        dispenser: schema.dispensers,
+        product: schema.products,
+        tank: schema.tanks,
+      })
+      .from(schema.nozzles)
+      .leftJoin(schema.dispensers, eq(schema.nozzles.dispenserId, schema.dispensers.id))
+      .leftJoin(schema.products, eq(schema.nozzles.productId, schema.products.id))
+      .leftJoin(schema.tanks, eq(schema.nozzles.tankId, schema.tanks.id))
+      .where(eq(schema.nozzles.dispenserId, dispenserId))
+      .orderBy(schema.nozzles.nozzleNumber);
+
+    return rows.map(r => this.evaluateNozzleRowIntegrity(r, disp?.outletId || r.nozzle.outletId));
+  }
+
+  async inspectNozzleById(id: string): Promise<NozzleDiagnosticItem | null> {
+    const [row] = await this.db
+      .select({
+        nozzle: schema.nozzles,
+        dispenser: schema.dispensers,
+        product: schema.products,
+        tank: schema.tanks,
+      })
+      .from(schema.nozzles)
+      .leftJoin(schema.dispensers, eq(schema.nozzles.dispenserId, schema.dispensers.id))
+      .leftJoin(schema.products, eq(schema.nozzles.productId, schema.products.id))
+      .leftJoin(schema.tanks, eq(schema.nozzles.tankId, schema.tanks.id))
+      .where(eq(schema.nozzles.id, id));
+
+    if (!row) return null;
+    return this.evaluateNozzleRowIntegrity(row, row.dispenser?.outletId || row.nozzle.outletId);
+  }
+
+  async findRawNozzleById(id: string): Promise<Nozzle | null> {
+    const [n] = await this.db
+      .select()
+      .from(schema.nozzles)
+      .where(eq(schema.nozzles.id, id));
+    return (n as Nozzle) || null;
+  }
+
+  async inspectNozzleSlot(
+    outletId: string,
+    dispenserId: string,
+    nozzleNumber: number
+  ): Promise<NozzleSlotDiagnostic> {
+    const [rawRow] = await this.db
+      .select()
+      .from(schema.nozzles)
+      .where(
+        and(
+          eq(schema.nozzles.dispenserId, dispenserId),
+          eq(schema.nozzles.nozzleNumber, nozzleNumber)
+        )
+      );
+
+    const joinedList = await this.listNozzlesByOutlet(outletId);
+    const joinedNozzle =
+      joinedList.find(n => n.dispenserId === dispenserId && n.nozzleNumber === nozzleNumber) || null;
+
+    if (!rawRow) {
+      return {
+        outletId,
+        dispenserId,
+        nozzleNumber,
+        existsInRawTable: false,
+        appearsInJoinedList: false,
+        rawNozzle: null,
+        joinedNozzle: null,
+        integrityStatus: 'NOT_FOUND',
+        brokenRelations: [],
+      };
+    }
+
+    const inspected = await this.inspectNozzleById(rawRow.id);
+    const brokenRelations = [...(inspected?.brokenRelations || [])];
+    if (rawRow.outletId !== outletId && !brokenRelations.includes('DISPENSER_OUTLET_MISMATCH')) {
+      brokenRelations.push('DISPENSER_OUTLET_MISMATCH');
+    }
+
+    const integrityStatus: NozzleIntegrityStatus =
+      joinedNozzle && brokenRelations.length === 0
+        ? 'VALID'
+        : inspected?.integrityStatus && inspected.integrityStatus !== 'VALID'
+          ? inspected.integrityStatus
+          : brokenRelations.includes('MISSING_PRODUCT')
+            ? 'MISSING_PRODUCT'
+            : brokenRelations.includes('MISSING_TANK') ||
+                brokenRelations.includes('TANK_OUTLET_MISMATCH') ||
+                brokenRelations.includes('TANK_PRODUCT_MISMATCH')
+              ? 'MISSING_TANK'
+              : 'MISSING_DISPENSER';
+
+    return {
+      outletId,
+      dispenserId,
+      nozzleNumber,
+      existsInRawTable: true,
+      appearsInJoinedList: Boolean(joinedNozzle),
+      rawNozzle: {
+        ...rawRow,
+        status: rawRow.status as any,
+      },
+      joinedNozzle,
+      integrityStatus,
+      brokenRelations,
+    };
+  }
+
+  async diagnoseOutletNozzles(outletId: string): Promise<OutletNozzleDiagnosticsReport> {
+    const items = await this.inspectNozzlesByOutlet(outletId);
+    const validNozzles = items.filter(i => i.integrityStatus === 'VALID');
+    const orphanNozzles = items.filter(i => i.integrityStatus !== 'VALID');
+    const dispensersList = await this.db
+      .select()
+      .from(schema.dispensers)
+      .where(eq(schema.dispensers.outletId, outletId))
+      .orderBy(schema.dispensers.dispenserNumber);
+
+    const missingPositions = dispensersList.map(d => {
+      const cap = d.nozzleCapacity || 6;
+      const validNums = new Set(
+        validNozzles.filter(n => n.dispenserId === d.id).map(n => n.nozzleNumber)
+      );
+      const orphanNums = new Set(
+        orphanNozzles.filter(n => n.dispenserId === d.id).map(n => n.nozzleNumber)
+      );
+      const missingNozzleNumbers: number[] = [];
+      for (let num = 1; num <= cap; num++) {
+        if (!validNums.has(num)) {
+          missingNozzleNumbers.push(num);
+        }
+      }
+      return {
+        dispenserId: d.id,
+        dispenserNumber: d.dispenserNumber,
+        dispenserName: d.name,
+        nozzleCapacity: cap,
+        missingNozzleNumbers,
+        orphanNozzleNumbers: Array.from(orphanNums).sort((a, b) => a - b),
+      };
+    });
+
+    return {
+      outletId,
+      rawNozzlesCount: items.length,
+      validNozzlesCount: validNozzles.length,
+      orphanNozzlesCount: orphanNozzles.length,
+      items,
+      orphanNozzles,
+      missingPositions,
+    };
+  }
+
+  async listNozzlesByOutlet(
+    outletId: string,
+    options?: { includeInvalid?: boolean }
+  ): Promise<Nozzle[]> {
+    if (options?.includeInvalid) {
+      return this.inspectNozzlesByOutlet(outletId);
+    }
+
     const rows = await this.db
       .select({
         nozzle: schema.nozzles,
@@ -381,7 +645,14 @@ export class PumpRepository {
       .innerJoin(schema.dispensers, eq(schema.nozzles.dispenserId, schema.dispensers.id))
       .innerJoin(schema.products, eq(schema.nozzles.productId, schema.products.id))
       .innerJoin(schema.tanks, eq(schema.nozzles.tankId, schema.tanks.id))
-      .where(eq(schema.nozzles.outletId, outletId))
+      .where(
+        and(
+          eq(schema.nozzles.outletId, outletId),
+          eq(schema.dispensers.outletId, outletId),
+          eq(schema.tanks.outletId, outletId),
+          eq(schema.tanks.productId, schema.nozzles.productId)
+        )
+      )
       .orderBy(schema.dispensers.dispenserNumber, schema.nozzles.nozzleNumber);
 
     return rows.map(r => ({
@@ -393,10 +664,19 @@ export class PumpRepository {
       productCode: r.product.code,
       tankNumber: r.tank.tankNumber,
       tankName: r.tank.name,
+      integrityStatus: 'VALID' as const,
+      brokenRelations: [],
     }));
   }
 
-  async listNozzlesByDispenser(dispenserId: string): Promise<Nozzle[]> {
+  async listNozzlesByDispenser(
+    dispenserId: string,
+    options?: { includeInvalid?: boolean }
+  ): Promise<Nozzle[]> {
+    if (options?.includeInvalid) {
+      return this.inspectNozzlesByDispenser(dispenserId);
+    }
+
     const rows = await this.db
       .select({
         nozzle: schema.nozzles,
@@ -408,7 +688,14 @@ export class PumpRepository {
       .innerJoin(schema.dispensers, eq(schema.nozzles.dispenserId, schema.dispensers.id))
       .innerJoin(schema.products, eq(schema.nozzles.productId, schema.products.id))
       .innerJoin(schema.tanks, eq(schema.nozzles.tankId, schema.tanks.id))
-      .where(eq(schema.nozzles.dispenserId, dispenserId))
+      .where(
+        and(
+          eq(schema.nozzles.dispenserId, dispenserId),
+          eq(schema.nozzles.outletId, schema.dispensers.outletId),
+          eq(schema.tanks.outletId, schema.dispensers.outletId),
+          eq(schema.tanks.productId, schema.nozzles.productId)
+        )
+      )
       .orderBy(schema.nozzles.nozzleNumber);
 
     return rows.map(r => ({
@@ -420,6 +707,8 @@ export class PumpRepository {
       productCode: r.product.code,
       tankNumber: r.tank.tankNumber,
       tankName: r.tank.name,
+      integrityStatus: 'VALID' as const,
+      brokenRelations: [],
     }));
   }
 
@@ -443,7 +732,14 @@ export class PumpRepository {
       .innerJoin(schema.dispensers, eq(schema.nozzles.dispenserId, schema.dispensers.id))
       .innerJoin(schema.products, eq(schema.nozzles.productId, schema.products.id))
       .innerJoin(schema.tanks, eq(schema.nozzles.tankId, schema.tanks.id))
-      .where(eq(schema.nozzles.id, id));
+      .where(
+        and(
+          eq(schema.nozzles.id, id),
+          eq(schema.nozzles.outletId, schema.dispensers.outletId),
+          eq(schema.tanks.outletId, schema.dispensers.outletId),
+          eq(schema.tanks.productId, schema.nozzles.productId)
+        )
+      );
 
     if (!row) return null;
     return {
@@ -455,6 +751,8 @@ export class PumpRepository {
       productCode: row.product.code,
       tankNumber: row.tank.tankNumber,
       tankName: row.tank.name,
+      integrityStatus: 'VALID' as const,
+      brokenRelations: [],
     };
   }
 
@@ -483,6 +781,9 @@ export class PumpRepository {
   }
 
   async updateNozzle(id: string, data: Partial<{
+    outletId: string;
+    dispenserId: string;
+    nozzleNumber: number;
     productId: string;
     tankId: string;
     status: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'DECOMMISSIONED';
@@ -490,6 +791,92 @@ export class PumpRepository {
   }>): Promise<Nozzle | null> {
     await this.db.update(schema.nozzles).set(data).where(eq(schema.nozzles.id, id));
     return this.findNozzleById(id);
+  }
+
+  async reconcileNozzleSlot(data: {
+    outletId: string;
+    dispenserId: string;
+    nozzleNumber: number;
+    productId: string;
+    tankId: string;
+    status?: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'DECOMMISSIONED';
+    createdBy: string;
+    nowIso?: string;
+  }): Promise<{
+    action: 'REPAIRED' | 'CREATED' | 'UNCHANGED';
+    nozzle: Nozzle;
+    preservedId: string;
+    previousIntegrityStatus: NozzleIntegrityStatus | 'NOT_FOUND';
+    repairedRelations: string[];
+  }> {
+    const nowIso = data.nowIso || new Date().toISOString();
+    const slotDiag = await this.inspectNozzleSlot(data.outletId, data.dispenserId, data.nozzleNumber);
+
+    if (slotDiag.existsInRawTable && slotDiag.rawNozzle) {
+      const existingId = slotDiag.rawNozzle.id;
+      const targetStatus = data.status || slotDiag.rawNozzle.status || 'ACTIVE';
+
+      if (
+        slotDiag.appearsInJoinedList &&
+        slotDiag.integrityStatus === 'VALID' &&
+        slotDiag.rawNozzle.outletId === data.outletId &&
+        slotDiag.rawNozzle.dispenserId === data.dispenserId &&
+        slotDiag.rawNozzle.productId === data.productId &&
+        slotDiag.rawNozzle.tankId === data.tankId &&
+        slotDiag.rawNozzle.status === targetStatus
+      ) {
+        return {
+          action: 'UNCHANGED',
+          nozzle: slotDiag.joinedNozzle!,
+          preservedId: existingId,
+          previousIntegrityStatus: 'VALID',
+          repairedRelations: [],
+        };
+      }
+
+      const repaired = await this.updateNozzle(existingId, {
+        outletId: data.outletId,
+        dispenserId: data.dispenserId,
+        nozzleNumber: data.nozzleNumber,
+        productId: data.productId,
+        tankId: data.tankId,
+        status: targetStatus,
+        updatedAt: nowIso,
+      });
+
+      if (!repaired) {
+        throw new Error('NOZZLE_TOPOLOGY_REPAIR_FAILED');
+      }
+
+      return {
+        action: 'REPAIRED',
+        nozzle: repaired,
+        preservedId: existingId,
+        previousIntegrityStatus: slotDiag.integrityStatus,
+        repairedRelations: slotDiag.brokenRelations,
+      };
+    }
+
+    const created = await this.createNozzle({
+      id: `nozz-${crypto.randomUUID()}`,
+      outletId: data.outletId,
+      dispenserId: data.dispenserId,
+      nozzleNumber: data.nozzleNumber,
+      productId: data.productId,
+      tankId: data.tankId,
+      status: data.status || 'ACTIVE',
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      createdBy: data.createdBy,
+    });
+
+    return {
+      action: 'CREATED',
+      nozzle: created,
+      preservedId: created.id,
+      previousIntegrityStatus: 'NOT_FOUND',
+      repairedRelations: [],
+    };
   }
 
   // ==========================================

@@ -753,7 +753,8 @@ pumpOperations.get('/dispensers/:dispenserId/nozzles', requirePermission(PERMISS
     return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this dispenser' } }, 403);
   }
 
-  const list = await pumpRepo.listNozzlesByDispenser(dispenserId);
+  const includeInvalid = c.req.query('includeInvalid') === 'true';
+  const list = await pumpRepo.listNozzlesByDispenser(dispenserId, { includeInvalid });
   return c.json({ success: true, data: list, error: null });
 });
 
@@ -770,8 +771,26 @@ pumpOperations.get('/outlets/:outletId/nozzles', requirePermission(PERMISSIONS.N
     return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
   }
 
-  const list = await pumpRepo.listNozzlesByOutlet(outletId);
+  const includeInvalid = c.req.query('includeInvalid') === 'true';
+  const list = await pumpRepo.listNozzlesByOutlet(outletId, { includeInvalid });
   return c.json({ success: true, data: list, error: null });
+});
+
+// GET /api/v1/outlets/:outletId/nozzles/diagnostics
+pumpOperations.get('/outlets/:outletId/nozzles/diagnostics', requirePermission(PERMISSIONS.NOZZLES_READ) as any, async (c: AppContext) => {
+  const outletId = c.req.param('outletId');
+  if (!outletId) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'outletId is required' } }, 400);
+
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+  const pumpRepo = new PumpRepository(db);
+
+  if (!await verifyOutletAuthority(c, outletId, outletRepo)) {
+    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+  }
+
+  const report = await pumpRepo.diagnoseOutletNozzles(outletId);
+  return c.json({ success: true, data: report, error: null });
 });
 
 // POST /api/v1/dispensers/:dispenserId/nozzles
@@ -794,6 +813,7 @@ pumpOperations.post('/dispensers/:dispenserId/nozzles', requirePermission(PERMIS
   }
 
   const body = await c.req.json().catch(() => ({}));
+  const repairOrphan = body?.repairOrphan === true;
   const parseResult = NozzleSchema.safeParse({ ...body, dispenserId });
   if (!parseResult.success) {
     return c.json({ success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid nozzle payload', details: parseResult.error.flatten() } }, 400);
@@ -803,14 +823,39 @@ pumpOperations.post('/dispensers/:dispenserId/nozzles', requirePermission(PERMIS
   const outletId = disp.outletId;
   const targetStatus = payload.status || 'ACTIVE';
 
-  // Rule: nozzle_number must be unique within a dispenser
+  // Rule: nozzle_number must be unique within a dispenser; distinguish valid vs broken/orphan records
   const existingNum = await pumpRepo.findNozzleByDispenserAndNumber(dispenserId, payload.nozzleNumber);
   if (existingNum) {
-    return c.json({
-      success: false,
-      data: null,
-      error: { code: 'CONFLICT', message: `Nozzle #${payload.nozzleNumber} already exists on this dispenser` },
-    }, 409);
+    const slotDiag = await pumpRepo.inspectNozzleSlot(outletId, dispenserId, payload.nozzleNumber);
+    const hasBrokenTopology = !slotDiag.appearsInJoinedList || slotDiag.integrityStatus !== 'VALID';
+
+    if (hasBrokenTopology && !repairOrphan) {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'NOZZLE_TOPOLOGY_INTEGRITY_ERROR',
+          message: `Nozzle #${payload.nozzleNumber} already exists on this dispenser (ID: ${existingNum.id}) but is hidden due to broken topology references (${slotDiag.integrityStatus}: ${slotDiag.brokenRelations.join(', ')}). Repair the existing nozzle record instead of creating a duplicate.`,
+          details: {
+            nozzleId: existingNum.id,
+            existingNozzleId: existingNum.id,
+            dispenserId,
+            outletId,
+            nozzleNumber: payload.nozzleNumber,
+            integrityStatus: slotDiag.integrityStatus,
+            brokenRelations: slotDiag.brokenRelations,
+          },
+        },
+      }, 409);
+    }
+
+    if (!hasBrokenTopology) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'CONFLICT', message: `Nozzle #${payload.nozzleNumber} already exists on this dispenser` },
+      }, 409);
+    }
   }
 
   // Rule: Product master must exist
@@ -905,6 +950,35 @@ pumpOperations.post('/dispensers/:dispenserId/nozzles', requirePermission(PERMIS
   }
 
   const nowIso = new Date().toISOString();
+
+  if (existingNum && repairOrphan) {
+    const reconciled = await pumpRepo.reconcileNozzleSlot({
+      outletId,
+      dispenserId,
+      nozzleNumber: payload.nozzleNumber,
+      productId: payload.productId,
+      tankId: payload.tankId,
+      status: targetStatus,
+      createdBy: c.var.user!.user.id,
+      nowIso,
+    });
+
+    await auditRepo.logAction({
+      id: `aud-${crypto.randomUUID()}`,
+      userId: c.var.user!.user.id,
+      action: 'NOZZLE_UPDATE',
+      entityType: 'NOZZLE',
+      entityId: reconciled.preservedId,
+      oldValue: existingNum as unknown as Record<string, unknown>,
+      newValue: reconciled.nozzle as unknown as Record<string, unknown>,
+      ipAddress: c.req.header('cf-connecting-ip') || null,
+      userAgent: c.req.header('user-agent') || null,
+      createdAt: nowIso,
+    });
+
+    return c.json({ success: true, data: reconciled.nozzle, error: null }, 200);
+  }
+
   const created = await pumpRepo.createNozzle({
     id: `nozz-${crypto.randomUUID()}`,
     outletId,
@@ -933,6 +1007,118 @@ pumpOperations.post('/dispensers/:dispenserId/nozzles', requirePermission(PERMIS
   return c.json({ success: true, data: created, error: null }, 201);
 });
 
+// POST /api/v1/dispensers/:dispenserId/nozzles/reconcile
+pumpOperations.post('/dispensers/:dispenserId/nozzles/reconcile', requirePermission(PERMISSIONS.NOZZLES_WRITE) as any, async (c: AppContext) => {
+  const dispenserId = c.req.param('dispenserId');
+  if (!dispenserId) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'dispenserId is required' } }, 400);
+
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+  const pumpRepo = new PumpRepository(db);
+  const auditRepo = new AuditRepository(db);
+
+  const disp = await pumpRepo.findDispenserById(dispenserId);
+  if (!disp) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Dispenser not found' } }, 404);
+  }
+
+  if (!await verifyOutletAuthority(c, disp.outletId, outletRepo)) {
+    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this dispenser' } }, 403);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const parseResult = NozzleSchema.safeParse({ ...body, dispenserId });
+  if (!parseResult.success) {
+    return c.json({ success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid nozzle payload', details: parseResult.error.flatten() } }, 400);
+  }
+
+  const payload = parseResult.data;
+  const outletId = disp.outletId;
+  const targetStatus = payload.status || 'ACTIVE';
+
+  const prodMaster = await pumpRepo.findProductById(payload.productId);
+  if (!prodMaster) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Product not found in global catalog' } }, 404);
+  }
+  if (prodMaster.status !== 'ACTIVE') {
+    return c.json({ success: false, data: null, error: { code: 'INACTIVE_PRODUCT', message: `Cannot configure nozzle because product '${prodMaster.code}' is ${prodMaster.status}` } }, 400);
+  }
+
+  const outletProduct = await pumpRepo.findOutletProduct(outletId, payload.productId);
+  if (!outletProduct) {
+    return c.json({ success: false, data: null, error: { code: 'INVALID_PRODUCT', message: 'Product must be mapped to this retail outlet' } }, 400);
+  }
+  if (outletProduct.status !== 'ACTIVE') {
+    return c.json({ success: false, data: null, error: { code: 'INACTIVE_PRODUCT', message: `Cannot configure nozzle because outlet product mapping is ${outletProduct.status}` } }, 400);
+  }
+
+  const tank = await pumpRepo.findTankById(payload.tankId);
+  if (!tank || tank.outletId !== outletId) {
+    return c.json({ success: false, data: null, error: { code: 'INVALID_TANK', message: 'Tank does not exist or belongs to another retail outlet' } }, 400);
+  }
+  if (tank.productId !== payload.productId) {
+    return c.json({ success: false, data: null, error: { code: 'PRODUCT_MISMATCH', message: 'Tank product does not match nozzle product' } }, 400);
+  }
+
+  if (targetStatus === 'ACTIVE') {
+    if (disp.status !== 'ACTIVE') {
+      return c.json({ success: false, data: null, error: { code: 'INACTIVE_DISPENSER', message: `Cannot configure an ACTIVE nozzle on dispenser #${disp.dispenserNumber} because it is ${disp.status}` } }, 400);
+    }
+    if (tank.status !== 'ACTIVE') {
+      return c.json({ success: false, data: null, error: { code: 'INACTIVE_TANK', message: `Cannot configure an ACTIVE nozzle for tank #${tank.tankNumber} because it is ${tank.status}` } }, 400);
+    }
+  }
+
+  const maxCapacity = disp.nozzleCapacity || 6;
+  if (payload.nozzleNumber < 1 || payload.nozzleNumber > maxCapacity) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'NOZZLE_CAPACITY_EXCEEDED',
+        message: `Nozzle #${payload.nozzleNumber} exceeds dispenser physical capacity of ${maxCapacity} nozzle(s)`,
+      },
+    }, 400);
+  }
+
+  const nowIso = new Date().toISOString();
+  const result = await pumpRepo.reconcileNozzleSlot({
+    outletId,
+    dispenserId,
+    nozzleNumber: payload.nozzleNumber,
+    productId: payload.productId,
+    tankId: payload.tankId,
+    status: targetStatus,
+    createdBy: c.var.user!.user.id,
+    nowIso,
+  });
+
+  if (result.action !== 'UNCHANGED') {
+    await auditRepo.logAction({
+      id: `aud-${crypto.randomUUID()}`,
+      userId: c.var.user!.user.id,
+      action: result.action === 'REPAIRED' ? 'NOZZLE_UPDATE' : 'NOZZLE_CREATE',
+      entityType: 'NOZZLE',
+      entityId: result.preservedId,
+      newValue: {
+        ...result.nozzle,
+        reconcileAction: result.action,
+        previousIntegrityStatus: result.previousIntegrityStatus,
+        repairedRelations: result.repairedRelations,
+      } as unknown as Record<string, unknown>,
+      ipAddress: c.req.header('cf-connecting-ip') || null,
+      userAgent: c.req.header('user-agent') || null,
+      createdAt: nowIso,
+    });
+  }
+
+  return c.json({
+    success: true,
+    data: result,
+    error: null,
+  }, result.action === 'CREATED' ? 201 : 200);
+});
+
 // GET /api/v1/nozzles/:id
 pumpOperations.get('/nozzles/:id', requirePermission(PERMISSIONS.NOZZLES_READ) as any, async (c: AppContext) => {
   const id = c.req.param('id');
@@ -942,7 +1128,10 @@ pumpOperations.get('/nozzles/:id', requirePermission(PERMISSIONS.NOZZLES_READ) a
   const outletRepo = new OutletRepository(db);
   const pumpRepo = new PumpRepository(db);
 
-  const nozzle = await pumpRepo.findNozzleById(id);
+  const includeInvalid = c.req.query('includeInvalid') === 'true';
+  const nozzle = includeInvalid
+    ? await pumpRepo.inspectNozzleById(id)
+    : await pumpRepo.findNozzleById(id);
   if (!nozzle) {
     return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Nozzle not found' } }, 404);
   }
@@ -964,12 +1153,15 @@ pumpOperations.put('/nozzles/:id', requirePermission(PERMISSIONS.NOZZLES_WRITE) 
   const pumpRepo = new PumpRepository(db);
   const auditRepo = new AuditRepository(db);
 
-  const nozzle = await pumpRepo.findNozzleById(id);
+  const nozzle = await pumpRepo.inspectNozzleById(id);
   if (!nozzle) {
     return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Nozzle not found' } }, 404);
   }
 
-  if (!await verifyOutletAuthority(c, nozzle.outletId, outletRepo)) {
+  const disp = await pumpRepo.findDispenserById(nozzle.dispenserId);
+  const effectiveOutletId = disp?.outletId || nozzle.outletId;
+
+  if (!await verifyOutletAuthority(c, effectiveOutletId, outletRepo)) {
     return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this nozzle' } }, 403);
   }
 
@@ -985,7 +1177,7 @@ pumpOperations.put('/nozzles/:id', requirePermission(PERMISSIONS.NOZZLES_WRITE) 
   const targetStatus = payload.status || nozzle.status;
 
   const tank = await pumpRepo.findTankById(targetTankId);
-  if (!tank || tank.outletId !== nozzle.outletId) {
+  if (!tank || tank.outletId !== effectiveOutletId) {
     return c.json({ success: false, data: null, error: { code: 'INVALID_TANK', message: 'Tank not found or belongs to another outlet' } }, 400);
   }
 
@@ -1002,7 +1194,7 @@ pumpOperations.put('/nozzles/:id', requirePermission(PERMISSIONS.NOZZLES_WRITE) 
     return c.json({ success: false, data: null, error: { code: 'INACTIVE_PRODUCT', message: `Cannot set nozzle product because product '${prodMaster.code}' is ${prodMaster.status}` } }, 400);
   }
 
-  const outletProd = await pumpRepo.findOutletProduct(nozzle.outletId, targetProductId);
+  const outletProd = await pumpRepo.findOutletProduct(effectiveOutletId, targetProductId);
   if (!outletProd) {
     return c.json({ success: false, data: null, error: { code: 'INVALID_PRODUCT', message: 'Product is not mapped for this outlet' } }, 400);
   }
@@ -1013,7 +1205,6 @@ pumpOperations.put('/nozzles/:id', requirePermission(PERMISSIONS.NOZZLES_WRITE) 
 
   // Active Nozzle Dependency Safety: if target status is ACTIVE, verify all dependencies are ACTIVE
   if (targetStatus === 'ACTIVE') {
-    const disp = await pumpRepo.findDispenserById(nozzle.dispenserId);
     if (!disp || disp.status !== 'ACTIVE') {
       return c.json({ success: false, data: null, error: { code: 'INACTIVE_DISPENSER', message: `Cannot set nozzle to ACTIVE because dispenser #${disp?.dispenserNumber} is ${disp?.status}` } }, 400);
     }
@@ -1031,6 +1222,7 @@ pumpOperations.put('/nozzles/:id', requirePermission(PERMISSIONS.NOZZLES_WRITE) 
   const nowIso = new Date().toISOString();
   const updated = await pumpRepo.updateNozzle(id, {
     ...payload,
+    outletId: effectiveOutletId,
     updatedAt: nowIso,
   });
 

@@ -260,6 +260,12 @@ export interface Dispenser {
   nozzlesCount?: number;
 }
 
+export type NozzleIntegrityStatus =
+  | 'VALID'
+  | 'MISSING_PRODUCT'
+  | 'MISSING_TANK'
+  | 'MISSING_DISPENSER';
+
 export interface Nozzle {
   id: string;
   outletId: string;
@@ -277,6 +283,53 @@ export interface Nozzle {
   productCode?: string;
   tankNumber?: number;
   tankName?: string;
+  integrityStatus?: NozzleIntegrityStatus;
+  brokenRelations?: string[];
+}
+
+export interface NozzleDiagnosticItem extends Nozzle {
+  integrityStatus: NozzleIntegrityStatus;
+  brokenRelations: string[];
+}
+
+export interface NozzleSlotDiagnostic {
+  outletId: string;
+  dispenserId: string;
+  nozzleNumber: number;
+  existsInRawTable: boolean;
+  appearsInJoinedList: boolean;
+  rawNozzle: {
+    id: string;
+    outletId: string;
+    dispenserId: string;
+    nozzleNumber: number;
+    productId: string;
+    tankId: string;
+    status: EquipmentStatus;
+    createdAt: string;
+    updatedAt: string;
+    createdBy: string;
+  } | null;
+  joinedNozzle: Nozzle | null;
+  integrityStatus: NozzleIntegrityStatus | 'NOT_FOUND';
+  brokenRelations: string[];
+}
+
+export interface OutletNozzleDiagnosticsReport {
+  outletId: string;
+  rawNozzlesCount: number;
+  validNozzlesCount: number;
+  orphanNozzlesCount: number;
+  items: NozzleDiagnosticItem[];
+  orphanNozzles: NozzleDiagnosticItem[];
+  missingPositions: {
+    dispenserId: string;
+    dispenserNumber: number;
+    dispenserName: string;
+    nozzleCapacity: number;
+    missingNozzleNumbers: number[];
+    orphanNozzleNumbers: number[];
+  }[];
 }
 
 export interface ShiftTemplate {
