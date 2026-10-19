@@ -53,6 +53,11 @@ export const ReportsPage: React.FC = () => {
     fetchOutlets();
   }, []);
 
+  // Clear stale PDF error whenever filters change
+  useEffect(() => {
+    setPdfError(null);
+  }, [selectedOutletId, selectedMonth, cutoffMode, cutoffDate]);
+
   // Canonical Report & PDF URL parameters
   const buildPdfUrl = useCallback(() => {
     if (!selectedOutletId || !selectedMonth) return null;
@@ -104,7 +109,9 @@ export const ReportsPage: React.FC = () => {
 
   useEffect(() => {
     if (cutoffMode === 'SELECTED_DATE' && !cutoffDate) {
-      return; // Wait until a valid cutoff date is selected before auto-fetching
+      setReport(null);
+      setError(null);
+      return; // Clear stale report and wait until a valid cutoff date is selected
     }
     fetchReport();
   }, [selectedOutletId, selectedMonth, cutoffMode, cutoffDate, fetchReport]);
@@ -124,23 +131,41 @@ export const ReportsPage: React.FC = () => {
       return;
     }
 
+    // Open blank window synchronously on user click to prevent popup blockers
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) {
+      setPdfError(
+        'Your browser blocked the PDF preview window. Please allow pop-ups for this site or use Download PDF.'
+      );
+      return;
+    }
+
     setPdfLoading(true);
     setPdfError(null);
 
     try {
       const res = await apiFetchBlob(pdfEndpoint);
       if (!res.success || !res.blob) {
+        if (previewWindow && !previewWindow.closed) {
+          previewWindow.close();
+        }
         setPdfError(res.error?.message || 'Failed to generate monthly operations report PDF.');
         return;
       }
 
       const previewUrl = URL.createObjectURL(res.blob);
-      window.open(previewUrl, '_blank', 'noopener,noreferrer');
+      if (previewWindow && !previewWindow.closed) {
+        previewWindow.opener = null;
+        previewWindow.location.href = previewUrl;
+      }
 
       setTimeout(() => {
         URL.revokeObjectURL(previewUrl);
       }, 60000);
     } catch (err: any) {
+      if (previewWindow && !previewWindow.closed) {
+        previewWindow.close();
+      }
       setPdfError(err.message || 'Failed to generate monthly operations report PDF.');
     } finally {
       setPdfLoading(false);
@@ -176,7 +201,9 @@ export const ReportsPage: React.FC = () => {
       a.click();
       document.body.removeChild(a);
 
-      URL.revokeObjectURL(downloadUrl);
+      setTimeout(() => {
+        URL.revokeObjectURL(downloadUrl);
+      }, 1000);
     } catch (err: any) {
       setPdfError(err.message || 'Failed to generate monthly operations report PDF.');
     } finally {
