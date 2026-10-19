@@ -90,16 +90,26 @@ export class ScopeService {
     outletId: string,
     outletRepo: OutletRepository
   ): Promise<boolean> {
+    if (!userCtx || !outletId) return false;
     if (userCtx.isGlobalScope) return true;
-    if (userCtx.accessibleOutletIds.includes(outletId)) return true;
+    if (userCtx.accessibleOutletIds?.includes(outletId)) return true;
 
-    const outlet = await outletRepo.findByIdOrCode(outletId);
+    if (!outletRepo) return false;
+
+    let outlet: RetailOutlet | null = null;
+    if (typeof outletRepo.findById === 'function') {
+      outlet = await outletRepo.findById(outletId);
+    }
+    if (!outlet && typeof (outletRepo as any).findByIdOrCode === 'function') {
+      outlet = await (outletRepo as any).findByIdOrCode(outletId);
+    }
+
     if (!outlet) return false;
 
-    if (userCtx.accessibleOutletIds.includes(outlet.id)) return true;
-    if (userCtx.accessibleSalesAreaIds.includes(outlet.salesAreaId)) return true;
-    if (userCtx.accessibleDivisionIds.includes(outlet.divisionId)) return true;
-    if (userCtx.accessibleStateIds.includes(outlet.stateId)) return true;
+    if (outlet.id && userCtx.accessibleOutletIds?.includes(outlet.id)) return true;
+    if (outlet.salesAreaId && userCtx.accessibleSalesAreaIds?.includes(outlet.salesAreaId)) return true;
+    if (outlet.divisionId && userCtx.accessibleDivisionIds?.includes(outlet.divisionId)) return true;
+    if (outlet.stateId && userCtx.accessibleStateIds?.includes(outlet.stateId)) return true;
 
     return false;
   }

@@ -138,6 +138,47 @@ describe('Phase 1A Backend Security Hardening Tests', () => {
       expect(result.map(o => o.id)).toContain('ro-delhi-123');
       expect(result.map(o => o.id)).not.toContain('ro-delhi-456');
     });
+
+    it('canAccessOutlet should deny empty scopes, handle missing/malformed target outlet metadata safely, and allow explicit global scope', async () => {
+      const emptyScopeUser: UserContext = {
+        ...userWithPunjabStateAndDelhiOutlet,
+        scopes: [],
+        primaryScope: 'OUTLET',
+        isGlobalScope: false,
+        accessibleStateIds: [],
+        accessibleDivisionIds: [],
+        accessibleSalesAreaIds: [],
+        accessibleOutletIds: [],
+        isGlobalAdmin: false,
+      };
+
+      const globalScopeUser: UserContext = {
+        ...userWithPunjabStateAndDelhiOutlet,
+        isGlobalScope: true,
+        isGlobalAdmin: true,
+      };
+
+      const mockOutletRepo: any = {
+        findById: async (id: string) => {
+          if (id === 'ro-pb-1') return mockPunjabOutlet;
+          if (id === 'ro-malformed') return { id: 'ro-malformed' } as any;
+          return null;
+        },
+      };
+
+      // Empty scopes -> denied
+      expect(await ScopeService.canAccessOutlet(emptyScopeUser, 'ro-pb-1', mockOutletRepo)).toBe(false);
+      expect(await ScopeService.canAccessOutlet(emptyScopeUser, 'ro-delhi-123', mockOutletRepo)).toBe(false);
+
+      // Missing/unknown outlet -> denied
+      expect(await ScopeService.canAccessOutlet(userWithPunjabStateAndDelhiOutlet, 'ro-unknown', mockOutletRepo)).toBe(false);
+
+      // Malformed outlet metadata without matching state/division/salesArea -> denied
+      expect(await ScopeService.canAccessOutlet(userWithPunjabStateAndDelhiOutlet, 'ro-malformed', mockOutletRepo)).toBe(false);
+
+      // Global scope -> allowed
+      expect(await ScopeService.canAccessOutlet(globalScopeUser, 'ro-delhi-456', mockOutletRepo)).toBe(true);
+    });
   });
 
   describe('3. Global Access Requires Explicit GLOBAL Scope', () => {
