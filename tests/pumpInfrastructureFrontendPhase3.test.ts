@@ -356,10 +356,10 @@ describe('Phase 3 Pump Infrastructure Pure Frontend Helpers Suite', () => {
         { id: 'n4', outletId: 'ro-396187', dispenserId: 'disp-1', nozzleNumber: 4, productId: 'prod-hsd', tankId: 'tank-2', status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '' },
       ];
       const outletProducts: OutletProduct[] = [
-        { id: 'op-1', outletId: 'ro-396187', productId: 'prod-ms', status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '', product: { id: 'prod-ms', code: 'MS', name: 'Motor Spirit', category: 'MS', unit: 'LITRE', status: 'ACTIVE', createdAt: '', updatedAt: '' } },
+        { id: 'op-1', outletId: 'ro-396187', productId: 'prod-ms', status: 'ACTIVE', createdAt: '', createdBy: '', product: { id: 'prod-ms', code: 'MS', name: 'Motor Spirit', category: 'MS', unit: 'LITRE', status: 'ACTIVE', createdAt: '', updatedAt: '' } },
       ];
       const tanks: Tank[] = [
-        { id: 'tank-1', outletId: 'ro-396187', tankNumber: 1, name: 'Tank 1 MS', productId: 'prod-ms', capacityLitres: 20000, safeFillCapacityLitres: 19000, minimumOperatingLevelLitres: 1000, currentVolumeLitres: 10000, status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '' },
+        { id: 'tank-1', outletId: 'ro-396187', tankNumber: 1, name: 'Tank 1 MS', productId: 'prod-ms', capacityLitres: 20000, safeFillCapacityLitres: 19000, minimumOperatingLevelLitres: 1000, status: 'ACTIVE', createdAt: '', updatedAt: '', createdBy: '' },
       ];
 
       // Even if React state holds stale nozzleNumber: 1 or empty strings, resolveNozzleFormState resolves Position #2

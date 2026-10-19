@@ -641,8 +641,8 @@ describe('Phase 3 DU Nozzle Capacity & Fuel Topology Hardened Suite', () => {
     });
 
     await db.insert(schema.outletProducts).values([
-      { id: 'op-coco-ms', outletId: cocoOutletId, productId: 'prod-ms', status: 'ACTIVE', createdAt: now, updatedAt: now, createdBy: 'user-admin' },
-      { id: 'op-coco-hsd', outletId: cocoOutletId, productId: 'prod-hsd', status: 'ACTIVE', createdAt: now, updatedAt: now, createdBy: 'user-admin' },
+      { id: 'op-coco-ms', outletId: cocoOutletId, productId: 'prod-ms', status: 'ACTIVE', createdAt: now, createdBy: 'user-admin' },
+      { id: 'op-coco-hsd', outletId: cocoOutletId, productId: 'prod-hsd', status: 'ACTIVE', createdAt: now, createdBy: 'user-admin' },
     ]);
 
     await db.insert(schema.tanks).values([
@@ -655,7 +655,6 @@ describe('Phase 3 DU Nozzle Capacity & Fuel Topology Hardened Suite', () => {
         capacityLitres: 20000,
         safeFillCapacityLitres: 19000,
         minimumOperatingLevelLitres: 1000,
-        currentVolumeLitres: 12000,
         status: 'ACTIVE',
         createdAt: now,
         updatedAt: now,
@@ -670,7 +669,6 @@ describe('Phase 3 DU Nozzle Capacity & Fuel Topology Hardened Suite', () => {
         capacityLitres: 20000,
         safeFillCapacityLitres: 19000,
         minimumOperatingLevelLitres: 1000,
-        currentVolumeLitres: 15000,
         status: 'ACTIVE',
         createdAt: now,
         updatedAt: now,
@@ -685,7 +683,6 @@ describe('Phase 3 DU Nozzle Capacity & Fuel Topology Hardened Suite', () => {
         capacityLitres: 10000,
         safeFillCapacityLitres: 9500,
         minimumOperatingLevelLitres: 500,
-        currentVolumeLitres: 0,
         status: 'INACTIVE',
         createdAt: now,
         updatedAt: now,
