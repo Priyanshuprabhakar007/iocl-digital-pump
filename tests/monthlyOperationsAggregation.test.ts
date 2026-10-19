@@ -730,8 +730,8 @@ describe("Monthly Operations Register Aggregation Hardening", () => {
     expect(row?.dailySalesL).toBe(100);
   });
 
-  // 6. MISSING NOZZLE READING
-  it("7. Missing expected nozzle meter reading produces PARTIAL status and descriptive missingFields", async () => {
+  // 6. MISSING NOZZLE READING & DETAIL
+  it("7. Missing expected nozzle meter reading produces PARTIAL status, descriptive missingFields, and null totalizers", async () => {
     const db = getDb(localD1);
     const outletId = "ro-1001";
     const month = "2026-10";
@@ -808,10 +808,21 @@ describe("Monthly Operations Register Aggregation Hardening", () => {
 
     expect(row?.status).toBe("PARTIAL");
     expect(row?.missingFields).toContain("DU 1 / Nozzle 2 missing meter reading");
+
+    // Missing nozzle detail entry exists with null totalizers and 0 quantities
+    expect(row?.nozzleReadings.length).toBe(1);
+    const missingDetail = row?.nozzleReadings[0];
+    expect(missingDetail?.dispenserNumber).toBe("1");
+    expect(missingDetail?.nozzleNumber).toBe("2");
+    expect(missingDetail?.openingTotalizerMilliunits).toBeNull();
+    expect(missingDetail?.closingTotalizerMilliunits).toBeNull();
+    expect(missingDetail?.testingQuantityMilliunits).toBe(0);
+    expect(missingDetail?.grossSalesQuantityMilliunits).toBe(0);
+    expect(missingDetail?.netSalesQuantityMilliunits).toBe(0);
   });
 
-  // 7. STOCK / RECEIPTS
-  it("8. Stock reconciliation uses earliest opening, latest closing/variance, and sums receipts across shifts", async () => {
+  // 7. STOCK / RECEIPTS / availableStockL
+  it("8. Stock reconciliation uses earliest opening, latest closing/variance, sums receipts, and computes availableStockL", async () => {
     const db = getDb(localD1);
     const outletId = "ro-1001";
     const month = "2026-10";
@@ -922,6 +933,8 @@ describe("Monthly Operations Register Aggregation Hardening", () => {
     expect(row?.theoreticalClosingL).toBe(9180);
     expect(row?.varianceL).toBe(20);
     expect(row?.receiptsL).toBe(700);
+    // availableStockL = tankOpeningStockL + receiptsL = 10000 + 700 = 10700
+    expect(row?.availableStockL).toBe(10700);
   });
 
   // 8. STATUS TESTS: NO_ENTRY, PARTIAL, COMPLETE
@@ -1172,5 +1185,553 @@ describe("Monthly Operations Register Aggregation Hardening", () => {
       { DB: localD1 }
     );
     expect(res.status).toBe(403);
+  });
+
+  // 12. EXACT tankReadings[] DETAIL
+  it("13. Exposes exact historical tank reading details (OPENING and CLOSING dips and volumes)", async () => {
+    const db = getDb(localD1);
+    const outletId = "ro-1001";
+    const month = "2026-10";
+
+    await db.insert(schema.operationalShifts).values({
+      id: "shift-tank-detail",
+      outletId,
+      shiftTemplateId: "st-ro1-1",
+      businessDate: "2026-10-11",
+      shiftNumber: 1,
+      status: "CLOSED",
+      startedAt: "2026-10-11T06:00:00Z",
+      endedAt: "2026-10-11T14:00:00Z",
+      openedByUserId: "user-admin",
+      closedByUserId: "user-admin",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    } as any);
+
+    await db.insert(schema.operationalShiftTanks).values({
+      id: "ost-detail-1",
+      operationalShiftId: "shift-tank-detail",
+      outletId,
+      tankId: "tank-ro1-1",
+      tankNumber: 1,
+      tankName: "Tank 1 - MS (20 KL)",
+      productId: "prod-ms",
+      productCode: "MS",
+      productName: "Motor Spirit",
+      productUnit: "LITRE",
+      capacityMilliunits: 20000000,
+      safeFillCapacityMilliunits: 19000000,
+      createdAt: nowIso,
+    } as any);
+
+    await db.insert(schema.tankStockReadings).values([
+      {
+        id: "tsr-detail-open",
+        operationalShiftId: "shift-tank-detail",
+        outletId,
+        tankId: "tank-ro1-1",
+        productId: "prod-ms",
+        readingType: "OPENING",
+        source: "MANUAL",
+        productDipMmMilliunits: 1250000,
+        waterDipMmMilliunits: 10000,
+        grossObservedVolumeMilliunits: 10000000,
+        waterVolumeMilliunits: 0,
+        netProductVolumeMilliunits: 10000000,
+        recordedAt: nowIso,
+        recordedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      {
+        id: "tsr-detail-close",
+        operationalShiftId: "shift-tank-detail",
+        outletId,
+        tankId: "tank-ro1-1",
+        productId: "prod-ms",
+        readingType: "CLOSING",
+        source: "MANUAL",
+        productDipMmMilliunits: 1180000,
+        waterDipMmMilliunits: 12000,
+        grossObservedVolumeMilliunits: 9200000,
+        waterVolumeMilliunits: 0,
+        netProductVolumeMilliunits: 9200000,
+        recordedAt: nowIso,
+        recordedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+    ] as any);
+
+    const report = await MonthlyOperationsReportService.generateReport(db, outletId, month, "MONTH_END");
+    const msSection = report.productSections.find((s) => s.productId === "prod-ms");
+    const row = msSection!.rows.find((r) => r.businessDate === "2026-10-11");
+
+    expect(row).not.toBeUndefined();
+    expect(row?.tankReadings.length).toBe(2);
+
+    expect(row?.tankReadings[0]).toEqual({
+      tankId: "tank-ro1-1",
+      tankNumber: "1",
+      readingType: "OPENING",
+      productDipMmMilliunits: 1250000,
+      waterDipMmMilliunits: 10000,
+      netProductVolumeMilliunits: 10000000,
+    });
+
+    expect(row?.tankReadings[1]).toEqual({
+      tankId: "tank-ro1-1",
+      tankNumber: "1",
+      readingType: "CLOSING",
+      productDipMmMilliunits: 1180000,
+      waterDipMmMilliunits: 12000,
+      netProductVolumeMilliunits: 9200000,
+    });
+  });
+
+  // 13. TANK READING ORDER
+  it("14. Sorts tankReadings deterministically: shift chronology, tankNumber, OPENING before CLOSING", async () => {
+    const db = getDb(localD1);
+    const outletId = "ro-1001";
+    const month = "2026-10";
+
+    // Shift 1 (06:00) & Shift 2 (14:00)
+    await db.insert(schema.operationalShifts).values([
+      {
+        id: "shift-order-1",
+        outletId,
+        shiftTemplateId: "st-ro1-1",
+        businessDate: "2026-10-13",
+        shiftNumber: 1,
+        status: "CLOSED",
+        startedAt: "2026-10-13T06:00:00Z",
+        endedAt: "2026-10-13T14:00:00Z",
+        openedByUserId: "user-admin",
+        closedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      {
+        id: "shift-order-2",
+        outletId,
+        shiftTemplateId: "st-ro1-2",
+        businessDate: "2026-10-13",
+        shiftNumber: 2,
+        status: "CLOSED",
+        startedAt: "2026-10-13T14:00:00Z",
+        endedAt: "2026-10-13T22:00:00Z",
+        openedByUserId: "user-admin",
+        closedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+    ] as any);
+
+    // Shift 1 has Tank 1 and Tank 2 for MS
+    await db.insert(schema.operationalShiftTanks).values([
+      {
+        id: "ost-ord-s1-t1",
+        operationalShiftId: "shift-order-1",
+        outletId,
+        tankId: "tank-ro1-1",
+        tankNumber: 1,
+        tankName: "Tank 1",
+        productId: "prod-ms",
+        productCode: "MS",
+        productName: "Motor Spirit",
+        productUnit: "LITRE",
+        capacityMilliunits: 20000000,
+        safeFillCapacityMilliunits: 19000000,
+        createdAt: nowIso,
+      },
+      {
+        id: "ost-ord-s1-t2",
+        operationalShiftId: "shift-order-1",
+        outletId,
+        tankId: "tank-ro1-2",
+        tankNumber: 2,
+        tankName: "Tank 2",
+        productId: "prod-ms",
+        productCode: "MS",
+        productName: "Motor Spirit",
+        productUnit: "LITRE",
+        capacityMilliunits: 25000000,
+        safeFillCapacityMilliunits: 23750000,
+        createdAt: nowIso,
+      },
+      {
+        id: "ost-ord-s2-t1",
+        operationalShiftId: "shift-order-2",
+        outletId,
+        tankId: "tank-ro1-1",
+        tankNumber: 1,
+        tankName: "Tank 1",
+        productId: "prod-ms",
+        productCode: "MS",
+        productName: "Motor Spirit",
+        productUnit: "LITRE",
+        capacityMilliunits: 20000000,
+        safeFillCapacityMilliunits: 19000000,
+        createdAt: nowIso,
+      },
+    ] as any);
+
+    // Insert readings out of order:
+    // Shift 1 Tank 2 CLOSING, Shift 1 Tank 2 OPENING, Shift 1 Tank 1 CLOSING, Shift 1 Tank 1 OPENING, Shift 2 Tank 1 CLOSING, Shift 2 Tank 1 OPENING
+    await db.insert(schema.tankStockReadings).values([
+      {
+        id: "tsr-ord-s1-t2-c",
+        operationalShiftId: "shift-order-1",
+        outletId,
+        tankId: "tank-ro1-2",
+        productId: "prod-ms",
+        readingType: "CLOSING",
+        source: "MANUAL",
+        productDipMmMilliunits: 1200000,
+        waterDipMmMilliunits: 0,
+        grossObservedVolumeMilliunits: 9500000,
+        netProductVolumeMilliunits: 9500000,
+        recordedAt: nowIso,
+        recordedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      {
+        id: "tsr-ord-s1-t2-o",
+        operationalShiftId: "shift-order-1",
+        outletId,
+        tankId: "tank-ro1-2",
+        productId: "prod-ms",
+        readingType: "OPENING",
+        source: "MANUAL",
+        productDipMmMilliunits: 1250000,
+        waterDipMmMilliunits: 0,
+        grossObservedVolumeMilliunits: 10000000,
+        netProductVolumeMilliunits: 10000000,
+        recordedAt: nowIso,
+        recordedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      {
+        id: "tsr-ord-s1-t1-c",
+        operationalShiftId: "shift-order-1",
+        outletId,
+        tankId: "tank-ro1-1",
+        productId: "prod-ms",
+        readingType: "CLOSING",
+        source: "MANUAL",
+        productDipMmMilliunits: 1100000,
+        waterDipMmMilliunits: 0,
+        grossObservedVolumeMilliunits: 8500000,
+        netProductVolumeMilliunits: 8500000,
+        recordedAt: nowIso,
+        recordedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      {
+        id: "tsr-ord-s1-t1-o",
+        operationalShiftId: "shift-order-1",
+        outletId,
+        tankId: "tank-ro1-1",
+        productId: "prod-ms",
+        readingType: "OPENING",
+        source: "MANUAL",
+        productDipMmMilliunits: 1150000,
+        waterDipMmMilliunits: 0,
+        grossObservedVolumeMilliunits: 9000000,
+        netProductVolumeMilliunits: 9000000,
+        recordedAt: nowIso,
+        recordedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      {
+        id: "tsr-ord-s2-t1-c",
+        operationalShiftId: "shift-order-2",
+        outletId,
+        tankId: "tank-ro1-1",
+        productId: "prod-ms",
+        readingType: "CLOSING",
+        source: "MANUAL",
+        productDipMmMilliunits: 1050000,
+        waterDipMmMilliunits: 0,
+        grossObservedVolumeMilliunits: 8000000,
+        netProductVolumeMilliunits: 8000000,
+        recordedAt: nowIso,
+        recordedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      {
+        id: "tsr-ord-s2-t1-o",
+        operationalShiftId: "shift-order-2",
+        outletId,
+        tankId: "tank-ro1-1",
+        productId: "prod-ms",
+        readingType: "OPENING",
+        source: "MANUAL",
+        productDipMmMilliunits: 1100000,
+        waterDipMmMilliunits: 0,
+        grossObservedVolumeMilliunits: 8500000,
+        netProductVolumeMilliunits: 8500000,
+        recordedAt: nowIso,
+        recordedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+    ] as any);
+
+    const report = await MonthlyOperationsReportService.generateReport(db, outletId, month, "MONTH_END");
+    const msSection = report.productSections.find((s) => s.productId === "prod-ms");
+    const row = msSection!.rows.find((r) => r.businessDate === "2026-10-13");
+
+    expect(row).not.toBeUndefined();
+    expect(row?.tankReadings.length).toBe(6);
+
+    // Exact ordered sequence:
+    // 1. Shift 1, Tank 1, OPENING
+    expect(row?.tankReadings[0].tankNumber).toBe("1");
+    expect(row?.tankReadings[0].readingType).toBe("OPENING");
+    // 2. Shift 1, Tank 1, CLOSING
+    expect(row?.tankReadings[1].tankNumber).toBe("1");
+    expect(row?.tankReadings[1].readingType).toBe("CLOSING");
+    // 3. Shift 1, Tank 2, OPENING
+    expect(row?.tankReadings[2].tankNumber).toBe("2");
+    expect(row?.tankReadings[2].readingType).toBe("OPENING");
+    // 4. Shift 1, Tank 2, CLOSING
+    expect(row?.tankReadings[3].tankNumber).toBe("2");
+    expect(row?.tankReadings[3].readingType).toBe("CLOSING");
+    // 5. Shift 2, Tank 1, OPENING
+    expect(row?.tankReadings[4].tankNumber).toBe("1");
+    expect(row?.tankReadings[4].readingType).toBe("OPENING");
+    // 6. Shift 2, Tank 1, CLOSING
+    expect(row?.tankReadings[5].tankNumber).toBe("1");
+    expect(row?.tankReadings[5].readingType).toBe("CLOSING");
+  });
+
+  // 14. EXACT nozzleReadings[] DETAIL
+  it("15. Exposes exact historical nozzle meter reading details", async () => {
+    const db = getDb(localD1);
+    const outletId = "ro-1001";
+    const month = "2026-10";
+
+    await db.insert(schema.operationalShifts).values({
+      id: "shift-nozz-det",
+      outletId,
+      shiftTemplateId: "st-ro1-1",
+      businessDate: "2026-10-21",
+      shiftNumber: 1,
+      status: "CLOSED",
+      startedAt: "2026-10-21T06:00:00Z",
+      endedAt: "2026-10-21T14:00:00Z",
+      openedByUserId: "user-admin",
+      closedByUserId: "user-admin",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    } as any);
+
+    await db.insert(schema.operationalShiftNozzles).values({
+      id: "osn-det-1",
+      operationalShiftId: "shift-nozz-det",
+      outletId,
+      nozzleId: "nozz-ro1-1-2",
+      dispenserId: "disp-ro1-1",
+      dispenserNumber: 1,
+      dispenserName: "Dispenser 1",
+      nozzleNumber: 2,
+      productId: "prod-ms",
+      productCode: "MS",
+      productName: "Motor Spirit",
+      productCategory: "MS",
+      productUnit: "LITRE",
+      tankId: "tank-ro1-1",
+      tankNumber: 1,
+      snapshotStatus: "ACTIVE",
+      createdAt: nowIso,
+    } as any);
+
+    await db.insert(schema.nozzleMeterReadings).values({
+      id: "nmr-det-1",
+      operationalShiftId: "shift-nozz-det",
+      outletId,
+      nozzleId: "nozz-ro1-1-2",
+      openingTotalizerMilliunits: 1000000,
+      closingTotalizerMilliunits: 1105000,
+      grossSalesQuantityMilliunits: 105000,
+      testingQuantityMilliunits: 5000,
+      netSalesQuantityMilliunits: 100000,
+      recordedByUserId: "user-admin",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    } as any);
+
+    const report = await MonthlyOperationsReportService.generateReport(db, outletId, month, "MONTH_END");
+    const msSection = report.productSections.find((s) => s.productId === "prod-ms");
+    const row = msSection!.rows.find((r) => r.businessDate === "2026-10-21");
+
+    expect(row).not.toBeUndefined();
+    expect(row?.nozzleReadings.length).toBe(1);
+
+    expect(row?.nozzleReadings[0]).toEqual({
+      operationalShiftId: "shift-nozz-det",
+      nozzleId: "nozz-ro1-1-2",
+      dispenserId: "disp-ro1-1",
+      dispenserNumber: "1",
+      nozzleNumber: "2",
+      openingTotalizerMilliunits: 1000000,
+      closingTotalizerMilliunits: 1105000,
+      testingQuantityMilliunits: 5000,
+      grossSalesQuantityMilliunits: 105000,
+      netSalesQuantityMilliunits: 100000,
+    });
+  });
+
+  // 15. NOZZLE ORDER
+  it("16. Sorts nozzleReadings deterministically: shift chronology, dispenserNumber, nozzleNumber", async () => {
+    const db = getDb(localD1);
+    const outletId = "ro-1001";
+    const month = "2026-10";
+
+    await db.insert(schema.operationalShifts).values([
+      {
+        id: "shift-nozz-ord-1",
+        outletId,
+        shiftTemplateId: "st-ro1-1",
+        businessDate: "2026-10-22",
+        shiftNumber: 1,
+        status: "CLOSED",
+        startedAt: "2026-10-22T06:00:00Z",
+        endedAt: "2026-10-22T14:00:00Z",
+        openedByUserId: "user-admin",
+        closedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      {
+        id: "shift-nozz-ord-2",
+        outletId,
+        shiftTemplateId: "st-ro1-2",
+        businessDate: "2026-10-22",
+        shiftNumber: 2,
+        status: "CLOSED",
+        startedAt: "2026-10-22T14:00:00Z",
+        endedAt: "2026-10-22T22:00:00Z",
+        openedByUserId: "user-admin",
+        closedByUserId: "user-admin",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+    ] as any);
+
+    // Shift 1: DU 2 / Nozzle 1, DU 1 / Nozzle 2, DU 1 / Nozzle 1 (inserted out of order)
+    // Shift 2: DU 1 / Nozzle 1
+    await db.insert(schema.operationalShiftNozzles).values([
+      {
+        id: "osn-ord-s1-d2-n1",
+        operationalShiftId: "shift-nozz-ord-1",
+        outletId,
+        nozzleId: "nozz-ro1-2-1",
+        dispenserId: "disp-ro1-2",
+        dispenserNumber: 2,
+        dispenserName: "Dispenser 2",
+        nozzleNumber: 1,
+        productId: "prod-ms",
+        productCode: "MS",
+        productName: "Motor Spirit",
+        productCategory: "MS",
+        productUnit: "LITRE",
+        tankId: "tank-ro1-1",
+        tankNumber: 1,
+        snapshotStatus: "ACTIVE",
+        createdAt: nowIso,
+      },
+      {
+        id: "osn-ord-s1-d1-n2",
+        operationalShiftId: "shift-nozz-ord-1",
+        outletId,
+        nozzleId: "nozz-ro1-1-2",
+        dispenserId: "disp-ro1-1",
+        dispenserNumber: 1,
+        dispenserName: "Dispenser 1",
+        nozzleNumber: 2,
+        productId: "prod-ms",
+        productCode: "MS",
+        productName: "Motor Spirit",
+        productCategory: "MS",
+        productUnit: "LITRE",
+        tankId: "tank-ro1-1",
+        tankNumber: 1,
+        snapshotStatus: "ACTIVE",
+        createdAt: nowIso,
+      },
+      {
+        id: "osn-ord-s1-d1-n1",
+        operationalShiftId: "shift-nozz-ord-1",
+        outletId,
+        nozzleId: "nozz-ro1-1-1",
+        dispenserId: "disp-ro1-1",
+        dispenserNumber: 1,
+        dispenserName: "Dispenser 1",
+        nozzleNumber: 1,
+        productId: "prod-ms",
+        productCode: "MS",
+        productName: "Motor Spirit",
+        productCategory: "MS",
+        productUnit: "LITRE",
+        tankId: "tank-ro1-1",
+        tankNumber: 1,
+        snapshotStatus: "ACTIVE",
+        createdAt: nowIso,
+      },
+      {
+        id: "osn-ord-s2-d1-n1",
+        operationalShiftId: "shift-nozz-ord-2",
+        outletId,
+        nozzleId: "nozz-ro1-1-1",
+        dispenserId: "disp-ro1-1",
+        dispenserNumber: 1,
+        dispenserName: "Dispenser 1",
+        nozzleNumber: 1,
+        productId: "prod-ms",
+        productCode: "MS",
+        productName: "Motor Spirit",
+        productCategory: "MS",
+        productUnit: "LITRE",
+        tankId: "tank-ro1-1",
+        tankNumber: 1,
+        snapshotStatus: "ACTIVE",
+        createdAt: nowIso,
+      },
+    ] as any);
+
+    const report = await MonthlyOperationsReportService.generateReport(db, outletId, month, "MONTH_END");
+    const msSection = report.productSections.find((s) => s.productId === "prod-ms");
+    const row = msSection!.rows.find((r) => r.businessDate === "2026-10-22");
+
+    expect(row).not.toBeUndefined();
+    expect(row?.nozzleReadings.length).toBe(4);
+
+    // Sequence must be:
+    // 1. Shift 1, DU 1, Nozzle 1
+    expect(row?.nozzleReadings[0].operationalShiftId).toBe("shift-nozz-ord-1");
+    expect(row?.nozzleReadings[0].dispenserNumber).toBe("1");
+    expect(row?.nozzleReadings[0].nozzleNumber).toBe("1");
+
+    // 2. Shift 1, DU 1, Nozzle 2
+    expect(row?.nozzleReadings[1].operationalShiftId).toBe("shift-nozz-ord-1");
+    expect(row?.nozzleReadings[1].dispenserNumber).toBe("1");
+    expect(row?.nozzleReadings[1].nozzleNumber).toBe("2");
+
+    // 3. Shift 1, DU 2, Nozzle 1
+    expect(row?.nozzleReadings[2].operationalShiftId).toBe("shift-nozz-ord-1");
+    expect(row?.nozzleReadings[2].dispenserNumber).toBe("2");
+    expect(row?.nozzleReadings[2].nozzleNumber).toBe("1");
+
+    // 4. Shift 2, DU 1, Nozzle 1
+    expect(row?.nozzleReadings[3].operationalShiftId).toBe("shift-nozz-ord-2");
+    expect(row?.nozzleReadings[3].dispenserNumber).toBe("1");
+    expect(row?.nozzleReadings[3].nozzleNumber).toBe("1");
   });
 });
