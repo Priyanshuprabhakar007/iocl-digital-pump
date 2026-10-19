@@ -4,6 +4,8 @@ import {
   DailyDgRow,
   DgRunInterval,
   ProductMonthlyReport,
+  DailyTankReadingDetail,
+  DailyNozzleReadingDetail,
 } from '../../shared/types';
 import { eq, and, gte, lte, asc, inArray, desc } from 'drizzle-orm';
 import {
@@ -19,6 +21,7 @@ import {
   operationalShiftProductPrices,
   operationalShiftNozzles,
   operationalShiftTanks,
+  tankStockReadings,
   shiftStockReconciliations,
   nozzleMeterReadings,
 } from '../../db/schema';
@@ -459,6 +462,10 @@ export class MonthlyOperationsReportService {
       .select()
       .from(operationalShiftTanks)
       .where(inArray(operationalShiftTanks.operationalShiftId, shiftIds));
+    const tankReadingsList = await db
+      .select()
+      .from(tankStockReadings)
+      .where(inArray(tankStockReadings.operationalShiftId, shiftIds));
 
     const cumulativeByProduct = new Map<string, number>();
     const startDateObj = new Date(startDate);
@@ -585,6 +592,80 @@ export class MonthlyOperationsReportService {
               }
           }
 
+          const dayTankReadings: DailyTankReadingDetail[] = [];
+          for (const shift of applicableProductShifts) {
+            const shiftReadings = tankReadingsList.filter(
+              (r: any) =>
+                r.operationalShiftId === shift.id &&
+                r.productId === productId &&
+                (r.readingType === 'OPENING' || r.readingType === 'CLOSING')
+            );
+
+            shiftReadings.sort((a: any, b: any) => {
+              const tankA = tankSnapshots.find(
+                (t: any) => t.operationalShiftId === shift.id && t.tankId === a.tankId
+              )?.tankNumber ?? 0;
+              const tankB = tankSnapshots.find(
+                (t: any) => t.operationalShiftId === shift.id && t.tankId === b.tankId
+              )?.tankNumber ?? 0;
+              if (tankA !== tankB) return tankA - tankB;
+              if (a.readingType !== b.readingType) {
+                return a.readingType === 'OPENING' ? -1 : 1;
+              }
+              return 0;
+            });
+
+            for (const r of shiftReadings) {
+              const tankSnap = tankSnapshots.find(
+                (t: any) => t.operationalShiftId === shift.id && t.tankId === r.tankId
+              );
+              dayTankReadings.push({
+                tankId: r.tankId,
+                tankNumber: String(tankSnap ? tankSnap.tankNumber : 0),
+                readingType: r.readingType as 'OPENING' | 'CLOSING',
+                productDipMmMilliunits: r.productDipMmMilliunits ?? 0,
+                waterDipMmMilliunits: r.waterDipMmMilliunits ?? 0,
+                netProductVolumeMilliunits: r.netProductVolumeMilliunits ?? 0,
+              });
+            }
+          }
+
+          const dayNozzleReadings: DailyNozzleReadingDetail[] = [];
+          for (const shift of applicableProductShifts) {
+            const shiftNozzles = nozzleSnapshots.filter(
+              (n: any) => n.operationalShiftId === shift.id && n.productId === productId
+            );
+
+            shiftNozzles.sort((a: any, b: any) => {
+              const dispA = Number(a.dispenserNumber) || 0;
+              const dispB = Number(b.dispenserNumber) || 0;
+              if (dispA !== dispB) return dispA - dispB;
+              const nozzA = Number(a.nozzleNumber) || 0;
+              const nozzB = Number(b.nozzleNumber) || 0;
+              return nozzA - nozzB;
+            });
+
+            for (const nozzle of shiftNozzles) {
+              const reading = nozzleReadings.find(
+                (r: any) =>
+                  r.operationalShiftId === shift.id &&
+                  r.nozzleId === nozzle.nozzleId
+              );
+              dayNozzleReadings.push({
+                operationalShiftId: shift.id,
+                nozzleId: nozzle.nozzleId,
+                dispenserId: nozzle.dispenserId,
+                dispenserNumber: String(nozzle.dispenserNumber),
+                nozzleNumber: String(nozzle.nozzleNumber),
+                openingTotalizerMilliunits: reading ? reading.openingTotalizerMilliunits : null,
+                closingTotalizerMilliunits: reading ? reading.closingTotalizerMilliunits : null,
+                testingQuantityMilliunits: reading?.testingQuantityMilliunits ?? 0,
+                grossSalesQuantityMilliunits: reading?.grossSalesQuantityMilliunits ?? 0,
+                netSalesQuantityMilliunits: reading?.netSalesQuantityMilliunits ?? 0,
+              });
+            }
+          }
+
           const status =
             applicableProductShifts.length === 0
               ? "NO_ENTRY"
@@ -602,6 +683,7 @@ export class MonthlyOperationsReportService {
               tankOpeningStockL: opening / 1000,
               tankClosingStockL: closing / 1000,
               receiptsL: receipts / 1000,
+              availableStockL: (opening + receipts) / 1000,
               meterSalesL: netSalesQuantityMilliunits / 1000,
               testingL: testingQuantityMilliunits / 1000,
               grossSalesL: grossSalesQuantityMilliunits / 1000,
@@ -610,7 +692,9 @@ export class MonthlyOperationsReportService {
               cumulativeSalesL: currentCumulative / 1000,
               theoreticalClosingL: theoreticalClosing / 1000,
               physicalClosingL: closing / 1000,
-              varianceL: variance / 1000
+              varianceL: variance / 1000,
+              tankReadings: dayTankReadings,
+              nozzleReadings: dayNozzleReadings,
           });
         }
     }

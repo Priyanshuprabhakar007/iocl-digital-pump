@@ -2010,6 +2010,28 @@ export interface UpdateDgDailyLogInput {
 export type CutoffMode = 'MONTH_END' | 'SELECTED_DATE' | 'LATEST_DATA';
 export type DayEntryStatus = 'COMPLETE' | 'PARTIAL' | 'NO_ENTRY';
 
+export interface DailyTankReadingDetail {
+  tankId: string;
+  tankNumber: string;
+  readingType: 'OPENING' | 'CLOSING';
+  productDipMmMilliunits: number;
+  waterDipMmMilliunits: number;
+  netProductVolumeMilliunits: number;
+}
+
+export interface DailyNozzleReadingDetail {
+  operationalShiftId: string;
+  nozzleId: string;
+  dispenserId: string;
+  dispenserNumber: string;
+  nozzleNumber: string;
+  openingTotalizerMilliunits: number | null;
+  closingTotalizerMilliunits: number | null;
+  testingQuantityMilliunits: number;
+  grossSalesQuantityMilliunits: number;
+  netSalesQuantityMilliunits: number;
+}
+
 export interface DailyProductRow {
   businessDate: string;
   status: DayEntryStatus;
@@ -2020,6 +2042,7 @@ export interface DailyProductRow {
   tankOpeningStockL: number;
   tankClosingStockL: number;
   receiptsL: number;
+  availableStockL: number;
   meterSalesL: number;
   testingL: number;
   grossSalesL: number;
@@ -2029,6 +2052,8 @@ export interface DailyProductRow {
   theoreticalClosingL: number;
   physicalClosingL: number;
   varianceL: number;
+  tankReadings: DailyTankReadingDetail[];
+  nozzleReadings: DailyNozzleReadingDetail[];
 }
 
 export interface ProductMonthlyReport {
