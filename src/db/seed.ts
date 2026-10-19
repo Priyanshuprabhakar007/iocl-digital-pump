@@ -135,6 +135,7 @@ export async function seedDatabase(db: AppDatabase) {
     { id: 'perm-dg-r', code: PERMISSIONS.DG_OPERATIONS_READ, name: 'Read DG Operations', description: 'View DG set daily logs and reports' },
     { id: 'perm-dg-w', code: PERMISSIONS.DG_OPERATIONS_WRITE, name: 'Write DG Operations', description: 'Record and update DG set daily logs' },
     { id: 'perm-rep-r', code: PERMISSIONS.REPORTS_READ, name: 'Read Reports', description: 'View monthly operations and performance reports' },
+    { id: 'perm-rep-g', code: PERMISSIONS.REPORTS_GENERATE, name: 'Generate Reports', description: 'Generate and export operations reports' },
   ];
   await db.insert(schema.permissions).values(permissionsList).onConflictDoNothing();
 
@@ -213,7 +214,7 @@ export async function seedDatabase(db: AppDatabase) {
     'perm-eq-r', 'perm-eq-as-w', 'perm-eq-t-c',
     'perm-hr-att-r', 'perm-hr-att-w', 'perm-hr-nozz-w',
     'perm-hr-uniform-r', 'perm-hr-uniform-inv-w', 'perm-hr-uniform-issue-w',
-    'perm-dg-r', 'perm-dg-w', 'perm-rep-r',
+    'perm-dg-r', 'perm-dg-w', 'perm-rep-r', 'perm-rep-g',
   ].map(pId => ({ roleId: 'role-dealer', permissionId: pId }));
 
   const cspPerms = [
