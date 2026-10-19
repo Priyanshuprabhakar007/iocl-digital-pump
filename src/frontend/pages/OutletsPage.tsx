@@ -80,9 +80,14 @@ export const OutletsPage: React.FC = () => {
   const [assignType, setAssignType] = useState<'DEALER' | 'CSP' | 'INSPECTOR'>('DEALER');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const canManageArchive = Boolean(
+    userCtx?.isGlobalScope && hasPermission(PERMISSIONS.OUTLETS_UPDATE)
+  );
+
   const fetchOutlets = async () => {
     setLoading(true);
-    const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
+    const endpoint = canManageArchive ? '/api/v1/outlets?includeArchived=true' : '/api/v1/outlets';
+    const res = await apiFetch<RetailOutlet[]>(endpoint);
     if (res.success && res.data) {
       setOutlets(res.data);
     }
@@ -378,27 +383,34 @@ export const OutletsPage: React.FC = () => {
       setSuccessMsg('Retail outlet hidden from directory. Database records and history were preserved.');
       fetchOutlets();
     } else {
-      setErrorMsg(res.error?.message || 'Failed to hide retail outlet from directory.');
+      setErrorMsg(res.error?.message || 'Failed to archive retail outlet.');
     }
   };
 
   const handleRestoreOutlet = async (ro: RetailOutlet) => {
     setErrorMsg(null);
-    const res = await apiFetch<RetailOutlet>(`/api/v1/outlets/${ro.id}/directory-visibility`, {
-      method: 'PATCH',
-      body: JSON.stringify({ hidden: false }),
+    const res = await apiFetch<RetailOutlet>(`/api/v1/outlets/${ro.id}/restore`, {
+      method: 'POST',
     });
 
     if (res.success) {
-      setSuccessMsg('Retail outlet restored to directory.');
+      setSuccessMsg(`Retail outlet ${ro.name} (${ro.roCode}) restored to active status.`);
       fetchOutlets();
     } else {
-      setErrorMsg(res.error?.message || 'Failed to restore retail outlet to directory.');
+      setErrorMsg(res.error?.message || 'Failed to restore retail outlet.');
     }
   };
 
+  const isOutletArchived = (o: RetailOutlet) =>
+    Boolean(o.isArchived || o.lifecycleStatus === 'ARCHIVED' || o.directoryHidden);
+
+  const archivedCount = useMemo(
+    () => outlets.filter((o) => isOutletArchived(o)).length,
+    [outlets]
+  );
+
   const visibilityFilteredOutlets = useMemo(() => {
-    return showHidden ? outlets : outlets.filter((o) => !o.directoryHidden);
+    return showHidden ? outlets : outlets.filter((o) => !isOutletArchived(o));
   }, [outlets, showHidden]);
 
   const displayedOutlets = useMemo(() => {
@@ -460,18 +472,20 @@ export const OutletsPage: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white select-none">
-                  <input
-                    type="checkbox"
-                    checked={showHidden}
-                    onChange={(e) => setShowHidden(e.target.checked)}
-                    className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-orange-500 focus:ring-orange-500 focus:ring-offset-slate-900"
-                  />
-                  <span className="flex items-center gap-1.5 font-medium">
-                    {showHidden ? <Eye className="w-3.5 h-3.5 text-orange-400" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
-                    <span>Show Hidden Outlets</span>
-                  </span>
-                </label>
+                {canManageArchive && (
+                  <label className="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                    <input
+                      type="checkbox"
+                      checked={showHidden}
+                      onChange={(e) => setShowHidden(e.target.checked)}
+                      className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-orange-500 focus:ring-orange-500 focus:ring-offset-slate-900"
+                    />
+                    <span className="flex items-center gap-1.5 font-medium">
+                      {showHidden ? <Eye className="w-3.5 h-3.5 text-orange-400" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
+                      <span>Show Archived Outlets ({archivedCount})</span>
+                    </span>
+                  </label>
+                )}
 
                 <span className="text-[11px] font-mono text-slate-400 border-l border-slate-800 pl-4">
                   {searchQuery.trim()
@@ -521,15 +535,21 @@ export const OutletsPage: React.FC = () => {
                           <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-orange-500/10 text-orange-400 border border-orange-500/30">
                             {ro.outletType}
                           </span>
-                          {ro.directoryHidden && (
+                          {isOutletArchived(ro) && (
                             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-400 border border-rose-500/40">
-                              HIDDEN
+                              ARCHIVED
                             </span>
                           )}
                         </div>
                         <div className="text-xs font-mono text-slate-400 mt-1">
                           RO Code: <span className="text-white font-bold">{ro.roCode}</span>
                         </div>
+                        {isOutletArchived(ro) && (ro.archivedAt || ro.directoryHiddenAt) && (
+                          <div className="text-[11px] font-mono text-rose-300/80 mt-1">
+                            Archived At: {new Date((ro.archivedAt || ro.directoryHiddenAt)!).toLocaleString()}
+                            {(ro.archivedBy || ro.directoryHiddenBy) ? ` • By: ${ro.archivedBy || ro.directoryHiddenBy}` : ''}
+                          </div>
+                        )}
                       </div>
 
                       <span
@@ -581,40 +601,44 @@ export const OutletsPage: React.FC = () => {
                       <div className="flex items-center gap-2 flex-wrap justify-end">
                         {hasPermission(PERMISSIONS.OUTLETS_UPDATE) && (
                           <>
-                            <button
-                              onClick={() => openEditModal(ro)}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                            >
-                              <Pencil className="w-3.5 h-3.5 text-orange-400" />
-                              <span>Edit Outlet</span>
-                            </button>
+                            {!isOutletArchived(ro) && (
+                              <>
+                                <button
+                                  onClick={() => openEditModal(ro)}
+                                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                >
+                                  <Pencil className="w-3.5 h-3.5 text-orange-400" />
+                                  <span>Edit Outlet</span>
+                                </button>
 
-                            <button
-                              onClick={() => {
-                                setSelectedOutlet(ro);
-                                setErrorMsg(null);
-                                setAssignModalOpen(true);
-                              }}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                            >
-                              <UserPlus className="w-3.5 h-3.5 text-orange-400" />
-                              <span>Assign Personnel</span>
-                            </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedOutlet(ro);
+                                    setErrorMsg(null);
+                                    setAssignModalOpen(true);
+                                  }}
+                                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                >
+                                  <UserPlus className="w-3.5 h-3.5 text-orange-400" />
+                                  <span>Assign Personnel</span>
+                                </button>
+                              </>
+                            )}
 
-                            {ro.directoryHidden ? (
+                            {isOutletArchived(ro) ? (
                               <button
                                 onClick={() => handleRestoreOutlet(ro)}
                                 className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                                title="Restore to Retail Outlet Directory"
+                                title="Restore Retail Outlet"
                               >
                                 <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
-                                <span>Restore</span>
+                                <span>Restore Outlet</span>
                               </button>
                             ) : (
                               <button
                                 onClick={() => openHideConfirm(ro)}
                                 className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                                title="Hide from Retail Outlet Directory"
+                                title="Archive Retail Outlet"
                               >
                                 <Trash2 className="w-3.5 h-3.5 text-rose-400" />
                                 <span>Delete</span>
@@ -1160,11 +1184,11 @@ export const OutletsPage: React.FC = () => {
               <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
                 <Trash2 className="w-5 h-5 text-rose-400" />
               </div>
-              <h2 className="text-lg font-bold text-white">Hide Retail Outlet?</h2>
+              <h2 className="text-lg font-bold text-white">Archive Retail Outlet?</h2>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              This will remove the outlet from the Retail Outlet Directory, but it will NOT delete the outlet or any historical data from the database.
+              This will archive the retail outlet and immediately revoke operational and user access across the system. Historical data is preserved and can be restored by an administrator at any time.
             </p>
 
             <div className="p-3 rounded-xl bg-slate-800/70 border border-slate-700/60 text-xs space-y-1">

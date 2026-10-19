@@ -5,6 +5,7 @@ import { getDb } from '../../db';
 import { SessionRepository } from '../repositories/sessionRepository';
 import { UserRepository } from '../repositories/userRepository';
 import { ScopeRepository } from '../repositories/scopeRepository';
+import { OutletRepository } from '../repositories/outletRepository';
 import { AuditRepository } from '../repositories/auditRepository';
 import { requireAuth, hashToken, AppContext, EnvBindings } from '../middleware/auth';
 import { LoginSchema } from '../../shared/validators';
@@ -113,6 +114,29 @@ auth.post('/login', async (c) => {
     }, 403);
   }
 
+  const scopeRepo = new ScopeRepository(db);
+  const outletRepo = new OutletRepository(db);
+  const roles = await userRepo.getUserRoles(authUser.user.id);
+  const scopes = await scopeRepo.getUserScopes(authUser.user.id);
+  const allScopes = await scopeRepo.getUserScopes(authUser.user.id, { includeArchived: true });
+  const activeOutletAssignments = await outletRepo.getUserOutletAssignments(authUser.user.id);
+  const allOutletAssignments = await outletRepo.getUserOutletAssignments(authUser.user.id, { includeArchived: true });
+
+  if (
+    scopes.length === 0 &&
+    activeOutletAssignments.length === 0 &&
+    (allScopes.length > 0 || allOutletAssignments.length > 0 || !roles.includes('ADMIN'))
+  ) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'OUTLET_ARCHIVED',
+        message: 'Your assigned retail outlet is currently archived/inactive. Please contact the administrator.',
+      },
+    }, 403);
+  }
+
   // Successful login -> clear local rate limit record
   localDevLoginLimiter.delete(rateLimitKey);
 
@@ -164,10 +188,7 @@ auth.post('/login', async (c) => {
     maxAge: SESSION_DURATION_HOURS * 3600,
   });
 
-  const roles = await userRepo.getUserRoles(authUser.user.id);
   const permissions = await userRepo.getUserPermissions(authUser.user.id);
-  const scopeRepo = new ScopeRepository(db);
-  const scopes = await scopeRepo.getUserScopes(authUser.user.id);
 
   return c.json({
     success: true,

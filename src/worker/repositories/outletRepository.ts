@@ -6,7 +6,16 @@ import { RetailOutlet, OutletUserAssignment } from '../../shared/types';
 export class OutletRepository {
   constructor(private db: AppDatabase) {}
 
-  async listAllOutlets(): Promise<RetailOutlet[]> {
+  static isOutletArchived(outlet: any): boolean {
+    if (!outlet) return false;
+    return (
+      outlet.lifecycleStatus === 'ARCHIVED' ||
+      Boolean(outlet.isArchived) ||
+      Boolean(outlet.directoryHidden)
+    );
+  }
+
+  async listAllOutlets(options?: { includeArchived?: boolean }): Promise<RetailOutlet[]> {
     const res = await this.db
       .select({
         outlet: schema.retailOutlets,
@@ -19,15 +28,20 @@ export class OutletRepository {
       .innerJoin(schema.divisions, eq(schema.retailOutlets.divisionId, schema.divisions.id))
       .innerJoin(schema.salesAreas, eq(schema.retailOutlets.salesAreaId, schema.salesAreas.id));
 
-    return res.map(r => ({
+    const mapped = res.map(r => ({
       ...r.outlet,
       stateName: r.stateName,
       divisionName: r.divisionName,
       salesAreaName: r.salesAreaName,
     }));
+
+    if (options?.includeArchived) {
+      return mapped;
+    }
+    return mapped.filter(o => !OutletRepository.isOutletArchived(o));
   }
 
-  async findOutletsByIds(outletIds: string[]): Promise<RetailOutlet[]> {
+  async findOutletsByIds(outletIds: string[], options?: { includeArchived?: boolean }): Promise<RetailOutlet[]> {
     if (outletIds.length === 0) return [];
 
     const res = await this.db
@@ -43,15 +57,20 @@ export class OutletRepository {
       .innerJoin(schema.salesAreas, eq(schema.retailOutlets.salesAreaId, schema.salesAreas.id))
       .where(inArray(schema.retailOutlets.id, outletIds));
 
-    return res.map(r => ({
+    const mapped = res.map(r => ({
       ...r.outlet,
       stateName: r.stateName,
       divisionName: r.divisionName,
       salesAreaName: r.salesAreaName,
     }));
+
+    if (options?.includeArchived) {
+      return mapped;
+    }
+    return mapped.filter(o => !OutletRepository.isOutletArchived(o));
   }
 
-  async findOutletsByStateIds(stateIds: string[]): Promise<RetailOutlet[]> {
+  async findOutletsByStateIds(stateIds: string[], options?: { includeArchived?: boolean }): Promise<RetailOutlet[]> {
     if (stateIds.length === 0) return [];
 
     const res = await this.db
@@ -67,15 +86,20 @@ export class OutletRepository {
       .innerJoin(schema.salesAreas, eq(schema.retailOutlets.salesAreaId, schema.salesAreas.id))
       .where(inArray(schema.retailOutlets.stateId, stateIds));
 
-    return res.map(r => ({
+    const mapped = res.map(r => ({
       ...r.outlet,
       stateName: r.stateName,
       divisionName: r.divisionName,
       salesAreaName: r.salesAreaName,
     }));
+
+    if (options?.includeArchived) {
+      return mapped;
+    }
+    return mapped.filter(o => !OutletRepository.isOutletArchived(o));
   }
 
-  async findOutletsByDivisionIds(divisionIds: string[]): Promise<RetailOutlet[]> {
+  async findOutletsByDivisionIds(divisionIds: string[], options?: { includeArchived?: boolean }): Promise<RetailOutlet[]> {
     if (divisionIds.length === 0) return [];
 
     const res = await this.db
@@ -91,15 +115,20 @@ export class OutletRepository {
       .innerJoin(schema.salesAreas, eq(schema.retailOutlets.salesAreaId, schema.salesAreas.id))
       .where(inArray(schema.retailOutlets.divisionId, divisionIds));
 
-    return res.map(r => ({
+    const mapped = res.map(r => ({
       ...r.outlet,
       stateName: r.stateName,
       divisionName: r.divisionName,
       salesAreaName: r.salesAreaName,
     }));
+
+    if (options?.includeArchived) {
+      return mapped;
+    }
+    return mapped.filter(o => !OutletRepository.isOutletArchived(o));
   }
 
-  async findOutletsBySalesAreaIds(salesAreaIds: string[]): Promise<RetailOutlet[]> {
+  async findOutletsBySalesAreaIds(salesAreaIds: string[], options?: { includeArchived?: boolean }): Promise<RetailOutlet[]> {
     if (salesAreaIds.length === 0) return [];
 
     const res = await this.db
@@ -115,12 +144,17 @@ export class OutletRepository {
       .innerJoin(schema.salesAreas, eq(schema.retailOutlets.salesAreaId, schema.salesAreas.id))
       .where(inArray(schema.retailOutlets.salesAreaId, salesAreaIds));
 
-    return res.map(r => ({
+    const mapped = res.map(r => ({
       ...r.outlet,
       stateName: r.stateName,
       divisionName: r.divisionName,
       salesAreaName: r.salesAreaName,
     }));
+
+    if (options?.includeArchived) {
+      return mapped;
+    }
+    return mapped.filter(o => !OutletRepository.isOutletArchived(o));
   }
 
   async findById(id: string): Promise<RetailOutlet | null> {
@@ -229,12 +263,45 @@ export class OutletRepository {
     directoryHidden: boolean;
     directoryHiddenAt: string | null;
     directoryHiddenBy: string | null;
+    lifecycleStatus: 'ACTIVE' | 'ARCHIVED';
+    isArchived: boolean;
+    archivedAt: string | null;
+    archivedBy: string | null;
     updatedAt: string;
   }>): Promise<void> {
     await this.db
       .update(schema.retailOutlets)
       .set(data)
       .where(eq(schema.retailOutlets.id, id));
+  }
+
+  async archiveOutlet(id: string, userId: string, nowIso: string): Promise<RetailOutlet | null> {
+    await this.updateOutlet(id, {
+      directoryHidden: true,
+      directoryHiddenAt: nowIso,
+      directoryHiddenBy: userId,
+      lifecycleStatus: 'ARCHIVED',
+      isArchived: true,
+      archivedAt: nowIso,
+      archivedBy: userId,
+      updatedAt: nowIso,
+    });
+    return this.findById(id);
+  }
+
+  async restoreOutlet(id: string, nowIso?: string): Promise<RetailOutlet | null> {
+    const ts = nowIso || new Date().toISOString();
+    await this.updateOutlet(id, {
+      directoryHidden: false,
+      directoryHiddenAt: null,
+      directoryHiddenBy: null,
+      lifecycleStatus: 'ACTIVE',
+      isArchived: false,
+      archivedAt: null,
+      archivedBy: null,
+      updatedAt: ts,
+    });
+    return this.findById(id);
   }
 
   async createOutletUserAssignment(data: {
@@ -273,7 +340,13 @@ export class OutletRepository {
     };
   }
 
-  async listOutletAssignments(outletId: string): Promise<OutletUserAssignment[]> {
+  async listOutletAssignments(outletId: string, options?: { includeArchived?: boolean }): Promise<OutletUserAssignment[]> {
+    const outlet = await this.findById(outletId);
+    if (!outlet) return [];
+    if (!options?.includeArchived && OutletRepository.isOutletArchived(outlet)) {
+      return [];
+    }
+
     const res = await this.db
       .select({
         assignment: schema.outletUserAssignments,
@@ -291,5 +364,24 @@ export class OutletRepository {
       userEmail: r.userEmail,
       userEmpCode: r.userEmpCode,
     }));
+  }
+
+  async getUserOutletAssignments(userId: string, options?: { includeArchived?: boolean }): Promise<OutletUserAssignment[]> {
+    const res = await this.db
+      .select({
+        assignment: schema.outletUserAssignments,
+        outlet: schema.retailOutlets,
+      })
+      .from(schema.outletUserAssignments)
+      .innerJoin(schema.retailOutlets, eq(schema.outletUserAssignments.outletId, schema.retailOutlets.id))
+      .where(eq(schema.outletUserAssignments.userId, userId));
+
+    const activeRows = res.filter(r => r.assignment.isActive);
+    if (options?.includeArchived) {
+      return activeRows.map(r => r.assignment);
+    }
+    return activeRows
+      .filter(r => !OutletRepository.isOutletArchived(r.outlet))
+      .map(r => r.assignment);
   }
 }

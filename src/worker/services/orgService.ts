@@ -236,12 +236,24 @@ export class OrgService {
   // -------------------------------------------------------------------------
   async listOfficerPostings(officerId?: string, actorCtx?: UserContext) {
     const allPostings = await this.repo.listOfficerPostings(officerId);
+
+    const activePostings: typeof allPostings = [];
+    for (const posting of allPostings) {
+      if (posting.scopeLevel === 'OUTLET' && posting.outletId) {
+        const outlet = await this.outletRepo.findById(posting.outletId);
+        if (!outlet || OutletRepository.isOutletArchived(outlet)) {
+          continue;
+        }
+      }
+      activePostings.push(posting);
+    }
+
     if (!actorCtx || actorCtx.isGlobalScope) {
-      return allPostings;
+      return activePostings;
     }
 
     const filtered: typeof allPostings = [];
-    for (const posting of allPostings) {
+    for (const posting of activePostings) {
       const isVisible = await ScopeService.isScopeWithinActorAuthority(
         actorCtx,
         {
@@ -326,8 +338,8 @@ export class OrgService {
       }
     } else if (data.scopeLevel === 'OUTLET') {
       const outlet = await this.outletRepo.findById(data.outletId!);
-      if (!outlet) {
-        throw new OrgError('INVALID_ORG_HIERARCHY', 'Specified outlet does not exist.', 400);
+      if (!outlet || OutletRepository.isOutletArchived(outlet)) {
+        throw new OrgError('INVALID_ORG_HIERARCHY', 'Specified outlet does not exist or is archived.', 400);
       }
       if (data.salesAreaId && outlet.salesAreaId !== data.salesAreaId) {
         throw new OrgError('INVALID_ORG_HIERARCHY', 'Outlet does not belong to the specified sales area.', 400);

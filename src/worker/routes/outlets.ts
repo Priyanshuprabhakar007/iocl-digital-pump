@@ -17,11 +17,29 @@ outlets.use('*', requireAuth as any);
 outlets.get('/', requirePermission(PERMISSIONS.OUTLETS_READ) as any, async (c: AppContext) => {
   const db = getDb(c.env.DB);
   const outletRepo = new OutletRepository(db);
+  const userCtx = c.var.user;
 
-  const accessibleOutlets = await ScopeService.getAccessibleOutlets(c.var.user, outletRepo);
+  const includeHiddenParam = c.req.query('includeHidden') === 'true';
+  const includeArchivedParam = c.req.query('includeArchived') === 'true';
+  const onlyArchivedParam =
+    c.req.query('onlyArchived') === 'true' ||
+    c.req.query('lifecycleStatus') === 'ARCHIVED';
+
+  const canManageArchive =
+    userCtx.isGlobalScope && userCtx.permissions.includes(PERMISSIONS.OUTLETS_UPDATE);
+
+  let targetOutlets;
+  if (canManageArchive && (includeHiddenParam || includeArchivedParam || onlyArchivedParam)) {
+    const allWithArchived = await outletRepo.listAllOutlets({ includeArchived: true });
+    targetOutlets = onlyArchivedParam
+      ? allWithArchived.filter(o => OutletRepository.isOutletArchived(o))
+      : allWithArchived;
+  } else {
+    targetOutlets = await ScopeService.getAccessibleOutlets(userCtx, outletRepo);
+  }
 
   const listWithAssignments = await Promise.all(
-    accessibleOutlets.map(async (o) => {
+    targetOutlets.map(async (o) => {
       const assignments = await outletRepo.listOutletAssignments(o.id);
       return {
         ...o,
@@ -235,21 +253,11 @@ outlets.patch('/:id', requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any, requ
   });
 });
 
-outlets.patch('/:id/directory-visibility', requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any, requireOutletAccess('id') as any, async (c: AppContext) => {
-  const id = c.req.param('id') as string;
-  const body = await c.req.json().catch(() => ({}));
-
-  if (typeof body.hidden !== 'boolean') {
-    return c.json({
-      success: false,
-      data: null,
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Invalid payload: "hidden" boolean is required.',
-      },
-    }, 400);
-  }
-
+async function performOutletLifecycleTransition(
+  c: AppContext,
+  id: string,
+  archive: boolean
+) {
   const db = getDb(c.env.DB);
   const outletRepo = new OutletRepository(db);
   const auditRepo = new AuditRepository(db);
@@ -266,30 +274,30 @@ outlets.patch('/:id/directory-visibility', requirePermission(PERMISSIONS.OUTLETS
   const nowIso = new Date().toISOString();
   const userId = c.var.user.user.id;
 
-  if (body.hidden) {
-    await outletRepo.updateOutlet(id, {
-      directoryHidden: true,
-      directoryHiddenAt: nowIso,
-      directoryHiddenBy: userId,
-      updatedAt: nowIso,
-    });
-  } else {
-    await outletRepo.updateOutlet(id, {
-      directoryHidden: false,
-      directoryHiddenAt: null,
-      directoryHiddenBy: null,
-      updatedAt: nowIso,
-    });
-  }
+  const updatedOutlet = archive
+    ? await outletRepo.archiveOutlet(id, userId, nowIso)
+    : await outletRepo.restoreOutlet(id, nowIso);
 
-  const updatedOutlet = await outletRepo.findById(id);
-
-  const auditAction = body.hidden ? 'OUTLET_DIRECTORY_HIDE' : 'OUTLET_DIRECTORY_RESTORE';
+  const primaryAuditAction = archive ? 'OUTLET_ARCHIVED' : 'OUTLET_RESTORED';
+  const legacyAuditAction = archive ? 'OUTLET_DIRECTORY_HIDE' : 'OUTLET_DIRECTORY_RESTORE';
 
   await auditRepo.logAction({
     id: `aud-${crypto.randomUUID()}`,
     userId,
-    action: auditAction,
+    action: primaryAuditAction,
+    entityType: 'RETAIL_OUTLET',
+    entityId: id,
+    oldValue: currentOutlet as unknown as Record<string, unknown>,
+    newValue: updatedOutlet as unknown as Record<string, unknown>,
+    ipAddress: c.req.header('cf-connecting-ip') || null,
+    userAgent: c.req.header('user-agent') || null,
+    createdAt: nowIso,
+  });
+
+  await auditRepo.logAction({
+    id: `aud-${crypto.randomUUID()}`,
+    userId,
+    action: legacyAuditAction,
     entityType: 'RETAIL_OUTLET',
     entityId: id,
     oldValue: currentOutlet as unknown as Record<string, unknown>,
@@ -304,7 +312,78 @@ outlets.patch('/:id/directory-visibility', requirePermission(PERMISSIONS.OUTLETS
     data: updatedOutlet,
     error: null,
   });
-});
+}
+
+outlets.patch(
+  '/:id/directory-visibility',
+  requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any,
+  requireOutletAccess('id', { allowArchivedForAdmin: true }) as any,
+  async (c: AppContext) => {
+    const id = c.req.param('id') as string;
+    const body = await c.req.json().catch(() => ({}));
+
+    const archiveFlag =
+      typeof body.hidden === 'boolean'
+        ? body.hidden
+        : typeof body.isArchived === 'boolean'
+          ? body.isArchived
+          : body.lifecycleStatus === 'ARCHIVED'
+            ? true
+            : body.lifecycleStatus === 'ACTIVE'
+              ? false
+              : undefined;
+
+    if (typeof archiveFlag !== 'boolean') {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid payload: "hidden" boolean is required.',
+        },
+      }, 400);
+    }
+
+    return performOutletLifecycleTransition(c, id, archiveFlag);
+  }
+);
+
+outlets.post(
+  '/:id/archive',
+  requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any,
+  requireOutletAccess('id', { allowArchivedForAdmin: true }) as any,
+  async (c: AppContext) => {
+    const id = c.req.param('id') as string;
+    return performOutletLifecycleTransition(c, id, true);
+  }
+);
+
+outlets.post(
+  '/:id/restore',
+  requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any,
+  requireOutletAccess('id', { allowArchivedForAdmin: true }) as any,
+  async (c: AppContext) => {
+    const id = c.req.param('id') as string;
+    return performOutletLifecycleTransition(c, id, false);
+  }
+);
+
+outlets.get(
+  '/:id/assignments',
+  requirePermission(PERMISSIONS.OUTLETS_READ) as any,
+  requireOutletAccess('id') as any,
+  async (c: AppContext) => {
+    const id = c.req.param('id') as string;
+    const db = getDb(c.env.DB);
+    const outletRepo = new OutletRepository(db);
+    const assignments = await outletRepo.listOutletAssignments(id);
+    return c.json({
+      success: true,
+      data: assignments,
+      error: null,
+    });
+  }
+);
 
 outlets.post('/:id/assignments', requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any, requireOutletAccess('id') as any, async (c: AppContext) => {
   const outletId = c.req.param('id');

@@ -1,8 +1,16 @@
 import { matchesSearch } from './searchUtils';
 
 export function filterOutletsForSearch(outlets: any[], query: string, showHidden: boolean): any[] {
-  if (!query || !query.trim()) return outlets;
-  return outlets.filter(ro => {
+  const base = showHidden
+    ? outlets
+    : outlets.filter(
+        ro => !ro.directoryHidden && !ro.isArchived && ro.lifecycleStatus !== 'ARCHIVED'
+      );
+  if (!query || !query.trim()) return base;
+  return base.filter(ro => {
+    const isArchivedOrHidden = Boolean(
+      ro.directoryHidden || ro.isArchived || ro.lifecycleStatus === 'ARCHIVED'
+    );
     const fields = [
       ro.name,
       ro.roCode,
@@ -18,7 +26,7 @@ export function filterOutletsForSearch(outlets: any[], query: string, showHidden
       ro.district,
       ro.pincode,
       ro.status,
-      showHidden && ro.directoryHidden ? 'hidden' : ''
+      showHidden && isArchivedOrHidden ? 'hidden archived' : ''
     ];
     return matchesSearch(query, fields);
   });

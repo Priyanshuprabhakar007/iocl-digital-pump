@@ -5,6 +5,7 @@ import { getDb } from '../../db';
 import { SessionRepository } from '../repositories/sessionRepository';
 import { UserRepository } from '../repositories/userRepository';
 import { ScopeRepository } from '../repositories/scopeRepository';
+import { OutletRepository } from '../repositories/outletRepository';
 import { UserContext, ScopeLevel } from '../../shared/types';
 
 export async function hashToken(token: string): Promise<string> {
@@ -46,6 +47,7 @@ export async function requireAuth(c: AppContext, next: Next) {
   const sessionRepo = new SessionRepository(db);
   const userRepo = new UserRepository(db);
   const scopeRepo = new ScopeRepository(db);
+  const outletRepo = new OutletRepository(db);
 
   const tokenHash = await hashToken(sessionToken);
   const nowIso = new Date().toISOString();
@@ -68,16 +70,37 @@ export async function requireAuth(c: AppContext, next: Next) {
     }, 401);
   }
 
+  const roles = await userRepo.getUserRoles(user.id);
+  const permissions = await userRepo.getUserPermissions(user.id);
+  const scopes = await scopeRepo.getUserScopes(user.id);
+  const allScopes = await scopeRepo.getUserScopes(user.id, { includeArchived: true });
+  const activeOutletAssignments = await outletRepo.getUserOutletAssignments(user.id);
+  const allOutletAssignments = await outletRepo.getUserOutletAssignments(user.id, { includeArchived: true });
+
+  const isLogoutEndpoint = c.req.path.endsWith('/auth/logout');
+  if (
+    !isLogoutEndpoint &&
+    scopes.length === 0 &&
+    activeOutletAssignments.length === 0 &&
+    (allScopes.length > 0 || allOutletAssignments.length > 0)
+  ) {
+    await sessionRepo.revokeSession(tokenHash, nowIso);
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'OUTLET_ARCHIVED',
+        message: 'Your assigned retail outlet is currently archived/inactive. Please contact the administrator.'
+      }
+    }, 403);
+  }
+
   // Session write optimization: throttle last_seen_at write to D1 (only if >15 mins old)
   const lastSeenMs = new Date(session.lastSeenAt).getTime();
   const nowMs = new Date(nowIso).getTime();
   if (nowMs - lastSeenMs > 15 * 60 * 1000) {
     c.executionCtx?.waitUntil(sessionRepo.updateLastSeen(session.id, nowIso));
   }
-
-  const roles = await userRepo.getUserRoles(user.id);
-  const permissions = await userRepo.getUserPermissions(user.id);
-  const scopes = await scopeRepo.getUserScopes(user.id);
 
   // Global scope requires an explicit GLOBAL scope assignment record!
   const isGlobalScope = scopes.some(s => s.scopeLevel === 'GLOBAL');
@@ -108,9 +131,14 @@ export async function requireAuth(c: AppContext, next: Next) {
     .filter(s => s.scopeLevel === 'SALES_AREA' && s.salesAreaId)
     .map(s => s.salesAreaId as string);
 
-  const accessibleOutletIds = scopes
-    .filter(s => s.scopeLevel === 'OUTLET' && s.outletId)
-    .map(s => s.outletId as string);
+  const accessibleOutletIds = Array.from(
+    new Set([
+      ...scopes
+        .filter(s => s.scopeLevel === 'OUTLET' && s.outletId)
+        .map(s => s.outletId as string),
+      ...activeOutletAssignments.map(a => a.outletId),
+    ])
+  );
 
   const userContext: UserContext = {
     user,

@@ -25,6 +25,7 @@ documents.get('/', requirePermission(PERMISSIONS.DOCUMENTS_READ) as any, async (
       doc: schema.documents,
       uploadedByName: schema.users.name,
       outletName: schema.retailOutlets.name,
+      outlet: schema.retailOutlets,
     })
     .from(schema.documents)
     .innerJoin(schema.users, eq(schema.documents.uploadedByUserId, schema.users.id))
@@ -33,9 +34,11 @@ documents.get('/', requirePermission(PERMISSIONS.DOCUMENTS_READ) as any, async (
 
   let docsList: any[] = [];
   if (c.var.user.isGlobalScope) {
-    docsList = await query;
+    const rawDocs = await query;
+    docsList = rawDocs.filter(r => !r.outlet || !OutletRepository.isOutletArchived(r.outlet));
   } else if (accessibleOutletIds.length > 0) {
-    docsList = await query.where(inArray(schema.documents.outletId, accessibleOutletIds));
+    const rawDocs = await query.where(inArray(schema.documents.outletId, accessibleOutletIds));
+    docsList = rawDocs.filter(r => !r.outlet || !OutletRepository.isOutletArchived(r.outlet));
   } else {
     docsList = [];
   }

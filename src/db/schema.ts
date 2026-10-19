@@ -98,6 +98,10 @@ export const retailOutlets = sqliteTable('retail_outlets', {
   directoryHidden: integer('directory_hidden', { mode: 'boolean' }).notNull().default(false),
   directoryHiddenAt: text('directory_hidden_at'),
   directoryHiddenBy: text('directory_hidden_by'),
+  lifecycleStatus: text('lifecycle_status', { enum: ['ACTIVE', 'ARCHIVED'] }).notNull().default('ACTIVE'),
+  isArchived: integer('is_archived', { mode: 'boolean' }).notNull().default(false),
+  archivedAt: text('archived_at'),
+  archivedBy: text('archived_by'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [
@@ -106,6 +110,8 @@ export const retailOutlets = sqliteTable('retail_outlets', {
   index('idx_outlets_division_id').on(table.divisionId),
   index('idx_outlets_sales_area_id').on(table.salesAreaId),
   index('idx_outlets_directory_hidden').on(table.directoryHidden),
+  index('idx_retail_outlets_lifecycle_status').on(table.lifecycleStatus),
+  index('idx_retail_outlets_is_archived').on(table.isArchived),
 ]);
 
 export const outletUserAssignments = sqliteTable('outlet_user_assignments', {

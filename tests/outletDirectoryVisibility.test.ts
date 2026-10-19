@@ -359,6 +359,280 @@ describe('Retail Outlet Directory Visibility / Soft-Hide & Restore Lifecycle', (
     expect(rows.length).toBe(1);
     expect(rows[0].id).toBe(testOutletId);
   });
+
+  it('13. Archive sets lifecycleStatus=ARCHIVED, isArchived=true, archivedAt, archivedBy and logs OUTLET_ARCHIVED', async () => {
+    const res = await app.fetch(
+      new Request(`http://localhost/api/v1/outlets/${testOutletId}/archive`, {
+        method: 'POST',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.success).toBe(true);
+    expect(json.data.lifecycleStatus).toBe('ARCHIVED');
+    expect(json.data.isArchived).toBe(true);
+    expect(json.data.archivedAt).not.toBeNull();
+    expect(json.data.archivedBy).toBe('user-admin');
+
+    const db = getDb(localD1);
+    const audits = await db.select().from(schema.auditLogs).where(
+      and(
+        eq(schema.auditLogs.action, 'OUTLET_ARCHIVED'),
+        eq(schema.auditLogs.entityId, testOutletId)
+      )
+    );
+    expect(audits.length).toBeGreaterThan(0);
+  });
+
+  it('14. Normal /api/v1/outlets excludes archived outlet; Admin ?includeArchived=true includes it; non-admin ?includeArchived=true never exposes it', async () => {
+    await app.fetch(
+      new Request(`http://localhost/api/v1/outlets/${testOutletId}/archive`, {
+        method: 'POST',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+
+    // 1. Default list excludes archived outlet even for Admin
+    const listRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets', {
+        headers: { Cookie: adminCookie },
+      }),
+      env
+    );
+    const listJson = (await listRes.json()) as any;
+    expect(listJson.data.some((o: any) => o.id === testOutletId)).toBe(false);
+
+    // 2. Admin with ?includeArchived=true sees archived outlet
+    const adminIncRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets?includeArchived=true', {
+        headers: { Cookie: adminCookie },
+      }),
+      env
+    );
+    const adminIncJson = (await adminIncRes.json()) as any;
+    const archivedItem = adminIncJson.data.find((o: any) => o.id === testOutletId);
+    expect(archivedItem).toBeDefined();
+    expect(archivedItem.lifecycleStatus).toBe('ARCHIVED');
+    expect(archivedItem.isArchived).toBe(true);
+
+    // 3. Non-admin with ?includeArchived=true does NOT see archived outlet
+    const foLogin = await loginAs('fo.central@iocl.in');
+    const foIncRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets?includeArchived=true', {
+        headers: { Cookie: foLogin.cookie },
+      }),
+      env
+    );
+    const foIncJson = (await foIncRes.json()) as any;
+    expect(foIncJson.data.some((o: any) => o.id === testOutletId)).toBe(false);
+  });
+
+  it('15. Direct outlet detail and operational endpoints fail with 403 while outlet is archived', async () => {
+    await app.fetch(
+      new Request(`http://localhost/api/v1/outlets/ro-1001/archive`, {
+        method: 'POST',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+
+    const endpointsToVerify = [
+      `/api/v1/outlets/ro-1001`,
+      `/api/v1/outlets/ro-1001/assignments`,
+      `/api/v1/outlets/ro-1001/products`,
+      `/api/v1/outlets/ro-1001/tanks`,
+      `/api/v1/outlets/ro-1001/dispensers`,
+      `/api/v1/outlets/ro-1001/nozzles`,
+      `/api/v1/outlets/ro-1001/shifts`,
+      `/api/v1/outlets/ro-1001/product-prices`,
+      `/api/v1/outlets/ro-1001/dg-logs`,
+      `/api/v1/outlets/ro-1001/reports/monthly-operations?year=2026&month=10&period=complete-month`,
+      `/api/v1/outlets/ro-1001/reports/monthly-operations/pdf?year=2026&month=10&period=complete-month`,
+    ];
+
+    for (const ep of endpointsToVerify) {
+      const res = await app.fetch(
+        new Request(`http://localhost${ep}`, {
+          headers: { Cookie: adminCookie },
+        }),
+        env
+      );
+      expect(res.status).toBe(403);
+    }
+  });
+
+  it('16. Active outlet lists, scopes, and user scope listings exclude archived outlet and update counts', async () => {
+    const beforeOutletsRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets', {
+        headers: { Cookie: adminCookie },
+      }),
+      env
+    );
+    const beforeOutlets = (await beforeOutletsRes.json()) as any;
+    const initialTotalOutlets = beforeOutlets.data.length;
+
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/archive', {
+        method: 'POST',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+
+    const afterOutletsRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets', {
+        headers: { Cookie: adminCookie },
+      }),
+      env
+    );
+    const afterOutlets = (await afterOutletsRes.json()) as any;
+    expect(afterOutlets.data.length).toBe(initialTotalOutlets - 1);
+    expect(afterOutlets.data.some((o: any) => o.id === 'ro-1001')).toBe(false);
+
+    const scopesRes = await app.fetch(
+      new Request('http://localhost/api/v1/scopes', {
+        headers: { Cookie: adminCookie },
+      }),
+      env
+    );
+    const scopesJson = (await scopesRes.json()) as any;
+    expect(scopesJson.data.some((s: any) => s.outletId === 'ro-1001')).toBe(false);
+
+    const usersRes = await app.fetch(
+      new Request('http://localhost/api/v1/users', {
+        headers: { Cookie: adminCookie },
+      }),
+      env
+    );
+    const usersJson = (await usersRes.json()) as any;
+    const dealerUser = usersJson.data.find((u: any) => u.id === 'user-dealer');
+    expect(dealerUser.scopes.some((s: any) => s.outletId === 'ro-1001')).toBe(false);
+  });
+
+  it('17. User assigned ONLY to archived outlet has existing session immediately blocked and cannot log in until restored', async () => {
+    // Dealer is already logged in (dealerCookie) and assigned only to ro-1001
+    const meBefore = await app.fetch(
+      new Request('http://localhost/api/v1/auth/me', {
+        headers: { Cookie: dealerCookie },
+      }),
+      env
+    );
+    expect(meBefore.status).toBe(200);
+
+    // Admin archives ro-1001
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/archive', {
+        method: 'POST',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+
+    // Existing dealer session is immediately rejected on next API call
+    const meAfter = await app.fetch(
+      new Request('http://localhost/api/v1/auth/me', {
+        headers: { Cookie: dealerCookie },
+      }),
+      env
+    );
+    expect(meAfter.status).toBe(403);
+    const meAfterJson = (await meAfter.json()) as any;
+    expect(meAfterJson.error.code).toBe('OUTLET_ARCHIVED');
+
+    // Dealer login attempt while ro-1001 is archived is blocked with 403 OUTLET_ARCHIVED
+    const blockedLogin = await loginAs('dealer.parkstreet@iocl.in');
+    expect(blockedLogin.res.status).toBe(403);
+    expect(blockedLogin.json.error.code).toBe('OUTLET_ARCHIVED');
+
+    // Admin restores ro-1001
+    const restoreRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/restore', {
+        method: 'POST',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(restoreRes.status).toBe(200);
+    const restoreJson = (await restoreRes.json()) as any;
+    expect(restoreJson.data.lifecycleStatus).toBe('ACTIVE');
+    expect(restoreJson.data.isArchived).toBe(false);
+    expect(restoreJson.data.archivedAt).toBeNull();
+    expect(restoreJson.data.archivedBy).toBeNull();
+
+    // Verify OUTLET_RESTORED audit log
+    const db = getDb(localD1);
+    const restoreAudits = await db.select().from(schema.auditLogs).where(
+      and(
+        eq(schema.auditLogs.action, 'OUTLET_RESTORED'),
+        eq(schema.auditLogs.entityId, 'ro-1001')
+      )
+    );
+    expect(restoreAudits.length).toBeGreaterThan(0);
+
+    // Dealer can now log in again and access ro-1001
+    const restoredLogin = await loginAs('dealer.parkstreet@iocl.in');
+    expect(restoredLogin.res.status).toBe(200);
+    const outletDetailRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001', {
+        headers: { Cookie: restoredLogin.cookie },
+      }),
+      env
+    );
+    expect(outletDetailRes.status).toBe(200);
+  });
+
+  it('18. User with multiple outlets keeps access to active outlet when one outlet is archived', async () => {
+    const db = getDb(localD1);
+    // Grant dealer access to ro-1002 as well
+    await db.insert(schema.userScopeAssignments).values({
+      id: 'usa-dlr-second',
+      userId: 'user-dealer',
+      scopeLevel: 'OUTLET',
+      outletId: 'ro-1002',
+      createdAt: new Date().toISOString(),
+      createdBy: 'user-admin',
+    });
+
+    // Archive ro-1001
+    await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/archive', {
+        method: 'POST',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+
+    // Dealer session remains valid and only has ro-1002 in active scopes
+    const meRes = await app.fetch(
+      new Request('http://localhost/api/v1/auth/me', {
+        headers: { Cookie: dealerCookie },
+      }),
+      env
+    );
+    expect(meRes.status).toBe(200);
+    const meJson = (await meRes.json()) as any;
+    expect(meJson.data.accessibleOutletIds).toEqual(['ro-1002']);
+
+    // Access to archived ro-1001 is denied (403), access to active ro-1002 succeeds (200)
+    const archivedAccess = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001', {
+        headers: { Cookie: dealerCookie },
+      }),
+      env
+    );
+    expect(archivedAccess.status).toBe(403);
+
+    const activeAccess = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1002', {
+        headers: { Cookie: dealerCookie },
+      }),
+      env
+    );
+    expect(activeAccess.status).toBe(200);
+  });
 });
 
 describe('Frontend Pure Logic Tests: Retail Outlet Directory Visibility', () => {

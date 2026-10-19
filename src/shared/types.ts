@@ -103,6 +103,10 @@ export interface RetailOutlet {
   directoryHidden?: boolean;
   directoryHiddenAt?: string | null;
   directoryHiddenBy?: string | null;
+  lifecycleStatus?: 'ACTIVE' | 'ARCHIVED';
+  isArchived?: boolean;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
   createdAt: string;
   updatedAt: string;
   salesAreaName?: string;

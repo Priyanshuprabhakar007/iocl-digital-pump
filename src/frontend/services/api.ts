@@ -60,6 +60,15 @@ export async function apiFetch<T = unknown>(
 
     if (contentType.includes('application/json')) {
       const json = (await res.json()) as ApiResponse<T>;
+      if (
+        !json.success &&
+        json.error?.code === 'OUTLET_ARCHIVED' &&
+        !endpoint.includes('/auth/login') &&
+        !endpoint.includes('/outlets/') &&
+        typeof window !== 'undefined'
+      ) {
+        window.dispatchEvent(new CustomEvent('iocl:outlet-archived', { detail: json.error }));
+      }
       return json;
     }
 

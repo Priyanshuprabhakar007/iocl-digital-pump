@@ -84,17 +84,15 @@ export class ScopeService {
 
   /**
    * AUTHORIZATION CHECK: Check if actor has scope access to a specific Outlet.
+   * Archived outlets are strictly denied for all operational & scope checks unless explicitly allowed for admin lifecycle restoration.
    */
   static async canAccessOutlet(
     userCtx: UserContext,
     outletId: string,
-    outletRepo: OutletRepository
+    outletRepo: OutletRepository,
+    options?: { allowArchivedForAdmin?: boolean }
   ): Promise<boolean> {
-    if (!userCtx || !outletId) return false;
-    if (userCtx.isGlobalScope) return true;
-    if (userCtx.accessibleOutletIds?.includes(outletId)) return true;
-
-    if (!outletRepo) return false;
+    if (!userCtx || !outletId || !outletRepo) return false;
 
     let outlet: RetailOutlet | null = null;
     if (typeof outletRepo.findById === 'function') {
@@ -104,8 +102,17 @@ export class ScopeService {
       outlet = await (outletRepo as any).findByIdOrCode(outletId);
     }
 
+    if (outlet && OutletRepository.isOutletArchived(outlet)) {
+      if (options?.allowArchivedForAdmin && userCtx.isGlobalScope) {
+        return true;
+      }
+      return false;
+    }
+
+    if (userCtx.isGlobalScope) return true;
     if (!outlet) return false;
 
+    if (userCtx.accessibleOutletIds?.includes(outletId)) return true;
     if (outlet.id && userCtx.accessibleOutletIds?.includes(outlet.id)) return true;
     if (outlet.salesAreaId && userCtx.accessibleSalesAreaIds?.includes(outlet.salesAreaId)) return true;
     if (outlet.divisionId && userCtx.accessibleDivisionIds?.includes(outlet.divisionId)) return true;
@@ -162,10 +169,13 @@ export class ScopeService {
 
     if (scope.scopeLevel === 'OUTLET' && scope.outletId) {
       const outlet = await outletRepo.findById(scope.outletId);
+      if (!outlet || OutletRepository.isOutletArchived(outlet)) {
+        return { stateId: null, divisionId: null, salesAreaId: null, outletId: null };
+      }
       return {
-        stateId: outlet ? outlet.stateId : null,
-        divisionId: outlet ? outlet.divisionId : null,
-        salesAreaId: outlet ? outlet.salesAreaId : null,
+        stateId: outlet.stateId,
+        divisionId: outlet.divisionId,
+        salesAreaId: outlet.salesAreaId,
         outletId: scope.outletId,
       };
     }
@@ -207,7 +217,10 @@ export class ScopeService {
     }
 
     if (scope.scopeLevel === 'OUTLET') {
-      if (scope.outletId && actorCtx.accessibleOutletIds.includes(scope.outletId)) return true;
+      if (!scope.outletId) return false;
+      const outlet = await outletRepo.findById(scope.outletId);
+      if (!outlet || OutletRepository.isOutletArchived(outlet)) return false;
+      if (actorCtx.accessibleOutletIds.includes(scope.outletId)) return true;
       if (ancestry.salesAreaId && actorCtx.accessibleSalesAreaIds.includes(ancestry.salesAreaId)) return true;
       if (ancestry.divisionId && actorCtx.accessibleDivisionIds.includes(ancestry.divisionId)) return true;
       if (ancestry.stateId && actorCtx.accessibleStateIds.includes(ancestry.stateId)) return true;
@@ -648,7 +661,9 @@ export class ScopeService {
     if (scopeLevel === 'OUTLET') {
       if (!payload.outletId) return { valid: false, message: 'outletId is required for OUTLET scope', derived: { stateId: null, divisionId: null, salesAreaId: null, outletId: null } };
       const outlet = await outletRepo.findById(payload.outletId);
-      if (!outlet) return { valid: false, message: 'Invalid Outlet ID', derived: { stateId: null, divisionId: null, salesAreaId: null, outletId: null } };
+      if (!outlet || OutletRepository.isOutletArchived(outlet)) {
+        return { valid: false, message: 'Invalid or archived Outlet ID', derived: { stateId: null, divisionId: null, salesAreaId: null, outletId: null } };
+      }
 
       return {
         valid: true,

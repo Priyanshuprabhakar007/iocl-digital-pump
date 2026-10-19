@@ -35,6 +35,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     fetchMe();
+    const handleArchivedRevocation = () => {
+      setAuthToken(null);
+      setUserCtx(null);
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('iocl:outlet-archived', handleArchivedRevocation);
+      return () => window.removeEventListener('iocl:outlet-archived', handleArchivedRevocation);
+    }
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {

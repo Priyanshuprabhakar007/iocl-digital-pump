@@ -2,11 +2,12 @@ import { AppDatabase } from '../../db';
 import * as schema from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { UserScopeAssignment, ScopeLevel } from '../../shared/types';
+import { OutletRepository } from './outletRepository';
 
 export class ScopeRepository {
   constructor(private db: AppDatabase) {}
 
-  async getUserScopes(userId: string): Promise<UserScopeAssignment[]> {
+  async getUserScopes(userId: string, options?: { includeArchived?: boolean }): Promise<UserScopeAssignment[]> {
     const res = await this.db
       .select({
         usa: schema.userScopeAssignments,
@@ -15,6 +16,7 @@ export class ScopeRepository {
         divisionName: schema.divisions.name,
         salesAreaName: schema.salesAreas.name,
         outletName: schema.retailOutlets.name,
+        outlet: schema.retailOutlets,
       })
       .from(schema.userScopeAssignments)
       .innerJoin(schema.users, eq(schema.userScopeAssignments.userId, schema.users.id))
@@ -24,7 +26,16 @@ export class ScopeRepository {
       .leftJoin(schema.retailOutlets, eq(schema.userScopeAssignments.outletId, schema.retailOutlets.id))
       .where(eq(schema.userScopeAssignments.userId, userId));
 
-    return res.map(r => ({
+    const filtered = options?.includeArchived
+      ? res
+      : res.filter(r => {
+          if (r.usa.scopeLevel === 'OUTLET') {
+            return Boolean(r.outlet && !OutletRepository.isOutletArchived(r.outlet));
+          }
+          return true;
+        });
+
+    return filtered.map(r => ({
       id: r.usa.id,
       userId: r.usa.userId,
       scopeLevel: r.usa.scopeLevel as ScopeLevel,
@@ -42,7 +53,7 @@ export class ScopeRepository {
     }));
   }
 
-  async listAllScopes(): Promise<UserScopeAssignment[]> {
+  async listAllScopes(options?: { includeArchived?: boolean }): Promise<UserScopeAssignment[]> {
     const res = await this.db
       .select({
         usa: schema.userScopeAssignments,
@@ -51,6 +62,7 @@ export class ScopeRepository {
         divisionName: schema.divisions.name,
         salesAreaName: schema.salesAreas.name,
         outletName: schema.retailOutlets.name,
+        outlet: schema.retailOutlets,
       })
       .from(schema.userScopeAssignments)
       .innerJoin(schema.users, eq(schema.userScopeAssignments.userId, schema.users.id))
@@ -59,7 +71,16 @@ export class ScopeRepository {
       .leftJoin(schema.salesAreas, eq(schema.userScopeAssignments.salesAreaId, schema.salesAreas.id))
       .leftJoin(schema.retailOutlets, eq(schema.userScopeAssignments.outletId, schema.retailOutlets.id));
 
-    return res.map(r => ({
+    const filtered = options?.includeArchived
+      ? res
+      : res.filter(r => {
+          if (r.usa.scopeLevel === 'OUTLET') {
+            return Boolean(r.outlet && !OutletRepository.isOutletArchived(r.outlet));
+          }
+          return true;
+        });
+
+    return filtered.map(r => ({
       id: r.usa.id,
       userId: r.usa.userId,
       scopeLevel: r.usa.scopeLevel as ScopeLevel,
