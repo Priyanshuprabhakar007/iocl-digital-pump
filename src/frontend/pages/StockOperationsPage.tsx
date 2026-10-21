@@ -22,9 +22,14 @@ import {
   MinusCircle,
 } from 'lucide-react';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { getLocalDateInputValue, getLocalDateTimeInputValue } from '../../shared/utils/dateUtils';
+
 export const StockOperationsPage: React.FC = () => {
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
+  const { activeOutletId, accessibleOutlets: outlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
+
   const [shifts, setShifts] = useState<OperationalShift[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'OPENING' | 'RECEIPTS' | 'CLOSING' | 'RECONCILIATION'>('OPENING');
@@ -58,8 +63,8 @@ export const StockOperationsPage: React.FC = () => {
   const [receiptForm, setReceiptForm] = useState({
     ttNumber: '',
     invoiceNumber: '',
-    invoiceDate: new Date().toISOString().split('T')[0],
-    arrivalTime: new Date().toISOString().slice(0, 16),
+    invoiceDate: getLocalDateInputValue(),
+    arrivalTime: getLocalDateTimeInputValue(),
     sealVerified: true,
     sealExceptionReason: '',
     lineTankId: '',
@@ -68,11 +73,6 @@ export const StockOperationsPage: React.FC = () => {
     invoiceDensity: '',
     temperature: '',
   });
-
-  // Fetch Outlets on Mount
-  useEffect(() => {
-    loadOutlets();
-  }, []);
 
   // Fetch Shifts when Outlet changes
   useEffect(() => {
@@ -90,16 +90,6 @@ export const StockOperationsPage: React.FC = () => {
       loadShiftData(selectedShiftId);
     }
   }, [selectedShiftId]);
-
-  const loadOutlets = async () => {
-    const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-    if (res.success && res.data) {
-      setOutlets(res.data);
-      if (res.data.length > 0) {
-        setSelectedOutletId(res.data[0].id);
-      }
-    }
-  };
 
   const loadShifts = async (outletId: string) => {
     const res = await apiFetch<OperationalShift[]>(`/api/v1/outlets/${outletId}/shifts`);
@@ -201,8 +191,8 @@ export const StockOperationsPage: React.FC = () => {
       setReceiptForm({
         ttNumber: '',
         invoiceNumber: '',
-        invoiceDate: new Date().toISOString().split('T')[0],
-        arrivalTime: new Date().toISOString().slice(0, 16),
+        invoiceDate: getLocalDateInputValue(),
+        arrivalTime: getLocalDateTimeInputValue(),
         sealVerified: true,
         sealExceptionReason: '',
         lineTankId: '',

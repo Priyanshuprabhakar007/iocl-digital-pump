@@ -243,7 +243,7 @@ export const UsersPage = () => {
                   <input
                     type="password"
                     required
-                    placeholder="Password@123"
+                    placeholder="••••••••••••"
                     value={form.password}
                     onChange={e => setForm({ ...form, password: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"

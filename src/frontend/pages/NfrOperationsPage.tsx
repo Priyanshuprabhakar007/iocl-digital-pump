@@ -45,14 +45,16 @@ import { NfrRentDueGenerateModal } from '../components/nfr/NfrRentDueGenerateMod
 import { NfrRentDueDetailPanel } from '../components/nfr/NfrRentDueDetailPanel';
 import { NfrRentPaymentModal } from '../components/nfr/NfrRentPaymentModal';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+
 export const NfrOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
   const canReadNfr = hasPermission(PERMISSIONS.NFR_READ as PermissionCode);
 
   // Outlets
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
-  const [isLoadingOutlets, setIsLoadingOutlets] = useState<boolean>(true);
+  const { activeOutletId, accessibleOutlets: outlets, loading: isLoadingOutlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
 
   // Stale Request Protection Ref
   const activeOutletReqRef = useRef<string>('');
@@ -131,41 +133,6 @@ export const NfrOperationsPage: React.FC = () => {
     }
     setActiveTab(nextTab);
   };
-
-  // 1. Load accessible outlets on mount
-  useEffect(() => {
-    if (!canReadNfr) {
-      setIsLoadingOutlets(false);
-      return;
-    }
-
-    let isMounted = true;
-    const fetchOutlets = async () => {
-      try {
-        const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-        if (isMounted && res.success && Array.isArray(res.data) && res.data.length > 0) {
-          setOutlets(res.data);
-          const firstId = res.data[0].id;
-          activeOutletReqRef.current = firstId;
-          setSelectedOutletId(firstId);
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          showFeedback('error', 'Failed to load accessible retail outlets.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingOutlets(false);
-        }
-      }
-    };
-
-    fetchOutlets();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [canReadNfr, showFeedback]);
 
   // Function to load all workspace data for current outlet and filters
   const loadWorkspaceData = useCallback(async (outletId: string, currentFilters: NfrFilterState) => {

@@ -43,6 +43,8 @@ import {
   buildChargeSummaryQueryParams,
 } from '../components/utilities/utilityUi';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+
 export const UtilitiesOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
 
@@ -56,9 +58,9 @@ export const UtilitiesOperationsPage: React.FC = () => {
   const hasOutletsRead = hasPermission(PERMISSIONS.OUTLETS_READ);
 
   // Outlet State
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
-  const [loadingOutlets, setLoadingOutlets] = useState<boolean>(true);
+  const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
 
   // Workspace Data State
   const [electricitySummary, setElectricitySummary] = useState<UtilityElectricitySummary | null>(null);
@@ -121,39 +123,6 @@ export const UtilitiesOperationsPage: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [successMessage]);
-
-  // Load Outlets on Mount
-  useEffect(() => {
-    const loadOutlets = async () => {
-      setLoadingOutlets(true);
-      try {
-        if (!hasOutletsRead && !canRead) {
-          setOutlets([]);
-          return;
-        }
-        const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-        if (res.success && res.data && res.data.length > 0) {
-          setOutlets(res.data);
-          setSelectedOutletId(res.data[0].id);
-        } else {
-          setOutlets([]);
-          if (res.success === false) {
-            setErrorMessage(res.error?.message || 'Failed to load retail outlets');
-          }
-        }
-      } catch (err: any) {
-        setErrorMessage(err.message || 'Failed to load retail outlets');
-      } finally {
-        setLoadingOutlets(false);
-      }
-    };
-
-    if (canRead) {
-      loadOutlets();
-    } else {
-      setLoadingOutlets(false);
-    }
-  }, [canRead, hasOutletsRead]);
 
   // Main data loader for selected outlet
   const fetchWorkspaceData = useCallback(async (outletId: string) => {

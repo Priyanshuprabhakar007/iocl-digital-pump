@@ -45,11 +45,13 @@ import {
   getProductCategoryBadgeClass,
 } from '../components/pump/pumpInfrastructureUi';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+
 export const PumpInfrastructurePage: React.FC = () => {
   const { userCtx } = useAuth();
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
-  const [loadingOutlets, setLoadingOutlets] = useState(true);
+  const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
 
   // Active Sub-tab
   const [activeTab, setActiveTab] = useState<'products' | 'tanks' | 'dispensers' | 'nozzles' | 'shifts' | 'fuelMapping'>('products');
@@ -101,20 +103,6 @@ export const PumpInfrastructurePage: React.FC = () => {
   const [shiftEnd, setShiftEnd] = useState('14:00');
   const [shiftSeq, setShiftSeq] = useState(1);
 
-  // Load Outlets list
-  useEffect(() => {
-    const loadOutlets = async () => {
-      setLoadingOutlets(true);
-      const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-      if (res.success && res.data && res.data.length > 0) {
-        setOutlets(res.data);
-        setSelectedOutletId(res.data[0].id);
-      }
-      setLoadingOutlets(false);
-    };
-    loadOutlets();
-  }, []);
-
   // Load Catalog Products once
   useEffect(() => {
     const loadCatalog = async () => {
@@ -128,9 +116,25 @@ export const PumpInfrastructurePage: React.FC = () => {
 
   // Load outlet operational data whenever selected outlet changes
   const loadOutletData = async () => {
-    if (!selectedOutletId) return;
+    if (!selectedOutletId) {
+      setOutletProducts([]);
+      setTanks([]);
+      setDispensers([]);
+      setNozzles([]);
+      setNozzleDiagnostics(null);
+      setShiftTemplates([]);
+      return;
+    }
     setLoadingData(true);
     setError(null);
+
+    // Clear stale data prior to fetching
+    setOutletProducts([]);
+    setTanks([]);
+    setDispensers([]);
+    setNozzles([]);
+    setNozzleDiagnostics(null);
+    setShiftTemplates([]);
 
     const [pRes, tRes, dRes, nRes, diagRes, sRes] = await Promise.all([
       apiFetch<OutletProduct[]>(`/api/v1/outlets/${selectedOutletId}/products`),
@@ -141,12 +145,17 @@ export const PumpInfrastructurePage: React.FC = () => {
       apiFetch<ShiftTemplate[]>(`/api/v1/outlets/${selectedOutletId}/shift-templates`),
     ]);
 
-    if (pRes.success && pRes.data) setOutletProducts(pRes.data);
-    if (tRes.success && tRes.data) setTanks(tRes.data);
-    if (dRes.success && dRes.data) setDispensers(dRes.data);
-    if (nRes.success && nRes.data) setNozzles(nRes.data);
+    const failures: string[] = [];
+    if (pRes.success && pRes.data) setOutletProducts(pRes.data); else failures.push('products');
+    if (tRes.success && tRes.data) setTanks(tRes.data); else failures.push('tanks');
+    if (dRes.success && dRes.data) setDispensers(dRes.data); else failures.push('dispensers');
+    if (nRes.success && nRes.data) setNozzles(nRes.data); else failures.push('nozzles');
     if (diagRes.success && diagRes.data) setNozzleDiagnostics(diagRes.data);
-    if (sRes.success && sRes.data) setShiftTemplates(sRes.data);
+    if (sRes.success && sRes.data) setShiftTemplates(sRes.data); else failures.push('shift templates');
+
+    if (failures.length > 0) {
+      setError(`Failed to load ${failures.join(', ')} for the selected outlet.`);
+    }
 
     setLoadingData(false);
   };

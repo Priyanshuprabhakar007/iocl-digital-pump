@@ -42,11 +42,14 @@ import {
 import { formatPaiseToMoney } from '../../shared/financialUtils';
 import { PERMISSIONS } from '../../shared/constants';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { getLocalDateInputValue } from '../../shared/utils/dateUtils';
+
 export const FinancialOperationsPage: React.FC = () => {
   const { userCtx, hasPermission } = useAuth();
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
-  const [loadingOutlets, setLoadingOutlets] = useState(true);
+  const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
 
   const [shiftsList, setShiftsList] = useState<OperationalShift[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
@@ -73,20 +76,6 @@ export const FinancialOperationsPage: React.FC = () => {
   const [showHandoverModal, setShowHandoverModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [varianceReason, setVarianceReason] = useState('');
-
-  // Load Outlets
-  useEffect(() => {
-    const loadOutlets = async () => {
-      setLoadingOutlets(true);
-      const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-      if (res.success && res.data && res.data.length > 0) {
-        setOutlets(res.data);
-        setSelectedOutletId(res.data[0].id);
-      }
-      setLoadingOutlets(false);
-    };
-    loadOutlets();
-  }, []);
 
   // Load shifts for selected outlet
   useEffect(() => {
@@ -964,7 +953,7 @@ export const FinancialOperationsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">Deposit Date</label>
-                  <input type="date" name="depositDate" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono" />
+                  <input type="date" name="depositDate" required defaultValue={getLocalDateInputValue()} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono" />
                 </div>
               </div>
               <div>
@@ -1073,7 +1062,7 @@ export const FinancialOperationsPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">Effective From</label>
-                  <input name="effectiveFrom" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
+                  <input name="effectiveFrom" type="date" required defaultValue={getLocalDateInputValue()} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">Effective To (Optional)</label>

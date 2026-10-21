@@ -18,15 +18,18 @@ import { RetailOutlet, MonthlyOperationsReport } from '../../shared/types';
 import { useAuth } from '../context/AuthContext';
 import { PERMISSIONS } from '../../shared/constants';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { getLocalMonthInputValue } from '../../shared/utils/dateUtils';
+
 export const ReportsPage: React.FC = () => {
   const { hasPermission } = useAuth();
   const canGeneratePdf = hasPermission(PERMISSIONS.REPORTS_GENERATE);
 
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
-  const [selectedMonth, setSelectedMonth] = useState<string>(
-    new Date().toISOString().substring(0, 7) // YYYY-MM
-  );
+  const { activeOutletId, accessibleOutlets: outlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
+
+  const [selectedMonth, setSelectedMonth] = useState<string>(getLocalMonthInputValue());
   const [cutoffMode, setCutoffMode] = useState<'MONTH_END' | 'SELECTED_DATE' | 'LATEST_DATA'>('MONTH_END');
   const [cutoffDate, setCutoffDate] = useState<string>('');
   const [report, setReport] = useState<MonthlyOperationsReport | null>(null);
@@ -36,22 +39,6 @@ export const ReportsPage: React.FC = () => {
   // PDF UI State
   const [pdfLoading, setPdfLoading] = useState<boolean>(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
-
-  // Load Outlets on Mount
-  useEffect(() => {
-    const fetchOutlets = async () => {
-      try {
-        const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-        if (res.success && res.data && res.data.length > 0) {
-          setOutlets(res.data);
-          setSelectedOutletId(res.data[0].id);
-        }
-      } catch (err: any) {
-        setError(err.message || 'Failed to load retail outlets');
-      }
-    };
-    fetchOutlets();
-  }, []);
 
   // Clear stale PDF error whenever filters change
   useEffect(() => {
@@ -76,11 +63,18 @@ export const ReportsPage: React.FC = () => {
   }, [selectedOutletId, selectedMonth, cutoffMode, cutoffDate]);
 
   const fetchReport = useCallback(async () => {
-    if (!selectedOutletId || !selectedMonth) return;
-    if (cutoffMode === 'SELECTED_DATE' && !cutoffDate) return;
+    if (!selectedOutletId || !selectedMonth) {
+      setReport(null);
+      return;
+    }
+    if (cutoffMode === 'SELECTED_DATE' && !cutoffDate) {
+      setReport(null);
+      return;
+    }
 
     setLoading(true);
     setError(null);
+    setReport(null); // Clear stale report data prior to fetching
 
     try {
       const params = new URLSearchParams({

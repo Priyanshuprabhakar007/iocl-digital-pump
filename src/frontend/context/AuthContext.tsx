@@ -5,6 +5,8 @@ import { apiFetch, setAuthToken } from '../services/api';
 interface AuthContextType {
   userCtx: UserContext | null;
   loading: boolean;
+  archivedNotice: string | null;
+  setArchivedNotice: (msg: string | null) => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refetchMe: () => Promise<boolean>;
@@ -18,6 +20,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [userCtx, setUserCtx] = useState<UserContext | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [archivedNotice, setArchivedNotice] = useState<string | null>(null);
 
   const fetchMe = async (): Promise<boolean> => {
     setLoading(true);
@@ -27,6 +30,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
       return true;
     } else {
+      if (res.error?.code === 'OUTLET_ARCHIVED') {
+        setArchivedNotice('Your assigned retail outlet is archived/inactive.');
+      }
       setUserCtx(null);
       setLoading(false);
       return false;
@@ -35,9 +41,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     fetchMe();
-    const handleArchivedRevocation = () => {
+    const handleArchivedRevocation = (e: Event) => {
       setAuthToken(null);
       setUserCtx(null);
+      setArchivedNotice('Your assigned retail outlet is archived/inactive.');
     };
     if (typeof window !== 'undefined') {
       window.addEventListener('iocl:outlet-archived', handleArchivedRevocation);
@@ -46,12 +53,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    setArchivedNotice(null);
     const res = await apiFetch<any>('/api/v1/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
 
     if (!res.success) {
+      if (res.error?.code === 'OUTLET_ARCHIVED') {
+        setArchivedNotice('Your assigned retail outlet is archived/inactive.');
+      }
       return {
         success: false,
         error: res.error?.message || 'Login failed. Check credentials.',
@@ -74,7 +85,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchDemoUser = async (email: string) => {
-    return login(email, 'Password@123');
+    if (import.meta.env.DEV) {
+      return login(email, 'Password@123');
+    }
+    return { success: false, error: 'Demo user login is disabled in production.' };
   };
 
   const logout = async () => {
@@ -98,6 +112,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         userCtx,
         loading,
+        archivedNotice,
+        setArchivedNotice,
         login,
         logout,
         refetchMe: fetchMe,

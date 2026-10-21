@@ -130,7 +130,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'reports',
       label: 'Monthly Reports',
       icon: FileText,
-      perm: PERMISSIONS.EQUIPMENT_READ,
+      perm: PERMISSIONS.REPORTS_READ,
     },
     {
       id: 'users',

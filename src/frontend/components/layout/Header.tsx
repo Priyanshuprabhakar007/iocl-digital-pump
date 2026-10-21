@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Shield, User, LogOut, ChevronDown, Building2, MapPin, Menu, RefreshCw } from 'lucide-react';
 
+import { GlobalOutletSelector } from '../../context/ActiveOutletContext';
+
 interface HeaderProps {
   onToggleMobileSidebar: () => void;
 }
@@ -72,6 +74,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
 
         {/* Center / Right Scope & User info */}
         <div className="flex items-center gap-3">
+          {/* Global Active Outlet Selector */}
+          <GlobalOutletSelector />
+
           {/* Active Scope Badge */}
           <div className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-medium border ${getScopeBadgeColor(userCtx.primaryScope)}`}>
             <MapPin className="w-3.5 h-3.5 opacity-70" />

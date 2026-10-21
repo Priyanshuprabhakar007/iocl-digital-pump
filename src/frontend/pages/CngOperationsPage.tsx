@@ -25,14 +25,16 @@ import { CngPressurePanel } from '../components/cng/CngPressurePanel';
 import { CngDailySummaryPanel } from '../components/cng/CngDailySummaryPanel';
 import { CngPressureModal } from '../components/cng/CngPressureModal';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+
 export const CngOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
   const canRead = hasPermission(PERMISSIONS.CNG_OPERATIONS_READ);
   const canWrite = hasPermission(PERMISSIONS.CNG_OPERATIONS_WRITE);
 
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
-  const [loadingOutlets, setLoadingOutlets] = useState(true);
+  const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
 
   const [shiftsList, setShiftsList] = useState<OperationalShift[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
@@ -61,30 +63,6 @@ export const CngOperationsPage: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [actionSuccess]);
-
-  // Load Outlets on Mount
-  useEffect(() => {
-    const loadOutlets = async () => {
-      setLoadingOutlets(true);
-      try {
-        const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-        if (res.success && res.data && res.data.length > 0) {
-          setOutlets(res.data);
-          setSelectedOutletId(res.data[0].id);
-        } else {
-          setOutlets([]);
-        }
-      } catch (err: any) {
-        setActionError(err.message || 'Failed to load retail outlets');
-      } finally {
-        setLoadingOutlets(false);
-      }
-    };
-
-    if (canRead) {
-      loadOutlets();
-    }
-  }, [canRead]);
 
   // Load Shifts when Outlet Changes
   useEffect(() => {

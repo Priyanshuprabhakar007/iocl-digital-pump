@@ -31,15 +31,18 @@ import { LubeSalesPanel } from '../components/lube/LubeSalesPanel';
 import { LubeDailySummaryPanel } from '../components/lube/LubeDailySummaryPanel';
 import { LubeSummaryPanel } from '../components/lube/LubeSummaryPanel';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { getLocalDateInputValue } from '../../shared/utils/dateUtils';
+
 export const LubeOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
   const canRead = hasPermission(PERMISSIONS.LUBE_OPERATIONS_READ);
   const hasShiftsRead = hasPermission(PERMISSIONS.SHIFTS_READ);
   const hasOutletsRead = hasPermission(PERMISSIONS.OUTLETS_READ);
 
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
-  const [loadingOutlets, setLoadingOutlets] = useState(true);
+  const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
 
   const [shiftsList, setShiftsList] = useState<OperationalShift[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
@@ -73,37 +76,6 @@ export const LubeOperationsPage: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [actionSuccess]);
-
-  // Load Outlets on Mount
-  useEffect(() => {
-    const loadOutlets = async () => {
-      setLoadingOutlets(true);
-      try {
-        if (!hasOutletsRead) {
-          setOutlets([]);
-          return;
-        }
-        const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-        if (res.success && res.data && res.data.length > 0) {
-          setOutlets(res.data);
-          setSelectedOutletId(res.data[0].id);
-        } else {
-          setOutlets([]);
-          if (res.success === false) {
-            setActionError(res.error?.message || 'Failed to load retail outlets');
-          }
-        }
-      } catch (err: any) {
-        setActionError(err.message || 'Failed to load retail outlets');
-      } finally {
-        setLoadingOutlets(false);
-      }
-    };
-
-    if (canRead) {
-      loadOutlets();
-    }
-  }, [canRead, hasOutletsRead]);
 
   // Point 4: Synchronous State Reset on Outlet Switch
   useEffect(() => {
@@ -636,7 +608,7 @@ export const LubeOperationsPage: React.FC = () => {
         {activeTab === 'daily' && (
           <LubeDailySummaryPanel
             outletId={selectedOutletId}
-            defaultDate={selectedShift?.businessDate || new Date().toISOString().split('T')[0]}
+            defaultDate={selectedShift?.businessDate || getLocalDateInputValue()}
           />
         )}
       </div>

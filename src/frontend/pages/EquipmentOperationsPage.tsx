@@ -29,6 +29,8 @@ import { DgDailyLogPanel } from '../components/equipment/DgDailyLogPanel';
 import { EquipmentTicketCreateModal } from '../components/equipment/EquipmentTicketCreateModal';
 import { getEquipmentErrorMessage } from '../components/equipment/equipmentUi';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+
 export const EquipmentOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
 
@@ -41,9 +43,9 @@ export const EquipmentOperationsPage: React.FC = () => {
   const hasOutletsRead = hasPermission(PERMISSIONS.OUTLETS_READ);
 
   // Outlet State
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
-  const [loadingOutlets, setLoadingOutlets] = useState<boolean>(true);
+  const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
 
   // Equipment Workspace State
   const [healthSummary, setHealthSummary] = useState<EquipmentHealthSummary | null>(null);
@@ -76,39 +78,6 @@ export const EquipmentOperationsPage: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [successMessage]);
-
-  // Load Outlets on Mount
-  useEffect(() => {
-    const loadOutlets = async () => {
-      setLoadingOutlets(true);
-      try {
-        if (!hasOutletsRead && !canRead) {
-          setOutlets([]);
-          return;
-        }
-        const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-        if (res.success && res.data && res.data.length > 0) {
-          setOutlets(res.data);
-          setSelectedOutletId(res.data[0].id);
-        } else {
-          setOutlets([]);
-          if (res.success === false) {
-            setErrorMessage(res.error?.message || 'Failed to load retail outlets');
-          }
-        }
-      } catch (err: any) {
-        setErrorMessage(err.message || 'Failed to load retail outlets');
-      } finally {
-        setLoadingOutlets(false);
-      }
-    };
-
-    if (canRead) {
-      loadOutlets();
-    } else {
-      setLoadingOutlets(false);
-    }
-  }, [canRead, hasOutletsRead]);
 
   // Build query string for tickets without empty parameters
   const buildTicketQuery = (status: string, priority: string, eqType: string) => {

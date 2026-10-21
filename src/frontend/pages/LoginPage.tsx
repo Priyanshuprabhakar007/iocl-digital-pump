@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { ShieldCheck, Lock, Mail, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { login, switchDemoUser } = useAuth();
+  const { login, switchDemoUser, archivedNotice } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -74,10 +74,10 @@ export const LoginPage: React.FC = () => {
               </p>
             </div>
 
-            {error && (
+            {(error || archivedNotice) && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{error}</span>
+                <span>{error || archivedNotice}</span>
               </div>
             )}
 

@@ -57,6 +57,8 @@ import { HrGeofencePanel } from '../components/hr/HrGeofencePanel';
 import { HrNozzleAssignmentsPanel } from '../components/hr/HrNozzleAssignmentsPanel';
 import { HrUniformManagementPanel } from '../components/hr/HrUniformManagementPanel';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+
 export const WorkforceOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
 
@@ -76,9 +78,9 @@ export const WorkforceOperationsPage: React.FC = () => {
   const canWriteUniformIssue = hasPermission(PERMISSIONS.HR_UNIFORM_ISSUE_WRITE as PermissionCode);
 
   // Outlets
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
-  const [isLoadingOutlets, setIsLoadingOutlets] = useState<boolean>(true);
+  const { activeOutletId, accessibleOutlets: outlets, loading: isLoadingOutlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
 
   // Stale Request Protection Ref
   const activeOutletReqRef = useRef<string>('');
@@ -181,39 +183,6 @@ export const WorkforceOperationsPage: React.FC = () => {
     }
     setActiveTab(nextTab);
   };
-
-  // 1. Load accessible outlets on mount
-  useEffect(() => {
-    if (!canReadHr) {
-      setIsLoadingOutlets(false);
-      return;
-    }
-
-    let isMounted = true;
-    const fetchOutlets = async () => {
-      try {
-        const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-        if (isMounted && res.success && Array.isArray(res.data) && res.data.length > 0) {
-          setOutlets(res.data);
-          const firstId = res.data[0].id;
-          activeOutletReqRef.current = firstId;
-          setSelectedOutletId(firstId);
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          showFeedback('error', getHrErrorMessage(err));
-        }
-      } finally {
-        if (isMounted) setIsLoadingOutlets(false);
-      }
-    };
-
-    fetchOutlets();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [canReadHr, showFeedback]);
 
   // 2. Focused Loaders (Instruction 11 & 12)
   const loadHrCoreData = useCallback(

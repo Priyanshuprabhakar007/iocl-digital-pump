@@ -1,23 +1,9 @@
 import { ApiResponse } from '../../shared/types';
 
 let authToken: string | null = null;
-if (typeof window !== 'undefined') {
-  try {
-    authToken = sessionStorage.getItem('iocl_auth_token');
-  } catch {}
-}
 
 export function setAuthToken(token: string | null) {
   authToken = token;
-  if (typeof window !== 'undefined') {
-    try {
-      if (token) {
-        sessionStorage.setItem('iocl_auth_token', token);
-      } else {
-        sessionStorage.removeItem('iocl_auth_token');
-      }
-    } catch {}
-  }
 }
 
 export function getAuthToken(): string | null {
@@ -64,10 +50,9 @@ export async function apiFetch<T = unknown>(
         !json.success &&
         json.error?.code === 'OUTLET_ARCHIVED' &&
         !endpoint.includes('/auth/login') &&
-        !endpoint.includes('/outlets/') &&
         typeof window !== 'undefined'
       ) {
-        window.dispatchEvent(new CustomEvent('iocl:outlet-archived', { detail: json.error }));
+        window.dispatchEvent(new CustomEvent('iocl:outlet-archived', { detail: { ...json.error, endpoint } }));
       }
       return json;
     }

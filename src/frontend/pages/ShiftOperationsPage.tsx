@@ -29,11 +29,14 @@ import {
 } from 'lucide-react';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
 
+import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { getLocalDateInputValue } from '../../shared/utils/dateUtils';
+
 export const ShiftOperationsPage: React.FC = () => {
   const { userCtx } = useAuth();
-  const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
-  const [loadingOutlets, setLoadingOutlets] = useState(true);
+  const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
+  const setSelectedOutletId = setActiveOutletId;
 
   // Shifts list & active selection
   const [shiftsList, setShiftsList] = useState<OperationalShift[]>([]);
@@ -60,33 +63,10 @@ export const ShiftOperationsPage: React.FC = () => {
   // Modals & Feedback
   const [openShiftModal, setOpenShiftModal] = useState(false);
   const [newShiftTemplateId, setNewShiftTemplateId] = useState('');
-  const [newShiftDate, setNewShiftDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newShiftDate, setNewShiftDate] = useState(getLocalDateInputValue());
   const [newShiftNotes, setNewShiftNotes] = useState('');
   const [modalSubmitting, setModalSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
-
-  const [unavailModalNozzle, setUnavailModalNozzle] = useState<ShiftEntryGridItem | null>(null);
-  const [unavailReason, setUnavailReason] = useState('');
-
-  const [closeConfirmModal, setCloseConfirmModal] = useState(false);
-  const [closingSubmitting, setClosingSubmitting] = useState(false);
-
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-
-  // Load Outlets
-  useEffect(() => {
-    const loadOutlets = async () => {
-      setLoadingOutlets(true);
-      const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-      if (res.success && res.data && res.data.length > 0) {
-        setOutlets(res.data);
-        setSelectedOutletId(res.data[0].id);
-      }
-      setLoadingOutlets(false);
-    };
-    loadOutlets();
-  }, []);
 
   // Load Shifts and Templates for selected Outlet
   const loadOutletShifts = async () => {

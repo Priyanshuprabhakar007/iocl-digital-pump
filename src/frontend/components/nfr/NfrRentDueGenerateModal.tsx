@@ -4,6 +4,8 @@ import type { NfrLease, NfrRentDue, NfrSpace, NfrVendor } from '../../../shared/
 import { apiFetch } from '../../services/api';
 import { getNfrErrorMessage } from './nfrUi';
 
+import { getLocalMonthInputValue } from '../../../shared/utils/dateUtils';
+
 export interface NfrRentDueGenerateModalProps {
   lease: NfrLease | null;
   spaces: NfrSpace[];
@@ -19,7 +21,7 @@ export const NfrRentDueGenerateModal: React.FC<NfrRentDueGenerateModalProps> = (
   onClose,
   onSuccess,
 }) => {
-  const currentMonthStr = new Date().toISOString().substring(0, 7);
+  const currentMonthStr = getLocalMonthInputValue();
   const [billingMonth, setBillingMonth] = useState<string>(currentMonthStr);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
