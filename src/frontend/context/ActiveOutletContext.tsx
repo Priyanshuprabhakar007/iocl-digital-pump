@@ -106,7 +106,7 @@ export const ActiveOutletProvider: React.FC<{ children: React.ReactNode }> = ({ 
           const nextOutlet = remainingActive[0];
           setActiveOutletId(nextOutlet.id);
           setArchivedNotice(
-            `Selected outlet was archived. Switched to active outlet ${nextOutlet.name} (${nextOutlet.outletCode}).`
+            `Selected outlet was archived. Switched to active outlet ${nextOutlet.name} (${nextOutlet.roCode}).`
           );
         }
       } else {
@@ -157,7 +157,7 @@ export const GlobalOutletSelector: React.FC<{ className?: string }> = ({ classNa
       return (
         <div className={`flex items-center gap-2 px-3 py-1.5 bg-slate-800/80 border border-slate-700/80 rounded-lg text-xs font-semibold text-slate-200 ${className}`}>
           <Building2 className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-          <span className="truncate">{accessibleOutlets[0].name} ({accessibleOutlets[0].outletCode})</span>
+          <span className="truncate">{accessibleOutlets[0].name} ({accessibleOutlets[0].roCode})</span>
         </div>
       );
     }
@@ -175,7 +175,7 @@ export const GlobalOutletSelector: React.FC<{ className?: string }> = ({ classNa
       >
         {accessibleOutlets.map((outlet) => (
           <option key={outlet.id} value={outlet.id}>
-            {outlet.name} ({outlet.outletCode})
+            {outlet.name} ({outlet.roCode})
           </option>
         ))}
       </select>

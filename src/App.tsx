@@ -112,7 +112,6 @@ function MainAppContent() {
       scopes: PERMISSIONS.SCOPES_READ,
       hierarchy: PERMISSIONS.HIERARCHY_READ,
       'org-masters': PERMISSIONS.ORG_MASTERS_READ,
-      rbac: PERMISSIONS.RBAC_READ,
       audit: PERMISSIONS.AUDIT_READ,
       documents: PERMISSIONS.DOCUMENTS_READ,
     };

@@ -127,13 +127,13 @@ export const LoginPage: React.FC = () => {
             </form>
 
             <div className="pt-3 border-t border-slate-800/80 text-[11px] text-slate-500 text-center font-mono">
-              Protected by SHA-256 Session Tokens & HttpOnly Cookies
+              Protected by HttpOnly Session Cookies
             </div>
           </div>
         </div>
 
         {/* Right Column: 1-Click Demo Accounts Picker (Development Mode Only) */}
-        {import.meta.env.DEV && (
+        {import.meta.env.DEV && import.meta.env.MODE !== 'production' && (
           <div className="lg:col-span-6 space-y-4">
             <div className="flex items-center gap-2 text-xs font-bold text-orange-400 uppercase tracking-wider font-mono">
               <Sparkles className="w-4 h-4" />
@@ -161,7 +161,7 @@ export const LoginPage: React.FC = () => {
                       {demo.desc}
                     </p>
                     <div className="text-[10px] text-slate-500 font-mono mt-1">
-                      {demo.email} • Password: <span className="text-slate-400">Password@123</span>
+                      {demo.email} • <span className="text-slate-400">1-Click Dev Preview</span>
                     </div>
                   </div>
 

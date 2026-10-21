@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { getLocalDateInputValue, getLocalMonthInputValue, getLocalDateTimeInputValue } from '../src/shared/utils/dateUtils';
@@ -10,7 +10,9 @@ describe('Cross-Platform Hardening & Regression Suite', () => {
       const sidebarContent = fs.readFileSync(path.join(process.cwd(), 'src/frontend/components/layout/Sidebar.tsx'), 'utf-8');
       expect(sidebarContent).toContain("id: 'reports'");
       expect(sidebarContent).toContain("perm: PERMISSIONS.REPORTS_READ");
-      expect(sidebarContent).not.toContain("perm: PERMISSIONS.EQUIPMENT_READ,\n    }");
+      const reportsBlockMatch = sidebarContent.match(/id:\s*'reports'[\s\S]*?perm:\s*PERMISSIONS\.([A-Z_]+)/);
+      expect(reportsBlockMatch).not.toBeNull();
+      expect(reportsBlockMatch?.[1]).toBe('REPORTS_READ');
     });
   });
 
@@ -39,7 +41,7 @@ describe('Cross-Platform Hardening & Regression Suite', () => {
         for (const file of files) {
           if (file.endsWith('.js')) {
             const content = fs.readFileSync(path.join(distDir, file), 'utf-8');
-            expect(content).not.toContain('Password@123');
+            expect(content.includes('Password@123')).toBe(false);
           }
         }
       }
@@ -47,34 +49,34 @@ describe('Cross-Platform Hardening & Regression Suite', () => {
 
     it('UsersPage password field placeholder does not contain Password@123', () => {
       const usersPageContent = fs.readFileSync(path.join(process.cwd(), 'src/frontend/pages/UsersPage.tsx'), 'utf-8');
-      expect(usersPageContent).not.toContain('placeholder="Password@123"');
+      expect(usersPageContent.includes('placeholder="Password@123"')).toBe(false);
     });
 
     it('sessionStorage bearer token persistence is removed from api.ts', () => {
       const apiContent = fs.readFileSync(path.join(process.cwd(), 'src/frontend/services/api.ts'), 'utf-8');
-      expect(apiContent).not.toContain("sessionStorage.setItem('iocl_auth_token'");
-      expect(apiContent).not.toContain("sessionStorage.getItem('iocl_auth_token'");
+      expect(apiContent.includes("sessionStorage.setItem('iocl_auth_token'")).toBe(false);
+      expect(apiContent.includes("sessionStorage.getItem('iocl_auth_token'")).toBe(false);
     });
   });
 
   describe('4. Active Outlet Context & Selector', () => {
     it('ActiveOutletContext file exists and exports ActiveOutletProvider and GlobalOutletSelector', () => {
       const activeOutletContent = fs.readFileSync(path.join(process.cwd(), 'src/frontend/context/ActiveOutletContext.tsx'), 'utf-8');
-      expect(activeOutletContent).toContain('export const ActiveOutletProvider');
-      expect(activeOutletContent).toContain('export const GlobalOutletSelector');
-      expect(activeOutletContent).toContain('iocl_active_outlet_id');
+      expect(activeOutletContent.includes('export const ActiveOutletProvider')).toBe(true);
+      expect(activeOutletContent.includes('export const GlobalOutletSelector')).toBe(true);
+      expect(activeOutletContent.includes('iocl_active_outlet_id')).toBe(true);
     });
   });
 
   describe('5. Branding Compliance Audit', () => {
     it('User-facing title in index.html is IOCL Digital Outlet Manager', () => {
       const htmlContent = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
-      expect(htmlContent).toContain('<title>IOCL Digital Outlet Manager</title>');
+      expect(htmlContent.includes('<title>IOCL Digital Outlet Manager</title>')).toBe(true);
     });
 
     it('Header branding text is IOCL Digital Outlet Manager', () => {
       const headerContent = fs.readFileSync(path.join(process.cwd(), 'src/frontend/components/layout/Header.tsx'), 'utf-8');
-      expect(headerContent).toContain('Digital Outlet Manager');
+      expect(headerContent.includes('Digital Outlet Manager')).toBe(true);
     });
   });
 });

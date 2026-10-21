@@ -68,6 +68,15 @@ export const ShiftOperationsPage: React.FC = () => {
   const [modalSubmitting, setModalSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
+  const [unavailModalNozzle, setUnavailModalNozzle] = useState<ShiftEntryGridItem | null>(null);
+  const [unavailReason, setUnavailReason] = useState('');
+
+  const [closeConfirmModal, setCloseConfirmModal] = useState(false);
+  const [closingSubmitting, setClosingSubmitting] = useState(false);
+
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
   // Load Shifts and Templates for selected Outlet
   const loadOutletShifts = async () => {
     if (!selectedOutletId) return;

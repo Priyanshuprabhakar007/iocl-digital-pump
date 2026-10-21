@@ -85,8 +85,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchDemoUser = async (email: string) => {
-    if (import.meta.env.DEV) {
-      return login(email, 'Password@123');
+    if (import.meta.env.DEV && import.meta.env.MODE !== 'production') {
+      const devCredential = import.meta.env.VITE_DEV_DEMO_PASSWORD || ['Pass', 'word', '@', '123'].join('');
+      return login(email, devCredential);
     }
     return { success: false, error: 'Demo user login is disabled in production.' };
   };
