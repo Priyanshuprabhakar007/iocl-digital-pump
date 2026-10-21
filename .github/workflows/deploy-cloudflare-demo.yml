@@ -168,7 +168,6 @@ jobs:
             "migrations/0028_dg_daily_operations_reporting.sql"
             "migrations/0029_dg_report_permissions.sql"
             "migrations/0030_outlet_archive_lifecycle.sql"
-            "migrations/0031_idempotency_and_unique_constraints.sql"
           )
 
           for FILE in "${MIGRATIONS[@]}"; do
@@ -205,6 +204,211 @@ jobs:
 
             echo "Completed: $NAME"
           done
+
+      - name: Apply Migration 0031 via Ordered Remote Batches
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          MIGRATION_0031="0031_idempotency_and_unique_constraints.sql"
+          echo "Checking migration: $MIGRATION_0031"
+
+          RESULT=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$MIGRATION_0031';" \
+            --json \
+            --yes)
+
+          COUNT=$(echo "$RESULT" | jq -r '.[0].results[0].count // 0')
+
+          if [ "$COUNT" = "1" ]; then
+            echo "Already applied: $MIGRATION_0031"
+            exit 0
+          fi
+
+          echo "[0031] Checking duplicate data..."
+
+          apply_unique_index_with_diagnostic() {
+            local INDEX_NAME="$1"
+            local DIAG_SQL="$2"
+            local INDEX_SQL="$3"
+
+            local DUP_RES
+            DUP_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+              --remote \
+              --command "$DIAG_SQL" \
+              --json \
+              --yes)
+
+            local DUP_COUNT
+            DUP_COUNT=$(echo "$DUP_RES" | jq -r '.[0].results | length')
+
+            if [ "$DUP_COUNT" -gt "0" ]; then
+              echo "ERROR: [0031] Duplicate records detected for ${INDEX_NAME} (groups=${DUP_COUNT}). Aborting without modifying data."
+              echo "$DUP_RES" | jq -r '.[0].results[] | "  Duplicate business key: \(.key_summary) (count=\(.cnt))"'
+              exit 1
+            fi
+
+            echo "[0031] Applying ${INDEX_NAME}..."
+            npx wrangler d1 execute iocl-pump-manager-d1 \
+              --remote \
+              --command "$INDEX_SQL" \
+              --yes
+          }
+
+          # BATCH 1: Create idempotency_keys table
+          echo "[0031] Creating idempotency_keys..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command 'CREATE TABLE IF NOT EXISTS "idempotency_keys" ("id" text PRIMARY KEY NOT NULL, "idempotency_key" text NOT NULL, "actor_id" text NOT NULL, "route" text NOT NULL, "request_fingerprint" text NOT NULL, "response_status" integer NOT NULL, "entity_id" text, "response_body" text NOT NULL, "created_at" text NOT NULL);' \
+            --yes
+
+          # BATCH 2: Create uq_idempotency_keys_key_actor index
+          echo "[0031] Applying uq_idempotency_keys_key_actor..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command 'CREATE UNIQUE INDEX IF NOT EXISTS "uq_idempotency_keys_key_actor" ON "idempotency_keys" ("idempotency_key", "actor_id");' \
+            --yes
+
+          # BATCH 3: Create idx_idempotency_keys_created_at index
+          echo "[0031] Applying idx_idempotency_keys_created_at..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command 'CREATE INDEX IF NOT EXISTS "idx_idempotency_keys_created_at" ON "idempotency_keys" ("created_at");' \
+            --yes
+
+          # 1. uq_user_scope_assignments_natural
+          apply_unique_index_with_diagnostic \
+            "uq_user_scope_assignments_natural" \
+            "SELECT user_id || ':' || scope_level || ':' || COALESCE(state_id,'') || ':' || COALESCE(division_id,'') || ':' || COALESCE(sales_area_id,'') || ':' || COALESCE(outlet_id,'') AS key_summary, COUNT(*) AS cnt FROM user_scope_assignments GROUP BY user_id, scope_level, COALESCE(state_id,''), COALESCE(division_id,''), COALESCE(sales_area_id,''), COALESCE(outlet_id,'') HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_user_scope_assignments_natural" ON "user_scope_assignments" ("user_id", "scope_level", COALESCE("state_id", '\'''\''), COALESCE("division_id", '\'''\''), COALESCE("sales_area_id", '\'''\''), COALESCE("outlet_id", '\'''\''));'
+
+          # 2. uq_outlet_user_assignments_natural
+          apply_unique_index_with_diagnostic \
+            "uq_outlet_user_assignments_natural" \
+            "SELECT outlet_id || ':' || user_id || ':' || assignment_type AS key_summary, COUNT(*) AS cnt FROM outlet_user_assignments GROUP BY outlet_id, user_id, assignment_type HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_outlet_user_assignments_natural" ON "outlet_user_assignments" ("outlet_id", "user_id", "assignment_type");'
+
+          # 3. uq_fuel_receipts_outlet_invoice
+          apply_unique_index_with_diagnostic \
+            "uq_fuel_receipts_outlet_invoice" \
+            "SELECT outlet_id || ':' || invoice_number AS key_summary, COUNT(*) AS cnt FROM fuel_receipts WHERE status != 'CANCELLED' GROUP BY outlet_id, invoice_number HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_fuel_receipts_outlet_invoice" ON "fuel_receipts" ("outlet_id", "invoice_number") WHERE status != '\''CANCELLED'\'';'
+
+          # 4. uq_fuel_receipt_lines_receipt_tank
+          apply_unique_index_with_diagnostic \
+            "uq_fuel_receipt_lines_receipt_tank" \
+            "SELECT fuel_receipt_id || ':' || tank_id AS key_summary, COUNT(*) AS cnt FROM fuel_receipt_tank_lines GROUP BY fuel_receipt_id, tank_id HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_fuel_receipt_lines_receipt_tank" ON "fuel_receipt_tank_lines" ("fuel_receipt_id", "tank_id");'
+
+          # 5. uq_outlet_product_prices_active_start
+          apply_unique_index_with_diagnostic \
+            "uq_outlet_product_prices_active_start" \
+            "SELECT outlet_id || ':' || product_id || ':' || effective_from AS key_summary, COUNT(*) AS cnt FROM outlet_product_prices WHERE status = 'ACTIVE' GROUP BY outlet_id, product_id, effective_from HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_outlet_product_prices_active_start" ON "outlet_product_prices" ("outlet_id", "product_id", "effective_from") WHERE status = '\''ACTIVE'\'';'
+
+          # 6. uq_shift_collections_shift_type_ref
+          apply_unique_index_with_diagnostic \
+            "uq_shift_collections_shift_type_ref" \
+            "SELECT operational_shift_id || ':' || collection_type || ':' || reference_number AS key_summary, COUNT(*) AS cnt FROM shift_collections WHERE reference_number IS NOT NULL AND trim(reference_number) != '' GROUP BY operational_shift_id, collection_type, reference_number HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_shift_collections_shift_type_ref" ON "shift_collections" ("operational_shift_id", "collection_type", "reference_number") WHERE reference_number IS NOT NULL AND trim(reference_number) != '\'''\'';'
+
+          # 7. uq_bank_deposits_outlet_channel_ref
+          apply_unique_index_with_diagnostic \
+            "uq_bank_deposits_outlet_channel_ref" \
+            "SELECT outlet_id || ':' || deposit_channel || ':' || reference_number AS key_summary, COUNT(*) AS cnt FROM bank_deposits WHERE reference_number IS NOT NULL AND trim(reference_number) != '' AND status != 'REJECTED' GROUP BY outlet_id, deposit_channel, reference_number HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_bank_deposits_outlet_channel_ref" ON "bank_deposits" ("outlet_id", "deposit_channel", "reference_number") WHERE reference_number IS NOT NULL AND trim(reference_number) != '\'''\'' AND status != '\''REJECTED'\'';'
+
+          # 8. uq_lube_sku_prices_active_start
+          apply_unique_index_with_diagnostic \
+            "uq_lube_sku_prices_active_start" \
+            "SELECT outlet_id || ':' || lube_sku_id || ':' || effective_from AS key_summary, COUNT(*) AS cnt FROM lube_sku_prices WHERE status = 'ACTIVE' GROUP BY outlet_id, lube_sku_id, effective_from HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_lube_sku_prices_active_start" ON "lube_sku_prices" ("outlet_id", "lube_sku_id", "effective_from") WHERE status = '\''ACTIVE'\'';'
+
+          # 9. uq_lube_stock_tx_opening_balance
+          apply_unique_index_with_diagnostic \
+            "uq_lube_stock_tx_opening_balance" \
+            "SELECT outlet_id || ':' || lube_sku_id AS key_summary, COUNT(*) AS cnt FROM lube_stock_transactions WHERE transaction_type = 'OPENING_BALANCE' GROUP BY outlet_id, lube_sku_id HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_lube_stock_tx_opening_balance" ON "lube_stock_transactions" ("outlet_id", "lube_sku_id") WHERE transaction_type = '\''OPENING_BALANCE'\'';'
+
+          # 10. uq_nfr_rent_payments_due_ref
+          apply_unique_index_with_diagnostic \
+            "uq_nfr_rent_payments_due_ref" \
+            "SELECT rent_due_id || ':' || payment_reference AS key_summary, COUNT(*) AS cnt FROM nfr_rent_payments WHERE payment_reference IS NOT NULL AND trim(payment_reference) != '' GROUP BY rent_due_id, payment_reference HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_nfr_rent_payments_due_ref" ON "nfr_rent_payments" ("rent_due_id", "payment_reference") WHERE payment_reference IS NOT NULL AND trim(payment_reference) != '\'''\'';'
+
+          # 11. uq_org_officers_email
+          apply_unique_index_with_diagnostic \
+            "uq_org_officers_email" \
+            "SELECT email AS key_summary, COUNT(*) AS cnt FROM org_officers WHERE email IS NOT NULL AND trim(email) != '' GROUP BY email HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_org_officers_email" ON "org_officers" ("email") WHERE email IS NOT NULL AND trim(email) != '\'''\'';'
+
+          # 12. uq_org_officer_postings_active
+          apply_unique_index_with_diagnostic \
+            "uq_org_officer_postings_active" \
+            "SELECT officer_id || ':' || scope_level || ':' || COALESCE(state_id,'') || ':' || COALESCE(division_id,'') || ':' || COALESCE(sales_area_id,'') || ':' || COALESCE(outlet_id,'') AS key_summary, COUNT(*) AS cnt FROM org_officer_postings WHERE status = 'ACTIVE' GROUP BY officer_id, scope_level, COALESCE(state_id,''), COALESCE(division_id,''), COALESCE(sales_area_id,''), COALESCE(outlet_id,'') HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_org_officer_postings_active" ON "org_officer_postings" ("officer_id", "scope_level", COALESCE("state_id", '\'''\''), COALESCE("division_id", '\'''\''), COALESCE("sales_area_id", '\'''\''), COALESCE("outlet_id", '\'''\'')) WHERE status = '\''ACTIVE'\'';'
+
+          # 13. uq_outlet_sp_assignments_natural
+          apply_unique_index_with_diagnostic \
+            "uq_outlet_sp_assignments_natural" \
+            "SELECT outlet_id || ':' || service_provider_id || ':' || effective_from || ':' || COALESCE(contract_number,'') AS key_summary, COUNT(*) AS cnt FROM outlet_service_provider_assignments WHERE status = 'ACTIVE' GROUP BY outlet_id, service_provider_id, effective_from, COALESCE(contract_number,'') HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_outlet_sp_assignments_natural" ON "outlet_service_provider_assignments" ("outlet_id", "service_provider_id", "effective_from", COALESCE("contract_number", '\'''\'')) WHERE status = '\''ACTIVE'\'';'
+
+          # 14. uq_hr_leave_requests_active_dates
+          apply_unique_index_with_diagnostic \
+            "uq_hr_leave_requests_active_dates" \
+            "SELECT staff_id || ':' || from_date || ':' || to_date AS key_summary, COUNT(*) AS cnt FROM hr_leave_requests WHERE status IN ('PENDING', 'APPROVED') GROUP BY staff_id, from_date, to_date HAVING COUNT(*) > 1;" \
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uq_hr_leave_requests_active_dates" ON "hr_leave_requests" ("staff_id", "from_date", "to_date") WHERE status IN ('\''PENDING'\'', '\''APPROVED'\'');'
+
+          # Verify table and all migration 0031 indexes exist in sqlite_master
+          TABLE_VERIFY=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'idempotency_keys';" \
+            --json \
+            --yes)
+
+          TABLE_FOUND=$(echo "$TABLE_VERIFY" | jq -r '.[0].results | length')
+          if [ "$TABLE_FOUND" != "1" ]; then
+            echo "ERROR: [0031] Table idempotency_keys was not found in sqlite_master after execution."
+            exit 1
+          fi
+
+          INDEX_VERIFY=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('uq_user_scope_assignments_natural', 'uq_outlet_user_assignments_natural', 'uq_fuel_receipts_outlet_invoice', 'uq_fuel_receipt_lines_receipt_tank', 'uq_outlet_product_prices_active_start', 'uq_shift_collections_shift_type_ref', 'uq_bank_deposits_outlet_channel_ref', 'uq_lube_sku_prices_active_start', 'uq_lube_stock_tx_opening_balance', 'uq_nfr_rent_payments_due_ref', 'uq_org_officers_email', 'uq_org_officer_postings_active', 'uq_outlet_sp_assignments_natural', 'uq_hr_leave_requests_active_dates');" \
+            --json \
+            --yes)
+
+          INDEX_COUNT=$(echo "$INDEX_VERIFY" | jq -r '.[0].results | length')
+          if [ "$INDEX_COUNT" != "14" ]; then
+            echo "ERROR: [0031] Expected 14 unique business indexes in sqlite_master, found $INDEX_COUNT."
+            exit 1
+          fi
+
+          IDEM_INDEX_VERIFY=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('uq_idempotency_keys_key_actor', 'idx_idempotency_keys_created_at');" \
+            --json \
+            --yes)
+
+          IDEM_INDEX_COUNT=$(echo "$IDEM_INDEX_VERIFY" | jq -r '.[0].results | length')
+          if [ "$IDEM_INDEX_COUNT" != "2" ]; then
+            echo "ERROR: [0031] Expected 2 idempotency_keys indexes in sqlite_master, found $IDEM_INDEX_COUNT."
+            exit 1
+          fi
+
+          echo "[0031] Verified 14 unique indexes..."
+
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0031_idempotency_and_unique_constraints.sql');" \
+            --yes
+
+          echo "[0031] Migration completed and recorded."
+
 
       - name: Verify D1 Migration Completion
         env:

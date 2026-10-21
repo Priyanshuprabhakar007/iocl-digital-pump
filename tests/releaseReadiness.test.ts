@@ -236,6 +236,40 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('Already applied: $NAME');
       expect(deployContent).toContain('INSERT OR IGNORE INTO d1_migrations (name) VALUES (\'$NAME\');');
     });
+
+    it('2.9 migration 0031 uses dedicated remote command batches with duplicate diagnostics and sqlite_master verification', () => {
+      expect(deployContent).not.toContain('"migrations/0031_idempotency_and_unique_constraints.sql"');
+      expect(deployContent).toContain('Apply Migration 0031 via Ordered Remote Batches');
+      expect(deployContent).toContain('[0031] Checking duplicate data...');
+      expect(deployContent).toContain('[0031] Creating idempotency_keys...');
+      expect(deployContent).toContain('apply_unique_index_with_diagnostic');
+
+      const expectedIndexes = [
+        'uq_user_scope_assignments_natural',
+        'uq_outlet_user_assignments_natural',
+        'uq_fuel_receipts_outlet_invoice',
+        'uq_fuel_receipt_lines_receipt_tank',
+        'uq_outlet_product_prices_active_start',
+        'uq_shift_collections_shift_type_ref',
+        'uq_bank_deposits_outlet_channel_ref',
+        'uq_lube_sku_prices_active_start',
+        'uq_lube_stock_tx_opening_balance',
+        'uq_nfr_rent_payments_due_ref',
+        'uq_org_officers_email',
+        'uq_org_officer_postings_active',
+        'uq_outlet_sp_assignments_natural',
+        'uq_hr_leave_requests_active_dates',
+      ];
+
+      for (const idx of expectedIndexes) {
+        expect(deployContent).toContain(`"${idx}"`);
+      }
+
+      expect(deployContent).toContain("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'idempotency_keys';");
+      expect(deployContent).toContain('[0031] Verified 14 unique indexes...');
+      expect(deployContent).toContain("INSERT OR IGNORE INTO d1_migrations (name) VALUES ('0031_idempotency_and_unique_constraints.sql');");
+      expect(deployContent).toContain('[0031] Migration completed and recorded.');
+    });
   });
 
   // ==========================================================================
