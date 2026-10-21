@@ -39,12 +39,12 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
   // 2. MIGRATION FREEZE CONTRACT (0001 - 0030)
   // ==========================================================================
   describe('2. Migration Freeze & Sequence Integrity', () => {
-    it('2.1 exactly 30 migrations exist, ordered sequentially 0001 to 0030 without gaps or migrations beyond 0030', () => {
+    it('2.1 exactly 31 migrations exist, ordered sequentially 0001 to 0031 without gaps or migrations beyond 0031', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR)
         .filter(f => f.endsWith('.sql'))
         .sort();
 
-      expect(files.length).toBe(30);
+      expect(files.length).toBe(31);
 
       const numbers = files.map(f => {
         const match = f.match(/^(\d{4})_/);
@@ -52,14 +52,14 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
         return parseInt(match![1], 10);
       });
 
-      for (let i = 1; i <= 30; i++) {
+      for (let i = 1; i <= 31; i++) {
         expect(numbers[i - 1]).toBe(i);
       }
 
-      const hasPost0030 = files.some(
-        f => parseInt(f.slice(0, 4), 10) > 30
+      const hasPost0031 = files.some(
+        f => parseInt(f.slice(0, 4), 10) > 31
       );
-      expect(hasPost0030).toBe(false);
+      expect(hasPost0031).toBe(false);
     });
 
     it('2.2 migration 0028 is DG Daily Operations & Monthly Reporting', () => {
@@ -139,10 +139,10 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       expect(pre).toContain('dg_run_intervals');
     });
 
-    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 30, and admin existence', () => {
+    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 31, and admin existence', () => {
       expect(deployContent).toContain('PRAGMA foreign_key_check;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "30" ]; then');
-      expect(deployContent).toContain('ERROR: Expected all 30 migrations to be recorded.');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "31" ]; then');
+      expect(deployContent).toContain('ERROR: Expected all 31 migrations to be recorded.');
       expect(deployContent).toContain("SELECT COUNT(*) AS count FROM users WHERE email = 'admin@iocl.in';");
       expect(deployContent).toContain('if [ "$POST_CNT" -lt "$PRE_CNT" ]; then');
     });

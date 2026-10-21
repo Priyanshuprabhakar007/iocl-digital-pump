@@ -107,8 +107,8 @@ const DUPLICATE_CHECKS: DuplicateCheckDefinition[] = [
   {
     table: 'org_officer_postings',
     constraintName: 'uq_org_officer_postings_active',
-    businessKeyDescription: '(officer_id, posting_role, scope_level, state_id, division_id, sales_area_id, outlet_id) WHERE status = ACTIVE',
-    query: `SELECT officer_id || ':' || posting_role || ':' || scope_level || ':' || COALESCE(state_id,'') || ':' || COALESCE(division_id,'') || ':' || COALESCE(sales_area_id,'') || ':' || COALESCE(outlet_id,'') AS key_summary, COUNT(*) AS cnt FROM org_officer_postings WHERE status = 'ACTIVE' GROUP BY officer_id, posting_role, scope_level, COALESCE(state_id,''), COALESCE(division_id,''), COALESCE(sales_area_id,''), COALESCE(outlet_id,'') HAVING COUNT(*) > 1`,
+    businessKeyDescription: '(officer_id, scope_level, state_id, division_id, sales_area_id, outlet_id) WHERE status = ACTIVE',
+    query: `SELECT officer_id || ':' || scope_level || ':' || COALESCE(state_id,'') || ':' || COALESCE(division_id,'') || ':' || COALESCE(sales_area_id,'') || ':' || COALESCE(outlet_id,'') AS key_summary, COUNT(*) AS cnt FROM org_officer_postings WHERE status = 'ACTIVE' GROUP BY officer_id, scope_level, COALESCE(state_id,''), COALESCE(division_id,''), COALESCE(sales_area_id,''), COALESCE(outlet_id,'') HAVING COUNT(*) > 1`,
   },
   {
     table: 'outlet_service_provider_assignments',
@@ -119,8 +119,8 @@ const DUPLICATE_CHECKS: DuplicateCheckDefinition[] = [
   {
     table: 'hr_leave_requests',
     constraintName: 'uq_hr_leave_requests_active_dates',
-    businessKeyDescription: '(staff_id, start_date, end_date) WHERE status IN (PENDING, APPROVED)',
-    query: `SELECT staff_id || ':' || start_date || ':' || end_date AS key_summary, COUNT(*) AS cnt FROM hr_leave_requests WHERE status IN ('PENDING', 'APPROVED') GROUP BY staff_id, start_date, end_date HAVING COUNT(*) > 1`,
+    businessKeyDescription: '(staff_id, from_date, to_date) WHERE status IN (PENDING, APPROVED)',
+    query: `SELECT staff_id || ':' || from_date || ':' || to_date AS key_summary, COUNT(*) AS cnt FROM hr_leave_requests WHERE status IN ('PENDING', 'APPROVED') GROUP BY staff_id, from_date, to_date HAVING COUNT(*) > 1`,
   },
 ];
 

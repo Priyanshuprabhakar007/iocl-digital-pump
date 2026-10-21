@@ -168,6 +168,7 @@ jobs:
             "migrations/0028_dg_daily_operations_reporting.sql"
             "migrations/0029_dg_report_permissions.sql"
             "migrations/0030_outlet_archive_lifecycle.sql"
+            "migrations/0031_idempotency_and_unique_constraints.sql"
           )
 
           for FILE in "${MIGRATIONS[@]}"; do
@@ -225,8 +226,8 @@ jobs:
 
           echo "Recorded migrations: $COUNT"
 
-          if [ "$COUNT" -lt "30" ]; then
-            echo "ERROR: Expected all 30 migrations to be recorded."
+          if [ "$COUNT" -lt "31" ]; then
+            echo "ERROR: Expected all 31 migrations to be recorded."
             exit 1
           fi
 

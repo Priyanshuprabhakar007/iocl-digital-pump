@@ -10,6 +10,7 @@ import { requirePermission } from '../middleware/permission';
 import { ScopeService } from '../services/scopeService';
 import { UserScopeAssignmentSchema } from '../../shared/validators';
 import { PERMISSIONS } from '../../shared/constants';
+import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
 
 const scopes = new Hono<{ Bindings: EnvBindings }>();
 
@@ -144,15 +145,16 @@ scopes.post('/', requirePermission(PERMISSIONS.SCOPES_ASSIGN) as any, async (c: 
       createdBy: c.var.user.user.id,
     });
   } catch (err: any) {
-    if (String(err?.message || '').includes('UNIQUE constraint failed')) {
+    const mapped = mapDatabaseUniqueError(err);
+    if (mapped) {
       return c.json({
         success: false,
         data: null,
         error: {
-          code: 'SCOPE_ASSIGNMENT_EXISTS',
-          message: 'User already holds this organizational scope assignment.',
+          code: mapped.code,
+          message: mapped.message,
         },
-      }, 409);
+      }, mapped.status);
     }
     throw err;
   }

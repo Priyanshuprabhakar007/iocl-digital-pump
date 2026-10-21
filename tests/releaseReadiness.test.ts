@@ -40,12 +40,12 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
   // 1. MIGRATION INVENTORY & INTEGRITY
   // ==========================================================================
   describe('1. Migration Inventory & Chronological Sequence', () => {
-    it('1.1 contains exactly 30 migrations numbered sequentially 0001 to 0030 without gaps', () => {
+    it('1.1 contains exactly 31 migrations numbered sequentially 0001 to 0031 without gaps', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR)
         .filter(f => f.endsWith('.sql'))
         .sort();
 
-      expect(files.length).toBe(30);
+      expect(files.length).toBe(31);
 
       const numbers = files.map(f => {
         const match = f.match(/^(\d{4})_/);
@@ -53,21 +53,21 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
         return parseInt(match![1], 10);
       });
 
-      for (let i = 1; i <= 30; i++) {
+      for (let i = 1; i <= 31; i++) {
         expect(numbers[i - 1]).toBe(i);
       }
     });
 
-    it('1.2 does not contain any migration 0031 or higher beyond the frozen baseline', () => {
+    it('1.2 does not contain any migration 0032 or higher beyond the frozen baseline', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql'));
-      const hasPost0030 = files.some(f => {
+      const hasPost0031 = files.some(f => {
         const num = parseInt(f.slice(0, 4), 10);
-        return num > 30;
+        return num > 31;
       });
-      expect(hasPost0030).toBe(false);
+      expect(hasPost0031).toBe(false);
     });
 
-    it('1.3 all 30 migration files are non-empty and have valid SQL contents', () => {
+    it('1.3 all 31 migration files are non-empty and have valid SQL contents', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql'));
       for (const file of files) {
         const filePath = path.join(MIGRATIONS_DIR, file);
@@ -218,10 +218,10 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('ERROR: Remote database contains foreign-key violations.');
     });
 
-    it('2.6 deployment workflow verifies recorded migration count is at least 30', () => {
+    it('2.6 deployment workflow verifies recorded migration count is at least 31', () => {
       expect(deployContent).toContain('SELECT COUNT(*) AS count FROM d1_migrations;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "30" ]; then');
-      expect(deployContent).toContain('ERROR: Expected all 30 migrations to be recorded.');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "31" ]; then');
+      expect(deployContent).toContain('ERROR: Expected all 31 migrations to be recorded.');
     });
 
     it('2.7 deployment workflow verifies production administrator account exists', () => {

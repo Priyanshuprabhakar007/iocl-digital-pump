@@ -20,6 +20,16 @@ const UNIQUE_CONSTRAINT_MAP: Array<{
     message: 'A user with this employee code already exists.',
   },
   {
+    pattern: 'uq_user_scope_assignments_natural',
+    code: 'SCOPE_ASSIGNMENT_EXISTS',
+    message: 'User already holds this organizational scope assignment.',
+  },
+  {
+    pattern: 'user_scope_assignments',
+    code: 'SCOPE_ASSIGNMENT_EXISTS',
+    message: 'User already holds this organizational scope assignment.',
+  },
+  {
     pattern: 'retail_outlets.ro_code',
     code: 'RO_CODE_EXISTS',
     message: 'A retail outlet with this RO Code already exists.',
@@ -307,16 +317,28 @@ const UNIQUE_CONSTRAINT_MAP: Array<{
 ];
 
 export function mapDatabaseUniqueError(err: unknown): MappedDuplicateError | null {
-  const rawMessage = String(
-    (err as any)?.message || (err as any)?.cause?.message || err || ''
-  );
-
-  if (!rawMessage.includes('UNIQUE constraint failed')) {
+  if (!err) return null;
+  const errObj = err as any;
+  
+  // Extract the most descriptive error message possible
+  let rawMessage = '';
+  if (errObj.message) rawMessage += errObj.message + ' ';
+  if (errObj.cause?.message) rawMessage += errObj.cause.message + ' ';
+  if (errObj.stack) rawMessage += errObj.stack + ' ';
+  if (typeof errObj.toString === 'function') rawMessage += errObj.toString() + ' ';
+  
+  const lowerMsg = rawMessage.toLowerCase();
+  
+  // Strict check for unique constraint failure
+  if (!lowerMsg.includes('unique constraint failed')) {
     return null;
   }
 
+  // Debug: log the error message that we're trying to map
+  // console.error('[Idem DEBUG] Mapping error:', lowerMsg);
+
   for (const entry of UNIQUE_CONSTRAINT_MAP) {
-    if (rawMessage.includes(entry.pattern)) {
+    if (lowerMsg.includes(entry.pattern.toLowerCase())) {
       return {
         code: entry.code,
         message: entry.message,

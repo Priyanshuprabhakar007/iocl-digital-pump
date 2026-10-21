@@ -14,7 +14,7 @@ export interface IdempotencyRecord {
 
 const IDEMPOTENCY_KEY_REGEX = /^[A-Za-z0-9_\-:.]{8,128}$/;
 
-// In-flight mutex per (actorId, idempotencyKey) to serialize concurrent identical retries
+// In-flight mutex per (actorId, idempotencyKey) to serialize concurrent identical retries across distinct requests
 const inFlightLocks = new Map<string, Promise<void>>();
 
 function canonicalizeJsonValue(value: any): any {
@@ -42,40 +42,26 @@ async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
-export async function computeRequestFingerprint(req: Request, routePath: string): Promise<string> {
-  const method = req.method.toUpperCase();
-  const contentType = (req.headers.get('content-type') || '').toLowerCase();
+export async function computeRequestFingerprint(c: Context<any>, routePath: string): Promise<string> {
+  const method = c.req.method.toUpperCase();
+  const contentType = (c.req.header('content-type') || '').toLowerCase();
 
   let canonicalBody = '';
   try {
-    const cloned = req.clone();
-    if (contentType.includes('application/json')) {
-      const text = await cloned.text();
-      if (text.trim().length > 0) {
+    const text = await c.req.text();
+    if (text && text.trim().length > 0) {
+      if (contentType.includes('application/json')) {
         try {
           const parsed = JSON.parse(text);
           canonicalBody = JSON.stringify(canonicalizeJsonValue(parsed));
         } catch {
           canonicalBody = text.trim();
         }
+      } else {
+        canonicalBody = text.trim();
       }
-    } else if (contentType.includes('multipart/form-data')) {
-      const formData = await cloned.formData();
-      const entries: string[] = [];
-      formData.forEach((val, key) => {
-        if (typeof val === 'string') {
-          entries.push(`${key}=str:${val}`);
-        } else if (val && typeof val === 'object' && 'name' in val && 'size' in val) {
-          const f = val as File;
-          entries.push(`${key}=file:${f.name}:${f.size}:${f.type || ''}`);
-        }
-      });
-      entries.sort();
-      canonicalBody = entries.join('&');
-    } else {
-      canonicalBody = (await cloned.text()).trim();
     }
-  } catch {
+  } catch (err) {
     canonicalBody = '';
   }
 
@@ -141,49 +127,46 @@ export class IdempotencyService {
 }
 
 export async function handleIdempotentRequest(c: Context<any>, next: Next) {
-  const method = c.req.method.toUpperCase();
-  if (method !== 'POST') {
+  // Guard against re-entrant execution when multiple sub-routers mount requireAuth on shared prefixes
+  if (c.get('_idempotencyChecked')) {
     return next();
   }
+  c.set('_idempotencyChecked', true);
+
+  const method = c.req.method.toUpperCase();
+  if (method !== 'POST') return next();
 
   const rawHeader = c.req.header('Idempotency-Key') ?? c.req.header('idempotency-key');
-  if (rawHeader === undefined) {
-    return next();
-  }
+  if (rawHeader === undefined) return next();
 
   const idempotencyKey = rawHeader.trim();
   if (!IDEMPOTENCY_KEY_REGEX.test(idempotencyKey)) {
-    return c.json(
-      {
-        success: false,
-        error: {
-          code: 'INVALID_IDEMPOTENCY_KEY',
-          message: 'Idempotency-Key must be between 8 and 128 valid characters (alphanumeric, hyphen, colon, underscore, period).',
-        },
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'INVALID_IDEMPOTENCY_KEY',
+        message: 'Idempotency-Key must be 8 to 128 characters (alphanumeric, hyphens, underscores, colons, or periods).',
       },
-      400
-    );
+    }, 400);
   }
 
   const userCtx = c.get('user');
   const actorId = userCtx?.user?.id || userCtx?.id || 'anonymous';
   const routePath = new URL(c.req.url).pathname;
-  const requestFingerprint = await computeRequestFingerprint(c.req.raw, routePath);
+
+  const requestFingerprint = await computeRequestFingerprint(c, routePath);
   const service = new IdempotencyService(c.env.DB);
   const lockKey = `${actorId}:${idempotencyKey}`;
 
-  // Wait for any in-flight request with the same (actorId, idempotencyKey)
+  // Serialize concurrent requests for the same (actorId, idempotencyKey)
   while (inFlightLocks.has(lockKey)) {
-    try {
-      await inFlightLocks.get(lockKey);
-    } catch {
-      break;
-    }
+    await inFlightLocks.get(lockKey);
   }
 
-  let releaseLock!: () => void;
+  let resolveLock: () => void = () => {};
   const lockPromise = new Promise<void>((resolve) => {
-    releaseLock = resolve;
+    resolveLock = resolve;
   });
   inFlightLocks.set(lockKey, lockPromise);
 
@@ -191,18 +174,15 @@ export async function handleIdempotentRequest(c: Context<any>, next: Next) {
     const existing = await service.findByKeyAndActor(idempotencyKey, actorId);
     if (existing) {
       if (existing.request_fingerprint !== requestFingerprint || existing.route !== routePath) {
-        return c.json(
-          {
-            success: false,
-            error: {
-              code: 'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD',
-              message: 'This Idempotency-Key was already used with a different request payload or endpoint.',
-            },
+        return c.json({
+          success: false,
+          data: null,
+          error: {
+            code: 'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD',
+            message: 'This Idempotency-Key was already used with a different request payload or endpoint.',
           },
-          409
-        );
+        }, 409);
       }
-
       return new Response(existing.response_body, {
         status: existing.response_status,
         headers: {
@@ -221,7 +201,6 @@ export async function handleIdempotentRequest(c: Context<any>, next: Next) {
         const clonedRes = res.clone();
         const responseBody = await clonedRes.text();
         const entityId = extractEntityId(responseBody);
-
         try {
           await service.saveRecord({
             id: crypto.randomUUID(),
@@ -235,42 +214,14 @@ export async function handleIdempotentRequest(c: Context<any>, next: Next) {
             created_at: new Date().toISOString(),
           });
         } catch (err: any) {
-          const msg = String(err?.message || err || '');
-          if (msg.includes('UNIQUE constraint failed') && msg.includes('idempotency_keys')) {
-            const concurrentRecord = await service.findByKeyAndActor(idempotencyKey, actorId);
-            if (concurrentRecord) {
-              if (
-                concurrentRecord.request_fingerprint !== requestFingerprint ||
-                concurrentRecord.route !== routePath
-              ) {
-                c.res = c.json(
-                  {
-                    success: false,
-                    error: {
-                      code: 'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD',
-                      message: 'This Idempotency-Key was already used with a different request payload or endpoint.',
-                    },
-                  },
-                  409
-                );
-                return c.res;
-              }
-              c.res = new Response(concurrentRecord.response_body, {
-                status: concurrentRecord.response_status,
-                headers: {
-                  'Content-Type': 'application/json; charset=UTF-8',
-                  'X-Idempotent-Replay': 'true',
-                },
-              });
-              return c.res;
-            }
-          }
-          throw err;
+          if (!String(err?.message || '').includes('UNIQUE constraint failed')) throw err;
         }
       }
     }
   } finally {
-    inFlightLocks.delete(lockKey);
-    releaseLock();
+    if (inFlightLocks.get(lockKey) === lockPromise) {
+      inFlightLocks.delete(lockKey);
+    }
+    resolveLock();
   }
 }

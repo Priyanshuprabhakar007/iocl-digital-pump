@@ -128,8 +128,11 @@ outlets.post('/', requirePermission(PERMISSIONS.OUTLETS_CREATE) as any, async (c
     }, 403);
   }
 
-  const normalizedRoCode = payload.roCode.trim().toUpperCase();
-  const existingByCode = await outletRepo.findByIdOrCode(normalizedRoCode, { includeArchived: true });
+  const normalizedRoCode = payload.roCode?.trim().toUpperCase();
+  if (!normalizedRoCode) {
+    return c.json({ success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'RO Code is required.' } }, 400);
+  }
+  const existingByCode = await outletRepo.findByIdOrCode(normalizedRoCode);
   if (existingByCode) {
     return c.json({
       success: false,

@@ -83,7 +83,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS "uq_org_officers_email"
 CREATE UNIQUE INDEX IF NOT EXISTS "uq_org_officer_postings_active"
   ON "org_officer_postings" (
     "officer_id",
-    "posting_role",
     "scope_level",
     COALESCE("state_id", ''),
     COALESCE("division_id", ''),
@@ -101,7 +100,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "uq_outlet_sp_assignments_natural"
   )
   WHERE status = 'ACTIVE';
 
--- 11. HR Leave Requests Active Start/End Date Uniqueness
+-- 11. HR Leave Requests Active From/To Date Uniqueness
 CREATE UNIQUE INDEX IF NOT EXISTS "uq_hr_leave_requests_active_dates"
-  ON "hr_leave_requests" ("staff_id", "start_date", "end_date")
+  ON "hr_leave_requests" ("staff_id", "from_date", "to_date")
   WHERE status IN ('PENDING', 'APPROVED');
