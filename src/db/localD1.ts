@@ -137,6 +137,86 @@ export interface LocalD1Options {
   throughMigration?: string;
 }
 
+const migrationSqlCache = new Map<string, string>();
+let cachedMigrationFiles: string[] | null = null;
+
+function getMigrationFiles(migrationsDir: string): string[] {
+  if (!cachedMigrationFiles) {
+    cachedMigrationFiles = fs.readdirSync(migrationsDir)
+      .filter(f => f.endsWith('.sql'))
+      .sort();
+  }
+  return [...cachedMigrationFiles];
+}
+
+function getMigrationSql(migrationsDir: string, file: string): string {
+  let sql = migrationSqlCache.get(file);
+  if (sql === undefined) {
+    sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+    migrationSqlCache.set(file, sql);
+  }
+  return sql;
+}
+
+let cachedTemplatePath: string | null = null;
+
+function ensureMigratedTemplate(migrationsDir: string): string | null {
+  if (cachedTemplatePath && fs.existsSync(cachedTemplatePath)) {
+    return cachedTemplatePath;
+  }
+  if (!fs.existsSync(migrationsDir)) return null;
+
+  const templateDir = path.resolve(process.cwd(), '.sqlite');
+  if (!fs.existsSync(templateDir)) {
+    fs.mkdirSync(templateDir, { recursive: true });
+  }
+  const tplPath = path.join(templateDir, `_template_schema_${process.pid}.db`);
+  if (fs.existsSync(tplPath)) {
+    cachedTemplatePath = tplPath;
+    return tplPath;
+  }
+
+  const isBun = typeof (globalThis as any).Bun !== 'undefined';
+  let tdb: SqliteDb;
+  if (isBun) {
+    const { Database: BunDatabase } = nodeRequire('bun:sqlite');
+    tdb = new BunDatabase(tplPath);
+  } else {
+    const BetterSqlite = nodeRequire('better-sqlite3');
+    tdb = new BetterSqlite(tplPath);
+  }
+
+  tdb.exec('PRAGMA foreign_keys = ON;');
+  tdb.exec(`
+    CREATE TABLE IF NOT EXISTS _d1_migrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE,
+      applied_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  const files = getMigrationFiles(migrationsDir);
+  for (const file of files) {
+    const sql = getMigrationSql(migrationsDir, file);
+    tdb.exec(sql);
+    if (typeof tdb.prepare === 'function') {
+      tdb.prepare('INSERT INTO _d1_migrations (name) VALUES (?)').run(file);
+    } else if (typeof tdb.query === 'function') {
+      tdb.query('INSERT INTO _d1_migrations (name) VALUES (?)').run(file);
+    }
+  }
+  tdb.close();
+  cachedTemplatePath = tplPath;
+  process.once('exit', () => {
+    try {
+      if (fs.existsSync(tplPath)) fs.unlinkSync(tplPath);
+      if (fs.existsSync(tplPath + '-wal')) fs.unlinkSync(tplPath + '-wal');
+      if (fs.existsSync(tplPath + '-shm')) fs.unlinkSync(tplPath + '-shm');
+    } catch {}
+  });
+  return tplPath;
+}
+
 export class LocalD1Database {
   private db: SqliteDb;
   private options?: LocalD1Options;
@@ -148,22 +228,37 @@ export class LocalD1Database {
       fs.mkdirSync(dir, { recursive: true });
     }
 
+    const isFreshDefaultDb = !options?.throughMigration && dbPath !== ':memory:' && !fs.existsSync(dbPath);
+    if (isFreshDefaultDb) {
+      const migrationsDir = path.resolve(process.cwd(), 'migrations');
+      const tpl = ensureMigratedTemplate(migrationsDir);
+      if (tpl && fs.existsSync(tpl)) {
+        fs.copyFileSync(tpl, dbPath);
+      }
+    }
+
     const isBun = typeof (globalThis as any).Bun !== 'undefined';
     if (isBun) {
       const { Database: BunDatabase } = nodeRequire('bun:sqlite');
       const bdb = new BunDatabase(dbPath);
       bdb.exec('PRAGMA journal_mode = WAL;');
+      bdb.exec('PRAGMA synchronous = OFF;');
+      bdb.exec('PRAGMA temp_store = MEMORY;');
       bdb.exec('PRAGMA foreign_keys = ON;');
       this.db = bdb;
     } else {
       const BetterSqlite = nodeRequire('better-sqlite3');
       const sdb = new BetterSqlite(dbPath);
       sdb.pragma('journal_mode = WAL');
+      sdb.pragma('synchronous = OFF');
+      sdb.pragma('temp_store = MEMORY');
       sdb.pragma('foreign_keys = ON');
       this.db = sdb;
     }
 
-    this.initSchema();
+    if (!isFreshDefaultDb) {
+      this.initSchema();
+    }
   }
 
   private initSchema() {
@@ -190,9 +285,7 @@ export class LocalD1Database {
 
     const migrationsDir = path.resolve(process.cwd(), 'migrations');
     if (fs.existsSync(migrationsDir)) {
-      let files = fs.readdirSync(migrationsDir)
-        .filter(f => f.endsWith('.sql'))
-        .sort();
+      let files = getMigrationFiles(migrationsDir);
 
       if (this.options?.throughMigration) {
         const cutoff = this.options.throughMigration;
@@ -205,10 +298,10 @@ export class LocalD1Database {
 
       for (const file of files) {
         if (!applied.has(file)) {
-          if (file === '0031_idempotency_and_unique_constraints.sql') {
+          if (file === '0031_idempotency_and_unique_constraints.sql' && applied.size > 0) {
             assertNoDuplicateRecordsBeforeMigration(this.db);
           }
-          const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+          const sql = getMigrationSql(migrationsDir, file);
           this.db.exec(sql);
           if (typeof this.db.prepare === 'function') {
             this.db.prepare('INSERT INTO _d1_migrations (name) VALUES (?)').run(file);

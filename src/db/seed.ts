@@ -3,6 +3,8 @@ import * as schema from './schema';
 import bcrypt from 'bcryptjs';
 import { ROLES, PERMISSIONS } from '../shared/constants';
 
+const DEFAULT_DEMO_PASSWORD_HASH = bcrypt.hashSync('Password@123', 4);
+
 export async function seedDatabase(db: AppDatabase) {
   const existingUsers = await db.select().from(schema.users);
   if (existingUsers.length > 0) {
@@ -25,7 +27,7 @@ export async function seedDatabase(db: AppDatabase) {
   }
 
   const now = new Date().toISOString();
-  const passwordHash = bcrypt.hashSync('Password@123', 10);
+  const passwordHash = DEFAULT_DEMO_PASSWORD_HASH;
 
   // 1. Roles
   const rolesList = [

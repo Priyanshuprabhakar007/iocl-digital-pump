@@ -310,6 +310,86 @@ const UNIQUE_CONSTRAINT_MAP: Array<{
     message: 'User already holds this organizational scope assignment.',
   },
   {
+    pattern: 'users.emp_code',
+    code: 'EMPLOYEE_CODE_EXISTS',
+    message: 'A user with this employee code already exists.',
+  },
+  {
+    pattern: 'uq_outlet_user_assignments_natural',
+    code: 'OUTLET_ASSIGNMENT_EXISTS',
+    message: 'User already has this assignment type for this retail outlet.',
+  },
+  {
+    pattern: 'uq_fuel_receipts_outlet_invoice',
+    code: 'DUPLICATE_FUEL_RECEIPT_INVOICE',
+    message: 'A fuel receipt with this invoice number already exists for this outlet.',
+  },
+  {
+    pattern: 'uq_fuel_receipt_lines_receipt_tank',
+    code: 'DUPLICATE_RECEIPT_TANK_LINE',
+    message: 'A decantation line for this tank already exists on this fuel receipt.',
+  },
+  {
+    pattern: 'uq_outlet_product_prices_active_start',
+    code: 'DUPLICATE_PRODUCT_PRICE',
+    message: 'An active product price already exists for this outlet and product.',
+  },
+  {
+    pattern: 'uq_shift_collections_shift_type_ref',
+    code: 'DUPLICATE_COLLECTION_REFERENCE',
+    message: 'A collection with this reference number already exists for this shift and collection type.',
+  },
+  {
+    pattern: 'uq_bank_deposits_outlet_channel_ref',
+    code: 'DUPLICATE_DEPOSIT_REFERENCE',
+    message: 'A bank deposit with this reference number already exists for this outlet and channel.',
+  },
+  {
+    pattern: 'uq_lube_sku_prices_active_start',
+    code: 'DUPLICATE_LUBE_PRICE',
+    message: 'An active price already exists for this lubricant SKU at this outlet.',
+  },
+  {
+    pattern: 'uq_lube_stock_tx_opening_balance',
+    code: 'LUBE_OPENING_BALANCE_EXISTS',
+    message: 'An opening balance transaction already exists for this lubricant SKU at this outlet.',
+  },
+  {
+    pattern: 'uq_nfr_rent_payments_due_ref',
+    code: 'DUPLICATE_RENT_PAYMENT_REFERENCE',
+    message: 'A rent payment with this reference number already exists for this rent due.',
+  },
+  {
+    pattern: 'uq_org_officers_email',
+    code: 'DUPLICATE_OFFICER',
+    message: 'An officer with this employee code or email already exists.',
+  },
+  {
+    pattern: 'uq_hr_leave_requests_active_dates',
+    code: 'HR_LEAVE_OVERLAP',
+    message: 'An active leave request already exists for this staff member and date range.',
+  },
+  {
+    pattern: 'hr_nozzle_assignments',
+    code: 'HR_NOZZLE_ALREADY_ASSIGNED',
+    message: 'This nozzle is already assigned for this shift and date.',
+  },
+  {
+    pattern: 'hr_uniform_variants',
+    code: 'UNIFORM_VARIANT_SKU_EXISTS',
+    message: 'A uniform variant with this SKU or size already exists.',
+  },
+  {
+    pattern: 'hr_uniform_items',
+    code: 'UNIFORM_ITEM_CODE_EXISTS',
+    message: 'A uniform item with this code already exists.',
+  },
+  {
+    pattern: 'hr_uniform_stock_transactions',
+    code: 'UNIFORM_OPENING_BALANCE_EXISTS',
+    message: 'An opening balance already exists for this uniform variant at this outlet.',
+  },
+  {
     pattern: 'outlet_user_assignments',
     code: 'OUTLET_ASSIGNMENT_EXISTS',
     message: 'User already has this assignment type for this retail outlet.',
@@ -319,23 +399,20 @@ const UNIQUE_CONSTRAINT_MAP: Array<{
 export function mapDatabaseUniqueError(err: unknown): MappedDuplicateError | null {
   if (!err) return null;
   const errObj = err as any;
-  
+
   // Extract the most descriptive error message possible
   let rawMessage = '';
   if (errObj.message) rawMessage += errObj.message + ' ';
   if (errObj.cause?.message) rawMessage += errObj.cause.message + ' ';
   if (errObj.stack) rawMessage += errObj.stack + ' ';
   if (typeof errObj.toString === 'function') rawMessage += errObj.toString() + ' ';
-  
+
   const lowerMsg = rawMessage.toLowerCase();
-  
+
   // Strict check for unique constraint failure
   if (!lowerMsg.includes('unique constraint failed')) {
     return null;
   }
-
-  // Debug: log the error message that we're trying to map
-  // console.error('[Idem DEBUG] Mapping error:', lowerMsg);
 
   for (const entry of UNIQUE_CONSTRAINT_MAP) {
     if (lowerMsg.includes(entry.pattern.toLowerCase())) {
@@ -347,9 +424,6 @@ export function mapDatabaseUniqueError(err: unknown): MappedDuplicateError | nul
     }
   }
 
-  return {
-    code: 'DUPLICATE_RECORD',
-    message: 'A record with the same unique business identity already exists.',
-    status: 409,
-  };
+  return null;
 }
+

@@ -33,6 +33,9 @@ export type AppContext = Context<{
 }>;
 
 export async function requireAuth(c: AppContext, next: Next) {
+  if (c.get('user')) {
+    return IdempotencyService.handleAuthenticatedMutation(c, next);
+  }
   const authHeader = c.req.header('authorization');
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
   const sessionToken = getCookie(c, COOKIE_NAME) || bearerToken;

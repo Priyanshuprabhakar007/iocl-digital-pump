@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import app from '../src/worker/app';
 import { createLocalD1Database } from '../src/db/localD1';
 import { getDb } from '../src/db';
 import { seedDatabase } from '../src/db/seed';
 import { detectDuplicateRecords } from '../src/db/duplicateDiagnostic';
+import { mapDatabaseUniqueError } from '../src/worker/services/duplicateErrorMapper';
+import { NfrService } from '../src/worker/services/nfrService';
 import fs from 'fs';
 
 describe('Platform-Wide Idempotency & Duplicate Hardening Suite', () => {
@@ -315,6 +317,68 @@ describe('Platform-Wide Idempotency & Duplicate Hardening Suite', () => {
       const json2: any = await res2.json();
       expect(json2.error.code).toBe('SCOPE_ASSIGNMENT_EXISTS');
     });
+
+    it('5.3 known hr_staff unique violation maps to 409 HR_STAFF_CODE_EXISTS', () => {
+      const mapped = mapDatabaseUniqueError(
+        new Error('SQLITE_CONSTRAINT: UNIQUE constraint failed: hr_staff.outlet_id, hr_staff.employee_code')
+      );
+      expect(mapped).not.toBeNull();
+      expect(mapped?.status).toBe(409);
+      expect(mapped?.code).toBe('HR_STAFF_CODE_EXISTS');
+    });
+
+    it('5.4 known nozzle unique violation maps to 409 NOZZLE_NUMBER_EXISTS', () => {
+      const mapped = mapDatabaseUniqueError(
+        new Error('SQLITE_CONSTRAINT: UNIQUE constraint failed: nozzles.dispenser_id, nozzles.nozzle_number')
+      );
+      expect(mapped).not.toBeNull();
+      expect(mapped?.status).toBe(409);
+      expect(mapped?.code).toBe('NOZZLE_NUMBER_EXISTS');
+    });
+
+    it('5.5 unknown unique violation secret_internal_table.foo returns null', () => {
+      const mapped = mapDatabaseUniqueError(
+        new Error('SQLITE_CONSTRAINT: UNIQUE constraint failed: secret_internal_table.foo')
+      );
+      expect(mapped).toBeNull();
+    });
+
+    it('5.6 non-unique SQLite error returns null', () => {
+      const mapped = mapDatabaseUniqueError(
+        new Error('SQLITE_CONSTRAINT_FOREIGNKEY: FOREIGN KEY constraint failed')
+      );
+      expect(mapped).toBeNull();
+    });
+
+    it('5.7 API-level unknown raw DB error returns 500 INTERNAL_SERVER_ERROR without leaking SQLITE, table, or constraint text', async () => {
+      const spy = vi.spyOn(NfrService.prototype, 'listSpaces').mockRejectedValueOnce(
+        new Error('SQLITE_CONSTRAINT: UNIQUE constraint failed: secret_internal_table.foo')
+      );
+
+      try {
+        const res = await app.fetch(
+          new Request('http://localhost:3000/api/v1/outlets/outlet-1/nfr/spaces', {
+            method: 'GET',
+            headers: {
+              Cookie: adminCookie,
+              Origin: 'http://localhost:3000',
+            },
+          }),
+          env
+        );
+
+        expect(res.status).toBe(500);
+        const bodyText = await res.text();
+        const json: any = JSON.parse(bodyText);
+        expect(json.success).toBe(false);
+        expect(json.error.code).toBe('INTERNAL_SERVER_ERROR');
+        expect(bodyText.toLowerCase()).not.toContain('sqlite');
+        expect(bodyText.toLowerCase()).not.toContain('secret_internal_table');
+        expect(bodyText.toLowerCase()).not.toContain('constraint');
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 
   describe('6. Non-Destructive Duplicate Diagnostics Verification', () => {
@@ -325,3 +389,4 @@ describe('Platform-Wide Idempotency & Duplicate Hardening Suite', () => {
     });
   });
 });
+
