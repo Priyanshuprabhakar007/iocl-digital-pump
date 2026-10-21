@@ -7,6 +7,7 @@ import { ScopeService } from '../services/scopeService';
 import { requireAuth, AppContext, EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 import { PERMISSIONS } from '../../shared/constants';
+import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
 
 export const utilityRoutes = new Hono<{ Bindings: EnvBindings }>();
 
@@ -40,6 +41,14 @@ function handleUtilityError(c: AppContext, err: any) {
       data: null,
       error: { code: 'VALIDATION_ERROR', message: err.errors?.[0]?.message || 'Validation error', details: err.format?.() },
     }, 400);
+  }
+  const mappedUnique = mapDatabaseUniqueError(err);
+  if (mappedUnique) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: mappedUnique.code, message: mappedUnique.message },
+    }, 409);
   }
   if (err.message && err.message.includes('UTILITY_CHARGE_OVERFLOW')) {
     return c.json({

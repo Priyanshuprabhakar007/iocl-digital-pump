@@ -140,7 +140,9 @@ dgOperationsRoutes.post('/outlets/:outletId/dg-logs', requirePermission(PERMISSI
       error: null,
     }, 201);
   } catch (err: any) {
-    const isConflict = err.message?.includes('already exists');
+    const isConflict =
+      err.message?.includes('already exists') ||
+      err.message?.includes('UNIQUE constraint failed');
     return c.json({
       success: false,
       data: null,

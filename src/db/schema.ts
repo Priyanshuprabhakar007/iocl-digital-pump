@@ -1668,11 +1668,26 @@ export const dgRunIntervals = sqliteTable('dg_run_intervals', {
   check('chk_dg_interval_dur', sql`${table.durationMinutes} >= 0`),
 ]);
 
+// ==========================================
+// GLOBAL IDEMPOTENCY KEYS LEDGER
+// ==========================================
 
-
-
-
-
-
-
+export const idempotencyKeys = sqliteTable(
+  'idempotency_keys',
+  {
+    id: text('id').primaryKey(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    actorId: text('actor_id').notNull(),
+    route: text('route').notNull(),
+    requestFingerprint: text('request_fingerprint').notNull(),
+    responseStatus: integer('response_status').notNull(),
+    entityId: text('entity_id'),
+    responseBody: text('response_body').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uq_idempotency_keys_key_actor').on(table.idempotencyKey, table.actorId),
+    index('idx_idempotency_keys_created_at').on(table.createdAt),
+  ]
+);
 

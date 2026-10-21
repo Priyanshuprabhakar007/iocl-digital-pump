@@ -73,6 +73,7 @@ export const ShiftOperationsPage: React.FC = () => {
 
   const [closeConfirmModal, setCloseConfirmModal] = useState(false);
   const [closingSubmitting, setClosingSubmitting] = useState(false);
+  const [savingReadingNozzleId, setSavingReadingNozzleId] = useState<string | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -146,32 +147,36 @@ export const ShiftOperationsPage: React.FC = () => {
 
   const handleOpenShiftSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (modalSubmitting) return;
     setModalSubmitting(true);
     setModalError(null);
 
-    const res = await apiFetch<OperationalShift>(`/api/v1/outlets/${selectedOutletId}/shifts/open`, {
-      method: 'POST',
-      body: JSON.stringify({
-        shiftTemplateId: newShiftTemplateId,
-        businessDate: newShiftDate,
-        notes: newShiftNotes.trim() || null,
-      }),
-    });
+    try {
+      const res = await apiFetch<OperationalShift>(`/api/v1/outlets/${selectedOutletId}/shifts/open`, {
+        method: 'POST',
+        body: JSON.stringify({
+          shiftTemplateId: newShiftTemplateId,
+          businessDate: newShiftDate,
+          notes: newShiftNotes.trim() || null,
+        }),
+      });
 
-    setModalSubmitting(false);
-
-    if (res.success && res.data) {
-      setOpenShiftModal(false);
-      setActionSuccess(`Operational Shift for ${newShiftDate} opened successfully with nozzle snapshot`);
-      setTimeout(() => setActionSuccess(null), 4000);
-      setSelectedShiftId(res.data.id);
-      loadOutletShifts();
-    } else {
-      setModalError(res.error?.message || 'Failed to open operational shift');
+      if (res.success && res.data) {
+        setOpenShiftModal(false);
+        setActionSuccess(`Operational Shift for ${newShiftDate} opened successfully with nozzle snapshot`);
+        setTimeout(() => setActionSuccess(null), 4000);
+        setSelectedShiftId(res.data.id);
+        loadOutletShifts();
+      } else {
+        setModalError(res.error?.message || 'Failed to open operational shift');
+      }
+    } finally {
+      setModalSubmitting(false);
     }
   };
 
   const handleSaveReading = async (nozzleId: string) => {
+    if (savingReadingNozzleId) return;
     const input = readingInputs[nozzleId];
     if (!input) return;
 
@@ -184,70 +189,82 @@ export const ShiftOperationsPage: React.FC = () => {
       return;
     }
 
-    const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/readings`, {
-      method: 'POST',
-      body: JSON.stringify({
-        nozzleId,
-        openingTotalizer: input.opening.trim(),
-        closingTotalizer: input.closing.trim(),
-        testingQuantity: input.testing ? input.testing.trim() : '0.000',
-        varianceReason: input.varianceReason ? input.varianceReason.trim() : null,
-      }),
-    });
+    setSavingReadingNozzleId(nozzleId);
+    try {
+      const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/readings`, {
+        method: 'POST',
+        body: JSON.stringify({
+          nozzleId,
+          openingTotalizer: input.opening.trim(),
+          closingTotalizer: input.closing.trim(),
+          testingQuantity: input.testing ? input.testing.trim() : '0.000',
+          varianceReason: input.varianceReason ? input.varianceReason.trim() : null,
+        }),
+      });
 
-    if (res.success) {
-      setActionSuccess('Reading recorded successfully');
-      setTimeout(() => setActionSuccess(null), 3000);
-      loadShiftWorkspace();
-    } else {
-      setActionError(res.error?.message || 'Failed to save meter reading');
+      if (res.success) {
+        setActionSuccess('Reading recorded successfully');
+        setTimeout(() => setActionSuccess(null), 3000);
+        loadShiftWorkspace();
+      } else {
+        setActionError(res.error?.message || 'Failed to save meter reading');
+      }
+    } finally {
+      setSavingReadingNozzleId(null);
     }
   };
 
   const handleRecordUnavailability = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!unavailModalNozzle) return;
+    if (!unavailModalNozzle || modalSubmitting) return;
 
     setModalSubmitting(true);
-    const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/nozzle-unavailability`, {
-      method: 'POST',
-      body: JSON.stringify({
-        nozzleId: unavailModalNozzle.snapshot.nozzleId,
-        reason: unavailReason.trim(),
-      }),
-    });
-    setModalSubmitting(false);
+    try {
+      const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/nozzle-unavailability`, {
+        method: 'POST',
+        body: JSON.stringify({
+          nozzleId: unavailModalNozzle.snapshot.nozzleId,
+          reason: unavailReason.trim(),
+        }),
+      });
 
-    if (res.success) {
-      setUnavailModalNozzle(null);
-      setUnavailReason('');
-      setActionSuccess('Nozzle marked unavailable for this shift');
-      setTimeout(() => setActionSuccess(null), 3000);
-      loadShiftWorkspace();
-    } else {
-      setActionError(res.error?.message || 'Failed to mark nozzle unavailable');
+      if (res.success) {
+        setUnavailModalNozzle(null);
+        setUnavailReason('');
+        setActionSuccess('Nozzle marked unavailable for this shift');
+        setTimeout(() => setActionSuccess(null), 3000);
+        loadShiftWorkspace();
+      } else {
+        setActionError(res.error?.message || 'Failed to mark nozzle unavailable');
+      }
+    } finally {
+      setModalSubmitting(false);
     }
   };
 
   const handleCloseShift = async () => {
+    if (closingSubmitting) return;
     setClosingSubmitting(true);
     setActionError(null);
 
-    const res = await apiFetch<OperationalShift>(`/api/v1/shifts/${selectedShiftId}/close`, {
-      method: 'POST',
-    });
+    try {
+      const res = await apiFetch<OperationalShift>(`/api/v1/shifts/${selectedShiftId}/close`, {
+        method: 'POST',
+      });
 
-    setClosingSubmitting(false);
-    setCloseConfirmModal(false);
+      setCloseConfirmModal(false);
 
-    if (res.success && res.data) {
-      setActionSuccess('Operational shift closed and finalized successfully');
-      setTimeout(() => setActionSuccess(null), 4000);
-      setSelectedShift(res.data);
-      loadOutletShifts();
-      loadShiftWorkspace();
-    } else {
-      setActionError(res.error?.message || 'Failed to close operational shift');
+      if (res.success && res.data) {
+        setActionSuccess('Operational shift closed and finalized successfully');
+        setTimeout(() => setActionSuccess(null), 4000);
+        setSelectedShift(res.data);
+        loadOutletShifts();
+        loadShiftWorkspace();
+      } else {
+        setActionError(res.error?.message || 'Failed to close operational shift');
+      }
+    } finally {
+      setClosingSubmitting(false);
     }
   };
 
@@ -597,10 +614,11 @@ export const ShiftOperationsPage: React.FC = () => {
                                 {isShiftOpen && (
                                   <>
                                     <button
+                                      disabled={savingReadingNozzleId === nId}
                                       onClick={() => handleSaveReading(nId)}
-                                      className="px-2.5 py-1 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-[11px] font-bold shadow hover:from-orange-600 hover:to-amber-700"
+                                      className="px-2.5 py-1 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-[11px] font-bold shadow hover:from-orange-600 hover:to-amber-700 disabled:opacity-50"
                                     >
-                                      {isRecorded ? 'Update' : 'Save'}
+                                      {savingReadingNozzleId === nId ? 'Saving...' : isRecorded ? 'Update' : 'Save'}
                                     </button>
                                     <button
                                       onClick={() => {

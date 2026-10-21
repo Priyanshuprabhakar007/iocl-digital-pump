@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
+import { assertNoDuplicateRecordsBeforeMigration } from './duplicateDiagnostic';
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 
@@ -204,6 +205,9 @@ export class LocalD1Database {
 
       for (const file of files) {
         if (!applied.has(file)) {
+          if (file === '0031_idempotency_and_unique_constraints.sql') {
+            assertNoDuplicateRecordsBeforeMigration(this.db);
+          }
           const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
           this.db.exec(sql);
           if (typeof this.db.prepare === 'function') {

@@ -53,6 +53,7 @@ export const DocumentsPage: React.FC = () => {
 
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (uploading) return;
     setErrorMsg(null);
     setSuccessMsg(null);
 

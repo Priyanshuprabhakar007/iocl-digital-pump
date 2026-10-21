@@ -7,6 +7,7 @@ import { OutletRepository } from '../repositories/outletRepository';
 import { requireAuth, AppContext, EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 import { PERMISSIONS } from '../../shared/constants';
+import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
 
 export const orgRoutes = new Hono<{
   Bindings: EnvBindings;
@@ -34,6 +35,14 @@ function handleOrgError(c: AppContext, err: any) {
       data: null,
       error: { code: err.code, message: err.message },
     }, err.status as any);
+  }
+  const mappedUnique = mapDatabaseUniqueError(err);
+  if (mappedUnique) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: mappedUnique.code, message: mappedUnique.message },
+    }, 409);
   }
   console.error('[Org Operation Error]:', err);
   return c.json({

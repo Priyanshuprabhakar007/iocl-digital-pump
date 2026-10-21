@@ -14,6 +14,8 @@ export const UsersPage = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     empCode: '',
@@ -44,27 +46,39 @@ export const UsersPage = () => {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creatingUser) return;
+    setCreatingUser(true);
     setErrorMsg(null);
-    const res = await apiFetch('/api/v1/users', {
-      method: 'POST',
-      body: JSON.stringify(form),
-    });
-    if (res.success) {
-      setModalOpen(false);
-      fetchUsers();
-    } else {
-      setErrorMsg(res.error?.message || 'Failed to create user');
+    try {
+      const res = await apiFetch('/api/v1/users', {
+        method: 'POST',
+        body: JSON.stringify(form),
+      });
+      if (res.success) {
+        setModalOpen(false);
+        fetchUsers();
+      } else {
+        setErrorMsg(res.error?.message || 'Failed to create user');
+      }
+    } finally {
+      setCreatingUser(false);
     }
   };
 
   const handleToggleStatus = async (userId: string, currentStatus: string) => {
-    const nextStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    const res = await apiFetch(`/api/v1/users/${userId}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: nextStatus }),
-    });
-    if (res.success) {
-      fetchUsers();
+    if (togglingUserId) return;
+    setTogglingUserId(userId);
+    try {
+      const nextStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const res = await apiFetch(`/api/v1/users/${userId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (res.success) {
+        fetchUsers();
+      }
+    } finally {
+      setTogglingUserId(null);
     }
   };
 
@@ -268,16 +282,18 @@ export const UsersPage = () => {
               <div className="pt-3 flex items-center justify-end gap-3">
                 <button
                   type="button"
+                  disabled={creatingUser}
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700"
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md"
+                  disabled={creatingUser}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md disabled:opacity-50"
                 >
-                  Provision User
+                  {creatingUser ? 'Provisioning...' : 'Provision User'}
                 </button>
               </div>
             </form>

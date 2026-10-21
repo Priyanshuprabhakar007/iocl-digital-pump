@@ -130,17 +130,32 @@ scopes.post('/', requirePermission(PERMISSIONS.SCOPES_ASSIGN) as any, async (c: 
   }
 
   const nowIso = new Date().toISOString();
-  const created = await scopeRepo.createScopeAssignment({
-    id: `usa-${crypto.randomUUID()}`,
-    userId: payload.userId,
-    scopeLevel: payload.scopeLevel,
-    stateId: derived.stateId,
-    divisionId: derived.divisionId,
-    salesAreaId: derived.salesAreaId,
-    outletId: derived.outletId,
-    createdAt: nowIso,
-    createdBy: c.var.user.user.id,
-  });
+  let created;
+  try {
+    created = await scopeRepo.createScopeAssignment({
+      id: `usa-${crypto.randomUUID()}`,
+      userId: payload.userId,
+      scopeLevel: payload.scopeLevel,
+      stateId: derived.stateId,
+      divisionId: derived.divisionId,
+      salesAreaId: derived.salesAreaId,
+      outletId: derived.outletId,
+      createdAt: nowIso,
+      createdBy: c.var.user.user.id,
+    });
+  } catch (err: any) {
+    if (String(err?.message || '').includes('UNIQUE constraint failed')) {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'SCOPE_ASSIGNMENT_EXISTS',
+          message: 'User already holds this organizational scope assignment.',
+        },
+      }, 409);
+    }
+    throw err;
+  }
 
   await auditRepo.logAction({
     id: `aud-${crypto.randomUUID()}`,

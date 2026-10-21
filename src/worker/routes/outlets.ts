@@ -128,25 +128,53 @@ outlets.post('/', requirePermission(PERMISSIONS.OUTLETS_CREATE) as any, async (c
     }, 403);
   }
 
+  const normalizedRoCode = payload.roCode.trim().toUpperCase();
+  const existingByCode = await outletRepo.findByIdOrCode(normalizedRoCode, { includeArchived: true });
+  if (existingByCode) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'RO_CODE_EXISTS',
+        message: `Retail outlet with RO Code '${normalizedRoCode}' already exists.`,
+      },
+    }, 409);
+  }
+
   const nowIso = new Date().toISOString();
-  const created = await outletRepo.createOutlet({
-    id: `ro-${crypto.randomUUID()}`,
-    roCode: payload.roCode.toUpperCase(),
-    name: payload.name,
-    outletType: payload.outletType,
-    stateId: payload.stateId,
-    divisionId: payload.divisionId,
-    salesAreaId: payload.salesAreaId,
-    address: payload.address,
-    city: payload.city,
-    district: payload.district,
-    pincode: payload.pincode,
-    latitude: payload.latitude ?? null,
-    longitude: payload.longitude ?? null,
-    status: payload.status,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  });
+  let created;
+  try {
+    created = await outletRepo.createOutlet({
+      id: `ro-${crypto.randomUUID()}`,
+      roCode: normalizedRoCode,
+      name: payload.name,
+      outletType: payload.outletType,
+      stateId: payload.stateId,
+      divisionId: payload.divisionId,
+      salesAreaId: payload.salesAreaId,
+      address: payload.address,
+      city: payload.city,
+      district: payload.district,
+      pincode: payload.pincode,
+      latitude: payload.latitude ?? null,
+      longitude: payload.longitude ?? null,
+      status: payload.status,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+  } catch (err: any) {
+    if (String(err?.message || '').includes('UNIQUE constraint failed')) {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'RO_CODE_EXISTS',
+          message: `Retail outlet with RO Code '${normalizedRoCode}' already exists.`,
+        },
+      }, 409);
+    }
+    throw err;
+  }
 
   await auditRepo.logAction({
     id: `aud-${crypto.randomUUID()}`,
@@ -408,17 +436,32 @@ outlets.post('/:id/assignments', requirePermission(PERMISSIONS.OUTLETS_UPDATE) a
   const auditRepo = new AuditRepository(db);
 
   const nowIso = new Date().toISOString();
-  const createdAssignment = await outletRepo.createOutletUserAssignment({
-    id: `oua-${crypto.randomUUID()}`,
-    outletId: payload.outletId,
-    userId: payload.userId,
-    assignmentType: payload.assignmentType,
-    effectiveFrom: payload.effectiveFrom || nowIso,
-    effectiveTo: payload.effectiveTo || null,
-    isActive: true,
-    createdAt: nowIso,
-    createdBy: c.var.user.user.id,
-  });
+  let createdAssignment;
+  try {
+    createdAssignment = await outletRepo.createOutletUserAssignment({
+      id: `oua-${crypto.randomUUID()}`,
+      outletId: payload.outletId,
+      userId: payload.userId,
+      assignmentType: payload.assignmentType,
+      effectiveFrom: payload.effectiveFrom || nowIso,
+      effectiveTo: payload.effectiveTo || null,
+      isActive: true,
+      createdAt: nowIso,
+      createdBy: c.var.user.user.id,
+    });
+  } catch (err: any) {
+    if (String(err?.message || '').includes('UNIQUE constraint failed')) {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'OUTLET_ASSIGNMENT_EXISTS',
+          message: 'User already has this assignment type for this retail outlet.',
+        },
+      }, 409);
+    }
+    throw err;
+  }
 
   await auditRepo.logAction({
     id: `aud-${crypto.randomUUID()}`,

@@ -18,6 +18,7 @@ import {
   UpdateLubeShiftSaleSchema,
 } from '../../shared/validators';
 import { PERMISSIONS } from '../../shared/constants';
+import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
 
 export const lubeRoutes = new Hono<{ Bindings: EnvBindings }>();
 
@@ -46,6 +47,14 @@ function handleLubeError(c: AppContext, err: any) {
       data: null,
       error: { code: err.code, message: err.message },
     }, err.status as any);
+  }
+  const mappedUnique = mapDatabaseUniqueError(err);
+  if (mappedUnique) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: mappedUnique.code, message: mappedUnique.message },
+    }, 409);
   }
   if (err.message?.includes('SHIFT_CLOSED')) {
     return c.json({

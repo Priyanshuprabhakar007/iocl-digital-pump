@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { EnvBindings } from './middleware/auth';
+import { mapDatabaseUniqueError } from './services/duplicateErrorMapper';
 
 import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
@@ -103,7 +104,7 @@ app.use('*', async (c, next) => {
       c.header('Access-Control-Allow-Origin', origin);
       c.header('Access-Control-Allow-Credentials', 'true');
       c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
+      c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie, Idempotency-Key');
       return c.body(null, 204);
     }
     return c.body(null, 403);
@@ -158,8 +159,20 @@ app.route('/api/v1/org', orgRoutes);
 app.route('/api/v1', dgOperationsRoutes);
 app.route('/api/v1', reportRoutes);
 
-// Global Error Handler - Generic external response, detailed internal server log
+// Global Error Handler - Maps unique constraint violations to 409; generic external response for 500
 app.onError((err, c) => {
+  const mappedUnique = mapDatabaseUniqueError(err);
+  if (mappedUnique) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: mappedUnique.code,
+        message: mappedUnique.message,
+      },
+    }, 409);
+  }
+
   console.error('[Worker Server Error]:', err);
   return c.json({
     success: false,

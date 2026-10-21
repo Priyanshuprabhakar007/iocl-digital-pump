@@ -38,6 +38,10 @@ export const OutletsPage: React.FC = () => {
   const [hideModalOpen, setHideModalOpen] = useState(false);
   const [outletToHide, setOutletToHide] = useState<RetailOutlet | null>(null);
   const [hidingLoading, setHidingLoading] = useState(false);
+  const [creatingOutlet, setCreatingOutlet] = useState(false);
+  const [updatingOutlet, setUpdatingOutlet] = useState(false);
+  const [assigningUser, setAssigningUser] = useState(false);
+  const [restoringOutletId, setRestoringOutletId] = useState<string | null>(null);
 
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -266,6 +270,7 @@ export const OutletsPage: React.FC = () => {
 
   const handleCreateOutlet = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creatingOutlet) return;
     setErrorMsg(null);
 
     if (!form.stateId || !form.divisionId || !form.salesAreaId) {
@@ -273,38 +278,43 @@ export const OutletsPage: React.FC = () => {
       return;
     }
 
-    const res = await apiFetch<RetailOutlet>('/api/v1/outlets', {
-      method: 'POST',
-      body: JSON.stringify({
-        roCode: form.roCode.trim(),
-        name: form.name.trim(),
-        outletType: form.outletType,
-        stateId: form.stateId,
-        divisionId: form.divisionId,
-        salesAreaId: form.salesAreaId,
-        address: form.address.trim(),
-        city: form.city.trim(),
-        district: form.district.trim(),
-        pincode: form.pincode.trim(),
-        status: form.status,
-      }),
-    });
+    setCreatingOutlet(true);
+    try {
+      const res = await apiFetch<RetailOutlet>('/api/v1/outlets', {
+        method: 'POST',
+        body: JSON.stringify({
+          roCode: form.roCode.trim(),
+          name: form.name.trim(),
+          outletType: form.outletType,
+          stateId: form.stateId,
+          divisionId: form.divisionId,
+          salesAreaId: form.salesAreaId,
+          address: form.address.trim(),
+          city: form.city.trim(),
+          district: form.district.trim(),
+          pincode: form.pincode.trim(),
+          status: form.status,
+        }),
+      });
 
-    if (res.success) {
-      setModalOpen(false);
-      setForm(initialFormState);
-      setDivisions([]);
-      setSalesAreas([]);
-      setSuccessMsg('Retail outlet registered successfully.');
-      fetchOutlets();
-    } else {
-      setErrorMsg(res.error?.message || 'Failed to create retail outlet');
+      if (res.success) {
+        setModalOpen(false);
+        setForm(initialFormState);
+        setDivisions([]);
+        setSalesAreas([]);
+        setSuccessMsg('Retail outlet registered successfully.');
+        fetchOutlets();
+      } else {
+        setErrorMsg(res.error?.message || 'Failed to create retail outlet');
+      }
+    } finally {
+      setCreatingOutlet(false);
     }
   };
 
   const handleUpdateOutlet = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingOutlet) return;
+    if (!editingOutlet || updatingOutlet) return;
     setErrorMsg(null);
 
     if (!editForm.stateId || !editForm.divisionId || !editForm.salesAreaId) {
@@ -312,51 +322,61 @@ export const OutletsPage: React.FC = () => {
       return;
     }
 
-    const res = await apiFetch<RetailOutlet>(`/api/v1/outlets/${editingOutlet.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        name: editForm.name.trim(),
-        outletType: editForm.outletType,
-        stateId: editForm.stateId,
-        divisionId: editForm.divisionId,
-        salesAreaId: editForm.salesAreaId,
-        address: editForm.address.trim(),
-        city: editForm.city.trim(),
-        district: editForm.district.trim(),
-        pincode: editForm.pincode.trim(),
-        status: editForm.status,
-      }),
-    });
+    setUpdatingOutlet(true);
+    try {
+      const res = await apiFetch<RetailOutlet>(`/api/v1/outlets/${editingOutlet.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          outletType: editForm.outletType,
+          stateId: editForm.stateId,
+          divisionId: editForm.divisionId,
+          salesAreaId: editForm.salesAreaId,
+          address: editForm.address.trim(),
+          city: editForm.city.trim(),
+          district: editForm.district.trim(),
+          pincode: editForm.pincode.trim(),
+          status: editForm.status,
+        }),
+      });
 
-    if (res.success) {
-      setEditModalOpen(false);
-      setEditingOutlet(null);
-      setSuccessMsg('Retail outlet updated successfully.');
-      fetchOutlets();
-    } else {
-      setErrorMsg(res.error?.message || 'Failed to update retail outlet');
+      if (res.success) {
+        setEditModalOpen(false);
+        setEditingOutlet(null);
+        setSuccessMsg('Retail outlet updated successfully.');
+        fetchOutlets();
+      } else {
+        setErrorMsg(res.error?.message || 'Failed to update retail outlet');
+      }
+    } finally {
+      setUpdatingOutlet(false);
     }
   };
 
   const handleAssignUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedOutlet) return;
+    if (!selectedOutlet || assigningUser) return;
+    setAssigningUser(true);
     setErrorMsg(null);
 
-    const res = await apiFetch(`/api/v1/outlets/${selectedOutlet.id}/assignments`, {
-      method: 'POST',
-      body: JSON.stringify({
-        userId: assignUserId,
-        assignmentType: assignType,
-      }),
-    });
+    try {
+      const res = await apiFetch(`/api/v1/outlets/${selectedOutlet.id}/assignments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: assignUserId,
+          assignmentType: assignType,
+        }),
+      });
 
-    if (res.success) {
-      setAssignModalOpen(false);
-      setSuccessMsg('Personnel assigned successfully.');
-      fetchOutlets();
-    } else {
-      setErrorMsg(res.error?.message || 'Failed to assign user to outlet');
+      if (res.success) {
+        setAssignModalOpen(false);
+        setSuccessMsg('Personnel assigned successfully.');
+        fetchOutlets();
+      } else {
+        setErrorMsg(res.error?.message || 'Failed to assign user to outlet');
+      }
+    } finally {
+      setAssigningUser(false);
     }
   };
 
@@ -367,37 +387,46 @@ export const OutletsPage: React.FC = () => {
   };
 
   const handleHideOutlet = async () => {
-    if (!outletToHide) return;
+    if (!outletToHide || hidingLoading) return;
     setHidingLoading(true);
     setErrorMsg(null);
 
-    const res = await apiFetch<RetailOutlet>(`/api/v1/outlets/${outletToHide.id}/directory-visibility`, {
-      method: 'PATCH',
-      body: JSON.stringify({ hidden: true }),
-    });
+    try {
+      const res = await apiFetch<RetailOutlet>(`/api/v1/outlets/${outletToHide.id}/directory-visibility`, {
+        method: 'PATCH',
+        body: JSON.stringify({ hidden: true }),
+      });
 
-    setHidingLoading(false);
-    if (res.success) {
-      setHideModalOpen(false);
-      setOutletToHide(null);
-      setSuccessMsg('Retail outlet hidden from directory. Database records and history were preserved.');
-      fetchOutlets();
-    } else {
-      setErrorMsg(res.error?.message || 'Failed to archive retail outlet.');
+      if (res.success) {
+        setHideModalOpen(false);
+        setOutletToHide(null);
+        setSuccessMsg('Retail outlet hidden from directory. Database records and history were preserved.');
+        fetchOutlets();
+      } else {
+        setErrorMsg(res.error?.message || 'Failed to archive retail outlet.');
+      }
+    } finally {
+      setHidingLoading(false);
     }
   };
 
   const handleRestoreOutlet = async (ro: RetailOutlet) => {
+    if (restoringOutletId) return;
+    setRestoringOutletId(ro.id);
     setErrorMsg(null);
-    const res = await apiFetch<RetailOutlet>(`/api/v1/outlets/${ro.id}/restore`, {
-      method: 'POST',
-    });
+    try {
+      const res = await apiFetch<RetailOutlet>(`/api/v1/outlets/${ro.id}/restore`, {
+        method: 'POST',
+      });
 
-    if (res.success) {
-      setSuccessMsg(`Retail outlet ${ro.name} (${ro.roCode}) restored to active status.`);
-      fetchOutlets();
-    } else {
-      setErrorMsg(res.error?.message || 'Failed to restore retail outlet.');
+      if (res.success) {
+        setSuccessMsg(`Retail outlet ${ro.name} (${ro.roCode}) restored to active status.`);
+        fetchOutlets();
+      } else {
+        setErrorMsg(res.error?.message || 'Failed to restore retail outlet.');
+      }
+    } finally {
+      setRestoringOutletId(null);
     }
   };
 
@@ -852,19 +881,21 @@ export const OutletsPage: React.FC = () => {
               <div className="pt-3 flex items-center justify-end gap-3">
                 <button
                   type="button"
+                  disabled={creatingOutlet}
                   onClick={() => {
                     setModalOpen(false);
                     setErrorMsg(null);
                   }}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 transition-colors"
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md transition-colors"
+                  disabled={creatingOutlet}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md transition-colors disabled:opacity-50"
                 >
-                  Register Outlet
+                  {creatingOutlet ? 'Registering...' : 'Register Outlet'}
                 </button>
               </div>
             </form>
@@ -1085,21 +1116,22 @@ export const OutletsPage: React.FC = () => {
               <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-800">
                 <button
                   type="button"
+                  disabled={updatingOutlet}
                   onClick={() => {
                     setEditModalOpen(false);
                     setEditingOutlet(null);
                     setErrorMsg(null);
                   }}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 transition-colors"
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={loadingEditDivisions || loadingEditSalesAreas}
+                  disabled={updatingOutlet || loadingEditDivisions || loadingEditSalesAreas}
                   className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg font-bold shadow-md transition-colors"
                 >
-                  Save Changes
+                  {updatingOutlet ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -1159,16 +1191,18 @@ export const OutletsPage: React.FC = () => {
               <div className="pt-2 flex items-center justify-end gap-3">
                 <button
                   type="button"
+                  disabled={assigningUser}
                   onClick={() => setAssignModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700"
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md"
+                  disabled={assigningUser}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md disabled:opacity-50"
                 >
-                  Confirm Assignment
+                  {assigningUser ? 'Assigning...' : 'Confirm Assignment'}
                 </button>
               </div>
             </form>

@@ -7,6 +7,7 @@ import { UserRepository } from '../repositories/userRepository';
 import { ScopeRepository } from '../repositories/scopeRepository';
 import { OutletRepository } from '../repositories/outletRepository';
 import { UserContext, ScopeLevel } from '../../shared/types';
+import { IdempotencyService } from '../services/idempotencyService';
 
 export async function hashToken(token: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -157,5 +158,6 @@ export async function requireAuth(c: AppContext, next: Next) {
   c.set('user', userContext);
   c.set('sessionToken', sessionToken);
 
-  await next();
+  return IdempotencyService.handleAuthenticatedMutation(c, next);
 }
+

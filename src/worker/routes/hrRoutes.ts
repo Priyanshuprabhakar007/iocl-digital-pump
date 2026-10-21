@@ -7,6 +7,7 @@ import { ScopeService } from '../services/scopeService';
 import { requireAuth, AppContext, EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 import { PERMISSIONS } from '../../shared/constants';
+import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
 
 export const hrRoutes = new Hono<{ Bindings: EnvBindings }>();
 
@@ -48,6 +49,14 @@ function handleHrError(c: AppContext, err: any) {
         details: err.format?.(),
       },
     }, 400);
+  }
+  const mappedUnique = mapDatabaseUniqueError(err);
+  if (mappedUnique) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: mappedUnique.code, message: mappedUnique.message },
+    }, 409);
   }
 
   console.error('[HR Controller Server Error]:', err);

@@ -42,6 +42,9 @@ export const StockOperationsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [dipSubmitting, setDipSubmitting] = useState(false);
+  const [receiptSubmitting, setReceiptSubmitting] = useState(false);
+  const [computeSubmitting, setComputeSubmitting] = useState(false);
 
   // Tank Stock Entry Form State
   const [dipForm, setDipForm] = useState<{
@@ -127,100 +130,115 @@ export const StockOperationsPage: React.FC = () => {
 
   const handleRecordDip = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedShiftId || !dipForm.tankId || !dipForm.productDipMm) return;
+    if (!selectedShiftId || !dipForm.tankId || !dipForm.productDipMm || dipSubmitting) return;
 
+    setDipSubmitting(true);
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/tank-readings`, {
-      method: 'POST',
-      body: JSON.stringify({
-        tankId: dipForm.tankId,
-        readingType: activeTab === 'OPENING' ? 'OPENING' : activeTab === 'CLOSING' ? 'CLOSING' : dipForm.readingType,
-        source: dipForm.source,
-        productDipMm: dipForm.productDipMm,
-        waterDipMm: dipForm.waterDipMm || '0.000',
-        recordedAt: new Date().toISOString(),
-      }),
-    });
+    try {
+      const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/tank-readings`, {
+        method: 'POST',
+        body: JSON.stringify({
+          tankId: dipForm.tankId,
+          readingType: activeTab === 'OPENING' ? 'OPENING' : activeTab === 'CLOSING' ? 'CLOSING' : dipForm.readingType,
+          source: dipForm.source,
+          productDipMm: dipForm.productDipMm,
+          waterDipMm: dipForm.waterDipMm || '0.000',
+          recordedAt: new Date().toISOString(),
+        }),
+      });
 
-    if (res.success) {
-      setSuccessMsg(`Recorded ${activeTab} stock dip successfully.`);
-      setDipForm({ tankId: '', readingType: 'OPENING', source: 'MANUAL', productDipMm: '', waterDipMm: '0.000' });
-      await loadShiftData(selectedShiftId);
-    } else {
-      setErrorMsg(res.error?.message || 'Failed to record tank reading');
+      if (res.success) {
+        setSuccessMsg(`Recorded ${activeTab} stock dip successfully.`);
+        setDipForm({ tankId: '', readingType: 'OPENING', source: 'MANUAL', productDipMm: '', waterDipMm: '0.000' });
+        await loadShiftData(selectedShiftId);
+      } else {
+        setErrorMsg(res.error?.message || 'Failed to record tank reading');
+      }
+    } finally {
+      setDipSubmitting(false);
     }
   };
 
   const handleCreateReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedShiftId || !receiptForm.lineTankId) return;
-
-    setErrorMsg(null);
-    setSuccessMsg(null);
+    if (!selectedShiftId || !receiptForm.lineTankId || receiptSubmitting) return;
 
     const tank = tankSnapshots.find(t => t.tankId === receiptForm.lineTankId);
     if (!tank) return;
 
-    const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/fuel-receipts`, {
-      method: 'POST',
-      body: JSON.stringify({
-        ttNumber: receiptForm.ttNumber,
-        invoiceNumber: receiptForm.invoiceNumber,
-        invoiceDate: receiptForm.invoiceDate,
-        arrivalAt: receiptForm.arrivalTime,
-        sealVerified: receiptForm.sealVerified,
-        sealExceptionReason: receiptForm.sealVerified ? null : receiptForm.sealExceptionReason,
-        lines: [
-          {
-            tankId: receiptForm.lineTankId,
-            productId: tank.productId,
-            invoiceQuantity: receiptForm.invoiceQuantity,
-            density: receiptForm.density || null,
-            invoiceDensity: receiptForm.invoiceDensity || null,
-            temperature: receiptForm.temperature || null,
-          },
-        ],
-      }),
-    });
+    setReceiptSubmitting(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
 
-    if (res.success) {
-      setSuccessMsg('Fuel receipt created successfully');
-      setShowReceiptModal(false);
-      setReceiptForm({
-        ttNumber: '',
-        invoiceNumber: '',
-        invoiceDate: getLocalDateInputValue(),
-        arrivalTime: getLocalDateTimeInputValue(),
-        sealVerified: true,
-        sealExceptionReason: '',
-        lineTankId: '',
-        invoiceQuantity: '',
-        density: '',
-        invoiceDensity: '',
-        temperature: '',
+    try {
+      const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/fuel-receipts`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ttNumber: receiptForm.ttNumber,
+          invoiceNumber: receiptForm.invoiceNumber,
+          invoiceDate: receiptForm.invoiceDate,
+          arrivalAt: receiptForm.arrivalTime,
+          sealVerified: receiptForm.sealVerified,
+          sealExceptionReason: receiptForm.sealVerified ? null : receiptForm.sealExceptionReason,
+          lines: [
+            {
+              tankId: receiptForm.lineTankId,
+              productId: tank.productId,
+              invoiceQuantity: receiptForm.invoiceQuantity,
+              density: receiptForm.density || null,
+              invoiceDensity: receiptForm.invoiceDensity || null,
+              temperature: receiptForm.temperature || null,
+            },
+          ],
+        }),
       });
-      await loadShiftData(selectedShiftId);
-    } else {
-      setErrorMsg(res.error?.message || 'Failed to create fuel receipt');
+
+      if (res.success) {
+        setSuccessMsg('Fuel receipt created successfully');
+        setShowReceiptModal(false);
+        setReceiptForm({
+          ttNumber: '',
+          invoiceNumber: '',
+          invoiceDate: getLocalDateInputValue(),
+          arrivalTime: getLocalDateTimeInputValue(),
+          sealVerified: true,
+          sealExceptionReason: '',
+          lineTankId: '',
+          invoiceQuantity: '',
+          density: '',
+          invoiceDensity: '',
+          temperature: '',
+        });
+        await loadShiftData(selectedShiftId);
+      } else {
+        setErrorMsg(res.error?.message || 'Failed to create fuel receipt');
+      }
+    } finally {
+      setReceiptSubmitting(false);
     }
   };
 
   const handleComputeReconciliation = async () => {
-    if (!selectedShiftId) return;
+    if (!selectedShiftId || computeSubmitting) return;
+    setComputeSubmitting(true);
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/stock-reconciliation/compute`, {
-      method: 'POST',
-    });
+    try {
+      const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/stock-reconciliation/compute`, {
+        method: 'POST',
+      });
 
-    if (res.success) {
-      setSuccessMsg('Reconciliation computed and saved.');
-      await loadShiftData(selectedShiftId);
-    } else {
-      setErrorMsg(res.error?.message || 'Reconciliation compute failed');
+      if (res.success) {
+        setSuccessMsg('Reconciliation computed and saved.');
+        await loadShiftData(selectedShiftId);
+      } else {
+        setErrorMsg(res.error?.message || 'Reconciliation compute failed');
+      }
+    } finally {
+      setComputeSubmitting(false);
     }
   };
 
@@ -416,9 +434,10 @@ export const StockOperationsPage: React.FC = () => {
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-orange-500/20"
+                  disabled={dipSubmitting}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-orange-500/20 disabled:opacity-50"
                 >
-                  Save {activeTab} Reading
+                  {dipSubmitting ? 'Saving...' : `Save ${activeTab} Reading`}
                 </button>
               </div>
             </form>
@@ -590,11 +609,12 @@ export const StockOperationsPage: React.FC = () => {
 
             {currentShift?.status === 'OPEN' && (
               <button
+                disabled={computeSubmitting}
                 onClick={handleComputeReconciliation}
-                className="px-3.5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-orange-500/20 flex items-center gap-1.5"
+                className="px-3.5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-orange-500/20 flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Calculator className="w-4 h-4" />
-                Compute Reconciliation
+                {computeSubmitting ? 'Computing...' : 'Compute Reconciliation'}
               </button>
             )}
           </div>
@@ -846,16 +866,18 @@ export const StockOperationsPage: React.FC = () => {
               <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
                 <button
                   type="button"
+                  disabled={receiptSubmitting}
                   onClick={() => setShowReceiptModal(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg shadow-lg shadow-orange-500/20"
+                  disabled={receiptSubmitting}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg shadow-lg shadow-orange-500/20 disabled:opacity-50"
                 >
-                  Save Receipt Header
+                  {receiptSubmitting ? 'Saving...' : 'Save Receipt Header'}
                 </button>
               </div>
             </form>

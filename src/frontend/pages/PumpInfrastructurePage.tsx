@@ -177,81 +177,93 @@ export const PumpInfrastructurePage: React.FC = () => {
   // Form Submissions
   const handleMapProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (modalSubmitting) return;
     setModalSubmitting(true);
     setModalError(null);
 
-    const res = await apiFetch(`/api/v1/outlets/${selectedOutletId}/products`, {
-      method: 'POST',
-      body: JSON.stringify({ productId: selectedProductId, status: 'ACTIVE' }),
-    });
+    try {
+      const res = await apiFetch(`/api/v1/outlets/${selectedOutletId}/products`, {
+        method: 'POST',
+        body: JSON.stringify({ productId: selectedProductId, status: 'ACTIVE' }),
+      });
 
-    setModalSubmitting(false);
-    if (res.success) {
-      setModalType(null);
-      setSuccessMsg('Product mapped to outlet');
-      setTimeout(() => setSuccessMsg(null), 3000);
-      loadOutletData();
-    } else {
-      setModalError(getPumpInfrastructureErrorMessage(res.error));
+      if (res.success) {
+        setModalType(null);
+        setSuccessMsg('Product mapped to outlet');
+        setTimeout(() => setSuccessMsg(null), 3000);
+        loadOutletData();
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
     }
   };
 
   const handleAddTank = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (modalSubmitting) return;
     setModalSubmitting(true);
     setModalError(null);
 
-    const res = await apiFetch(`/api/v1/outlets/${selectedOutletId}/tanks`, {
-      method: 'POST',
-      body: JSON.stringify({
-        tankNumber: Number(tankNumber),
-        name: tankName,
-        productId: selectedProductId,
-        capacityLitres: Number(tankCapacity),
-        safeFillCapacityLitres: Number(tankSafeFill),
-        minimumOperatingLevelLitres: Number(tankMinOperating),
-        status: 'ACTIVE',
-      }),
-    });
+    try {
+      const res = await apiFetch(`/api/v1/outlets/${selectedOutletId}/tanks`, {
+        method: 'POST',
+        body: JSON.stringify({
+          tankNumber: Number(tankNumber),
+          name: tankName,
+          productId: selectedProductId,
+          capacityLitres: Number(tankCapacity),
+          safeFillCapacityLitres: Number(tankSafeFill),
+          minimumOperatingLevelLitres: Number(tankMinOperating),
+          status: 'ACTIVE',
+        }),
+      });
 
-    setModalSubmitting(false);
-    if (res.success) {
-      setModalType(null);
-      setSuccessMsg('Underground tank created');
-      setTimeout(() => setSuccessMsg(null), 3000);
-      loadOutletData();
-    } else {
-      setModalError(getPumpInfrastructureErrorMessage(res.error));
+      if (res.success) {
+        setModalType(null);
+        setSuccessMsg('Underground tank created');
+        setTimeout(() => setSuccessMsg(null), 3000);
+        loadOutletData();
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
     }
   };
 
   const handleAddDispenser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (modalSubmitting) return;
     setModalSubmitting(true);
     setModalError(null);
 
-    const res = await apiFetch(`/api/v1/outlets/${selectedOutletId}/dispensers`, {
-      method: 'POST',
-      body: JSON.stringify({
-        dispenserNumber: Number(dispNumber),
-        name: dispName,
-        manufacturer: dispManufacturer || null,
-        model: dispModel || null,
-        serialNumber: dispSerial || null,
-        nozzleCapacity: Number(dispNozzleCapacity),
-        status: dispStatus,
-        commissionedAt: dispCommissionedAt ? new Date(dispCommissionedAt).toISOString() : null,
-      }),
-    });
+    try {
+      const res = await apiFetch(`/api/v1/outlets/${selectedOutletId}/dispensers`, {
+        method: 'POST',
+        body: JSON.stringify({
+          dispenserNumber: Number(dispNumber),
+          name: dispName,
+          manufacturer: dispManufacturer || null,
+          model: dispModel || null,
+          serialNumber: dispSerial || null,
+          nozzleCapacity: Number(dispNozzleCapacity),
+          status: dispStatus,
+          commissionedAt: dispCommissionedAt ? new Date(dispCommissionedAt).toISOString() : null,
+        }),
+      });
 
-    setModalSubmitting(false);
-    if (res.success) {
-      setModalType(null);
-      setSuccessMsg('Dispensing Unit (DU) registered successfully');
-      setTimeout(() => setSuccessMsg(null), 3000);
-      loadOutletData();
-    } else {
-      setModalError(getPumpInfrastructureErrorMessage(res.error));
+      if (res.success) {
+        setModalType(null);
+        setSuccessMsg('Dispensing Unit (DU) registered successfully');
+        setTimeout(() => setSuccessMsg(null), 3000);
+        loadOutletData();
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
     }
   };
 
@@ -271,32 +283,35 @@ export const PumpInfrastructurePage: React.FC = () => {
 
   const handleEditDispenser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingDispenser) return;
+    if (!editingDispenser || modalSubmitting) return;
     setModalSubmitting(true);
     setModalError(null);
 
-    const res = await apiFetch(`/api/v1/dispensers/${editingDispenser.id}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        name: dispName,
-        manufacturer: dispManufacturer || null,
-        model: dispModel || null,
-        serialNumber: dispSerial || null,
-        nozzleCapacity: Number(dispNozzleCapacity),
-        status: dispStatus,
-        commissionedAt: dispCommissionedAt ? new Date(dispCommissionedAt).toISOString() : null,
-      }),
-    });
+    try {
+      const res = await apiFetch(`/api/v1/dispensers/${editingDispenser.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: dispName,
+          manufacturer: dispManufacturer || null,
+          model: dispModel || null,
+          serialNumber: dispSerial || null,
+          nozzleCapacity: Number(dispNozzleCapacity),
+          status: dispStatus,
+          commissionedAt: dispCommissionedAt ? new Date(dispCommissionedAt).toISOString() : null,
+        }),
+      });
 
-    setModalSubmitting(false);
-    if (res.success) {
-      setModalType(null);
-      setEditingDispenser(null);
-      setSuccessMsg('Dispensing Unit (DU) updated successfully');
-      setTimeout(() => setSuccessMsg(null), 3000);
-      loadOutletData();
-    } else {
-      setModalError(getPumpInfrastructureErrorMessage(res.error));
+      if (res.success) {
+        setModalType(null);
+        setEditingDispenser(null);
+        setSuccessMsg('Dispensing Unit (DU) updated successfully');
+        setTimeout(() => setSuccessMsg(null), 3000);
+        loadOutletData();
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
     }
   };
 
@@ -341,75 +356,83 @@ export const PumpInfrastructurePage: React.FC = () => {
 
   const handleAddNozzle = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (modalSubmitting) return;
     setModalSubmitting(true);
     setModalError(null);
 
-    const resolved = resolveNozzleFormState(dispensers, nozzles, outletProducts, tanks, {
-      dispenserId: nozzleDispenserId,
-      nozzleNumber: Number(nozzleNumber),
-      productId: nozzleProductId,
-      tankId: nozzleTankId,
-    });
+    try {
+      const resolved = resolveNozzleFormState(dispensers, nozzles, outletProducts, tanks, {
+        dispenserId: nozzleDispenserId,
+        nozzleNumber: Number(nozzleNumber),
+        productId: nozzleProductId,
+        tankId: nozzleTankId,
+      });
 
-    const hasOrphanAtSlot = nozzleDiagnostics?.orphanNozzles?.some(
-      o => o.dispenserId === resolved.dispenserId && o.nozzleNumber === resolved.nozzleNumber
-    );
-
-    const endpoint = hasOrphanAtSlot
-      ? `/api/v1/dispensers/${resolved.dispenserId}/nozzles/reconcile`
-      : `/api/v1/dispensers/${resolved.dispenserId}/nozzles`;
-
-    const res = await apiFetch(endpoint, {
-      method: 'POST',
-      body: JSON.stringify({
-        nozzleNumber: resolved.nozzleNumber,
-        productId: resolved.productId,
-        tankId: resolved.tankId,
-        status: 'ACTIVE',
-        ...(hasOrphanAtSlot ? { repairOrphan: true } : {}),
-      }),
-    });
-
-    setModalSubmitting(false);
-    if (res.success) {
-      setModalType(null);
-      setSuccessMsg(
-        hasOrphanAtSlot
-          ? `Nozzle #${resolved.nozzleNumber} topology repaired and synchronized`
-          : `Nozzle #${resolved.nozzleNumber} configured successfully`
+      const hasOrphanAtSlot = nozzleDiagnostics?.orphanNozzles?.some(
+        o => o.dispenserId === resolved.dispenserId && o.nozzleNumber === resolved.nozzleNumber
       );
-      setTimeout(() => setSuccessMsg(null), 3000);
-      loadOutletData();
-    } else {
-      setModalError(getPumpInfrastructureErrorMessage(res.error));
+
+      const endpoint = hasOrphanAtSlot
+        ? `/api/v1/dispensers/${resolved.dispenserId}/nozzles/reconcile`
+        : `/api/v1/dispensers/${resolved.dispenserId}/nozzles`;
+
+      const res = await apiFetch(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({
+          nozzleNumber: resolved.nozzleNumber,
+          productId: resolved.productId,
+          tankId: resolved.tankId,
+          status: 'ACTIVE',
+          ...(hasOrphanAtSlot ? { repairOrphan: true } : {}),
+        }),
+      });
+
+      if (res.success) {
+        setModalType(null);
+        setSuccessMsg(
+          hasOrphanAtSlot
+            ? `Nozzle #${resolved.nozzleNumber} topology repaired and synchronized`
+            : `Nozzle #${resolved.nozzleNumber} configured successfully`
+        );
+        setTimeout(() => setSuccessMsg(null), 3000);
+        loadOutletData();
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
     }
   };
 
   const handleAddShift = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (modalSubmitting) return;
     setModalSubmitting(true);
     setModalError(null);
 
-    const res = await apiFetch(`/api/v1/outlets/${selectedOutletId}/shift-templates`, {
-      method: 'POST',
-      body: JSON.stringify({
-        code: shiftCode,
-        name: shiftName,
-        startTime: shiftStart,
-        endTime: shiftEnd,
-        sequence: Number(shiftSeq),
-        status: 'ACTIVE',
-      }),
-    });
+    try {
+      const res = await apiFetch(`/api/v1/outlets/${selectedOutletId}/shift-templates`, {
+        method: 'POST',
+        body: JSON.stringify({
+          code: shiftCode,
+          name: shiftName,
+          startTime: shiftStart,
+          endTime: shiftEnd,
+          sequence: Number(shiftSeq),
+          status: 'ACTIVE',
+        }),
+      });
 
-    setModalSubmitting(false);
-    if (res.success) {
-      setModalType(null);
-      setSuccessMsg('Shift template registered');
-      setTimeout(() => setSuccessMsg(null), 3000);
-      loadOutletData();
-    } else {
-      setModalError(res.error?.message || 'Failed to create shift template');
+      if (res.success) {
+        setModalType(null);
+        setSuccessMsg('Shift template registered');
+        setTimeout(() => setSuccessMsg(null), 3000);
+        loadOutletData();
+      } else {
+        setModalError(res.error?.message || 'Failed to create shift template');
+      }
+    } finally {
+      setModalSubmitting(false);
     }
   };
 

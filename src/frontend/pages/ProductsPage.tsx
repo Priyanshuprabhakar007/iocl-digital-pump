@@ -81,44 +81,47 @@ export const ProductsPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (modalSubmitting) return;
     setModalSubmitting(true);
     setModalError(null);
 
-    const payload = {
-      code: code.trim().toUpperCase(),
-      name: name.trim(),
-      category: category.trim().toUpperCase(),
-      unit,
-      status,
-    };
+    try {
+      const payload = {
+        code: code.trim().toUpperCase(),
+        name: name.trim(),
+        category: category.trim().toUpperCase(),
+        unit,
+        status,
+      };
 
-    let res;
-    if (editingProduct) {
-      res = await apiFetch<Product>(`/api/v1/products/${editingProduct.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          name: payload.name,
-          category: payload.category,
-          unit: payload.unit,
-          status: payload.status,
-        }),
-      });
-    } else {
-      res = await apiFetch<Product>('/api/v1/products', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-    }
+      let res;
+      if (editingProduct) {
+        res = await apiFetch<Product>(`/api/v1/products/${editingProduct.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            name: payload.name,
+            category: payload.category,
+            unit: payload.unit,
+            status: payload.status,
+          }),
+        });
+      } else {
+        res = await apiFetch<Product>('/api/v1/products', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      }
 
-    setModalSubmitting(false);
-
-    if (res.success && res.data) {
-      setModalOpen(false);
-      setSuccessMsg(editingProduct ? 'Product updated successfully' : 'Product created successfully');
-      setTimeout(() => setSuccessMsg(null), 4000);
-      loadProducts();
-    } else {
-      setModalError(res.error?.message || 'Operation failed');
+      if (res.success && res.data) {
+        setModalOpen(false);
+        setSuccessMsg(editingProduct ? 'Product updated successfully' : 'Product created successfully');
+        setTimeout(() => setSuccessMsg(null), 4000);
+        loadProducts();
+      } else {
+        setModalError(res.error?.message || 'Operation failed');
+      }
+    } finally {
+      setModalSubmitting(false);
     }
   };
 

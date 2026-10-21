@@ -7,6 +7,7 @@ import { ScopeService } from '../services/scopeService';
 import { requireAuth, AppContext, EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 import { PERMISSIONS } from '../../shared/constants';
+import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
 
 export const nfrRoutes = new Hono<{ Bindings: EnvBindings }>();
 
@@ -44,6 +45,14 @@ function handleNfrError(c: AppContext, err: any) {
         details: err.format?.(),
       },
     }, 400);
+  }
+  const mappedUnique = mapDatabaseUniqueError(err);
+  if (mappedUnique) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: mappedUnique.code, message: mappedUnique.message },
+    }, 409);
   }
 
   // Handle direct message patterns
