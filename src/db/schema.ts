@@ -283,6 +283,26 @@ export const nozzles = sqliteTable('nozzles', {
   index('idx_nozzles_product_id').on(table.productId),
 ]);
 
+export const globalShiftTemplates = sqliteTable('global_shift_templates', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull().unique(),
+  name: text('name').notNull(),
+  startTime: text('start_time').notNull(),
+  endTime: text('end_time').notNull(),
+  sequence: integer('sequence').notNull().default(1),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uq_global_shift_templates_code').on(table.code),
+  index('idx_global_shift_templates_status').on(table.status),
+  index('idx_global_shift_templates_sequence').on(table.sequence),
+  check('global_shift_templates_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('global_shift_templates_code_check', sql`trim(${table.code}) <> ''`),
+  check('global_shift_templates_name_check', sql`trim(${table.name}) <> ''`),
+]);
+
 export const shiftTemplates = sqliteTable('shift_templates', {
   id: text('id').primaryKey(),
   outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
@@ -303,7 +323,7 @@ export const shiftTemplates = sqliteTable('shift_templates', {
 export const operationalShifts = sqliteTable('operational_shifts', {
   id: text('id').primaryKey(),
   outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
-  shiftTemplateId: text('shift_template_id').notNull().references(() => shiftTemplates.id),
+  shiftTemplateId: text('shift_template_id').notNull().references(() => globalShiftTemplates.id),
   businessDate: text('business_date').notNull(),
   startedAt: text('started_at').notNull(),
   closedAt: text('closed_at'),
@@ -1187,6 +1207,26 @@ export const nfrRentPayments = sqliteTable('nfr_rent_payments', {
 // Phase 5A-1: Workforce Master, Manpower Allocation & Shift Roster
 // ============================================================================
 
+export const globalHrDesignations = sqliteTable('global_hr_designations', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull().unique(),
+  name: text('name').notNull(),
+  skillCategory: text('skill_category', { enum: ['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED'] }),
+  status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uq_global_hr_designations_code').on(table.code),
+  index('idx_global_hr_designations_status').on(table.status),
+  index('idx_global_hr_designations_skill_category').on(table.skillCategory),
+  check('global_hr_designations_status_check', sql`${table.status} IN ('ACTIVE', 'INACTIVE')`),
+  check('global_hr_designations_code_check', sql`trim(${table.code}) <> ''`),
+  check('global_hr_designations_name_check', sql`trim(${table.name}) <> ''`),
+  check('global_hr_designations_skill_category_check', sql`${table.skillCategory} IS NULL OR ${table.skillCategory} IN ('HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED')`),
+]);
+
 export const hrDesignations = sqliteTable('hr_designations', {
   id: text('id').primaryKey(),
   outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
@@ -1214,7 +1254,7 @@ export const hrStaff = sqliteTable('hr_staff', {
   outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
   employeeCode: text('employee_code').notNull(),
   fullName: text('full_name').notNull(),
-  designationId: text('designation_id').notNull().references(() => hrDesignations.id),
+  designationId: text('designation_id').notNull().references(() => globalHrDesignations.id),
   aadhaarLast4: text('aadhaar_last4').notNull(),
   aadhaarDocumentId: text('aadhaar_document_id').references(() => documents.id),
   photoDocumentId: text('photo_document_id').references(() => documents.id),
@@ -1245,7 +1285,7 @@ export const hrStaff = sqliteTable('hr_staff', {
 export const hrManpowerSanctions = sqliteTable('hr_manpower_sanctions', {
   id: text('id').primaryKey(),
   outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
-  designationId: text('designation_id').notNull().references(() => hrDesignations.id),
+  designationId: text('designation_id').notNull().references(() => globalHrDesignations.id),
   sanctionedCount: integer('sanctioned_count').notNull(),
   effectiveFrom: text('effective_from').notNull(),
   notes: text('notes'),
@@ -1265,7 +1305,7 @@ export const hrRosterAssignments = sqliteTable('hr_roster_assignments', {
   outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
   staffId: text('staff_id').notNull().references(() => hrStaff.id),
   rosterDate: text('roster_date').notNull(),
-  shiftTemplateId: text('shift_template_id').notNull().references(() => shiftTemplates.id),
+  shiftTemplateId: text('shift_template_id').notNull().references(() => globalShiftTemplates.id),
   status: text('status', { enum: ['SCHEDULED', 'CANCELLED'] }).notNull().default('SCHEDULED'),
   notes: text('notes'),
   createdBy: text('created_by').notNull().references(() => users.id),
@@ -1304,7 +1344,7 @@ export const hrAttendanceRecords = sqliteTable('hr_attendance_records', {
   staffId: text('staff_id').notNull().references(() => hrStaff.id, { onDelete: 'cascade' }),
   rosterAssignmentId: text('roster_assignment_id').notNull().references(() => hrRosterAssignments.id, { onDelete: 'cascade' }),
   attendanceDate: text('attendance_date').notNull(),
-  shiftTemplateId: text('shift_template_id').notNull().references(() => shiftTemplates.id),
+  shiftTemplateId: text('shift_template_id').notNull().references(() => globalShiftTemplates.id),
   checkInAt: text('check_in_at').notNull(),
   checkInLatitude: real('check_in_latitude').notNull(),
   checkInLongitude: real('check_in_longitude').notNull(),
@@ -1345,7 +1385,7 @@ export const hrNozzleAssignments = sqliteTable('hr_nozzle_assignments', {
   staffId: text('staff_id').notNull().references(() => hrStaff.id, { onDelete: 'cascade' }),
   nozzleId: text('nozzle_id').notNull().references(() => nozzles.id, { onDelete: 'cascade' }),
   assignmentDate: text('assignment_date').notNull(),
-  shiftTemplateId: text('shift_template_id').notNull().references(() => shiftTemplates.id),
+  shiftTemplateId: text('shift_template_id').notNull().references(() => globalShiftTemplates.id),
   status: text('status', { enum: ['ASSIGNED', 'CANCELLED'] }).notNull().default('ASSIGNED'),
   notes: text('notes'),
   createdBy: text('created_by').notNull().references(() => users.id),

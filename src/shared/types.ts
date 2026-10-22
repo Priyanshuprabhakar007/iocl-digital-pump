@@ -332,9 +332,22 @@ export interface OutletNozzleDiagnosticsReport {
   }[];
 }
 
+export interface GlobalShiftTemplate {
+  id: string;
+  code: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  sequence: number;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
 export interface ShiftTemplate {
   id: string;
-  outletId: string;
+  outletId?: string | null;
   code: string;
   name: string;
   startTime: string;
@@ -1604,9 +1617,21 @@ export interface HrLeaveRequest {
   calendarDays?: number;
 }
 
+export interface GlobalHrDesignation {
+  id: string;
+  code: string;
+  name: string;
+  skillCategory: HrSkillCategory | null;
+  status: HrDesignationStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface HrDesignation {
   id: string;
-  outletId: string;
+  outletId?: string | null;
   code: string;
   name: string;
   skillCategory: HrSkillCategory | null;

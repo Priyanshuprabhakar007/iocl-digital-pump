@@ -8,6 +8,7 @@ import { requireAuth, AppContext, EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 import { PERMISSIONS } from '../../shared/constants';
 import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
+import { GlobalHrDesignationStatusSchema } from '../../shared/validators';
 
 export const hrRoutes = new Hono<{ Bindings: EnvBindings }>();
 
@@ -70,28 +71,42 @@ function handleHrError(c: AppContext, err: any) {
   }, 500);
 }
 
+// In-memory cache with 60s TTL
+interface CacheStore<T> {
+  [key: string]: { data: T; expiresAt: number };
+}
+const globalDesignationCache: CacheStore<any> = {};
+
+export function invalidateGlobalDesignationCache() {
+  for (const k of Object.keys(globalDesignationCache)) {
+    delete globalDesignationCache[k];
+  }
+}
+
 // ============================================================================
-// DESIGNATION ROUTES
+// GLOBAL DESIGNATION ROUTES (CENTRAL MASTER)
 // ============================================================================
 
-// 1. List designations for outlet
+// 1. List global designations (supports optional ?status=ACTIVE|INACTIVE)
 hrRoutes.get(
-  '/outlets/:outletId/hr/designations',
+  '/hr/designations',
   requirePermission(PERMISSIONS.HR_READ) as any,
   async (c: AppContext) => {
-    const outletId = c.req.param('outletId')!;
-    const { hrService, outletRepo } = getServices(c);
+    const { hrService } = getServices(c);
+    const statusParam = c.req.query('status') as 'ACTIVE' | 'INACTIVE' | undefined;
+    const cacheKey = `list_${statusParam || 'ALL'}`;
+    const now = Date.now();
 
-    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
-      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    if (globalDesignationCache[cacheKey] && globalDesignationCache[cacheKey].expiresAt > now) {
+      return c.json({ success: true, data: globalDesignationCache[cacheKey].data, error: null });
     }
 
     try {
-      const query = c.req.query();
-      const designations = await hrService.listDesignations(
-        outletId,
-        Object.keys(query).length > 0 ? query : undefined
-      );
+      const designations = await hrService.listGlobalDesignations(statusParam);
+      globalDesignationCache[cacheKey] = {
+        data: designations,
+        expiresAt: now + 60_000,
+      };
       return c.json({ success: true, data: designations, error: null });
     } catch (err) {
       return handleHrError(c, err);
@@ -99,30 +114,26 @@ hrRoutes.get(
   }
 );
 
-// 2. Create designation for outlet
+// 2. Create global designation
 hrRoutes.post(
-  '/outlets/:outletId/hr/designations',
+  '/hr/designations',
   requirePermission(PERMISSIONS.HR_STAFF_WRITE) as any,
   async (c: AppContext) => {
-    const outletId = c.req.param('outletId')!;
     const user = c.var.user!.user;
-    const { hrService, outletRepo } = getServices(c);
-
-    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
-      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
-    }
+    const { hrService } = getServices(c);
 
     try {
       const body = await c.req.json();
-      const designation = await hrService.createDesignation(outletId, user.id, body);
-      return c.json({ success: true, data: designation, error: null }, 201);
+      const created = await hrService.createGlobalDesignation(user.id, body);
+      invalidateGlobalDesignationCache();
+      return c.json({ success: true, data: created, error: null }, 201);
     } catch (err) {
       return handleHrError(c, err);
     }
   }
 );
 
-// 3. Get designation by ID
+// 3. Get global or legacy designation by ID
 hrRoutes.get(
   '/hr/designations/:id',
   requirePermission(PERMISSIONS.HR_READ) as any,
@@ -131,20 +142,15 @@ hrRoutes.get(
     const { hrService, hrRepo, outletRepo } = getServices(c);
 
     try {
-      const existing = await hrRepo.getDesignationById(id);
-      if (!existing) {
-        return c.json({
-          success: false,
-          data: null,
-          error: { code: 'HR_DESIGNATION_NOT_FOUND', message: 'The designation could not be found' },
-        }, 404);
+      const legacy = await hrRepo.getDesignationById(id);
+      if (legacy && legacy.outletId) {
+        if (!(await verifyOutletAuthority(c, legacy.outletId, outletRepo))) {
+          return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+        }
+        return c.json({ success: true, data: legacy, error: null });
       }
 
-      if (!(await verifyOutletAuthority(c, existing.outletId, outletRepo))) {
-        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
-      }
-
-      const designation = await hrService.getDesignationById(id, existing.outletId);
+      const designation = await hrService.getGlobalDesignationById(id);
       return c.json({ success: true, data: designation, error: null });
     } catch (err) {
       return handleHrError(c, err);
@@ -152,7 +158,7 @@ hrRoutes.get(
   }
 );
 
-// 4. Update designation by ID
+// 4. Update global or legacy designation by ID
 hrRoutes.put(
   '/hr/designations/:id',
   requirePermission(PERMISSIONS.HR_STAFF_WRITE) as any,
@@ -162,25 +168,182 @@ hrRoutes.put(
     const { hrService, hrRepo, outletRepo } = getServices(c);
 
     try {
-      const existing = await hrRepo.getDesignationById(id);
-      if (!existing) {
-        return c.json({
-          success: false,
-          data: null,
-          error: { code: 'HR_DESIGNATION_NOT_FOUND', message: 'The designation could not be found' },
-        }, 404);
-      }
-
-      if (!(await verifyOutletAuthority(c, existing.outletId, outletRepo))) {
-        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
-      }
-
       const body = await c.req.json();
-      const updated = await hrService.updateDesignation(id, existing.outletId, user.id, body);
+      const legacy = await hrRepo.getDesignationById(id);
+      const globalDesig = await hrRepo.getGlobalDesignationById(id);
+
+      if (legacy && !globalDesig && legacy.outletId) {
+        if (!(await verifyOutletAuthority(c, legacy.outletId, outletRepo))) {
+          return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+        }
+        const updated = await hrService.updateDesignation(id, legacy.outletId, user.id, body);
+        invalidateGlobalDesignationCache();
+        return c.json({ success: true, data: updated, error: null });
+      }
+
+      const updated = await hrService.updateGlobalDesignation(id, user.id, body);
+      invalidateGlobalDesignationCache();
       return c.json({ success: true, data: updated, error: null });
     } catch (err) {
       return handleHrError(c, err);
     }
+  }
+);
+
+// 5. Update global designation status
+hrRoutes.patch(
+  '/hr/designations/:id/status',
+  requirePermission(PERMISSIONS.HR_STAFF_WRITE) as any,
+  async (c: AppContext) => {
+    const id = c.req.param('id')!;
+    const user = c.var.user!.user;
+    const { hrService } = getServices(c);
+
+    try {
+      const body = await c.req.json();
+      const parsed = GlobalHrDesignationStatusSchema.parse(body);
+      const updated = await hrService.updateGlobalDesignationStatus(id, user.id, parsed.status);
+      invalidateGlobalDesignationCache();
+      return c.json({ success: true, data: updated, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+// 6. Compatibility aliases for legacy outlet designation management (DEPRECATED)
+hrRoutes.get(
+  '/outlets/:outletId/hr/designations',
+  requirePermission(PERMISSIONS.HR_READ) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const { hrService, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const statusParam = c.req.query('status') as HrDesignationStatus | undefined;
+      const skillCategory = c.req.query('skillCategory') as any;
+      const search = c.req.query('search');
+      const designations = await hrService.listDesignations(outletId, {
+        status: statusParam || 'ACTIVE',
+        skillCategory,
+        search,
+      });
+      c.header('X-Deprecated', 'This endpoint is deprecated. Use GET /api/v1/hr/designations instead.');
+      return c.json({ success: true, data: designations, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.post(
+  '/outlets/:outletId/hr/designations',
+  requirePermission(PERMISSIONS.HR_STAFF_WRITE) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const user = c.var.user!.user;
+    const { hrService, hrRepo, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const body = await c.req.json();
+      if (body?.code && typeof body.code === 'string' && body.code.trim()) {
+        const legacyDup = await hrRepo.findDesignationByCode(outletId, body.code.trim().toUpperCase());
+        if (legacyDup && (!legacyDup.outletId || legacyDup.outletId === outletId)) {
+          return c.json({
+            success: false,
+            data: null,
+            error: { code: 'HR_DESIGNATION_CODE_EXISTS', message: `A designation with code '${body.code.trim().toUpperCase()}' already exists` },
+          }, 409);
+        }
+      }
+      const created = await hrService.createGlobalDesignation(user.id, body);
+      invalidateGlobalDesignationCache();
+      c.header('X-Deprecated', 'This endpoint is deprecated. Use POST /api/v1/hr/designations instead.');
+      return c.json({ success: true, data: { ...created, outletId }, error: null }, 201);
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.get(
+  '/outlets/:outletId/hr/designations/:id',
+  requirePermission(PERMISSIONS.HR_READ) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const id = c.req.param('id')!;
+    const { hrService, hrRepo, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const legacy = await hrRepo.getDesignationById(id);
+      if (legacy && legacy.outletId && legacy.outletId !== outletId) {
+        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this designation' } }, 403);
+      }
+      const designation = (await hrService.getGlobalDesignationById(id)) || legacy;
+      if (!designation) {
+        return c.json({ success: false, data: null, error: { code: 'HR_DESIGNATION_NOT_FOUND', message: 'Designation not found' } }, 404);
+      }
+      c.header('X-Deprecated', 'This endpoint is deprecated. Use GET /api/v1/hr/designations/:id instead.');
+      return c.json({ success: true, data: designation, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.put(
+  '/outlets/:outletId/hr/designations/:id',
+  requirePermission(PERMISSIONS.HR_STAFF_WRITE) as any,
+  async (c: AppContext) => {
+    const outletId = c.req.param('outletId')!;
+    const id = c.req.param('id')!;
+    const user = c.var.user!.user;
+    const { hrService, hrRepo, outletRepo } = getServices(c);
+
+    if (!(await verifyOutletAuthority(c, outletId, outletRepo))) {
+      return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+    }
+
+    try {
+      const legacy = await hrRepo.getDesignationById(id);
+      if (legacy && legacy.outletId && legacy.outletId !== outletId) {
+        return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this designation' } }, 403);
+      }
+      const body = await c.req.json();
+      const globalDesig = await hrRepo.getGlobalDesignationById(id);
+      const updated = (legacy && !globalDesig)
+        ? await hrService.updateDesignation(id, outletId, user.id, body)
+        : await hrService.updateGlobalDesignation(id, user.id, body);
+      invalidateGlobalDesignationCache();
+      c.header('X-Deprecated', 'This endpoint is deprecated. Use PUT /api/v1/hr/designations/:id instead.');
+      return c.json({ success: true, data: updated, error: null });
+    } catch (err) {
+      return handleHrError(c, err);
+    }
+  }
+);
+
+hrRoutes.delete(
+  '/outlets/:outletId/hr/designations/:id',
+  requirePermission(PERMISSIONS.HR_STAFF_WRITE) as any,
+  async (c: AppContext) => {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'HR_DESIGNATION_DELETE_FORBIDDEN', message: 'Physical deletion of designations is prohibited. Use status=INACTIVE instead.' },
+    }, 409);
   }
 );
 

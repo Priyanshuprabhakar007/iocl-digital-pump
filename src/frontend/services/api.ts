@@ -60,7 +60,9 @@ function isCacheableEndpoint(endpoint: string): boolean {
     endpoint.includes('/api/v1/products') ||
     endpoint.includes('/api/v1/roles') ||
     endpoint.includes('/api/v1/scopes') ||
-    endpoint.includes('/api/v1/users')
+    endpoint.includes('/api/v1/users') ||
+    endpoint.includes('/api/v1/hr/designations') ||
+    endpoint.includes('/api/v1/shift-templates')
   );
 }
 

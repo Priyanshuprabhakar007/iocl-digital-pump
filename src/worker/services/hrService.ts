@@ -27,6 +27,7 @@ import {
 } from '../../shared/validators';
 import {
   HrDesignation,
+  GlobalHrDesignation,
   HrStaff,
   HrManpowerSanction,
   HrManpowerSummary,
@@ -110,19 +111,30 @@ function handleDbError(err: any): never {
   }
   const msg = String(err?.message || err);
 
-  if (msg.includes('HR_DESIGNATION_NOT_FOUND')) {
+  if (msg.includes('GLOBAL_HR_DESIGNATION_NOT_FOUND') || msg.includes('HR_DESIGNATION_NOT_FOUND')) {
     throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Designation not found', 404);
   }
-  if (msg.includes('HR_DESIGNATION_CODE_EXISTS') || msg.includes('idx_hr_designations_outlet_code') || (msg.includes('UNIQUE constraint') && msg.includes('hr_designations'))) {
-    throw new HrError('HR_DESIGNATION_CODE_EXISTS', 'A designation with this code already exists for this outlet', 409);
+  if (
+    msg.includes('GLOBAL_HR_DESIGNATION_CODE_EXISTS') ||
+    msg.includes('uq_global_hr_designations_code') ||
+    msg.includes('global_hr_designations.code') ||
+    msg.includes('HR_DESIGNATION_CODE_EXISTS') ||
+    msg.includes('idx_hr_designations_outlet_code') ||
+    (msg.includes('UNIQUE constraint') && (msg.includes('hr_designations') || msg.includes('global_hr_designations')))
+  ) {
+    throw new HrError('HR_DESIGNATION_CODE_EXISTS', 'A designation with this code already exists', 409);
   }
-  if (msg.includes('HR_DESIGNATION_NOT_ACTIVE')) {
+  if (msg.includes('GLOBAL_HR_DESIGNATION_NOT_ACTIVE') || msg.includes('HR_DESIGNATION_NOT_ACTIVE')) {
     throw new HrError('HR_DESIGNATION_NOT_ACTIVE', 'Designation is not active', 409);
   }
-  if (msg.includes('HR_DESIGNATION_DELETE_FORBIDDEN')) {
+  if (msg.includes('GLOBAL_HR_DESIGNATION_DELETE_FORBIDDEN') || msg.includes('HR_DESIGNATION_DELETE_FORBIDDEN')) {
     throw new HrError('HR_DESIGNATION_DELETE_FORBIDDEN', 'Direct deletion of HR designations is forbidden', 409);
   }
-  if (msg.includes('HR_DESIGNATION_IDENTITY_IMMUTABLE')) {
+  if (
+    msg.includes('GLOBAL_HR_DESIGNATION_CODE_IMMUTABLE') ||
+    msg.includes('GLOBAL_HR_DESIGNATION_IDENTITY_IMMUTABLE') ||
+    msg.includes('HR_DESIGNATION_IDENTITY_IMMUTABLE')
+  ) {
     throw new HrError('HR_DESIGNATION_IDENTITY_IMMUTABLE', 'Designation code and identity fields cannot be modified', 400);
   }
 
@@ -328,7 +340,157 @@ export class HrService {
   }
 
   // ==========================================================================
-  // DESIGNATIONS
+  // GLOBAL DESIGNATIONS
+  // ==========================================================================
+
+  async listGlobalDesignations(filtersOrStatus?: 'ACTIVE' | 'INACTIVE' | any): Promise<GlobalHrDesignation[]> {
+    if (typeof filtersOrStatus === 'object' && filtersOrStatus !== null) {
+      const cleanFilters = Object.fromEntries(
+        Object.entries(filtersOrStatus).filter(([, v]) => v !== undefined)
+      );
+      if (Object.keys(cleanFilters).length > 0) {
+        const parsed = HrDesignationFilterSchema.parse(cleanFilters);
+        return this.hrRepo.listGlobalDesignations(parsed);
+      }
+      return this.hrRepo.listGlobalDesignations();
+    }
+    return this.hrRepo.listGlobalDesignations(filtersOrStatus);
+  }
+
+  async getGlobalDesignationById(id: string): Promise<GlobalHrDesignation> {
+    const desig = await this.hrRepo.getGlobalDesignationById(id);
+    if (!desig) {
+      throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Global designation not found', 404);
+    }
+    return desig;
+  }
+
+  async createGlobalDesignation(actorUserId: string, payload: any): Promise<GlobalHrDesignation> {
+    const validated = CreateHrDesignationSchema.parse(payload);
+
+    const existing = await this.hrRepo.findGlobalDesignationByCode(validated.code);
+    if (existing) {
+      throw new HrError('HR_DESIGNATION_CODE_EXISTS', 'A global designation with this code already exists', 409);
+    }
+
+    const id = `desig-glb-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+
+    try {
+      const created = await this.hrRepo.createGlobalDesignation({
+        id,
+        code: validated.code,
+        name: validated.name,
+        skillCategory: validated.skillCategory,
+        status: validated.status || 'ACTIVE',
+        notes: validated.notes,
+        createdBy: actorUserId,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_DESIGNATION_CREATE',
+        entityType: 'HR_DESIGNATION',
+        entityId: id,
+        newValue: {
+          code: created.code,
+          name: created.name,
+          skillCategory: created.skillCategory,
+          status: created.status,
+        },
+        createdAt: now,
+      });
+
+      return created;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  async updateGlobalDesignation(id: string, actorUserId: string, payload: any): Promise<GlobalHrDesignation> {
+    const existing = await this.getGlobalDesignationById(id);
+
+    if (payload?.code !== undefined && String(payload.code).trim().toUpperCase() !== existing.code.toUpperCase()) {
+      throw new HrError('HR_DESIGNATION_IDENTITY_IMMUTABLE', 'Designation code is immutable once created', 400);
+    }
+
+    const validated = UpdateHrDesignationSchema.parse(payload);
+    const now = new Date().toISOString();
+
+    try {
+      const updated = await this.hrRepo.updateGlobalDesignation(id, {
+        name: validated.name,
+        skillCategory: validated.skillCategory,
+        status: validated.status,
+        notes: validated.notes,
+        updatedAt: now,
+      });
+
+      if (!updated) {
+        throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Global designation not found', 404);
+      }
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'HR_DESIGNATION_UPDATE',
+        entityType: 'HR_DESIGNATION',
+        entityId: id,
+        oldValue: {
+          status: existing.status,
+          name: existing.name,
+          skillCategory: existing.skillCategory,
+        },
+        newValue: {
+          status: updated.status,
+          name: updated.name,
+          skillCategory: updated.skillCategory,
+        },
+        createdAt: now,
+      });
+
+      return updated;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  async updateGlobalDesignationStatus(
+    id: string,
+    actorUserId: string,
+    status: 'ACTIVE' | 'INACTIVE'
+  ): Promise<GlobalHrDesignation> {
+    const existing = await this.getGlobalDesignationById(id);
+    const now = new Date().toISOString();
+
+    try {
+      const updated = await this.hrRepo.updateGlobalDesignationStatus(id, status, now);
+      if (!updated) {
+        throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Global designation not found', 404);
+      }
+
+      await this.auditRepo.logAction({
+        id: crypto.randomUUID(),
+        userId: actorUserId,
+        action: 'GLOBAL_HR_DESIGNATION_STATUS_UPDATE',
+        entityType: 'GLOBAL_HR_DESIGNATION',
+        entityId: id,
+        oldValue: { status: existing.status },
+        newValue: { status: updated.status },
+        createdAt: now,
+      });
+
+      return updated;
+    } catch (err) {
+      return handleDbError(err);
+    }
+  }
+
+  // ==========================================================================
+  // OUTLET DESIGNATIONS (LEGACY COMPATIBILITY)
   // ==========================================================================
 
   async listDesignations(outletId: string, rawQuery?: any): Promise<HrDesignation[]> {
@@ -338,7 +500,7 @@ export class HrService {
 
   async getDesignationById(id: string, outletId: string): Promise<HrDesignation> {
     const designation = await this.hrRepo.getDesignationById(id);
-    if (!designation || designation.outletId !== outletId) {
+    if (!designation || (designation.outletId && designation.outletId !== outletId)) {
       throw new HrError('HR_DESIGNATION_NOT_FOUND', 'The designation could not be found', 404);
     }
     return designation;
@@ -396,9 +558,13 @@ export class HrService {
     actorUserId: string,
     payload: any
   ): Promise<HrDesignation> {
-    const validated = UpdateHrDesignationSchema.parse(payload);
     const existing = await this.getDesignationById(id, outletId);
 
+    if (payload?.code !== undefined && String(payload.code).trim().toUpperCase() !== existing.code.toUpperCase()) {
+      throw new HrError('HR_DESIGNATION_IDENTITY_IMMUTABLE', 'Designation code is immutable once created', 400);
+    }
+
+    const validated = UpdateHrDesignationSchema.parse(payload);
     const now = new Date().toISOString();
 
     try {
@@ -468,7 +634,7 @@ export class HrService {
     if (!designation) {
       throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Designation could not be found', 404);
     }
-    if (designation.outletId !== outletId) {
+    if (designation.outletId && designation.outletId !== outletId) {
       throw new HrError('HR_STAFF_DESIGNATION_OUTLET_MISMATCH', 'Designation belongs to another outlet', 400);
     }
     if (designation.status !== 'ACTIVE') {
@@ -557,7 +723,7 @@ export class HrService {
       if (!designation) {
         throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Designation could not be found', 404);
       }
-      if (designation.outletId !== outletId) {
+      if (designation.outletId && designation.outletId !== outletId) {
         throw new HrError('HR_STAFF_DESIGNATION_OUTLET_MISMATCH', 'Designation belongs to another outlet', 400);
       }
       if (designation.status !== 'ACTIVE') {
@@ -686,7 +852,7 @@ export class HrService {
     if (!designation) {
       throw new HrError('HR_DESIGNATION_NOT_FOUND', 'Designation could not be found', 404);
     }
-    if (designation.outletId !== outletId) {
+    if (designation.outletId && designation.outletId !== outletId) {
       throw new HrError('HR_MANPOWER_DESIGNATION_OUTLET_MISMATCH', 'Designation belongs to another outlet', 400);
     }
 
@@ -922,7 +1088,7 @@ export class HrService {
     if (!template) {
       throw new HrError('HR_SHIFT_TEMPLATE_NOT_FOUND', 'Shift template could not be found', 404);
     }
-    if (template.outletId !== outletId) {
+    if (template.outletId && template.outletId !== outletId) {
       throw new HrError('HR_ROSTER_SHIFT_OUTLET_MISMATCH', 'Shift template does not belong to this outlet', 400);
     }
     if (template.status !== 'ACTIVE') {
@@ -999,7 +1165,7 @@ export class HrService {
       if (!template) {
         throw new HrError('HR_SHIFT_TEMPLATE_NOT_FOUND', 'Shift template could not be found', 404);
       }
-      if (template.outletId !== outletId) {
+      if (template.outletId && template.outletId !== outletId) {
         throw new HrError('HR_ROSTER_SHIFT_OUTLET_MISMATCH', 'Shift template does not belong to this outlet', 400);
       }
       if (template.status !== 'ACTIVE') {

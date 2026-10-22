@@ -90,9 +90,9 @@ shifts.post('/outlets/:outletId/shifts/open', requirePermission(PERMISSIONS.SHIF
 
   const { shiftTemplateId, businessDate, notes } = parseResult.data;
 
-  // Validate shift template exists and belongs to this outlet
+  // Validate shift template exists
   const template = await pumpRepo.findShiftTemplateById(shiftTemplateId);
-  if (!template || template.outletId !== outletId) {
+  if (!template || (template.outletId && template.outletId !== outletId)) {
     return c.json({
       success: false,
       data: null,

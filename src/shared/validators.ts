@@ -297,6 +297,21 @@ export const ShiftTemplateSchema = z.object({
   status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
 });
 
+export const GlobalShiftTemplateSchema = ShiftTemplateSchema;
+
+export const UpdateGlobalShiftTemplateSchema = z.object({
+  code: z.string().trim().optional(),
+  name: z.string().min(2, 'Shift name is required').trim().optional(),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Start time must be in HH:MM format (24h)').optional(),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'End time must be in HH:MM format (24h)').optional(),
+  sequence: z.number().int().min(1).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+});
+
+export const GlobalShiftTemplateStatusSchema = z.object({
+  status: z.enum(['ACTIVE', 'INACTIVE']),
+});
+
 export const OpenShiftSchema = z.object({
   shiftTemplateId: z.string().min(1, 'Shift template is required'),
   businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Business date must be YYYY-MM-DD'),
@@ -1097,11 +1112,16 @@ export const CreateHrDesignationSchema = z.object({
 }).strict();
 
 export const UpdateHrDesignationSchema = z.object({
+  code: z.string().trim().optional(),
   name: z.string().trim().min(1, 'name cannot be empty').optional(),
   skillCategory: HrSkillCategoryEnum.optional(),
   status: HrDesignationStatusEnum.optional(),
   notes: z.string().trim().optional().nullable(),
-}).strict();
+});
+
+export const GlobalHrDesignationStatusSchema = z.object({
+  status: HrDesignationStatusEnum,
+});
 
 export const CreateHrStaffSchema = z.object({
   employeeCode: z.string().trim().min(1, 'employeeCode is required'),

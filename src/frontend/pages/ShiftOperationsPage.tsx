@@ -83,7 +83,7 @@ export const ShiftOperationsPage: React.FC = () => {
     if (!selectedOutletId) return;
     const [shiftsRes, tplRes] = await Promise.all([
       apiFetch<OperationalShift[]>(`/api/v1/outlets/${selectedOutletId}/shifts`),
-      apiFetch<ShiftTemplate[]>(`/api/v1/outlets/${selectedOutletId}/shift-templates`),
+      apiFetch<ShiftTemplate[]>('/api/v1/shift-templates?status=ACTIVE'),
     ]);
 
     if (shiftsRes.success && shiftsRes.data) {

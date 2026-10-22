@@ -529,7 +529,59 @@ export async function seedDatabase(db: AppDatabase) {
     },
   ]);
 
-  // 15. Shift Templates (Park Street RO)
+  // 15. Global Shift Templates
+  await db.insert(schema.globalShiftTemplates).values([
+    {
+      id: 'st-ro1-1',
+      code: 'SHIFT_1',
+      name: 'Shift 1 (Morning)',
+      startTime: '06:00',
+      endTime: '14:00',
+      sequence: 1,
+      status: 'ACTIVE' as const,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: 'user-admin',
+    },
+    {
+      id: 'st-ro1-2',
+      code: 'SHIFT_2',
+      name: 'Shift 2 (Evening)',
+      startTime: '14:00',
+      endTime: '22:00',
+      sequence: 2,
+      status: 'ACTIVE' as const,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: 'user-admin',
+    },
+    {
+      id: 'st-ro1-3',
+      code: 'SHIFT_3',
+      name: 'Shift 3 (Night Overnight)',
+      startTime: '22:00',
+      endTime: '06:00',
+      sequence: 3,
+      status: 'ACTIVE' as const,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: 'user-admin',
+    },
+    {
+      id: 'st-ro1-gen',
+      code: 'GENERAL',
+      name: 'General Shift',
+      startTime: '09:00',
+      endTime: '18:00',
+      sequence: 4,
+      status: 'ACTIVE' as const,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: 'user-admin',
+    },
+  ]).onConflictDoNothing();
+
+  // Legacy Shift Templates (for backwards compatibility fallback)
   await db.insert(schema.shiftTemplates).values([
     {
       id: 'st-ro1-1',
@@ -583,7 +635,66 @@ export async function seedDatabase(db: AppDatabase) {
       updatedAt: now,
       createdBy: 'user-admin',
     },
-  ]);
+  ]).onConflictDoNothing();
+
+  // Global HR Designations
+  await db.insert(schema.globalHrDesignations).values([
+    {
+      id: 'desig-glb-dsm',
+      code: 'DSM',
+      name: 'Driveway Sales Master',
+      skillCategory: 'SKILLED',
+      status: 'ACTIVE' as const,
+      notes: 'Customer facing fuel dispenser operator and cash handler',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'desig-glb-mgr',
+      code: 'MANAGER',
+      name: 'Outlet Manager',
+      skillCategory: 'HIGHLY_SKILLED',
+      status: 'ACTIVE' as const,
+      notes: 'Overall outlet operational supervisor and inventory controller',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'desig-glb-pa',
+      code: 'PUMP_ATTENDANT',
+      name: 'Pump Attendant',
+      skillCategory: 'SKILLED',
+      status: 'ACTIVE' as const,
+      notes: 'Fuel dispensing and windscreen cleaning attendant',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'desig-glb-sec',
+      code: 'SECURITY_GUARD',
+      name: 'Security Guard',
+      skillCategory: 'SEMI_SKILLED',
+      status: 'ACTIVE' as const,
+      notes: 'Forecourt security and safety adherence',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'desig-glb-hk',
+      code: 'HOUSEKEEPING',
+      name: 'Housekeeping',
+      skillCategory: 'UNSKILLED',
+      status: 'ACTIVE' as const,
+      notes: 'Forecourt and facility cleanliness attendant',
+      createdBy: 'user-admin',
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]).onConflictDoNothing();
 
   // 16. Tank Calibration Charts (Park Street RO Tanks 1, 2, 3)
   // Dip in mm (milliunits, 1000 = 1.000 mm), Volume in Litres (milliunits, 1000 = 1.000 L)

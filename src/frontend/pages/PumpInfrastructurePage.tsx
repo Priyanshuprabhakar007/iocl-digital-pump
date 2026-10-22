@@ -80,7 +80,7 @@ export const PumpInfrastructurePage: React.FC = () => {
 
   // Modals
   const [modalType, setModalType] = useState<
-    'mapProduct' | 'addTank' | 'editTank' | 'addDispenser' | 'editDispenser' | 'addNozzle' | 'editNozzle' | 'addShift' | null
+    'mapProduct' | 'addTank' | 'editTank' | 'addDispenser' | 'editDispenser' | 'addNozzle' | 'editNozzle' | 'addShift' | 'editShift' | null
   >(null);
   const [modalSubmitting, setModalSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -123,11 +123,20 @@ export const PumpInfrastructurePage: React.FC = () => {
   const [editNozzleTankId, setEditNozzleTankId] = useState('');
   const [editNozzleStatus, setEditNozzleStatus] = useState<'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'DECOMMISSIONED'>('ACTIVE');
 
+  // Shift Template states
   const [shiftCode, setShiftCode] = useState('');
   const [shiftName, setShiftName] = useState('');
   const [shiftStart, setShiftStart] = useState('06:00');
   const [shiftEnd, setShiftEnd] = useState('14:00');
   const [shiftSeq, setShiftSeq] = useState(1);
+
+  // Edit Shift Template states
+  const [editingShift, setEditingShift] = useState<ShiftTemplate | null>(null);
+  const [editShiftName, setEditShiftName] = useState('');
+  const [editShiftStart, setEditShiftStart] = useState('06:00');
+  const [editShiftEnd, setEditShiftEnd] = useState('14:00');
+  const [editShiftSeq, setEditShiftSeq] = useState(1);
+  const [editShiftStatus, setEditShiftStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
 
   // Load Catalog Products once
   useEffect(() => {
@@ -168,7 +177,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       apiFetch<Dispenser[]>(`/api/v1/outlets/${selectedOutletId}/dispensers`),
       apiFetch<Nozzle[]>(`/api/v1/outlets/${selectedOutletId}/nozzles`),
       apiFetch<OutletNozzleDiagnosticsReport>(`/api/v1/outlets/${selectedOutletId}/nozzles/diagnostics`),
-      apiFetch<ShiftTemplate[]>(`/api/v1/outlets/${selectedOutletId}/shift-templates`),
+      apiFetch<ShiftTemplate[]>('/api/v1/shift-templates'),
     ]);
 
     const failures: string[] = [];
@@ -583,11 +592,11 @@ export const PumpInfrastructurePage: React.FC = () => {
     setModalError(null);
 
     try {
-      const res = await apiFetch(`/api/v1/outlets/${selectedOutletId}/shift-templates`, {
+      const res = await apiFetch('/api/v1/shift-templates', {
         method: 'POST',
         body: JSON.stringify({
-          code: shiftCode,
-          name: shiftName,
+          code: shiftCode.trim().toUpperCase(),
+          name: shiftName.trim(),
           startTime: shiftStart,
           endTime: shiftEnd,
           sequence: Number(shiftSeq),
@@ -597,7 +606,7 @@ export const PumpInfrastructurePage: React.FC = () => {
 
       if (res.success) {
         setModalType(null);
-        setSuccessMsg('Shift template registered');
+        setSuccessMsg('Global shift template registered');
         setTimeout(() => setSuccessMsg(null), 3000);
         loadOutletData();
       } else {
@@ -605,6 +614,68 @@ export const PumpInfrastructurePage: React.FC = () => {
       }
     } finally {
       setModalSubmitting(false);
+    }
+  };
+
+  const openEditShift = (s: ShiftTemplate) => {
+    setEditingShift(s);
+    setEditShiftName(s.name);
+    setEditShiftStart(s.startTime);
+    setEditShiftEnd(s.endTime);
+    setEditShiftSeq(s.sequence);
+    setEditShiftStatus((s.status as any) || 'ACTIVE');
+    setModalError(null);
+    setModalType('editShift');
+  };
+
+  const handleEditShift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (modalSubmitting || !editingShift) return;
+    setModalSubmitting(true);
+    setModalError(null);
+
+    try {
+      const res = await apiFetch(`/api/v1/shift-templates/${editingShift.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: editShiftName.trim(),
+          startTime: editShiftStart,
+          endTime: editShiftEnd,
+          sequence: Number(editShiftSeq),
+          status: editShiftStatus,
+        }),
+      });
+
+      if (res.success) {
+        setModalType(null);
+        setEditingShift(null);
+        setSuccessMsg(`Shift template ${editingShift.code} updated successfully`);
+        setTimeout(() => setSuccessMsg(null), 3000);
+        loadOutletData();
+      } else {
+        setModalError(res.error?.message || 'Failed to update shift template');
+      }
+    } finally {
+      setModalSubmitting(false);
+    }
+  };
+
+  const handleToggleShiftStatus = async (s: ShiftTemplate) => {
+    const nextStatus = s.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      const res = await apiFetch(`/api/v1/shift-templates/${s.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (res.success) {
+        setSuccessMsg(`Shift template ${s.code} is now ${nextStatus}`);
+        setTimeout(() => setSuccessMsg(null), 3000);
+        loadOutletData();
+      } else {
+        setError(res.error?.message || 'Failed to update shift template status');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Error updating shift template status');
     }
   };
 
@@ -1135,53 +1206,94 @@ export const PumpInfrastructurePage: React.FC = () => {
         </div>
       )}
 
-      {/* 5. SHIFT TEMPLATES */}
+      {/* 5. GLOBAL SHIFT MASTER */}
       {activeTab === 'shifts' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
-              Configured Shift Templates
-            </h2>
-            <button
-              onClick={() => {
-                setShiftCode(`SHIFT_${shiftTemplates.length + 1}`);
-                setShiftName(`Shift ${shiftTemplates.length + 1}`);
-                setShiftStart('06:00');
-                setShiftEnd('14:00');
-                setShiftSeq(shiftTemplates.length + 1);
-                setModalError(null);
-                setModalType('addShift');
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Shift Template</span>
-            </button>
+            <div>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                Global Shift Master
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Centrally defined shift definitions shared across all retail outlets ({shiftTemplates.length} templates)
+              </p>
+            </div>
+            {canWriteShifts && (
+              <button
+                onClick={() => {
+                  setShiftCode(`SHIFT_${shiftTemplates.length + 1}`);
+                  setShiftName(`Shift ${shiftTemplates.length + 1}`);
+                  setShiftStart('06:00');
+                  setShiftEnd('14:00');
+                  setShiftSeq(shiftTemplates.length + 1);
+                  setModalError(null);
+                  setModalType('addShift');
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Shift Template</span>
+              </button>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {shiftTemplates.map(s => {
               const isOvernight = s.startTime > s.endTime;
+              const isActive = s.status === 'ACTIVE';
               return (
-                <div key={s.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
+                <div key={s.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="px-2 py-0.5 rounded font-mono font-bold text-orange-400 bg-slate-800 border border-slate-700 text-xs">
-                      {s.code}
-                    </span>
-                    {isOvernight && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                        Overnight
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded font-mono font-bold text-orange-400 bg-slate-800 border border-slate-700 text-xs">
+                        {s.code}
                       </span>
-                    )}
+                      {isOvernight && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                          Overnight
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        isActive
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                      }`}
+                    >
+                      {s.status || 'ACTIVE'}
+                    </span>
                   </div>
-                  <h3 className="text-sm font-bold text-white">{s.name}</h3>
+                  <h3 className="text-base font-bold text-white">{s.name}</h3>
                   <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-300">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-orange-400" />
                       <span>{s.startTime} → {s.endTime}</span>
                     </div>
                     <span className="text-slate-500">Seq #{s.sequence}</span>
                   </div>
+
+                  {canWriteShifts && (
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2">
+                      <button
+                        onClick={() => openEditShift(s)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-orange-400" />
+                        <span>Edit Shift</span>
+                      </button>
+                      <button
+                        onClick={() => handleToggleShiftStatus(s)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                          isActive
+                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
+                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                        }`}
+                      >
+                        {isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1897,6 +2009,121 @@ export const PumpInfrastructurePage: React.FC = () => {
                 <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
                 <button type="submit" disabled={modalSubmitting} className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">
                   {modalSubmitting ? 'Saving...' : 'Save Template'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Global Shift Template Modal */}
+      {modalType === 'editShift' && editingShift && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white">Edit Shift Template ({editingShift.code})</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Update central shift timing, sequence, and operational status
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalType(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {modalError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{modalError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleEditShift} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Shift Code (Immutable)</label>
+                  <div className="w-full bg-slate-800/60 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold font-mono text-orange-400">
+                    {editingShift.code}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Sequence</label>
+                  <input
+                    type="number"
+                    value={editShiftSeq}
+                    onChange={(e) => setEditShiftSeq(Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-300 mb-1">Shift Name</label>
+                <input
+                  type="text"
+                  value={editShiftName}
+                  onChange={(e) => setEditShiftName(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Start Time (24h)</label>
+                  <input
+                    type="text"
+                    value={editShiftStart}
+                    onChange={(e) => setEditShiftStart(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">End Time (24h)</label>
+                  <input
+                    type="text"
+                    value={editShiftEnd}
+                    onChange={(e) => setEditShiftEnd(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-300 mb-1">Operational Status</label>
+                <select
+                  value={editShiftStatus}
+                  onChange={(e) => setEditShiftStatus(e.target.value as any)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                >
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="INACTIVE">INACTIVE</option>
+                </select>
+              </div>
+
+              <div className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-[11px] text-slate-400">
+                ℹ️ Notice: Inactivating a shift template prevents it from being used for new operational shifts or roster schedules, while all historical shifts remain completely intact.
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalType(null)}
+                  className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={modalSubmitting}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold"
+                >
+                  {modalSubmitting ? 'Saving...' : 'Update Shift'}
                 </button>
               </div>
             </form>

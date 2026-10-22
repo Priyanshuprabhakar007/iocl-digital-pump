@@ -15,8 +15,12 @@ import {
   NozzleSchema,
   NozzleUpdateSchema,
   ShiftTemplateSchema,
+  GlobalShiftTemplateSchema,
+  UpdateGlobalShiftTemplateSchema,
+  GlobalShiftTemplateStatusSchema,
 } from '../../shared/validators';
 import { PERMISSIONS } from '../../shared/constants';
+import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
 
 export const pumpOperations = new Hono<{ Bindings: EnvBindings }>();
 
@@ -1313,8 +1317,261 @@ pumpOperations.patch('/nozzles/:id/status', requirePermission(PERMISSIONS.NOZZLE
   return c.json({ success: true, data: updated, error: null });
 });
 
+// In-memory cache with 60s TTL for global shift templates
+interface ShiftTemplateCacheStore<T> {
+  [key: string]: { data: T; expiresAt: number };
+}
+const globalShiftTemplateCache: ShiftTemplateCacheStore<any> = {};
+
+export function invalidateGlobalShiftTemplateCache() {
+  for (const k of Object.keys(globalShiftTemplateCache)) {
+    delete globalShiftTemplateCache[k];
+  }
+}
+
 // ==========================================
-// 5. SHIFT TEMPLATES
+// 5. GLOBAL SHIFT TEMPLATES (CENTRAL MASTER)
+// ==========================================
+
+// GET /api/v1/shift-templates - List global shift templates (supports optional ?status=ACTIVE|INACTIVE)
+pumpOperations.get('/shift-templates', requirePermission(PERMISSIONS.SHIFT_TEMPLATES_READ) as any, async (c: AppContext) => {
+  const statusParam = c.req.query('status') as 'ACTIVE' | 'INACTIVE' | undefined;
+  const cacheKey = `list_${statusParam || 'ALL'}`;
+  const now = Date.now();
+
+  if (globalShiftTemplateCache[cacheKey] && globalShiftTemplateCache[cacheKey].expiresAt > now) {
+    return c.json({ success: true, data: globalShiftTemplateCache[cacheKey].data, error: null });
+  }
+
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+
+  try {
+    const list = await pumpRepo.listGlobalShiftTemplates(statusParam);
+    globalShiftTemplateCache[cacheKey] = {
+      data: list,
+      expiresAt: now + 60_000,
+    };
+    return c.json({ success: true, data: list, error: null });
+  } catch (err: any) {
+    const mapped = mapDatabaseUniqueError(err);
+    if (mapped) {
+      return c.json({ success: false, data: null, error: mapped }, 409);
+    }
+    return c.json({ success: false, data: null, error: { code: 'INTERNAL_SERVER_ERROR', message: err?.message || 'Error fetching shift templates' } }, 500);
+  }
+});
+
+// POST /api/v1/shift-templates - Create global shift template
+pumpOperations.post('/shift-templates', requirePermission(PERMISSIONS.SHIFT_TEMPLATES_WRITE) as any, async (c: AppContext) => {
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+  const auditRepo = new AuditRepository(db);
+
+  const body = await c.req.json().catch(() => ({}));
+  const parseResult = GlobalShiftTemplateSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json({ success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid payload', details: parseResult.error.flatten() } }, 400);
+  }
+
+  const payload = parseResult.data;
+
+  // Check code uniqueness globally
+  const existing = await pumpRepo.findGlobalShiftTemplateByCode(payload.code);
+  if (existing) {
+    return c.json({ success: false, data: null, error: { code: 'CONFLICT', message: `Shift template code '${payload.code}' already exists` } }, 409);
+  }
+
+  const nowIso = new Date().toISOString();
+  const id = `st-glb-${crypto.randomUUID()}`;
+
+  try {
+    const created = await pumpRepo.createGlobalShiftTemplate({
+      id,
+      code: payload.code,
+      name: payload.name,
+      startTime: payload.startTime,
+      endTime: payload.endTime,
+      sequence: payload.sequence,
+      status: payload.status,
+      createdBy: c.var.user!.user.id,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+
+    await auditRepo.logAction({
+      id: `aud-${crypto.randomUUID()}`,
+      userId: c.var.user!.user.id,
+      action: 'GLOBAL_SHIFT_TEMPLATE_CREATE',
+      entityType: 'GLOBAL_SHIFT_TEMPLATE',
+      entityId: created.id,
+      newValue: created as unknown as Record<string, unknown>,
+      ipAddress: c.req.header('cf-connecting-ip') || null,
+      userAgent: c.req.header('user-agent') || null,
+      createdAt: nowIso,
+    });
+
+    invalidateGlobalShiftTemplateCache();
+    return c.json({ success: true, data: created, error: null }, 201);
+  } catch (err: any) {
+    const mapped = mapDatabaseUniqueError(err);
+    if (mapped) {
+      return c.json({ success: false, data: null, error: mapped }, 409);
+    }
+    return c.json({ success: false, data: null, error: { code: 'INTERNAL_SERVER_ERROR', message: err?.message || 'Error creating shift template' } }, 500);
+  }
+});
+
+// GET /api/v1/shift-templates/:id - Get global shift template by ID
+pumpOperations.get('/shift-templates/:id', requirePermission(PERMISSIONS.SHIFT_TEMPLATES_READ) as any, async (c: AppContext) => {
+  const id = c.req.param('id');
+  if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'id is required' } }, 400);
+
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+
+  const tpl = (await pumpRepo.findGlobalShiftTemplateById(id)) || (await pumpRepo.findShiftTemplateById(id));
+  if (!tpl) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Shift template not found' } }, 404);
+  }
+
+  return c.json({ success: true, data: tpl, error: null });
+});
+
+// PUT /api/v1/shift-templates/:id - Update global shift template
+pumpOperations.put('/shift-templates/:id', requirePermission(PERMISSIONS.SHIFT_TEMPLATES_WRITE) as any, async (c: AppContext) => {
+  const id = c.req.param('id');
+  if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'id is required' } }, 400);
+
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+  const auditRepo = new AuditRepository(db);
+
+  const tpl = (await pumpRepo.findGlobalShiftTemplateById(id)) || (await pumpRepo.findShiftTemplateById(id));
+  if (!tpl) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Shift template not found' } }, 404);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const parseResult = UpdateGlobalShiftTemplateSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json({ success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid payload', details: parseResult.error.flatten() } }, 400);
+  }
+
+  const payload = parseResult.data;
+
+  // Code immutability guard
+  if (payload.code && payload.code.toUpperCase() !== tpl.code.toUpperCase()) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'IMMUTABLE_CODE', message: 'Shift template code is immutable once created' },
+    }, 400);
+  }
+
+  const nowIso = new Date().toISOString();
+
+  try {
+    let updated: any;
+    const globalExisting = await pumpRepo.findGlobalShiftTemplateById(id);
+    if (globalExisting) {
+      updated = await pumpRepo.updateGlobalShiftTemplate(id, {
+        name: payload.name,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        sequence: payload.sequence,
+        status: payload.status,
+        updatedAt: nowIso,
+      });
+    } else {
+      updated = await pumpRepo.updateShiftTemplate(id, {
+        name: payload.name,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        sequence: payload.sequence,
+        status: payload.status,
+        updatedAt: nowIso,
+      });
+    }
+
+    await auditRepo.logAction({
+      id: `aud-${crypto.randomUUID()}`,
+      userId: c.var.user!.user.id,
+      action: 'GLOBAL_SHIFT_TEMPLATE_UPDATE',
+      entityType: 'GLOBAL_SHIFT_TEMPLATE',
+      entityId: id,
+      oldValue: tpl as unknown as Record<string, unknown>,
+      newValue: updated as unknown as Record<string, unknown>,
+      ipAddress: c.req.header('cf-connecting-ip') || null,
+      userAgent: c.req.header('user-agent') || null,
+      createdAt: nowIso,
+    });
+
+    invalidateGlobalShiftTemplateCache();
+    return c.json({ success: true, data: updated, error: null });
+  } catch (err: any) {
+    const mapped = mapDatabaseUniqueError(err);
+    if (mapped) {
+      return c.json({ success: false, data: null, error: mapped }, 409);
+    }
+    return c.json({ success: false, data: null, error: { code: 'INTERNAL_SERVER_ERROR', message: err?.message || 'Error updating shift template' } }, 500);
+  }
+});
+
+// PATCH /api/v1/shift-templates/:id/status - Update global shift template status
+pumpOperations.patch('/shift-templates/:id/status', requirePermission(PERMISSIONS.SHIFT_TEMPLATES_WRITE) as any, async (c: AppContext) => {
+  const id = c.req.param('id');
+  if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'id is required' } }, 400);
+
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+  const auditRepo = new AuditRepository(db);
+
+  const tpl = (await pumpRepo.findGlobalShiftTemplateById(id)) || (await pumpRepo.findShiftTemplateById(id));
+  if (!tpl) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Shift template not found' } }, 404);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const parseResult = GlobalShiftTemplateStatusSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json({ success: false, data: null, error: { code: 'VALIDATION_ERROR', message: "status must be 'ACTIVE' or 'INACTIVE'" } }, 400);
+  }
+
+  const { status } = parseResult.data;
+  const nowIso = new Date().toISOString();
+
+  try {
+    let updated: any;
+    const globalExisting = await pumpRepo.findGlobalShiftTemplateById(id);
+    if (globalExisting) {
+      updated = await pumpRepo.updateGlobalShiftTemplateStatus(id, status, nowIso);
+    } else {
+      updated = await pumpRepo.updateShiftTemplate(id, { status, updatedAt: nowIso });
+    }
+
+    await auditRepo.logAction({
+      id: `aud-${crypto.randomUUID()}`,
+      userId: c.var.user!.user.id,
+      action: 'GLOBAL_SHIFT_TEMPLATE_STATUS_UPDATE',
+      entityType: 'GLOBAL_SHIFT_TEMPLATE',
+      entityId: id,
+      oldValue: { status: tpl.status },
+      newValue: { status },
+      ipAddress: c.req.header('cf-connecting-ip') || null,
+      userAgent: c.req.header('user-agent') || null,
+      createdAt: nowIso,
+    });
+
+    invalidateGlobalShiftTemplateCache();
+    return c.json({ success: true, data: updated, error: null });
+  } catch (err: any) {
+    return c.json({ success: false, data: null, error: { code: 'INTERNAL_SERVER_ERROR', message: err?.message || 'Error updating status' } }, 500);
+  }
+});
+
+// ==========================================
+// COMPATIBILITY ALIASES (DEPRECATED)
 // ==========================================
 
 // GET /api/v1/outlets/:outletId/shift-templates
@@ -1330,7 +1587,8 @@ pumpOperations.get('/outlets/:outletId/shift-templates', requirePermission(PERMI
     return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
   }
 
-  const list = await pumpRepo.listShiftTemplatesByOutlet(outletId);
+  const list = await pumpRepo.listGlobalShiftTemplates('ACTIVE');
+  c.header('X-Deprecated', 'This endpoint is deprecated. Use GET /api/v1/shift-templates?status=ACTIVE instead.');
   return c.json({ success: true, data: list, error: null });
 });
 
@@ -1356,32 +1614,31 @@ pumpOperations.post('/outlets/:outletId/shift-templates', requirePermission(PERM
 
   const payload = parseResult.data;
 
-  // Check code uniqueness per outlet
-  const existing = await pumpRepo.findShiftTemplateByCode(outletId, payload.code);
+  // Check code uniqueness globally
+  const existing = await pumpRepo.findGlobalShiftTemplateByCode(payload.code);
   if (existing) {
-    return c.json({ success: false, data: null, error: { code: 'CONFLICT', message: `Shift template code '${payload.code}' already exists for this outlet` } }, 409);
+    return c.json({ success: false, data: null, error: { code: 'CONFLICT', message: `Shift template code '${payload.code}' already exists` } }, 409);
   }
 
   const nowIso = new Date().toISOString();
-  const created = await pumpRepo.createShiftTemplate({
-    id: `st-${crypto.randomUUID()}`,
-    outletId,
+  const created = await pumpRepo.createGlobalShiftTemplate({
+    id: `st-glb-${crypto.randomUUID()}`,
     code: payload.code,
     name: payload.name,
     startTime: payload.startTime,
     endTime: payload.endTime,
     sequence: payload.sequence,
     status: payload.status,
+    createdBy: c.var.user!.user.id,
     createdAt: nowIso,
     updatedAt: nowIso,
-    createdBy: c.var.user!.user.id,
   });
 
   await auditRepo.logAction({
     id: `aud-${crypto.randomUUID()}`,
     userId: c.var.user!.user.id,
-    action: 'SHIFT_TEMPLATE_CREATE',
-    entityType: 'SHIFT_TEMPLATE',
+    action: 'GLOBAL_SHIFT_TEMPLATE_CREATE',
+    entityType: 'GLOBAL_SHIFT_TEMPLATE',
     entityId: created.id,
     newValue: created as unknown as Record<string, unknown>,
     ipAddress: c.req.header('cf-connecting-ip') || null,
@@ -1389,119 +1646,8 @@ pumpOperations.post('/outlets/:outletId/shift-templates', requirePermission(PERM
     createdAt: nowIso,
   });
 
+  invalidateGlobalShiftTemplateCache();
   return c.json({ success: true, data: created, error: null }, 201);
-});
-
-// GET /api/v1/shift-templates/:id
-pumpOperations.get('/shift-templates/:id', requirePermission(PERMISSIONS.SHIFT_TEMPLATES_READ) as any, async (c: AppContext) => {
-  const id = c.req.param('id');
-  if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'id is required' } }, 400);
-
-  const db = getDb(c.env.DB);
-  const outletRepo = new OutletRepository(db);
-  const pumpRepo = new PumpRepository(db);
-
-  const tpl = await pumpRepo.findShiftTemplateById(id);
-  if (!tpl) {
-    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Shift template not found' } }, 404);
-  }
-
-  if (!await verifyOutletAuthority(c, tpl.outletId, outletRepo)) {
-    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this shift template' } }, 403);
-  }
-
-  return c.json({ success: true, data: tpl, error: null });
-});
-
-// PUT /api/v1/shift-templates/:id
-pumpOperations.put('/shift-templates/:id', requirePermission(PERMISSIONS.SHIFT_TEMPLATES_WRITE) as any, async (c: AppContext) => {
-  const id = c.req.param('id');
-  if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'id is required' } }, 400);
-
-  const db = getDb(c.env.DB);
-  const outletRepo = new OutletRepository(db);
-  const pumpRepo = new PumpRepository(db);
-  const auditRepo = new AuditRepository(db);
-
-  const tpl = await pumpRepo.findShiftTemplateById(id);
-  if (!tpl) {
-    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Shift template not found' } }, 404);
-  }
-
-  if (!await verifyOutletAuthority(c, tpl.outletId, outletRepo)) {
-    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this shift template' } }, 403);
-  }
-
-  const body = await c.req.json().catch(() => ({}));
-  const parseResult = ShiftTemplateSchema.partial().safeParse(body);
-  if (!parseResult.success) {
-    return c.json({ success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid payload', details: parseResult.error.flatten() } }, 400);
-  }
-
-  const nowIso = new Date().toISOString();
-  const updated = await pumpRepo.updateShiftTemplate(id, {
-    ...parseResult.data,
-    updatedAt: nowIso,
-  });
-
-  await auditRepo.logAction({
-    id: `aud-${crypto.randomUUID()}`,
-    userId: c.var.user!.user.id,
-    action: 'SHIFT_TEMPLATE_UPDATE',
-    entityType: 'SHIFT_TEMPLATE',
-    entityId: id,
-    oldValue: tpl as unknown as Record<string, unknown>,
-    newValue: updated as unknown as Record<string, unknown>,
-    ipAddress: c.req.header('cf-connecting-ip') || null,
-    userAgent: c.req.header('user-agent') || null,
-    createdAt: nowIso,
-  });
-
-  return c.json({ success: true, data: updated, error: null });
-});
-
-// PATCH /api/v1/shift-templates/:id/status
-pumpOperations.patch('/shift-templates/:id/status', requirePermission(PERMISSIONS.SHIFT_TEMPLATES_WRITE) as any, async (c: AppContext) => {
-  const id = c.req.param('id');
-  if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'id is required' } }, 400);
-
-  const db = getDb(c.env.DB);
-  const outletRepo = new OutletRepository(db);
-  const pumpRepo = new PumpRepository(db);
-  const auditRepo = new AuditRepository(db);
-
-  const tpl = await pumpRepo.findShiftTemplateById(id);
-  if (!tpl) {
-    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Shift template not found' } }, 404);
-  }
-
-  if (!await verifyOutletAuthority(c, tpl.outletId, outletRepo)) {
-    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this shift template' } }, 403);
-  }
-
-  const body = await c.req.json().catch(() => ({}));
-  const status = body?.status;
-  if (status !== 'ACTIVE' && status !== 'INACTIVE') {
-    return c.json({ success: false, data: null, error: { code: 'VALIDATION_ERROR', message: "status must be 'ACTIVE' or 'INACTIVE'" } }, 400);
-  }
-
-  const nowIso = new Date().toISOString();
-  const updated = await pumpRepo.updateShiftTemplate(id, { status, updatedAt: nowIso });
-
-  await auditRepo.logAction({
-    id: `aud-${crypto.randomUUID()}`,
-    userId: c.var.user!.user.id,
-    action: 'SHIFT_TEMPLATE_STATUS_UPDATE',
-    entityType: 'SHIFT_TEMPLATE',
-    entityId: id,
-    oldValue: { status: tpl.status },
-    newValue: { status },
-    ipAddress: c.req.header('cf-connecting-ip') || null,
-    userAgent: c.req.header('user-agent') || null,
-    createdAt: nowIso,
-  });
-
-  return c.json({ success: true, data: updated, error: null });
 });
 
 export default pumpOperations;

@@ -2,6 +2,7 @@ import { eq, and, desc, asc, gte, lte, sql, like, or, isNull, inArray } from 'dr
 import { alias } from 'drizzle-orm/sqlite-core';
 import { AppDatabase } from '../../db';
 import {
+  globalHrDesignations,
   hrDesignations,
   hrStaff,
   hrManpowerSanctions,
@@ -10,6 +11,7 @@ import {
   hrAttendanceRecords,
   hrNozzleAssignments,
   hrLeaveRequests,
+  globalShiftTemplates,
   shiftTemplates,
   documents,
   retailOutlets,
@@ -19,6 +21,7 @@ import {
   users,
 } from '../../db/schema';
 import {
+  GlobalHrDesignation,
   HrDesignation,
   HrStaff,
   HrManpowerSanction,
@@ -33,6 +36,8 @@ import {
   HrEmploymentStatus,
   HrRosterStatus,
   HrSkillCategory,
+  GlobalShiftTemplate,
+  ShiftTemplate,
 } from '../../shared/types';
 
 export interface HrDesignationFilters {
@@ -63,10 +68,137 @@ export class HrRepository {
   constructor(private db: AppDatabase) {}
 
   // ==========================================================================
-  // DESIGNATIONS
+  // GLOBAL HR DESIGNATIONS
   // ==========================================================================
 
+  async getGlobalDesignationById(id: string): Promise<GlobalHrDesignation | null> {
+    const row = await this.db
+      .select()
+      .from(globalHrDesignations)
+      .where(eq(globalHrDesignations.id, id))
+      .get();
+    return row ? (row as GlobalHrDesignation) : null;
+  }
+
+  async findGlobalDesignationByCode(code: string): Promise<GlobalHrDesignation | null> {
+    const row = await this.db
+      .select()
+      .from(globalHrDesignations)
+      .where(sql`UPPER(TRIM(${globalHrDesignations.code})) = UPPER(TRIM(${code}))`)
+      .get();
+    return row ? (row as GlobalHrDesignation) : null;
+  }
+
+  async listGlobalDesignations(filtersOrStatus?: string | {
+    status?: HrDesignationStatus;
+    skillCategory?: HrSkillCategory | null;
+    search?: string;
+  }): Promise<GlobalHrDesignation[]> {
+    const filters = typeof filtersOrStatus === 'string'
+      ? { status: filtersOrStatus as HrDesignationStatus }
+      : filtersOrStatus;
+    const conditions = [];
+
+    if (filters?.status) {
+      conditions.push(eq(globalHrDesignations.status, filters.status));
+    }
+    if (filters?.skillCategory !== undefined) {
+      if (filters.skillCategory === null) {
+        conditions.push(isNull(globalHrDesignations.skillCategory));
+      } else {
+        conditions.push(eq(globalHrDesignations.skillCategory, filters.skillCategory));
+      }
+    }
+    if (filters?.search && typeof filters.search === 'string') {
+      const s = `%${filters.search.trim()}%`;
+      conditions.push(
+        or(like(globalHrDesignations.code, s), like(globalHrDesignations.name, s))!
+      );
+    }
+
+    const rows = await this.db
+      .select()
+      .from(globalHrDesignations)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(globalHrDesignations.code))
+      .all();
+
+    return rows as GlobalHrDesignation[];
+  }
+
+  async createGlobalDesignation(data: {
+    id: string;
+    code: string;
+    name: string;
+    skillCategory: HrSkillCategory | null;
+    status: HrDesignationStatus;
+    notes?: string | null;
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
+  }): Promise<GlobalHrDesignation> {
+    await this.db.insert(globalHrDesignations).values({
+      id: data.id,
+      code: data.code.trim().toUpperCase(),
+      name: data.name.trim(),
+      skillCategory: data.skillCategory ?? null,
+      status: data.status,
+      notes: data.notes ?? null,
+      createdBy: data.createdBy,
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+    }).run();
+
+    const created = await this.getGlobalDesignationById(data.id);
+    return created!;
+  }
+
+  async updateGlobalDesignation(
+    id: string,
+    data: {
+      name?: string;
+      skillCategory?: HrSkillCategory | null;
+      status?: HrDesignationStatus;
+      notes?: string | null;
+      updatedAt: string;
+    }
+  ): Promise<GlobalHrDesignation | null> {
+    const updateValues: Record<string, any> = {
+      updatedAt: data.updatedAt,
+    };
+    if (data.name !== undefined) updateValues.name = data.name.trim();
+    if (data.skillCategory !== undefined) updateValues.skillCategory = data.skillCategory;
+    if (data.status !== undefined) updateValues.status = data.status;
+    if (data.notes !== undefined) updateValues.notes = data.notes;
+
+    await this.db
+      .update(globalHrDesignations)
+      .set(updateValues)
+      .where(eq(globalHrDesignations.id, id))
+      .run();
+
+    return this.getGlobalDesignationById(id);
+  }
+
+  async updateGlobalDesignationStatus(
+    id: string,
+    status: HrDesignationStatus,
+    updatedAt: string
+  ): Promise<GlobalHrDesignation | null> {
+    await this.db
+      .update(globalHrDesignations)
+      .set({ status, updatedAt })
+      .where(eq(globalHrDesignations.id, id))
+      .run();
+
+    return this.getGlobalDesignationById(id);
+  }
+
+  // Legacy/Compatibility Designations
   async getDesignationById(id: string): Promise<HrDesignation | null> {
+    const globalRow = await this.getGlobalDesignationById(id);
+    if (globalRow) return globalRow as unknown as HrDesignation;
+
     const row = await this.db
       .select()
       .from(hrDesignations)
@@ -76,6 +208,9 @@ export class HrRepository {
   }
 
   async findDesignationByCode(outletId: string, code: string): Promise<HrDesignation | null> {
+    const globalRow = await this.findGlobalDesignationByCode(code);
+    if (globalRow) return globalRow as unknown as HrDesignation;
+
     const row = await this.db
       .select()
       .from(hrDesignations)
@@ -85,6 +220,8 @@ export class HrRepository {
   }
 
   async listDesignations(outletId: string, filters?: HrDesignationFilters): Promise<HrDesignation[]> {
+    const globals = await this.listGlobalDesignations(filters);
+
     const conditions = [eq(hrDesignations.outletId, outletId)];
 
     if (filters?.status) {
@@ -104,14 +241,22 @@ export class HrRepository {
       );
     }
 
-    const rows = await this.db
+    const legacyRows = await this.db
       .select()
       .from(hrDesignations)
       .where(and(...conditions))
       .orderBy(asc(hrDesignations.code))
       .all();
 
-    return rows as HrDesignation[];
+    const seenIds = new Set(globals.map(g => g.id));
+    const seenCodes = new Set(globals.map(g => g.code.toUpperCase()));
+    const combined: HrDesignation[] = [...(globals as unknown as HrDesignation[])];
+    for (const row of legacyRows) {
+      if (!seenIds.has(row.id) && !seenCodes.has(row.code.toUpperCase())) {
+        combined.push(row as HrDesignation);
+      }
+    }
+    return combined.sort((a, b) => a.code.localeCompare(b.code));
   }
 
   async createDesignation(data: {
@@ -179,21 +324,24 @@ export class HrRepository {
     const row = await this.db
       .select({
         staff: hrStaff,
-        designation: hrDesignations,
+        globalDesignation: globalHrDesignations,
+        legacyDesignation: hrDesignations,
       })
       .from(hrStaff)
+      .leftJoin(globalHrDesignations, eq(hrStaff.designationId, globalHrDesignations.id))
       .leftJoin(hrDesignations, eq(hrStaff.designationId, hrDesignations.id))
       .where(eq(hrStaff.id, id))
       .get();
 
     if (!row) return null;
 
+    const desig = row.globalDesignation ?? row.legacyDesignation;
     return {
       ...(row.staff as HrStaff),
       maskedAadhaar: `XXXX XXXX ${row.staff.aadhaarLast4}`,
-      designationName: row.designation?.name,
-      designationCode: row.designation?.code,
-      designationSkillCategory: row.designation?.skillCategory,
+      designationName: desig?.name,
+      designationCode: desig?.code,
+      designationSkillCategory: desig?.skillCategory,
     };
   }
 
@@ -219,9 +367,19 @@ export class HrRepository {
     }
     if (filters?.skillCategory !== undefined) {
       if (filters.skillCategory === null) {
-        conditions.push(isNull(hrDesignations.skillCategory));
+        conditions.push(
+          and(
+            isNull(globalHrDesignations.skillCategory),
+            isNull(hrDesignations.skillCategory)
+          )!
+        );
       } else {
-        conditions.push(eq(hrDesignations.skillCategory, filters.skillCategory));
+        conditions.push(
+          or(
+            eq(globalHrDesignations.skillCategory, filters.skillCategory),
+            eq(hrDesignations.skillCategory, filters.skillCategory)
+          )!
+        );
       }
     }
     if (filters?.employmentStatus) {
@@ -243,21 +401,26 @@ export class HrRepository {
     const rows = await this.db
       .select({
         staff: hrStaff,
-        designation: hrDesignations,
+        globalDesignation: globalHrDesignations,
+        legacyDesignation: hrDesignations,
       })
       .from(hrStaff)
+      .leftJoin(globalHrDesignations, eq(hrStaff.designationId, globalHrDesignations.id))
       .leftJoin(hrDesignations, eq(hrStaff.designationId, hrDesignations.id))
       .where(and(...conditions))
       .orderBy(asc(hrStaff.employeeCode))
       .all();
 
-    return rows.map(r => ({
-      ...(r.staff as HrStaff),
-      maskedAadhaar: `XXXX XXXX ${r.staff.aadhaarLast4}`,
-      designationName: r.designation?.name,
-      designationCode: r.designation?.code,
-      designationSkillCategory: r.designation?.skillCategory,
-    }));
+    return rows.map(r => {
+      const desig = r.globalDesignation ?? r.legacyDesignation;
+      return {
+        ...(r.staff as HrStaff),
+        maskedAadhaar: `XXXX XXXX ${r.staff.aadhaarLast4}`,
+        designationName: desig?.name,
+        designationCode: desig?.code,
+        designationSkillCategory: desig?.skillCategory,
+      };
+    });
   }
 
   async createStaff(data: {
@@ -353,20 +516,23 @@ export class HrRepository {
     const row = await this.db
       .select({
         sanction: hrManpowerSanctions,
-        designation: hrDesignations,
+        globalDesignation: globalHrDesignations,
+        legacyDesignation: hrDesignations,
       })
       .from(hrManpowerSanctions)
+      .leftJoin(globalHrDesignations, eq(hrManpowerSanctions.designationId, globalHrDesignations.id))
       .leftJoin(hrDesignations, eq(hrManpowerSanctions.designationId, hrDesignations.id))
       .where(eq(hrManpowerSanctions.id, id))
       .get();
 
     if (!row) return null;
 
+    const desig = row.globalDesignation ?? row.legacyDesignation;
     return {
       ...(row.sanction as HrManpowerSanction),
-      designationName: row.designation?.name,
-      designationCode: row.designation?.code,
-      designationSkillCategory: row.designation?.skillCategory,
+      designationName: desig?.name,
+      designationCode: desig?.code,
+      designationSkillCategory: desig?.skillCategory,
     };
   }
 
@@ -377,9 +543,11 @@ export class HrRepository {
     const row = await this.db
       .select({
         sanction: hrManpowerSanctions,
-        designation: hrDesignations,
+        globalDesignation: globalHrDesignations,
+        legacyDesignation: hrDesignations,
       })
       .from(hrManpowerSanctions)
+      .leftJoin(globalHrDesignations, eq(hrManpowerSanctions.designationId, globalHrDesignations.id))
       .leftJoin(hrDesignations, eq(hrManpowerSanctions.designationId, hrDesignations.id))
       .where(
         and(
@@ -391,11 +559,12 @@ export class HrRepository {
 
     if (!row) return null;
 
+    const desig = row.globalDesignation ?? row.legacyDesignation;
     return {
       ...(row.sanction as HrManpowerSanction),
-      designationName: row.designation?.name,
-      designationCode: row.designation?.code,
-      designationSkillCategory: row.designation?.skillCategory,
+      designationName: desig?.name,
+      designationCode: desig?.code,
+      designationSkillCategory: desig?.skillCategory,
     };
   }
 
@@ -403,20 +572,24 @@ export class HrRepository {
     const rows = await this.db
       .select({
         sanction: hrManpowerSanctions,
-        designation: hrDesignations,
+        globalDesignation: globalHrDesignations,
+        legacyDesignation: hrDesignations,
       })
       .from(hrManpowerSanctions)
+      .leftJoin(globalHrDesignations, eq(hrManpowerSanctions.designationId, globalHrDesignations.id))
       .leftJoin(hrDesignations, eq(hrManpowerSanctions.designationId, hrDesignations.id))
       .where(eq(hrManpowerSanctions.outletId, outletId))
-      .orderBy(asc(hrDesignations.code))
       .all();
 
-    return rows.map(r => ({
-      ...(r.sanction as HrManpowerSanction),
-      designationName: r.designation?.name,
-      designationCode: r.designation?.code,
-      designationSkillCategory: r.designation?.skillCategory,
-    }));
+    return rows.map(r => {
+      const desig = r.globalDesignation ?? r.legacyDesignation;
+      return {
+        ...(r.sanction as HrManpowerSanction),
+        designationName: desig?.name,
+        designationCode: desig?.code,
+        designationSkillCategory: desig?.skillCategory,
+      };
+    }).sort((a, b) => (a.designationCode || '').localeCompare(b.designationCode || ''));
   }
 
   async createManpowerSanction(data: {
@@ -481,27 +654,33 @@ export class HrRepository {
       .select({
         roster: hrRosterAssignments,
         staff: hrStaff,
-        designation: hrDesignations,
-        shiftTemplate: shiftTemplates,
+        globalDesignation: globalHrDesignations,
+        legacyDesignation: hrDesignations,
+        globalShiftTemplate: globalShiftTemplates,
+        legacyShiftTemplate: shiftTemplates,
       })
       .from(hrRosterAssignments)
       .leftJoin(hrStaff, eq(hrRosterAssignments.staffId, hrStaff.id))
+      .leftJoin(globalHrDesignations, eq(hrStaff.designationId, globalHrDesignations.id))
       .leftJoin(hrDesignations, eq(hrStaff.designationId, hrDesignations.id))
+      .leftJoin(globalShiftTemplates, eq(hrRosterAssignments.shiftTemplateId, globalShiftTemplates.id))
       .leftJoin(shiftTemplates, eq(hrRosterAssignments.shiftTemplateId, shiftTemplates.id))
       .where(eq(hrRosterAssignments.id, id))
       .get();
 
     if (!row) return null;
 
+    const desig = row.globalDesignation ?? row.legacyDesignation;
+    const shift = row.globalShiftTemplate ?? row.legacyShiftTemplate;
     return {
       ...(row.roster as HrRosterAssignment),
       staffName: row.staff?.fullName,
       employeeCode: row.staff?.employeeCode,
-      designationName: row.designation?.name,
-      shiftTemplateCode: row.shiftTemplate?.code,
-      shiftTemplateName: row.shiftTemplate?.name,
-      shiftStartTime: row.shiftTemplate?.startTime,
-      shiftEndTime: row.shiftTemplate?.endTime,
+      designationName: desig?.name,
+      shiftTemplateCode: shift?.code,
+      shiftTemplateName: shift?.name,
+      shiftStartTime: shift?.startTime,
+      shiftEndTime: shift?.endTime,
     };
   }
 
@@ -513,12 +692,16 @@ export class HrRepository {
       .select({
         roster: hrRosterAssignments,
         staff: hrStaff,
-        designation: hrDesignations,
-        shiftTemplate: shiftTemplates,
+        globalDesignation: globalHrDesignations,
+        legacyDesignation: hrDesignations,
+        globalShiftTemplate: globalShiftTemplates,
+        legacyShiftTemplate: shiftTemplates,
       })
       .from(hrRosterAssignments)
       .leftJoin(hrStaff, eq(hrRosterAssignments.staffId, hrStaff.id))
+      .leftJoin(globalHrDesignations, eq(hrStaff.designationId, globalHrDesignations.id))
       .leftJoin(hrDesignations, eq(hrStaff.designationId, hrDesignations.id))
+      .leftJoin(globalShiftTemplates, eq(hrRosterAssignments.shiftTemplateId, globalShiftTemplates.id))
       .leftJoin(shiftTemplates, eq(hrRosterAssignments.shiftTemplateId, shiftTemplates.id))
       .where(
         and(
@@ -530,15 +713,17 @@ export class HrRepository {
 
     if (!row) return null;
 
+    const desig = row.globalDesignation ?? row.legacyDesignation;
+    const shift = row.globalShiftTemplate ?? row.legacyShiftTemplate;
     return {
       ...(row.roster as HrRosterAssignment),
       staffName: row.staff?.fullName,
       employeeCode: row.staff?.employeeCode,
-      designationName: row.designation?.name,
-      shiftTemplateCode: row.shiftTemplate?.code,
-      shiftTemplateName: row.shiftTemplate?.name,
-      shiftStartTime: row.shiftTemplate?.startTime,
-      shiftEndTime: row.shiftTemplate?.endTime,
+      designationName: desig?.name,
+      shiftTemplateCode: shift?.code,
+      shiftTemplateName: shift?.name,
+      shiftStartTime: shift?.startTime,
+      shiftEndTime: shift?.endTime,
     };
   }
 
@@ -568,27 +753,35 @@ export class HrRepository {
       .select({
         roster: hrRosterAssignments,
         staff: hrStaff,
-        designation: hrDesignations,
-        shiftTemplate: shiftTemplates,
+        globalDesignation: globalHrDesignations,
+        legacyDesignation: hrDesignations,
+        globalShiftTemplate: globalShiftTemplates,
+        legacyShiftTemplate: shiftTemplates,
       })
       .from(hrRosterAssignments)
       .leftJoin(hrStaff, eq(hrRosterAssignments.staffId, hrStaff.id))
+      .leftJoin(globalHrDesignations, eq(hrStaff.designationId, globalHrDesignations.id))
       .leftJoin(hrDesignations, eq(hrStaff.designationId, hrDesignations.id))
+      .leftJoin(globalShiftTemplates, eq(hrRosterAssignments.shiftTemplateId, globalShiftTemplates.id))
       .leftJoin(shiftTemplates, eq(hrRosterAssignments.shiftTemplateId, shiftTemplates.id))
       .where(and(...conditions))
       .orderBy(asc(hrRosterAssignments.rosterDate), asc(hrRosterAssignments.createdAt))
       .all();
 
-    return rows.map(r => ({
-      ...(r.roster as HrRosterAssignment),
-      staffName: r.staff?.fullName,
-      employeeCode: r.staff?.employeeCode,
-      designationName: r.designation?.name,
-      shiftTemplateCode: r.shiftTemplate?.code,
-      shiftTemplateName: r.shiftTemplate?.name,
-      shiftStartTime: r.shiftTemplate?.startTime,
-      shiftEndTime: r.shiftTemplate?.endTime,
-    }));
+    return rows.map(r => {
+      const desig = r.globalDesignation ?? r.legacyDesignation;
+      const shift = r.globalShiftTemplate ?? r.legacyShiftTemplate;
+      return {
+        ...(r.roster as HrRosterAssignment),
+        staffName: r.staff?.fullName,
+        employeeCode: r.staff?.employeeCode,
+        designationName: desig?.name,
+        shiftTemplateCode: shift?.code,
+        shiftTemplateName: shift?.name,
+        shiftStartTime: shift?.startTime,
+        shiftEndTime: shift?.endTime,
+      };
+    });
   }
 
   async createRoster(data: {
@@ -659,18 +852,15 @@ export class HrRepository {
     sanctions: HrManpowerSanction[];
     activeStaffCounts: { designationId: string; count: number }[];
   }> {
-    const [designations, sanctions, activeStaffGroup] = await Promise.all([
+    const [globalDesigs, legacyDesigs, sanctions, activeStaffGroup] = await Promise.all([
+      this.listGlobalDesignations(),
       this.db
         .select()
         .from(hrDesignations)
         .where(eq(hrDesignations.outletId, outletId))
         .orderBy(asc(hrDesignations.code))
-        .all(),
-      this.db
-        .select()
-        .from(hrManpowerSanctions)
-        .where(eq(hrManpowerSanctions.outletId, outletId))
-        .all(),
+        .all() as Promise<HrDesignation[]>,
+      this.listManpowerSanctions(outletId),
       this.db
         .select({
           designationId: hrStaff.designationId,
@@ -687,8 +877,18 @@ export class HrRepository {
         .all(),
     ]);
 
+    const seenIds = new Set(globalDesigs.map(g => g.id));
+    const seenCodes = new Set(globalDesigs.map(g => g.code.toUpperCase()));
+    const designations: HrDesignation[] = [...(globalDesigs as unknown as HrDesignation[])];
+    for (const l of legacyDesigs) {
+      if (!seenIds.has(l.id) && !seenCodes.has(l.code.toUpperCase())) {
+        designations.push(l);
+      }
+    }
+    designations.sort((a, b) => a.code.localeCompare(b.code));
+
     return {
-      designations: designations as HrDesignation[],
+      designations,
       sanctions: sanctions as HrManpowerSanction[],
       activeStaffCounts: activeStaffGroup.map(r => ({
         designationId: r.designationId,
@@ -708,13 +908,27 @@ export class HrRepository {
 
   async getShiftTemplateById(id: string): Promise<{
     id: string;
-    outletId: string;
+    outletId?: string | null;
     status: string;
     code: string;
     name: string;
     startTime: string;
     endTime: string;
   } | null> {
+    const grow = await this.db
+      .select({
+        id: globalShiftTemplates.id,
+        status: globalShiftTemplates.status,
+        code: globalShiftTemplates.code,
+        name: globalShiftTemplates.name,
+        startTime: globalShiftTemplates.startTime,
+        endTime: globalShiftTemplates.endTime,
+      })
+      .from(globalShiftTemplates)
+      .where(eq(globalShiftTemplates.id, id))
+      .get();
+    if (grow) return grow;
+
     const row = await this.db
       .select({
         id: shiftTemplates.id,

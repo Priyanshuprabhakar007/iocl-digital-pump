@@ -12,6 +12,7 @@ import {
   NozzleSlotDiagnostic,
   OutletNozzleDiagnosticsReport,
   ShiftTemplate,
+  GlobalShiftTemplate,
   OperationalShift,
   OperationalShiftNozzleSnapshot,
   OperationalShiftTankSnapshot,
@@ -957,7 +958,91 @@ export class PumpRepository {
   // 6. SHIFT TEMPLATES
   // ==========================================
 
+  // ==========================================
+  // 6. GLOBAL SHIFT TEMPLATES & LEGACY FALLBACK
+  // ==========================================
+
+  async listGlobalShiftTemplates(status?: 'ACTIVE' | 'INACTIVE'): Promise<GlobalShiftTemplate[]> {
+    const query = this.db.select().from(schema.globalShiftTemplates);
+    if (status) {
+      const list = await query.where(eq(schema.globalShiftTemplates.status, status)).orderBy(asc(schema.globalShiftTemplates.sequence));
+      return list as GlobalShiftTemplate[];
+    }
+    const list = await query.orderBy(asc(schema.globalShiftTemplates.sequence));
+    return list as GlobalShiftTemplate[];
+  }
+
+  async findGlobalShiftTemplateById(id: string): Promise<GlobalShiftTemplate | null> {
+    const [row] = await this.db
+      .select()
+      .from(schema.globalShiftTemplates)
+      .where(eq(schema.globalShiftTemplates.id, id));
+    return (row as GlobalShiftTemplate) || null;
+  }
+
+  async findGlobalShiftTemplateByCode(code: string): Promise<GlobalShiftTemplate | null> {
+    const [row] = await this.db
+      .select()
+      .from(schema.globalShiftTemplates)
+      .where(eq(schema.globalShiftTemplates.code, code.toUpperCase()));
+    return (row as GlobalShiftTemplate) || null;
+  }
+
+  async createGlobalShiftTemplate(data: {
+    id: string;
+    code: string;
+    name: string;
+    startTime: string;
+    endTime: string;
+    sequence: number;
+    status: 'ACTIVE' | 'INACTIVE';
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
+  }): Promise<GlobalShiftTemplate> {
+    await this.db.insert(schema.globalShiftTemplates).values({
+      ...data,
+      code: data.code.toUpperCase(),
+    });
+    return (await this.findGlobalShiftTemplateById(data.id))!;
+  }
+
+  async updateGlobalShiftTemplate(
+    id: string,
+    data: Partial<{
+      name: string;
+      startTime: string;
+      endTime: string;
+      sequence: number;
+      status: 'ACTIVE' | 'INACTIVE';
+      updatedAt: string;
+    }>
+  ): Promise<GlobalShiftTemplate | null> {
+    await this.db.update(schema.globalShiftTemplates).set(data).where(eq(schema.globalShiftTemplates.id, id));
+    return this.findGlobalShiftTemplateById(id);
+  }
+
+  async updateGlobalShiftTemplateStatus(
+    id: string,
+    status: 'ACTIVE' | 'INACTIVE',
+    updatedAt: string
+  ): Promise<GlobalShiftTemplate | null> {
+    await this.db
+      .update(schema.globalShiftTemplates)
+      .set({ status, updatedAt })
+      .where(eq(schema.globalShiftTemplates.id, id));
+    return this.findGlobalShiftTemplateById(id);
+  }
+
+  // Compatibility methods returning global templates or legacy fallbacks
   async listShiftTemplatesByOutlet(outletId: string): Promise<ShiftTemplate[]> {
+    const globals = await this.listGlobalShiftTemplates('ACTIVE');
+    if (globals.length > 0) {
+      return globals.map(g => ({
+        ...g,
+        outletId,
+      })) as ShiftTemplate[];
+    }
     const list = await this.db
       .select()
       .from(schema.shiftTemplates)
@@ -968,11 +1053,28 @@ export class PumpRepository {
   }
 
   async findShiftTemplateById(id: string): Promise<ShiftTemplate | null> {
+    const [globalTpl] = await this.db
+      .select()
+      .from(schema.globalShiftTemplates)
+      .where(eq(schema.globalShiftTemplates.id, id));
+    if (globalTpl) {
+      return globalTpl as ShiftTemplate;
+    }
     const [tpl] = await this.db.select().from(schema.shiftTemplates).where(eq(schema.shiftTemplates.id, id));
     return (tpl as ShiftTemplate) || null;
   }
 
   async findShiftTemplateByCode(outletId: string, code: string): Promise<ShiftTemplate | null> {
+    const [globalTpl] = await this.db
+      .select()
+      .from(schema.globalShiftTemplates)
+      .where(eq(schema.globalShiftTemplates.code, code.toUpperCase()));
+    if (globalTpl) {
+      return {
+        ...globalTpl,
+        outletId,
+      } as ShiftTemplate;
+    }
     const [tpl] = await this.db
       .select()
       .from(schema.shiftTemplates)
@@ -1021,10 +1123,12 @@ export class PumpRepository {
       .select({
         shift: schema.operationalShifts,
         template: schema.shiftTemplates,
+        globalTemplate: schema.globalShiftTemplates,
         openedBy: schema.users,
       })
       .from(schema.operationalShifts)
-      .innerJoin(schema.shiftTemplates, eq(schema.operationalShifts.shiftTemplateId, schema.shiftTemplates.id))
+      .leftJoin(schema.globalShiftTemplates, eq(schema.operationalShifts.shiftTemplateId, schema.globalShiftTemplates.id))
+      .leftJoin(schema.shiftTemplates, eq(schema.operationalShifts.shiftTemplateId, schema.shiftTemplates.id))
       .innerJoin(schema.users, eq(schema.operationalShifts.openedByUserId, schema.users.id))
       .where(eq(schema.operationalShifts.outletId, outletId))
       .orderBy(desc(schema.operationalShifts.businessDate), desc(schema.operationalShifts.startedAt))
@@ -1033,8 +1137,8 @@ export class PumpRepository {
     return rows.map(r => ({
       ...r.shift,
       status: r.shift.status as any,
-      shiftTemplateName: r.template.name,
-      shiftTemplateCode: r.template.code,
+      shiftTemplateName: r.globalTemplate?.name || r.template?.name || 'Unknown',
+      shiftTemplateCode: r.globalTemplate?.code || r.template?.code || 'UNKNOWN',
       openedByName: r.openedBy.name,
     }));
   }
@@ -1044,11 +1148,13 @@ export class PumpRepository {
       .select({
         shift: schema.operationalShifts,
         template: schema.shiftTemplates,
+        globalTemplate: schema.globalShiftTemplates,
         openedBy: schema.users,
         outlet: schema.retailOutlets,
       })
       .from(schema.operationalShifts)
-      .innerJoin(schema.shiftTemplates, eq(schema.operationalShifts.shiftTemplateId, schema.shiftTemplates.id))
+      .leftJoin(schema.globalShiftTemplates, eq(schema.operationalShifts.shiftTemplateId, schema.globalShiftTemplates.id))
+      .leftJoin(schema.shiftTemplates, eq(schema.operationalShifts.shiftTemplateId, schema.shiftTemplates.id))
       .innerJoin(schema.users, eq(schema.operationalShifts.openedByUserId, schema.users.id))
       .innerJoin(schema.retailOutlets, eq(schema.operationalShifts.outletId, schema.retailOutlets.id))
       .where(eq(schema.operationalShifts.id, id));
@@ -1064,8 +1170,8 @@ export class PumpRepository {
     return {
       ...row.shift,
       status: row.shift.status as any,
-      shiftTemplateName: row.template.name,
-      shiftTemplateCode: row.template.code,
+      shiftTemplateName: row.globalTemplate?.name || row.template?.name || 'Unknown',
+      shiftTemplateCode: row.globalTemplate?.code || row.template?.code || 'UNKNOWN',
       openedByName: row.openedBy.name,
       closedByName,
       outletName: row.outlet.name,

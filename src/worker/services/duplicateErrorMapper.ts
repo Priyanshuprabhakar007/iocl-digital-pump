@@ -60,6 +60,16 @@ const UNIQUE_CONSTRAINT_MAP: Array<{
     message: 'A nozzle with this nozzle number already exists on this dispenser.',
   },
   {
+    pattern: 'global_shift_templates',
+    code: 'CONFLICT',
+    message: 'A global shift template with this code already exists.',
+  },
+  {
+    pattern: 'uq_global_shift_templates_code',
+    code: 'CONFLICT',
+    message: 'A global shift template with this code already exists.',
+  },
+  {
     pattern: 'shift_templates',
     code: 'SHIFT_TEMPLATE_CODE_EXISTS',
     message: 'A shift template with this code already exists at this outlet.',
@@ -208,6 +218,16 @@ const UNIQUE_CONSTRAINT_MAP: Array<{
     pattern: 'nfr_rent_payments',
     code: 'DUPLICATE_RENT_PAYMENT_REFERENCE',
     message: 'A rent payment with this reference number already exists for this rent due.',
+  },
+  {
+    pattern: 'global_hr_designations',
+    code: 'CONFLICT',
+    message: 'A global HR designation with this code already exists.',
+  },
+  {
+    pattern: 'uq_global_hr_designations_code',
+    code: 'CONFLICT',
+    message: 'A global HR designation with this code already exists.',
   },
   {
     pattern: 'hr_designations',

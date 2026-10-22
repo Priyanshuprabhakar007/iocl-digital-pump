@@ -99,7 +99,7 @@ export const HrDesignationModal: React.FC<HrDesignationModalProps> = ({
         };
 
         const res = await apiFetch<HrDesignation>(
-          `/api/v1/outlets/${outletId}/hr/designations`,
+          `/api/v1/hr/designations`,
           {
             method: 'POST',
             body: JSON.stringify(payload),

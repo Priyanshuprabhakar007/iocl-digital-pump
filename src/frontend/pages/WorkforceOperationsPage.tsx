@@ -196,12 +196,12 @@ export const WorkforceOperationsPage: React.FC = () => {
         `/api/v1/outlets/${outletId}/hr/manpower-summary`
       );
       const staffRefPromise = apiFetch<HrStaff[]>(`/api/v1/outlets/${outletId}/hr/staff`);
-      const desigRefPromise = apiFetch<HrDesignation[]>(`/api/v1/outlets/${outletId}/hr/designations`);
+      const desigRefPromise = apiFetch<HrDesignation[]>('/api/v1/hr/designations?status=ACTIVE');
       const sanctionsPromise = apiFetch<HrManpowerSanction[]>(
         `/api/v1/outlets/${outletId}/hr/manpower-sanctions`
       );
       const shiftTemplatesPromise = canReadShiftTemplates
-        ? apiFetch<ShiftTemplate[]>(`/api/v1/outlets/${outletId}/shift-templates`)
+        ? apiFetch<ShiftTemplate[]>('/api/v1/shift-templates?status=ACTIVE')
         : Promise.resolve({ success: false, data: [] });
 
       try {
@@ -323,7 +323,7 @@ export const WorkforceOperationsPage: React.FC = () => {
 
       try {
         const res = await apiFetch<HrDesignation[]>(
-          `/api/v1/outlets/${outletId}/hr/designations${query}`
+          `/api/v1/hr/designations${query}`
         );
         if (activeOutletReqRef.current !== outletId) return;
         if (res.success && Array.isArray(res.data)) {

@@ -553,7 +553,7 @@ export function getEligibleStaffDesignations(
 ): HrDesignation[] {
   let list = designations;
   if (outletId) {
-    list = list.filter(d => d.outletId === outletId);
+    list = list.filter(d => !d.outletId || d.outletId === outletId);
   }
 
   return list.filter(d => {
@@ -593,7 +593,7 @@ export function getEligibleRosterShiftTemplates(
 ): ShiftTemplate[] {
   let list = templates;
   if (outletId) {
-    list = list.filter(t => t.outletId === outletId);
+    list = list.filter(t => !t.outletId || t.outletId === outletId);
   }
 
   const eligible = list.filter(t => {

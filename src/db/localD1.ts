@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
 import { assertNoDuplicateRecordsBeforeMigration } from './duplicateDiagnostic';
+import { assertNoGlobalMasterConflictsBeforeMigration } from './globalMasterDiagnostic';
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 
@@ -186,7 +187,8 @@ function ensureMigratedTemplate(migrationsDir: string): string | null {
     tdb = new BetterSqlite(tplPath);
   }
 
-  tdb.exec('PRAGMA foreign_keys = ON;');
+  tdb.exec('PRAGMA foreign_keys = OFF;');
+  tdb.exec('PRAGMA legacy_alter_table = ON;');
   tdb.exec(`
     CREATE TABLE IF NOT EXISTS _d1_migrations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,6 +207,8 @@ function ensureMigratedTemplate(migrationsDir: string): string | null {
       tdb.query('INSERT INTO _d1_migrations (name) VALUES (?)').run(file);
     }
   }
+  tdb.exec('PRAGMA legacy_alter_table = OFF;');
+  tdb.exec('PRAGMA foreign_keys = ON;');
   tdb.close();
   cachedTemplatePath = tplPath;
   process.once('exit', () => {
@@ -301,6 +305,9 @@ export class LocalD1Database {
           if (file === '0031_idempotency_and_unique_constraints.sql' && applied.size > 0) {
             assertNoDuplicateRecordsBeforeMigration(this.db);
           }
+          if (file === '0032_global_designation_and_shift_masters.sql') {
+            assertNoGlobalMasterConflictsBeforeMigration(this.db);
+          }
           const sql = getMigrationSql(migrationsDir, file);
           this.db.exec(sql);
           if (typeof this.db.prepare === 'function') {
@@ -349,6 +356,10 @@ export class LocalD1Database {
     };
   }
 
+  getNativeDb(): SqliteDb {
+    return this.db;
+  }
+
   close(): void {
     try {
       this.db.close();
@@ -361,6 +372,6 @@ export class LocalD1Database {
 export function createLocalD1Database(
   dbPath = './.sqlite/iocl_local.db',
   options?: LocalD1Options
-): D1Database & { close: () => void } {
-  return new LocalD1Database(dbPath, options) as unknown as D1Database & { close: () => void };
+): D1Database & { close: () => void; getNativeDb: () => any } {
+  return new LocalD1Database(dbPath, options) as unknown as D1Database & { close: () => void; getNativeDb: () => any };
 }
