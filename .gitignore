@@ -16,3 +16,5 @@ coverage/
 .d1_counts/
 demo-seed.sql
 package-lock.json
+bun.lock
+bun.lockb
