@@ -38,16 +38,19 @@ outlets.get('/', requirePermission(PERMISSIONS.OUTLETS_READ) as any, async (c: A
     targetOutlets = await ScopeService.getAccessibleOutlets(userCtx, outletRepo);
   }
 
-  const listWithAssignments = await Promise.all(
-    targetOutlets.map(async (o) => {
-      const assignments = await outletRepo.listOutletAssignments(o.id);
-      return {
-        ...o,
-        assignedUsersCount: assignments.length,
-        assignments,
-      };
-    })
-  );
+  const outletIds = targetOutlets.map(o => o.id);
+  const assignmentsMap = await outletRepo.listOutletAssignmentsByOutletIds(outletIds);
+
+  const allowArchivedAssignments = includeHiddenParam || includeArchivedParam || onlyArchivedParam;
+  const listWithAssignments = targetOutlets.map((o) => {
+    const isArchived = OutletRepository.isOutletArchived(o);
+    const assignments = (!allowArchivedAssignments && isArchived) ? [] : (assignmentsMap.get(o.id) || []);
+    return {
+      ...o,
+      assignedUsersCount: assignments.length,
+      assignments,
+    };
+  });
 
   return c.json({
     success: true,

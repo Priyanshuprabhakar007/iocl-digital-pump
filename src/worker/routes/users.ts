@@ -28,17 +28,26 @@ users.get('/', requirePermission(PERMISSIONS.USERS_READ) as any, async (c: AppCo
   // Derive users within organizational scope hierarchy (State -> Division -> Sales Area -> Outlet)
   const accessibleUsers = await ScopeService.getAccessibleUsers(c.var.user, userRepo, scopeRepo, hierarchyRepo, outletRepo);
 
-  const userListWithRoles = await Promise.all(
-    accessibleUsers.map(async (u) => {
-      const roles = await userRepo.getUserRoles(u.id);
-      const scopes = await scopeRepo.getUserScopes(u.id);
-      return {
-        ...u,
-        roles,
-        scopes,
-      };
-    })
-  );
+  const limitParam = c.req.query('limit');
+  const offsetParam = c.req.query('offset');
+  let targetUsers = accessibleUsers;
+  if (limitParam !== undefined) {
+    const limit = Math.min(200, Math.max(1, parseInt(limitParam, 10) || 50));
+    const offset = offsetParam ? Math.max(0, parseInt(offsetParam, 10) || 0) : 0;
+    targetUsers = accessibleUsers.slice(offset, offset + limit);
+  }
+
+  const userIds = targetUsers.map(u => u.id);
+  const [roleMap, scopeMap] = await Promise.all([
+    userRepo.getUserRolesByUserIds(userIds),
+    scopeRepo.getUserScopesByUserIds(userIds),
+  ]);
+
+  const userListWithRoles = targetUsers.map((u) => ({
+    ...u,
+    roles: roleMap.get(u.id) || [],
+    scopes: scopeMap.get(u.id) || [],
+  }));
 
   return c.json({
     success: true,

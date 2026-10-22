@@ -43,6 +43,14 @@ documents.get('/', requirePermission(PERMISSIONS.DOCUMENTS_READ) as any, async (
     docsList = [];
   }
 
+  const limitParam = c.req.query('limit');
+  const offsetParam = c.req.query('offset');
+  if (limitParam !== undefined) {
+    const limit = Math.min(200, Math.max(1, parseInt(limitParam, 10) || 50));
+    const offset = offsetParam ? Math.max(0, parseInt(offsetParam, 10) || 0) : 0;
+    docsList = docsList.slice(offset, offset + limit);
+  }
+
   const result = docsList.map(r => ({
     id: r.doc.id,
     r2Key: r.doc.r2Key,

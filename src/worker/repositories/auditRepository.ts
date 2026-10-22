@@ -43,7 +43,7 @@ export class AuditRepository {
     });
   }
 
-  async listLogs(limit = 100): Promise<AuditLog[]> {
+  async listLogs(limit = 100, offset = 0): Promise<AuditLog[]> {
     const res = await this.db
       .select({
         log: schema.auditLogs,
@@ -53,7 +53,8 @@ export class AuditRepository {
       .from(schema.auditLogs)
       .leftJoin(schema.users, eq(schema.auditLogs.userId, schema.users.id))
       .orderBy(desc(schema.auditLogs.createdAt))
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
 
     return res.map(r => ({
       id: r.log.id,

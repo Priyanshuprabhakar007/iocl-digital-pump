@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserContext, RoleCode, PermissionCode } from '../../shared/types';
-import { apiFetch, setAuthToken } from '../services/api';
+import { apiFetch, setAuthToken, clearApiCache } from '../services/api';
 
 interface AuthContextType {
   userCtx: UserContext | null;
@@ -42,6 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     fetchMe();
     const handleArchivedRevocation = (e: Event) => {
+      clearApiCache();
       setAuthToken(null);
       setUserCtx(null);
       setArchivedNotice('Your assigned retail outlet is archived/inactive.');
@@ -53,6 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    clearApiCache();
     setArchivedNotice(null);
     const res = await apiFetch<any>('/api/v1/auth/login', {
       method: 'POST',
@@ -94,6 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     await apiFetch('/api/v1/auth/logout', { method: 'POST' });
+    clearApiCache();
     setAuthToken(null);
     setUserCtx(null);
   };

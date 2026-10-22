@@ -79,6 +79,11 @@ export function isOriginAllowed(origin: string | undefined, reqUrl: string, env?
   return allowedOrigins.includes(origin);
 }
 
+import { timingMiddleware } from './middleware/timing';
+
+// Request performance timing and Server-Timing instrumentation
+app.use('*', timingMiddleware);
+
 // Strict CORS and State-Changing Origin Validation Middleware
 app.use('*', async (c, next) => {
   const origin = c.req.header('origin');
@@ -105,6 +110,7 @@ app.use('*', async (c, next) => {
       c.header('Access-Control-Allow-Credentials', 'true');
       c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
       c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie, Idempotency-Key');
+      c.header('Access-Control-Expose-Headers', 'Server-Timing');
       return c.body(null, 204);
     }
     return c.body(null, 403);
@@ -116,6 +122,7 @@ app.use('*', async (c, next) => {
   if (origin && allowed) {
     c.header('Access-Control-Allow-Origin', origin);
     c.header('Access-Control-Allow-Credentials', 'true');
+    c.header('Access-Control-Expose-Headers', 'Server-Timing');
   }
 });
 

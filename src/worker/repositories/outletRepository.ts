@@ -366,6 +366,44 @@ export class OutletRepository {
     }));
   }
 
+  async listOutletAssignmentsByOutletIds(
+    outletIds: string[]
+  ): Promise<Map<string, OutletUserAssignment[]>> {
+    const map = new Map<string, OutletUserAssignment[]>();
+    for (const id of outletIds) {
+      map.set(id, []);
+    }
+    if (outletIds.length === 0) return map;
+
+    const res = await this.db
+      .select({
+        assignment: schema.outletUserAssignments,
+        userName: schema.users.name,
+        userEmail: schema.users.email,
+        userEmpCode: schema.users.empCode,
+      })
+      .from(schema.outletUserAssignments)
+      .innerJoin(schema.users, eq(schema.outletUserAssignments.userId, schema.users.id))
+      .where(inArray(schema.outletUserAssignments.outletId, outletIds));
+
+    for (const r of res) {
+      const item = {
+        ...r.assignment,
+        userName: r.userName,
+        userEmail: r.userEmail,
+        userEmpCode: r.userEmpCode,
+      } as any;
+      const list = map.get(r.assignment.outletId);
+      if (list) {
+        list.push(item);
+      } else {
+        map.set(r.assignment.outletId, [item]);
+      }
+    }
+
+    return map;
+  }
+
   async getUserOutletAssignments(userId: string, options?: { includeArchived?: boolean }): Promise<OutletUserAssignment[]> {
     const res = await this.db
       .select({

@@ -85,6 +85,34 @@ export class UserRepository {
     return rows.map(r => r.code as RoleCode);
   }
 
+  async getUserRolesByUserIds(userIds: string[]): Promise<Map<string, RoleCode[]>> {
+    const map = new Map<string, RoleCode[]>();
+    for (const uid of userIds) {
+      map.set(uid, []);
+    }
+    if (userIds.length === 0) return map;
+
+    const rows = await this.db
+      .select({
+        userId: schema.userRoles.userId,
+        code: schema.roles.code,
+      })
+      .from(schema.userRoles)
+      .innerJoin(schema.roles, eq(schema.userRoles.roleId, schema.roles.id))
+      .where(inArray(schema.userRoles.userId, userIds));
+
+    for (const r of rows) {
+      const list = map.get(r.userId);
+      if (list) {
+        list.push(r.code as RoleCode);
+      } else {
+        map.set(r.userId, [r.code as RoleCode]);
+      }
+    }
+
+    return map;
+  }
+
   async getUserInheritedPermissions(userId: string): Promise<PermissionCode[]> {
     // Join user_roles -> role_permissions -> permissions
     const rows = await this.db
@@ -131,8 +159,10 @@ export class UserRepository {
   }
 
   async getUserPermissions(userId: string): Promise<PermissionCode[]> {
-    const inherited = await this.getUserInheritedPermissions(userId);
-    const overrides = await this.getUserPermissionOverrides(userId);
+    const [inherited, overrides] = await Promise.all([
+      this.getUserInheritedPermissions(userId),
+      this.getUserPermissionOverrides(userId),
+    ]);
 
     const effective = new Set<PermissionCode>(inherited);
     for (const override of overrides) {

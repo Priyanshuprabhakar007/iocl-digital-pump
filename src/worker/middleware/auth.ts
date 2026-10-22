@@ -29,17 +29,33 @@ export type AppContext = Context<{
   Variables: {
     user: UserContext;
     sessionToken: string;
+    authDurationMs?: number;
+    dbDurationMs?: number;
+    recordAuthDuration?: (dur: number) => void;
+    recordDbDuration?: (dur: number) => void;
+    _idempotencyChecked?: boolean;
   };
 }>;
 
 export async function requireAuth(c: AppContext, next: Next) {
+  const authStart = performance.now();
+  const finishAuth = () => {
+    const authDur = performance.now() - authStart;
+    const current = (c.get('authDurationMs') as number | undefined) || 0;
+    c.set('authDurationMs', current + authDur);
+    const rec = c.get('recordAuthDuration');
+    if (typeof rec === 'function') rec(authDur);
+  };
+
   if (c.get('user')) {
+    finishAuth();
     return IdempotencyService.handleAuthenticatedMutation(c, next);
   }
   const authHeader = c.req.header('authorization');
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
   const sessionToken = getCookie(c, COOKIE_NAME) || bearerToken;
   if (!sessionToken) {
+    finishAuth();
     return c.json({
       success: false,
       data: null,
@@ -58,6 +74,7 @@ export async function requireAuth(c: AppContext, next: Next) {
 
   const session = await sessionRepo.findActiveSessionByTokenHash(tokenHash, nowIso);
   if (!session) {
+    finishAuth();
     return c.json({
       success: false,
       data: null,
@@ -67,6 +84,7 @@ export async function requireAuth(c: AppContext, next: Next) {
 
   const user = await userRepo.findById(session.userId);
   if (!user || user.status !== 'ACTIVE') {
+    finishAuth();
     return c.json({
       success: false,
       data: null,
@@ -74,29 +92,38 @@ export async function requireAuth(c: AppContext, next: Next) {
     }, 401);
   }
 
-  const roles = await userRepo.getUserRoles(user.id);
-  const permissions = await userRepo.getUserPermissions(user.id);
-  const scopes = await scopeRepo.getUserScopes(user.id);
-  const allScopes = await scopeRepo.getUserScopes(user.id, { includeArchived: true });
-  const activeOutletAssignments = await outletRepo.getUserOutletAssignments(user.id);
-  const allOutletAssignments = await outletRepo.getUserOutletAssignments(user.id, { includeArchived: true });
+  // Parallelize roles, permissions, scopes, and active outlet assignments in a single concurrent batch
+  const [roles, permissions, scopes, activeOutletAssignments] = await Promise.all([
+    userRepo.getUserRoles(user.id),
+    userRepo.getUserPermissions(user.id),
+    scopeRepo.getUserScopes(user.id),
+    outletRepo.getUserOutletAssignments(user.id),
+  ]);
 
   const isLogoutEndpoint = c.req.path.endsWith('/auth/logout');
   if (
     !isLogoutEndpoint &&
     scopes.length === 0 &&
-    activeOutletAssignments.length === 0 &&
-    (allScopes.length > 0 || allOutletAssignments.length > 0)
+    activeOutletAssignments.length === 0
   ) {
-    await sessionRepo.revokeSession(tokenHash, nowIso);
-    return c.json({
-      success: false,
-      data: null,
-      error: {
-        code: 'OUTLET_ARCHIVED',
-        message: 'Your assigned retail outlet is currently archived/inactive. Please contact the administrator.'
-      }
-    }, 403);
+    // Only query archived scopes/assignments when active assignments are completely empty
+    const [allScopes, allOutletAssignments] = await Promise.all([
+      scopeRepo.getUserScopes(user.id, { includeArchived: true }),
+      outletRepo.getUserOutletAssignments(user.id, { includeArchived: true }),
+    ]);
+
+    if (allScopes.length > 0 || allOutletAssignments.length > 0) {
+      await sessionRepo.revokeSession(tokenHash, nowIso);
+      finishAuth();
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'OUTLET_ARCHIVED',
+          message: 'Your assigned retail outlet is currently archived/inactive. Please contact the administrator.'
+        }
+      }, 403);
+    }
   }
 
   // Session write optimization: throttle last_seen_at write to D1 (only if >15 mins old)
@@ -161,6 +188,7 @@ export async function requireAuth(c: AppContext, next: Next) {
   c.set('user', userContext);
   c.set('sessionToken', sessionToken);
 
+  finishAuth();
   return IdempotencyService.handleAuthenticatedMutation(c, next);
 }
 

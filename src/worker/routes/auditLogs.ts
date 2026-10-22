@@ -14,9 +14,11 @@ auditLogs.get('/', requirePermission(PERMISSIONS.AUDIT_READ) as any, async (c: A
   const repo = new AuditRepository(db);
 
   const limitParam = c.req.query('limit');
-  const limit = limitParam ? parseInt(limitParam, 10) : 100;
+  const offsetParam = c.req.query('offset');
+  const limit = limitParam !== undefined ? Math.min(200, Math.max(1, parseInt(limitParam, 10) || 50)) : 100;
+  const offset = offsetParam !== undefined ? Math.max(0, parseInt(offsetParam, 10) || 0) : 0;
 
-  const logs = await repo.listLogs(limit);
+  const logs = await repo.listLogs(limit, offset);
 
   return c.json({
     success: true,

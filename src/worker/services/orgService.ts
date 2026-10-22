@@ -237,10 +237,26 @@ export class OrgService {
   async listOfficerPostings(officerId?: string, actorCtx?: UserContext) {
     const allPostings = await this.repo.listOfficerPostings(officerId);
 
+    const outletIds = Array.from(
+      new Set(
+        allPostings
+          .filter(p => p.scopeLevel === 'OUTLET' && p.outletId)
+          .map(p => p.outletId as string)
+      )
+    );
+
+    const outletMap = new Map<string, any>();
+    if (outletIds.length > 0) {
+      const outlets = await Promise.all(outletIds.map(id => this.outletRepo.findById(id)));
+      outletIds.forEach((id, idx) => {
+        outletMap.set(id, outlets[idx]);
+      });
+    }
+
     const activePostings: typeof allPostings = [];
     for (const posting of allPostings) {
       if (posting.scopeLevel === 'OUTLET' && posting.outletId) {
-        const outlet = await this.outletRepo.findById(posting.outletId);
+        const outlet = outletMap.get(posting.outletId);
         if (!outlet || OutletRepository.isOutletArchived(outlet)) {
           continue;
         }
@@ -252,30 +268,28 @@ export class OrgService {
       return activePostings;
     }
 
-    const filtered: typeof allPostings = [];
-    for (const posting of activePostings) {
-      const isVisible = await ScopeService.isScopeWithinActorAuthority(
-        actorCtx,
-        {
-          id: posting.id,
-          userId: posting.officerId,
-          scopeLevel: posting.scopeLevel as any,
-          stateId: posting.stateId,
-          divisionId: posting.divisionId,
-          salesAreaId: posting.salesAreaId,
-          outletId: posting.outletId,
-          createdAt: posting.createdAt,
-          createdBy: posting.createdBy,
-        },
-        this.hierarchyRepo,
-        this.outletRepo
-      );
-      if (isVisible) {
-        filtered.push(posting);
-      }
-    }
+    const checks = await Promise.all(
+      activePostings.map(posting =>
+        ScopeService.isScopeWithinActorAuthority(
+          actorCtx,
+          {
+            id: posting.id,
+            userId: posting.officerId,
+            scopeLevel: posting.scopeLevel as any,
+            stateId: posting.stateId,
+            divisionId: posting.divisionId,
+            salesAreaId: posting.salesAreaId,
+            outletId: posting.outletId,
+            createdAt: posting.createdAt,
+            createdBy: posting.createdBy,
+          },
+          this.hierarchyRepo,
+          this.outletRepo
+        )
+      )
+    );
 
-    return filtered;
+    return activePostings.filter((_, idx) => checks[idx]);
   }
 
   async getPostingById(id: string) {

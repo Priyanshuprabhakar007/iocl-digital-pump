@@ -270,19 +270,17 @@ export class NfrService {
   async listSpaces(outletId: string, queryParams: unknown): Promise<NfrSpace[]> {
     const validated = NfrSpaceFilterSchema.parse(queryParams || {});
     const repo = new NfrRepository(this.db);
-    const spaces = await repo.listSpaces(outletId, validated);
-
     const today = new Date().toISOString().slice(0, 10);
-    const result: NfrSpace[] = [];
-    for (const s of spaces) {
-      const isCurrentlyLeased = await repo.isSpaceCurrentlyLeased(s.id, today);
-      result.push({
-        ...s,
-        isCurrentlyLeased,
-      });
-    }
 
-    return result;
+    const [spaces, leasedSpaceIds] = await Promise.all([
+      repo.listSpaces(outletId, validated),
+      repo.getCurrentlyLeasedSpaceIds(outletId, today),
+    ]);
+
+    return spaces.map(s => ({
+      ...s,
+      isCurrentlyLeased: leasedSpaceIds.has(s.id),
+    }));
   }
 
   async updateSpace(outletId: string, spaceId: string, userId: string, data: unknown): Promise<NfrSpace> {

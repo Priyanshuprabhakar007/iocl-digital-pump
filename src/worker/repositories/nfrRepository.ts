@@ -181,6 +181,23 @@ export class NfrRepository {
     return !!row;
   }
 
+  async getCurrentlyLeasedSpaceIds(outletId: string, currentDateStr: string): Promise<Set<string>> {
+    const rows = await this.db
+      .select({ spaceId: nfrLeases.spaceId })
+      .from(nfrLeases)
+      .where(
+        and(
+          eq(nfrLeases.outletId, outletId),
+          eq(nfrLeases.status, 'ACTIVE'),
+          lte(nfrLeases.leaseStartDate, currentDateStr),
+          gte(nfrLeases.leaseEndDate, currentDateStr)
+        )
+      )
+      .all();
+
+    return new Set(rows.map(r => r.spaceId));
+  }
+
   // ==========================================================================
   // VENDORS
   // ==========================================================================

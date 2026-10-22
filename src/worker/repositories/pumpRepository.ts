@@ -1875,10 +1875,12 @@ export class PumpRepository {
     const shift = await this.findOperationalShiftById(shiftId);
     if (!shift) return [];
 
-    // CRITICAL: Retrieve participating nozzles from historical snapshot!
-    const snapshots = await this.listShiftNozzleSnapshots(shiftId);
-    const readings = await this.listReadingsForShift(shiftId);
-    const unavails = await this.listUnavailabilityForShift(shiftId);
+    // CRITICAL: Retrieve participating nozzles from historical snapshot in parallel
+    const [snapshots, readings, unavails] = await Promise.all([
+      this.listShiftNozzleSnapshots(shiftId),
+      this.listReadingsForShift(shiftId),
+      this.listUnavailabilityForShift(shiftId),
+    ]);
 
     const readingMap = new Map<string, NozzleMeterReading>();
     readings.forEach(r => readingMap.set(r.nozzleId, r));
@@ -1886,13 +1888,21 @@ export class PumpRepository {
     const unavailMap = new Map<string, NozzleUnavailabilityRecord>();
     unavails.forEach(u => unavailMap.set(u.nozzleId, u));
 
+    // Parallelize previous reading lookups across all nozzles
+    const prevReadings = await Promise.all(
+      snapshots.map(s => this.getLatestClosedReadingForNozzle(s.nozzleId))
+    );
+    const prevReadingMap = new Map<string, NozzleMeterReading | null>();
+    snapshots.forEach((s, idx) => {
+      prevReadingMap.set(s.nozzleId, prevReadings[idx]);
+    });
+
     const grid: ShiftEntryGridItem[] = [];
 
     for (const snapshot of snapshots) {
       const reading = readingMap.get(snapshot.nozzleId) || null;
       const unavail = unavailMap.get(snapshot.nozzleId) || null;
-
-      const prevReading = await this.getLatestClosedReadingForNozzle(snapshot.nozzleId);
+      const prevReading = prevReadingMap.get(snapshot.nozzleId) || null;
       const suggestedOpeningTotalizer = prevReading ? prevReading.closingTotalizerStr : '0.000';
 
       grid.push({
