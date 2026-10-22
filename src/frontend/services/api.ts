@@ -50,7 +50,11 @@ function isCacheableEndpoint(endpoint: string): boolean {
     endpoint.includes('/auth/me') ||
     endpoint.includes('/auth/login') ||
     endpoint.includes('/auth/logout') ||
-    endpoint.includes('/auth/demo-login')
+    endpoint.includes('/auth/demo-login') ||
+    endpoint.includes('/daily-operations') ||
+    endpoint.includes('/fuel/daily-summary') ||
+    endpoint.includes('/shifts') ||
+    endpoint.includes('/reports')
   ) {
     return false;
   }
@@ -330,4 +334,70 @@ export async function apiFetchBlob(
       },
     };
   }
+}
+
+export async function fetchDailyOperationsBootstrap(outletId: string, businessDate: string) {
+  return apiFetch<import('../../shared/types').DailyOperationsBootstrapResponse>(
+    `/api/v1/outlets/${outletId}/daily-operations?businessDate=${encodeURIComponent(businessDate)}`,
+    { headers: { 'x-skip-cache': 'true' } }
+  );
+}
+
+export async function fetchDailyFuelSummary(outletId: string, businessDate: string) {
+  return apiFetch<import('../../shared/types').DailyFuelSummary>(
+    `/api/v1/outlets/${outletId}/fuel/daily-summary?businessDate=${encodeURIComponent(businessDate)}`,
+    { headers: { 'x-skip-cache': 'true' } }
+  );
+}
+
+export async function saveMeterReadingsBatch(
+  shiftId: string,
+  readings: Array<{
+    nozzleId: string;
+    openingTotalizer: string;
+    closingTotalizer: string;
+    testingQuantity?: string;
+    varianceReason?: string | null;
+  }>
+) {
+  return apiFetch<{
+    shiftId: string;
+    count: number;
+    readings: import('../../shared/types').NozzleMeterReading[];
+    results: Array<{
+      nozzleId: string;
+      action: 'CREATED' | 'UPDATED';
+      reading: import('../../shared/types').NozzleMeterReading;
+    }>;
+  }>(`/api/v1/shifts/${shiftId}/readings/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ readings }),
+  });
+}
+
+export async function saveTankReadingsBatch(
+  shiftId: string,
+  readings: Array<{
+    tankId: string;
+    readingType: 'OPENING' | 'CLOSING' | 'PRE_RECEIPT' | 'POST_RECEIPT' | 'ADHOC';
+    source?: 'MANUAL' | 'ATG';
+    productDipMm: string;
+    waterDipMm?: string;
+    notes?: string | null;
+  }>
+) {
+  return apiFetch<{
+    shiftId: string;
+    count: number;
+    readings: import('../../shared/types').TankStockReading[];
+    results: Array<{
+      tankId: string;
+      readingType: string;
+      action: 'CREATED' | 'UPDATED';
+      reading: import('../../shared/types').TankStockReading;
+    }>;
+  }>(`/api/v1/shifts/${shiftId}/tank-readings/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ readings }),
+  });
 }

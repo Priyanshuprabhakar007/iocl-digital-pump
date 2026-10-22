@@ -1143,6 +1143,35 @@ export class PumpRepository {
     }));
   }
 
+  async listOperationalShiftsByOutletAndDate(outletId: string, businessDate: string): Promise<OperationalShift[]> {
+    const rows = await this.db
+      .select({
+        shift: schema.operationalShifts,
+        template: schema.shiftTemplates,
+        globalTemplate: schema.globalShiftTemplates,
+        openedBy: schema.users,
+      })
+      .from(schema.operationalShifts)
+      .leftJoin(schema.globalShiftTemplates, eq(schema.operationalShifts.shiftTemplateId, schema.globalShiftTemplates.id))
+      .leftJoin(schema.shiftTemplates, eq(schema.operationalShifts.shiftTemplateId, schema.shiftTemplates.id))
+      .innerJoin(schema.users, eq(schema.operationalShifts.openedByUserId, schema.users.id))
+      .where(
+        and(
+          eq(schema.operationalShifts.outletId, outletId),
+          eq(schema.operationalShifts.businessDate, businessDate)
+        )
+      )
+      .orderBy(asc(schema.operationalShifts.startedAt), asc(schema.operationalShifts.createdAt));
+
+    return rows.map(r => ({
+      ...r.shift,
+      status: r.shift.status as any,
+      shiftTemplateName: r.globalTemplate?.name || r.template?.name || 'Unknown',
+      shiftTemplateCode: r.globalTemplate?.code || r.template?.code || 'UNKNOWN',
+      openedByName: r.openedBy.name,
+    }));
+  }
+
   async findOperationalShiftById(id: string): Promise<OperationalShift | null> {
     const [row] = await this.db
       .select({
@@ -2532,6 +2561,99 @@ export class PumpRepository {
     return { success: true, reading };
   }
 
+  async findLatestClosedTankClosingReading(
+    outletId: string,
+    tankId: string
+  ): Promise<{
+    productDipMmMilliunits: number;
+    productDipMmStr: string;
+    waterDipMmMilliunits: number;
+    waterDipMmStr: string;
+    netProductVolumeMilliunits: number;
+    netProductVolumeStr: string;
+    shiftId: string;
+    businessDate: string;
+  } | null> {
+    const rows = await this.db
+      .select({
+        reading: schema.tankStockReadings,
+        shift: schema.operationalShifts,
+      })
+      .from(schema.tankStockReadings)
+      .innerJoin(schema.operationalShifts, eq(schema.tankStockReadings.operationalShiftId, schema.operationalShifts.id))
+      .where(
+        and(
+          eq(schema.tankStockReadings.outletId, outletId),
+          eq(schema.tankStockReadings.tankId, tankId),
+          eq(schema.tankStockReadings.readingType, 'CLOSING'),
+          eq(schema.operationalShifts.status, 'CLOSED')
+        )
+      )
+      .orderBy(desc(schema.operationalShifts.businessDate), desc(schema.operationalShifts.startedAt))
+      .limit(1);
+
+    if (!rows || rows.length === 0) return null;
+    const item = rows[0];
+    return {
+      productDipMmMilliunits: item.reading.productDipMmMilliunits,
+      productDipMmStr: formatMilliunits(item.reading.productDipMmMilliunits),
+      waterDipMmMilliunits: item.reading.waterDipMmMilliunits,
+      waterDipMmStr: formatMilliunits(item.reading.waterDipMmMilliunits),
+      netProductVolumeMilliunits: item.reading.netProductVolumeMilliunits,
+      netProductVolumeStr: formatMilliunits(item.reading.netProductVolumeMilliunits),
+      shiftId: item.shift.id,
+      businessDate: item.shift.businessDate,
+    };
+  }
+
+  async updateTankReadingConditional(
+    id: string,
+    operationalShiftId: string,
+    data: {
+      source: TankReadingSource;
+      productDipMmMilliunits: number;
+      waterDipMmMilliunits: number;
+      grossObservedVolumeMilliunits: number;
+      waterVolumeMilliunits: number;
+      netProductVolumeMilliunits: number;
+      recordedAt: string;
+      recordedByUserId: string;
+      notes?: string | null;
+      updatedAt: string;
+    }
+  ): Promise<{ success: boolean; reading: TankStockReading | null; shiftClosed?: boolean; error?: string }> {
+    const updatedRows = await this.db.all<{ id: string }>(
+      sql`UPDATE tank_stock_readings
+          SET
+            source = ${data.source},
+            product_dip_mm_milliunits = ${data.productDipMmMilliunits},
+            water_dip_mm_milliunits = ${data.waterDipMmMilliunits},
+            gross_observed_volume_milliunits = ${data.grossObservedVolumeMilliunits},
+            water_volume_milliunits = ${data.waterVolumeMilliunits},
+            net_product_volume_milliunits = ${data.netProductVolumeMilliunits},
+            recorded_at = ${data.recordedAt},
+            recorded_by_user_id = ${data.recordedByUserId},
+            notes = ${data.notes || null},
+            updated_at = ${data.updatedAt}
+          WHERE id = ${id} AND operational_shift_id = ${operationalShiftId}
+            AND EXISTS (
+              SELECT 1 FROM operational_shifts WHERE id = ${operationalShiftId} AND status = 'OPEN'
+            )
+          RETURNING id`
+    );
+
+    if (!updatedRows || updatedRows.length === 0) {
+      const shift = await this.findOperationalShiftById(operationalShiftId);
+      if (!shift || shift.status !== 'OPEN') {
+        return { success: false, reading: null, shiftClosed: true, error: 'SHIFT_CLOSED' };
+      }
+      return { success: false, reading: null, error: 'NOT_FOUND' };
+    }
+
+    const reading = await this.findTankReadingById(id);
+    return { success: true, reading };
+  }
+
   async createTankReading(data: {
     id: string;
     operationalShiftId: string;
@@ -3264,6 +3386,35 @@ export class PumpRepository {
       byTank,
       byProduct,
     };
+  }
+
+  async listShiftStockReconciliations(shiftId: string): Promise<ShiftStockReconciliation[]> {
+    const rows = await this.db
+      .select({
+        recon: schema.shiftStockReconciliations,
+        tank: schema.tanks,
+        product: schema.products,
+      })
+      .from(schema.shiftStockReconciliations)
+      .leftJoin(schema.tanks, eq(schema.shiftStockReconciliations.tankId, schema.tanks.id))
+      .leftJoin(schema.products, eq(schema.shiftStockReconciliations.productId, schema.products.id))
+      .where(eq(schema.shiftStockReconciliations.operationalShiftId, shiftId));
+
+    return rows.map(r => ({
+      ...r.recon,
+      varianceStatus: r.recon.varianceStatus as VarianceStatus,
+      openingStockStr: formatMilliunits(r.recon.openingStockMilliunits),
+      receiptQuantityStr: formatMilliunits(r.recon.receiptQuantityMilliunits),
+      salesQuantityStr: formatMilliunits(r.recon.salesQuantityMilliunits),
+      theoreticalClosingStockStr: formatMilliunits(r.recon.theoreticalClosingStockMilliunits),
+      physicalClosingStockStr: formatMilliunits(r.recon.physicalClosingStockMilliunits),
+      varianceStr: formatMilliunits(r.recon.varianceMilliunits),
+      tankNumber: r.tank?.tankNumber,
+      tankName: r.tank?.name,
+      productCode: r.product?.code,
+      productName: r.product?.name,
+      productUnit: (r.product?.unit as ProductUnit) || 'LITRE',
+    }));
   }
 
   async deleteStockReconciliation(shiftId: string): Promise<void> {

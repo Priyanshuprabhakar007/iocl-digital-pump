@@ -1675,10 +1675,43 @@ export const MonthlyOperationsReportQuerySchema = z.object({
   path: ['cutoffDate'],
 });
 
+// ==========================================
+// Phase 3: Daily Fuel Operations + DSR Validators
+// ==========================================
 
+export const DailyOperationsQuerySchema = z.object({
+  businessDate: StrictDateOnlySchema,
+});
 
+export const BatchMeterReadingSchema = z.object({
+  readings: z.array(MeterReadingSchema).min(1, 'At least one meter reading is required'),
+}).refine((data) => {
+  const seen = new Set<string>();
+  for (const r of data.readings) {
+    if (seen.has(r.nozzleId)) {
+      return false;
+    }
+    seen.add(r.nozzleId);
+  }
+  return true;
+}, {
+  message: 'Duplicate nozzleId in batch readings payload is not allowed',
+  path: ['readings'],
+});
 
-
-
-
-
+export const BatchTankStockReadingSchema = z.object({
+  readings: z.array(TankStockReadingSchema).min(1, 'At least one tank reading is required'),
+}).refine((data) => {
+  const seen = new Set<string>();
+  for (const r of data.readings) {
+    const key = `${r.tankId}:${r.readingType}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+  }
+  return true;
+}, {
+  message: 'Duplicate tankId + readingType in batch tank readings payload is not allowed',
+  path: ['readings'],
+});

@@ -9,7 +9,9 @@ import { requirePermission } from '../middleware/permission';
 import {
   OpenShiftSchema,
   MeterReadingSchema,
+  BatchMeterReadingSchema,
   NozzleUnavailabilitySchema,
+  DailyOperationsQuerySchema,
 } from '../../shared/validators';
 import { PERMISSIONS } from '../../shared/constants';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
@@ -18,6 +20,7 @@ import { CngRepository } from '../repositories/cngRepository';
 import { LubeRepository } from '../repositories/lubeRepository';
 import { FinancialService } from '../services/financialService';
 import { ShiftCloseService } from '../services/shiftCloseService';
+import { FuelDailyOperationsService } from '../services/fuelDailyOperationsService';
 
 export const shifts = new Hono<{ Bindings: EnvBindings }>();
 
@@ -683,6 +686,322 @@ shifts.get('/shifts/:shiftId/sales-summary', requirePermission(PERMISSIONS.METER
 
   const summary = await pumpRepo.getSalesSummary(shiftId);
   return c.json({ success: true, data: summary, error: null });
+});
+
+// ==========================================
+// 5. PHASE 3: BATCH METER READINGS & DAILY OPERATIONS / DSR
+// ==========================================
+
+// POST /api/v1/shifts/:shiftId/readings/batch - Atomic/idempotent batch nozzle meter readings
+shifts.post('/shifts/:shiftId/readings/batch', requirePermission(PERMISSIONS.METER_READINGS_WRITE) as any, async (c: AppContext) => {
+  const shiftId = c.req.param('shiftId');
+  if (!shiftId) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'shiftId is required' } }, 400);
+
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+  const pumpRepo = new PumpRepository(db);
+  const auditRepo = new AuditRepository(db);
+
+  const shift = await pumpRepo.findOperationalShiftById(shiftId);
+  if (!shift) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Operational shift not found' } }, 404);
+  }
+
+  if (!await verifyOutletAuthority(c, shift.outletId, outletRepo)) {
+    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this shift outlet' } }, 403);
+  }
+
+  if (shift.status === 'CLOSED' || shift.status === 'LOCKED') {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'SHIFT_CLOSED',
+        message: `Operational shift is ${shift.status}. Modifying meter readings on a closed or locked shift is prohibited.`,
+      },
+    }, 409);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const parseResult = BatchMeterReadingSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'VALIDATION_ERROR', message: 'Invalid batch reading payload', details: parseResult.error.flatten() },
+    }, 400);
+  }
+
+  const snapshots = await pumpRepo.listShiftNozzleSnapshots(shiftId);
+  const snapshotMap = new Map(snapshots.map((s) => [s.nozzleId, s]));
+
+  interface PreparedReadingRow {
+    nozzleId: string;
+    openingMilli: number;
+    closingMilli: number;
+    testingMilli: number;
+    grossMilli: number;
+    netMilli: number;
+    hasOpeningVariance: boolean;
+    openingVarianceMilliunits: number;
+    finalVarianceReason: string | null;
+  }
+
+  const preparedRows: PreparedReadingRow[] = [];
+
+  // Phase 1: Validate every row before persisting anything (no partial corruption)
+  for (let i = 0; i < parseResult.data.readings.length; i++) {
+    const item = parseResult.data.readings[i];
+    const snap = snapshotMap.get(item.nozzleId);
+    if (!snap) {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'INVALID_NOZZLE',
+          message: `Nozzle ${item.nozzleId} at index ${i} was not part of the active snapshot for this operational shift`,
+          details: { index: i, nozzleId: item.nozzleId },
+        },
+      }, 400);
+    }
+
+    let openingMilli: number;
+    let closingMilli: number;
+    let testingMilli: number;
+    try {
+      openingMilli = parseMilliunits(item.openingTotalizer);
+      closingMilli = parseMilliunits(item.closingTotalizer);
+      testingMilli = parseMilliunits(item.testingQuantity || '0.000');
+    } catch (err: any) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'VALIDATION_ERROR', message: err.message, details: { index: i, nozzleId: item.nozzleId } },
+      }, 400);
+    }
+
+    if (closingMilli < openingMilli) {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Closing totalizer must be greater than or equal to opening totalizer for nozzle ${snap.nozzleNumber}`,
+          details: { index: i, nozzleId: item.nozzleId },
+        },
+      }, 400);
+    }
+
+    const grossMilli = closingMilli - openingMilli;
+    if (testingMilli > grossMilli) {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Testing quantity (${formatMilliunits(testingMilli)}) cannot exceed gross sales quantity (${formatMilliunits(grossMilli)}) for nozzle ${snap.nozzleNumber}`,
+          details: { index: i, nozzleId: item.nozzleId },
+        },
+      }, 400);
+    }
+
+    const netMilli = grossMilli - testingMilli;
+    const latestPrev = await pumpRepo.getLatestClosedReadingForNozzle(item.nozzleId);
+    let hasOpeningVariance = false;
+    let openingVarianceMilliunits = 0;
+    let finalVarianceReason: string | null = null;
+
+    if (latestPrev && latestPrev.closingTotalizerMilliunits !== undefined) {
+      const prevClosingMilli = latestPrev.closingTotalizerMilliunits;
+      if (openingMilli !== prevClosingMilli) {
+        if (!item.varianceReason || item.varianceReason.trim().length === 0) {
+          return c.json({
+            success: false,
+            data: null,
+            error: {
+              code: 'VARIANCE_REASON_REQUIRED',
+              message: `Opening totalizer (${formatMilliunits(openingMilli)}) differs from previous shift closing totalizer (${formatMilliunits(prevClosingMilli)}) for DU ${snap.dispenserNumber} / Nozzle ${snap.nozzleNumber}. A varianceReason is required.`,
+              details: {
+                index: i,
+                nozzleId: item.nozzleId,
+                enteredOpening: formatMilliunits(openingMilli),
+                previousClosing: formatMilliunits(prevClosingMilli),
+                varianceQuantity: formatMilliunits(openingMilli - prevClosingMilli),
+              },
+            },
+          }, 400);
+        }
+        hasOpeningVariance = true;
+        openingVarianceMilliunits = openingMilli - prevClosingMilli;
+        finalVarianceReason = item.varianceReason.trim();
+      }
+    }
+
+    preparedRows.push({
+      nozzleId: item.nozzleId,
+      openingMilli,
+      closingMilli,
+      testingMilli,
+      grossMilli,
+      netMilli,
+      hasOpeningVariance,
+      openingVarianceMilliunits,
+      finalVarianceReason,
+    });
+  }
+
+  // Phase 2: Persist all validated rows idempotently
+  const nowIso = new Date().toISOString();
+  const savedReadings = [];
+  const results = [];
+
+  for (const row of preparedRows) {
+    const existingReading = await pumpRepo.findReadingByShiftAndNozzle(shiftId, row.nozzleId);
+    let resultReading;
+    let action: 'CREATED' | 'UPDATED' = 'CREATED';
+
+    if (existingReading) {
+      action = 'UPDATED';
+      const res = await pumpRepo.updateReading(shiftId, row.nozzleId, {
+        openingMilliunits: row.openingMilli,
+        closingMilliunits: row.closingMilli,
+        testingMilliunits: row.testingMilli,
+        grossMilliunits: row.grossMilli,
+        netMilliunits: row.netMilli,
+        hasOpeningVariance: row.hasOpeningVariance,
+        openingVarianceMilliunits: row.openingVarianceMilliunits,
+        varianceReason: row.finalVarianceReason,
+        updatedAt: nowIso,
+      });
+      if (res.shiftClosed) {
+        return c.json({
+          success: false,
+          data: null,
+          error: { code: 'SHIFT_CLOSED', message: 'Operational shift is CLOSED. Modifying meter readings on a closed shift is prohibited.' },
+        }, 409);
+      }
+      resultReading = res.reading!;
+    } else {
+      const res = await pumpRepo.createReading({
+        id: `nmr-${crypto.randomUUID()}`,
+        operationalShiftId: shiftId,
+        outletId: shift.outletId,
+        nozzleId: row.nozzleId,
+        openingMilliunits: row.openingMilli,
+        closingMilliunits: row.closingMilli,
+        testingMilliunits: row.testingMilli,
+        grossMilliunits: row.grossMilli,
+        netMilliunits: row.netMilli,
+        recordedByUserId: c.var.user!.user.id,
+        hasOpeningVariance: row.hasOpeningVariance,
+        openingVarianceMilliunits: row.openingVarianceMilliunits,
+        varianceReason: row.finalVarianceReason,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+      if (res.shiftClosed) {
+        return c.json({
+          success: false,
+          data: null,
+          error: { code: 'SHIFT_CLOSED', message: 'Operational shift is CLOSED. Modifying meter readings on a closed shift is prohibited.' },
+        }, 409);
+      }
+      resultReading = res.reading!;
+    }
+
+    await pumpRepo.removeUnavailability(shiftId, row.nozzleId);
+    savedReadings.push(resultReading);
+    results.push({
+      nozzleId: row.nozzleId,
+      action,
+      reading: resultReading,
+    });
+  }
+
+  await auditRepo.logAction({
+    id: `aud-${crypto.randomUUID()}`,
+    userId: c.var.user!.user.id,
+    action: 'METER_READING_BATCH_SAVE',
+    entityType: 'OPERATIONAL_SHIFT',
+    entityId: shiftId,
+    newValue: { count: savedReadings.length, nozzleIds: preparedRows.map((r) => r.nozzleId) },
+    ipAddress: c.req.header('cf-connecting-ip') || null,
+    userAgent: c.req.header('user-agent') || null,
+    createdAt: nowIso,
+  });
+
+  return c.json({
+    success: true,
+    data: {
+      shiftId,
+      count: savedReadings.length,
+      readings: savedReadings,
+      results,
+    },
+    error: null,
+  }, 200);
+});
+
+// GET /api/v1/outlets/:outletId/fuel/daily-summary?businessDate=YYYY-MM-DD
+shifts.get('/outlets/:outletId/fuel/daily-summary', requirePermission(PERMISSIONS.SHIFTS_READ) as any, async (c: AppContext) => {
+  const outletId = c.req.param('outletId');
+  if (!outletId) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'outletId is required' } }, 400);
+
+  const businessDate = c.req.query('businessDate');
+  const queryValidation = DailyOperationsQuerySchema.safeParse({ businessDate });
+  if (!queryValidation.success) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'VALIDATION_ERROR', message: 'Valid businessDate (YYYY-MM-DD) is required', details: queryValidation.error.flatten() },
+    }, 400);
+  }
+
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+
+  const outlet = await outletRepo.findById(outletId);
+  if (!outlet) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Outlet not found' } }, 404);
+  }
+
+  if (!await verifyOutletAuthority(c, outletId, outletRepo)) {
+    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+  }
+
+  const summary = await FuelDailyOperationsService.getDailySummary(db, outletId, queryValidation.data.businessDate);
+  return c.json({ success: true, data: summary, error: null });
+});
+
+// GET /api/v1/outlets/:outletId/daily-operations?businessDate=YYYY-MM-DD
+shifts.get('/outlets/:outletId/daily-operations', requirePermission(PERMISSIONS.SHIFTS_READ) as any, async (c: AppContext) => {
+  const outletId = c.req.param('outletId');
+  if (!outletId) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'outletId is required' } }, 400);
+
+  const businessDate = c.req.query('businessDate');
+  const queryValidation = DailyOperationsQuerySchema.safeParse({ businessDate });
+  if (!queryValidation.success) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'VALIDATION_ERROR', message: 'Valid businessDate (YYYY-MM-DD) is required', details: queryValidation.error.flatten() },
+    }, 400);
+  }
+
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+
+  const outlet = await outletRepo.findById(outletId);
+  if (!outlet) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Outlet not found' } }, 404);
+  }
+
+  if (!await verifyOutletAuthority(c, outletId, outletRepo)) {
+    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+  }
+
+  const bootstrap = await FuelDailyOperationsService.getDailyOperationsBootstrap(db, outletId, queryValidation.data.businessDate);
+  return c.json({ success: true, data: bootstrap, error: null });
 });
 
 export default shifts;

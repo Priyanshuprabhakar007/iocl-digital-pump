@@ -24,7 +24,11 @@ import {
   tankStockReadings,
   shiftStockReconciliations,
   nozzleMeterReadings,
+  nozzleUnavailabilityRecords,
+  fuelReceipts,
+  fuelReceiptTankLines,
 } from '../../db/schema';
+import { FuelDailyOperationsService } from './fuelDailyOperationsService';
 
 export class MonthlyOperationsReportService {
   static async generateReport(
@@ -452,249 +456,98 @@ export class MonthlyOperationsReportService {
     }
     
     // Fetch all necessary historical data
-    const stockReconciliations = await db.select().from(shiftStockReconciliations).where(inArray(shiftStockReconciliations.operationalShiftId, shiftIds));
-    const productPrices = await db.select().from(operationalShiftProductPrices).where(inArray(operationalShiftProductPrices.operationalShiftId, shiftIds));
-    const nozzleSnapshots = await db.select().from(operationalShiftNozzles).where(inArray(operationalShiftNozzles.operationalShiftId, shiftIds));
-    const nozzleReadings = await db.select().from(nozzleMeterReadings).where(inArray(nozzleMeterReadings.operationalShiftId, shiftIds));
-    const tankSnapshots = await db
-      .select()
-      .from(operationalShiftTanks)
-      .where(inArray(operationalShiftTanks.operationalShiftId, shiftIds));
-    const tankReadingsList = await db
-      .select()
-      .from(tankStockReadings)
-      .where(inArray(tankStockReadings.operationalShiftId, shiftIds));
+    const [
+      stockReconciliations,
+      productPrices,
+      nozzleSnapshots,
+      nozzleReadings,
+      nozzleUnavailabilities,
+      tankSnapshots,
+      tankReadingsList,
+      receiptLinesList,
+    ] = await Promise.all([
+      db.select().from(shiftStockReconciliations).where(inArray(shiftStockReconciliations.operationalShiftId, shiftIds)),
+      db.select().from(operationalShiftProductPrices).where(inArray(operationalShiftProductPrices.operationalShiftId, shiftIds)),
+      db.select().from(operationalShiftNozzles).where(inArray(operationalShiftNozzles.operationalShiftId, shiftIds)),
+      db.select().from(nozzleMeterReadings).where(inArray(nozzleMeterReadings.operationalShiftId, shiftIds)),
+      db.select().from(nozzleUnavailabilityRecords).where(inArray(nozzleUnavailabilityRecords.operationalShiftId, shiftIds)),
+      db.select().from(operationalShiftTanks).where(inArray(operationalShiftTanks.operationalShiftId, shiftIds)),
+      db.select().from(tankStockReadings).where(inArray(tankStockReadings.operationalShiftId, shiftIds)),
+      db
+        .select({
+          line: fuelReceiptTankLines,
+          receipt: fuelReceipts,
+        })
+        .from(fuelReceiptTankLines)
+        .innerJoin(fuelReceipts, eq(fuelReceiptTankLines.fuelReceiptId, fuelReceipts.id))
+        .where(inArray(fuelReceipts.operationalShiftId, shiftIds)),
+    ]);
+
+    const completedReceiptLines = receiptLinesList
+      .filter((r: any) => r.receipt.status === 'COMPLETED')
+      .map((r: any) => ({
+        operationalShiftId: r.receipt.operationalShiftId,
+        tankId: r.line.tankId,
+        productId: r.line.productId,
+        invoiceQuantityMilliunits: r.line.invoiceQuantityMilliunits,
+        measuredReceivedQuantityMilliunits: r.line.measuredReceivedQuantityMilliunits,
+      }));
 
     const cumulativeByProduct = new Map<string, number>();
     const startDateObj = new Date(startDate);
     const endDateObj = new Date(endDate);
 
     for (let d = new Date(startDateObj); d <= endDateObj; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
-        const dayShifts = shiftsByDate.get(dateStr) || [];
-        
-        for (const [productId, report] of productMap.entries()) {
-          const applicableProductShifts = dayShifts.filter((shift: any) => {
-            const shiftId = shift.id;
+      const dateStr = d.toISOString().split('T')[0];
+      const dayShifts = shiftsByDate.get(dateStr) || [];
 
-            return (
-              productPrices.some(
-                (p: any) =>
-                  p.operationalShiftId === shiftId &&
-                  p.productId === productId
-              ) ||
-              nozzleSnapshots.some(
-                (n: any) =>
-                  n.operationalShiftId === shiftId &&
-                  n.productId === productId
-              ) ||
-              tankSnapshots.some(
-                (t: any) =>
-                  t.operationalShiftId === shiftId &&
-                  t.productId === productId
-              ) ||
-              stockReconciliations.some(
-                (r: any) =>
-                  r.operationalShiftId === shiftId &&
-                  r.productId === productId
-              )
-            );
-          });
+      for (const [productId, report] of productMap.entries()) {
+        const dailySummary = FuelDailyOperationsService.computeProductDailySummary({
+          businessDate: dateStr,
+          productId,
+          productCode: report.productCode,
+          productName: report.productName,
+          unit: 'LITRE',
+          dayShifts,
+          productPrices,
+          nozzleSnapshots,
+          nozzleReadings,
+          nozzleUnavailabilities,
+          tankSnapshots,
+          tankReadingsList,
+          stockReconciliations,
+          completedReceiptLines,
+          allowLiveTankFallback: true,
+        });
 
-          const earliestApplicableShift =
-            applicableProductShifts.length > 0
-              ? applicableProductShifts[0]
-              : null;
+        const previousCumulative = cumulativeByProduct.get(productId) ?? 0;
+        const currentCumulative = previousCumulative + dailySummary.netSalesMilliunits;
+        cumulativeByProduct.set(productId, currentCumulative);
 
-          const latestApplicableShift =
-            applicableProductShifts.length > 0
-              ? applicableProductShifts[applicableProductShifts.length - 1]
-              : null;
-
-          const earliestShiftId = earliestApplicableShift?.id ?? null;
-          const latestShiftId = latestApplicableShift?.id ?? null;
-
-          let grossSalesQuantityMilliunits = 0;
-          let netSalesQuantityMilliunits = 0;
-          let testingQuantityMilliunits = 0;
-
-          for (const shift of applicableProductShifts) {
-              const nozzles = nozzleSnapshots.filter((n: any) => n.operationalShiftId === shift.id && n.productId === productId);
-              for (const nozzle of nozzles) {
-                  const reading = nozzleReadings.find((r: any) => r.operationalShiftId === shift.id && r.nozzleId === nozzle.nozzleId);
-                  if (reading) {
-                      grossSalesQuantityMilliunits += reading.grossSalesQuantityMilliunits || 0;
-                      netSalesQuantityMilliunits += reading.netSalesQuantityMilliunits || 0;
-                      testingQuantityMilliunits += reading.testingQuantityMilliunits || 0;
-                  }
-              }
-          }
-
-          const reconciliations = stockReconciliations.filter((r: any) => applicableProductShifts.some((s: any) => s.id === r.operationalShiftId) && r.productId === productId);
-
-          const openingRecon = reconciliations.filter(
-            (r: any) => earliestShiftId !== null && r.operationalShiftId === earliestShiftId
-          );
-
-          const closingRecon = reconciliations.filter(
-            (r: any) => latestShiftId !== null && r.operationalShiftId === latestShiftId
-          );
-
-          const opening = openingRecon.reduce((sum: number, r: any) => sum + r.openingStockMilliunits, 0);
-
-          const closing = closingRecon.reduce((sum: number, r: any) => sum + r.physicalClosingStockMilliunits, 0);
-
-          const receipts = reconciliations.reduce((sum: number, r: any) => sum + r.receiptQuantityMilliunits, 0);
-
-          const theoreticalClosing = closingRecon.reduce((sum: number, r: any) => sum + r.theoreticalClosingStockMilliunits, 0);
-
-          const variance = closingRecon.reduce((sum: number, r: any) => sum + r.varianceMilliunits, 0);
-
-          const previousCumulative = cumulativeByProduct.get(productId) ?? 0;
-          const currentCumulative = previousCumulative + netSalesQuantityMilliunits;
-          cumulativeByProduct.set(productId, currentCumulative);
-
-          const prices = productPrices.filter((p: any) => applicableProductShifts.some((s: any) => s.id === p.operationalShiftId) && p.productId === productId);
-          const uniquePrices = Array.from(new Set(prices.map((p: any) => p.pricePaisePerUnit)));
-
-          const missingFields: string[] = [];
-          if (applicableProductShifts.length > 0) {
-              if (uniquePrices.length === 0) {
-                  missingFields.push("No RSP snapshot");
-              }
-              if (openingRecon.length === 0) {
-                  missingFields.push("No opening tank reading");
-              }
-              if (closingRecon.length === 0) {
-                  missingFields.push("No closing tank reading");
-              }
-              for (const shift of applicableProductShifts) {
-                  const expectedNozzles = nozzleSnapshots.filter(
-                    (n: any) =>
-                      n.operationalShiftId === shift.id &&
-                      n.productId === productId
-                  );
-                  for (const nozzle of expectedNozzles) {
-                      const reading = nozzleReadings.find(
-                        (r: any) =>
-                          r.operationalShiftId === shift.id &&
-                          r.nozzleId === nozzle.nozzleId
-                      );
-                      if (!reading) {
-                          const msg = `DU ${nozzle.dispenserNumber} / Nozzle ${nozzle.nozzleNumber} missing meter reading`;
-                          if (!missingFields.includes(msg)) {
-                              missingFields.push(msg);
-                          }
-                      }
-                  }
-              }
-          }
-
-          const dayTankReadings: DailyTankReadingDetail[] = [];
-          for (const shift of applicableProductShifts) {
-            const shiftReadings = tankReadingsList.filter(
-              (r: any) =>
-                r.operationalShiftId === shift.id &&
-                r.productId === productId &&
-                (r.readingType === 'OPENING' || r.readingType === 'CLOSING')
-            );
-
-            shiftReadings.sort((a: any, b: any) => {
-              const tankA = tankSnapshots.find(
-                (t: any) => t.operationalShiftId === shift.id && t.tankId === a.tankId
-              )?.tankNumber ?? 0;
-              const tankB = tankSnapshots.find(
-                (t: any) => t.operationalShiftId === shift.id && t.tankId === b.tankId
-              )?.tankNumber ?? 0;
-              if (tankA !== tankB) return tankA - tankB;
-              if (a.readingType !== b.readingType) {
-                return a.readingType === 'OPENING' ? -1 : 1;
-              }
-              return 0;
-            });
-
-            for (const r of shiftReadings) {
-              const tankSnap = tankSnapshots.find(
-                (t: any) => t.operationalShiftId === shift.id && t.tankId === r.tankId
-              );
-              dayTankReadings.push({
-                tankId: r.tankId,
-                tankNumber: String(tankSnap ? tankSnap.tankNumber : 0),
-                readingType: r.readingType as 'OPENING' | 'CLOSING',
-                productDipMmMilliunits: r.productDipMmMilliunits ?? 0,
-                waterDipMmMilliunits: r.waterDipMmMilliunits ?? 0,
-                netProductVolumeMilliunits: r.netProductVolumeMilliunits ?? 0,
-              });
-            }
-          }
-
-          const dayNozzleReadings: DailyNozzleReadingDetail[] = [];
-          for (const shift of applicableProductShifts) {
-            const shiftNozzles = nozzleSnapshots.filter(
-              (n: any) => n.operationalShiftId === shift.id && n.productId === productId
-            );
-
-            shiftNozzles.sort((a: any, b: any) => {
-              const dispA = Number(a.dispenserNumber) || 0;
-              const dispB = Number(b.dispenserNumber) || 0;
-              if (dispA !== dispB) return dispA - dispB;
-              const nozzA = Number(a.nozzleNumber) || 0;
-              const nozzB = Number(b.nozzleNumber) || 0;
-              return nozzA - nozzB;
-            });
-
-            for (const nozzle of shiftNozzles) {
-              const reading = nozzleReadings.find(
-                (r: any) =>
-                  r.operationalShiftId === shift.id &&
-                  r.nozzleId === nozzle.nozzleId
-              );
-              dayNozzleReadings.push({
-                operationalShiftId: shift.id,
-                nozzleId: nozzle.nozzleId,
-                dispenserId: nozzle.dispenserId,
-                dispenserNumber: String(nozzle.dispenserNumber),
-                nozzleNumber: String(nozzle.nozzleNumber),
-                openingTotalizerMilliunits: reading ? reading.openingTotalizerMilliunits : null,
-                closingTotalizerMilliunits: reading ? reading.closingTotalizerMilliunits : null,
-                testingQuantityMilliunits: reading?.testingQuantityMilliunits ?? 0,
-                grossSalesQuantityMilliunits: reading?.grossSalesQuantityMilliunits ?? 0,
-                netSalesQuantityMilliunits: reading?.netSalesQuantityMilliunits ?? 0,
-              });
-            }
-          }
-
-          const status =
-            applicableProductShifts.length === 0
-              ? "NO_ENTRY"
-              : missingFields.length > 0
-                ? "PARTIAL"
-                : "COMPLETE";
-
-          report.rows.push({
-              businessDate: dateStr,
-              status,
-              missingFields,
-              shiftsCount: applicableProductShifts.length,
-              rspPaise: uniquePrices as number[],
-              changedWithinDay: uniquePrices.length > 1,
-              tankOpeningStockL: opening / 1000,
-              tankClosingStockL: closing / 1000,
-              receiptsL: receipts / 1000,
-              availableStockL: (opening + receipts) / 1000,
-              meterSalesL: netSalesQuantityMilliunits / 1000,
-              testingL: testingQuantityMilliunits / 1000,
-              grossSalesL: grossSalesQuantityMilliunits / 1000,
-              netSalesL: netSalesQuantityMilliunits / 1000,
-              dailySalesL: netSalesQuantityMilliunits / 1000,
-              cumulativeSalesL: currentCumulative / 1000,
-              theoreticalClosingL: theoreticalClosing / 1000,
-              physicalClosingL: closing / 1000,
-              varianceL: variance / 1000,
-              tankReadings: dayTankReadings,
-              nozzleReadings: dayNozzleReadings,
-          });
-        }
+        report.rows.push({
+          businessDate: dateStr,
+          status: dailySummary.status,
+          missingFields: dailySummary.missingFields,
+          shiftsCount: dailySummary.shiftsCount,
+          rspPaise: dailySummary.rspPaise,
+          changedWithinDay: dailySummary.changedWithinDay,
+          tankOpeningStockL: dailySummary.openingStockL,
+          tankClosingStockL: dailySummary.closingStockL,
+          receiptsL: dailySummary.receiptsL,
+          availableStockL: dailySummary.availableStockL,
+          meterSalesL: dailySummary.meterSalesL,
+          testingL: dailySummary.testingL,
+          grossSalesL: dailySummary.grossSalesL,
+          netSalesL: dailySummary.netSalesL,
+          dailySalesL: dailySummary.netSalesL,
+          cumulativeSalesL: currentCumulative / 1000,
+          theoreticalClosingL: dailySummary.theoreticalClosingL,
+          physicalClosingL: dailySummary.physicalClosingL,
+          varianceL: dailySummary.varianceL,
+          tankReadings: dailySummary.tankReadings,
+          nozzleReadings: dailySummary.nozzleReadings,
+        });
+      }
     }
     
     for (const report of productMap.values()) {

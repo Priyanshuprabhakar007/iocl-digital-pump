@@ -49,6 +49,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       perm: null,
     },
     {
+      id: 'daily-ops',
+      label: 'Daily Operations & DSR',
+      icon: Fuel,
+      perm: PERMISSIONS.SHIFTS_READ,
+    },
+    {
       id: 'outlets',
       label: 'Retail Outlets',
       icon: Building2,

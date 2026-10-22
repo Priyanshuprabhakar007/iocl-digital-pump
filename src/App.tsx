@@ -25,10 +25,12 @@ import { NfrOperationsPage } from './frontend/pages/NfrOperationsPage';
 import { WorkforceOperationsPage } from './frontend/pages/WorkforceOperationsPage';
 import { OrganizationMastersPage } from './frontend/pages/OrganizationMastersPage';
 import { ReportsPage } from './frontend/pages/ReportsPage';
+import { DailyOperationsPage } from './frontend/pages/DailyOperationsPage';
 import { PERMISSIONS } from './shared/constants';
 
 const ROUTE_TAB_MAP: Record<string, string> = {
   '/dashboard': 'dashboard',
+  '/daily-operations': 'daily-ops',
   '/outlets': 'outlets',
   '/products': 'products',
   '/pump-infrastructure': 'pump-infra',
@@ -94,6 +96,7 @@ function MainAppContent() {
   useEffect(() => {
     if (!userCtx) return;
     const tabToPermMap: Record<string, any> = {
+      'daily-ops': PERMISSIONS.SHIFTS_READ,
       outlets: PERMISSIONS.OUTLETS_READ,
       products: PERMISSIONS.PRODUCTS_READ,
       'pump-infra': PERMISSIONS.TANKS_READ,
@@ -146,6 +149,7 @@ function MainAppContent() {
     <ActiveOutletProvider>
       <DashboardShell activeTab={activeTab} setActiveTab={handleSetActiveTab}>
         {activeTab === 'dashboard' && <DashboardPage />}
+        {activeTab === 'daily-ops' && <DailyOperationsPage />}
         {activeTab === 'outlets' && <OutletsPage />}
         {activeTab === 'products' && <ProductsPage />}
         {activeTab === 'pump-infra' && <PumpInfrastructurePage />}

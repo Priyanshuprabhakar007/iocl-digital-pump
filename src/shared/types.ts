@@ -2218,11 +2218,229 @@ export interface MonthlyOperationsReport {
   };
 }
 
+// ==========================================
+// Phase 3: Daily Fuel Operations + DSR Types
+// ==========================================
 
+export type DailyOperationsStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETE' | 'BLOCKED';
 
+export interface DailyDispenserNozzleItem {
+  operationalShiftId: string;
+  shiftNumber: number;
+  nozzleId: string;
+  nozzleNumber: number;
+  dispenserId: string;
+  dispenserNumber: number;
+  dispenserName: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  tankId: string;
+  tankNumber: number;
+  openingTotalizerMilliunits: number | null;
+  closingTotalizerMilliunits: number | null;
+  testingQuantityMilliunits: number;
+  grossSalesMilliunits: number;
+  netSalesMilliunits: number;
+  grossSalesL: number;
+  testingL: number;
+  netSalesL: number;
+  hasReading: boolean;
+  isUnavailable: boolean;
+  unavailabilityReason?: string | null;
+}
 
+export interface DailyDispenserProductSubtotal {
+  productId: string;
+  productCode: string;
+  productName: string;
+  grossSalesMilliunits: number;
+  testingMilliunits: number;
+  netSalesMilliunits: number;
+  grossSalesL: number;
+  testingL: number;
+  netSalesL: number;
+}
 
+export interface DailyDispenserSummary {
+  dispenserId: string;
+  dispenserNumber: number;
+  dispenserName: string;
+  grossSalesMilliunits: number;
+  testingMilliunits: number;
+  netSalesMilliunits: number;
+  grossSalesL: number;
+  testingL: number;
+  netSalesL: number;
+  byProduct: DailyDispenserProductSubtotal[];
+  nozzles: DailyDispenserNozzleItem[];
+}
 
+export interface DailyProductSummary {
+  productId: string;
+  productCode: string;
+  productName: string;
+  unit: string;
+  status: DayEntryStatus;
+  missingFields: string[];
+  shiftsCount: number;
+  rspPaise: number[];
+  changedWithinDay: boolean;
+  openingStockMilliunits: number;
+  closingStockMilliunits: number;
+  receiptsMilliunits: number;
+  availableStockMilliunits: number;
+  meterSalesMilliunits: number;
+  grossSalesMilliunits: number;
+  testingMilliunits: number;
+  netSalesMilliunits: number;
+  theoreticalClosingMilliunits: number;
+  physicalClosingMilliunits: number;
+  varianceMilliunits: number;
+  openingStockL: number;
+  closingStockL: number;
+  receiptsL: number;
+  availableStockL: number;
+  meterSalesL: number;
+  grossSalesL: number;
+  testingL: number;
+  netSalesL: number;
+  theoreticalClosingL: number;
+  physicalClosingL: number;
+  varianceL: number;
+  tankReadings: DailyTankReadingDetail[];
+  nozzleReadings: DailyNozzleReadingDetail[];
+}
 
+export interface DailyFuelCompletion {
+  expectedTanks: number;
+  openingTankReadings: number;
+  closingTankReadings: number;
+  expectedNozzles: number;
+  nozzleMeterReadings: number;
+  unavailableNozzles: number;
+  totalReceipts: number;
+  completedReceipts: number;
+  pendingReceipts: number;
+  reconciliationComplete: boolean;
+  uncalibratedTanksCount: number;
+}
 
+export interface DailyFuelTotals {
+  openingStockMilliunits: number;
+  receiptsMilliunits: number;
+  availableStockMilliunits: number;
+  grossSalesMilliunits: number;
+  testingMilliunits: number;
+  netSalesMilliunits: number;
+  theoreticalClosingMilliunits: number;
+  physicalClosingMilliunits: number;
+  varianceMilliunits: number;
+  openingStockL: number;
+  receiptsL: number;
+  availableStockL: number;
+  grossSalesL: number;
+  testingL: number;
+  netSalesL: number;
+  theoreticalClosingL: number;
+  physicalClosingL: number;
+  varianceL: number;
+}
 
+export interface DailyShiftSummaryItem {
+  id: string;
+  shiftTemplateId: string;
+  shiftNumber: number;
+  businessDate: string;
+  status: 'OPEN' | 'CLOSED' | 'LOCKED';
+  startedAt: string;
+  endedAt: string | null;
+  expectedTanks: number;
+  openingTankReadings: number;
+  closingTankReadings: number;
+  expectedNozzles: number;
+  nozzleMeterReadings: number;
+  unavailableNozzles: number;
+  reconciliationComplete: boolean;
+  grossSalesMilliunits: number;
+  testingMilliunits: number;
+  netSalesMilliunits: number;
+}
+
+export interface DailyFuelSummary {
+  outletId: string;
+  outletName: string;
+  businessDate: string;
+  status: DailyOperationsStatus;
+  dayEntryStatus: DayEntryStatus;
+  shiftsCount: number;
+  shifts: DailyShiftSummaryItem[];
+  tankReadings: DailyTankReadingDetail[];
+  nozzleReadings: DailyNozzleReadingDetail[];
+  completion: DailyFuelCompletion;
+  byDispenser: DailyDispenserSummary[];
+  byProduct: DailyProductSummary[];
+  totals: DailyFuelTotals;
+  missingFields: string[];
+}
+
+export interface DailyOperationsTankEntryRow {
+  tankId: string;
+  tankNumber: number;
+  tankName: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  productUnit: string;
+  capacityMilliunits: number;
+  safeFillCapacityMilliunits: number;
+  capacityLitres: string;
+  safeFillCapacityLitres: string;
+  hasCalibrationChart: boolean;
+  calibrationPointCount: number;
+  calibrationBlocker: string | null;
+  suggestedOpeningDipMm: string | null;
+  suggestedOpeningVolumeLitres: string | null;
+  openingReading: TankStockReading | null;
+  closingReading: TankStockReading | null;
+}
+
+export interface DailyOperationsNozzleEntryRow {
+  nozzleId: string;
+  nozzleNumber: number;
+  dispenserId: string;
+  dispenserNumber: number;
+  dispenserName: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  productCategory: string;
+  productUnit: string;
+  tankId: string;
+  tankNumber: number;
+  snapshotStatus: string;
+  suggestedOpeningTotalizer: string | null;
+  suggestedOpeningTotalizerMilliunits: number | null;
+  previousShiftId: string | null;
+  reading: NozzleMeterReading | null;
+  unavailability: NozzleUnavailabilityRecord | null;
+}
+
+export interface DailyOperationsShiftWorkspace {
+  shift: OperationalShift;
+  shiftTemplateName: string;
+  shiftTemplateCode: string;
+  tanks: DailyOperationsTankEntryRow[];
+  nozzles: DailyOperationsNozzleEntryRow[];
+  receipts: FuelReceipt[];
+  reconciliations: ShiftStockReconciliation[];
+}
+
+export interface DailyOperationsBootstrapResponse {
+  outletId: string;
+  outletName: string;
+  businessDate: string;
+  shiftTemplates: ShiftTemplate[];
+  shifts: DailyOperationsShiftWorkspace[];
+  dailySummary: DailyFuelSummary;
+}

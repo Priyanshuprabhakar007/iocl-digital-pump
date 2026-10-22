@@ -7,7 +7,7 @@ import { ScopeService } from '../services/scopeService';
 import { TankCalibrationService } from '../services/tankCalibrationService';
 import { requireAuth, AppContext, EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
-import { TankStockReadingSchema } from '../../shared/validators';
+import { TankStockReadingSchema, BatchTankStockReadingSchema } from '../../shared/validators';
 import { PERMISSIONS } from '../../shared/constants';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
 
@@ -281,6 +281,266 @@ tankStock.post('/shifts/:shiftId/tank-readings', requirePermission(PERMISSIONS.T
   });
 
   return c.json({ success: true, data: created, error: null }, 201);
+});
+
+// POST /api/v1/shifts/:shiftId/tank-readings/batch - Safe idempotent batch tank stock reading entry
+tankStock.post('/shifts/:shiftId/tank-readings/batch', requirePermission(PERMISSIONS.TANK_STOCK_WRITE) as any, async (c: AppContext) => {
+  const shiftId = c.req.param('shiftId');
+  if (!shiftId) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'shiftId is required' } }, 400);
+
+  const body = await c.req.json().catch(() => null);
+  const validation = BatchTankStockReadingSchema.safeParse(body);
+  if (!validation.success) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'VALIDATION_ERROR', message: 'Invalid batch tank stock reading data', details: validation.error.flatten() },
+    }, 400);
+  }
+
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+  const pumpRepo = new PumpRepository(db);
+  const auditRepo = new AuditRepository(db);
+
+  const shift = await pumpRepo.findOperationalShiftById(shiftId);
+  if (!shift) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Operational shift not found' } }, 404);
+  }
+
+  if (!await verifyOutletAuthority(c, shift.outletId, outletRepo)) {
+    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this shift outlet' } }, 403);
+  }
+
+  if (shift.status !== 'OPEN') {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'SHIFT_CLOSED', message: 'Cannot record tank readings on a CLOSED shift. Shift records are immutable.' },
+    }, 409);
+  }
+
+  const tankSnapshots = await pumpRepo.listShiftTankSnapshots(shiftId);
+  const snapByTankId = new Map(tankSnapshots.map(t => [t.tankId, t]));
+
+  // Pre-validate all rows before writing so batch is all-or-nothing
+  const seenKeys = new Set<string>();
+  const preparedRows: Array<{
+    tankId: string;
+    productId: string;
+    readingType: 'OPENING' | 'CLOSING' | 'PRE_RECEIPT' | 'POST_RECEIPT' | 'ADHOC';
+    source: 'MANUAL' | 'ATG';
+    productDipMilli: number;
+    waterDipMilli: number;
+    grossObservedVolumeMilliunits: number;
+    waterVolumeMilliunits: number;
+    netProductVolumeMilliunits: number;
+    notes: string | null;
+  }> = [];
+
+  for (const row of validation.data.readings) {
+    const dedupeKey = `${row.tankId}:${row.readingType}`;
+    if (seenKeys.has(dedupeKey)) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'DUPLICATE_BATCH_ROW', message: `Duplicate (${row.tankId}, ${row.readingType}) in batch payload` },
+      }, 400);
+    }
+    seenKeys.add(dedupeKey);
+
+    const tankSnap = snapByTankId.get(row.tankId);
+    if (!tankSnap) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'TANK_NOT_IN_SNAPSHOT', message: `Tank ${row.tankId} is not part of this shift snapshot` },
+      }, 400);
+    }
+
+    const productDipMilli = parseMilliunits(row.productDipMm);
+    const waterDipMilli = row.waterDipMm ? parseMilliunits(row.waterDipMm) : 0;
+
+    if (productDipMilli < 0 || waterDipMilli < 0) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'VALIDATION_ERROR', message: 'Dip values cannot be negative' },
+      }, 400);
+    }
+
+    if (waterDipMilli > productDipMilli) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'VALIDATION_ERROR', message: 'Water dip cannot exceed product dip' },
+      }, 400);
+    }
+
+    let grossObservedVolumeMilliunits = 0;
+    let waterVolumeMilliunits = 0;
+    try {
+      const grossResult = await TankCalibrationService.convertDipToVolume(db, row.tankId, productDipMilli);
+      grossObservedVolumeMilliunits = grossResult.calculatedVolumeMilliunits;
+
+      if (waterDipMilli > 0) {
+        const waterResult = await TankCalibrationService.convertDipToVolume(db, row.tankId, waterDipMilli);
+        waterVolumeMilliunits = waterResult.calculatedVolumeMilliunits;
+      }
+    } catch (err: any) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: err.code || 'CALIBRATION_ERROR', message: err.message },
+      }, 400);
+    }
+
+    if (waterVolumeMilliunits > grossObservedVolumeMilliunits) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'VALIDATION_ERROR', message: 'Derived water volume exceeds gross observed volume' },
+      }, 400);
+    }
+
+    const netProductVolumeMilliunits = grossObservedVolumeMilliunits - waterVolumeMilliunits;
+    if (netProductVolumeMilliunits < 0) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'VALIDATION_ERROR', message: 'Net product volume cannot be negative' },
+      }, 400);
+    }
+
+    preparedRows.push({
+      tankId: row.tankId,
+      productId: tankSnap.productId,
+      readingType: row.readingType,
+      source: row.source || 'MANUAL',
+      productDipMilli,
+      waterDipMilli,
+      grossObservedVolumeMilliunits,
+      waterVolumeMilliunits,
+      netProductVolumeMilliunits,
+      notes: row.notes || null,
+    });
+  }
+
+  const existingReadings = await pumpRepo.listShiftTankReadings(shiftId);
+  const nowIso = new Date().toISOString();
+  const savedReadings = [];
+  const results = [];
+
+  for (const prep of preparedRows) {
+    const existing = existingReadings.find(
+      r => r.tankId === prep.tankId && r.readingType === prep.readingType && (prep.readingType === 'OPENING' || prep.readingType === 'CLOSING')
+    );
+
+    if (existing) {
+      const updRes = await pumpRepo.updateTankReadingConditional(existing.id, shiftId, {
+        source: prep.source,
+        productDipMmMilliunits: prep.productDipMilli,
+        waterDipMmMilliunits: prep.waterDipMilli,
+        grossObservedVolumeMilliunits: prep.grossObservedVolumeMilliunits,
+        waterVolumeMilliunits: prep.waterVolumeMilliunits,
+        netProductVolumeMilliunits: prep.netProductVolumeMilliunits,
+        recordedAt: nowIso,
+        recordedByUserId: c.var.user!.user.id,
+        notes: prep.notes,
+        updatedAt: nowIso,
+      });
+
+      if (!updRes.success || !updRes.reading) {
+        if (updRes.shiftClosed) {
+          return c.json({
+            success: false,
+            data: null,
+            error: { code: 'SHIFT_CLOSED', message: 'Operational shift is CLOSED.' },
+          }, 409);
+        }
+        return c.json({
+          success: false,
+          data: null,
+          error: { code: 'CONFLICT', message: `Failed to update tank reading for ${prep.tankId}` },
+        }, 409);
+      }
+
+      savedReadings.push(updRes.reading);
+      results.push({
+        tankId: prep.tankId,
+        readingType: prep.readingType,
+        action: 'UPDATED' as const,
+        reading: updRes.reading,
+      });
+    } else {
+      const readingId = `tsr-${crypto.randomUUID()}`;
+      const createRes = await pumpRepo.createTankReadingConditional({
+        id: readingId,
+        operationalShiftId: shiftId,
+        outletId: shift.outletId,
+        tankId: prep.tankId,
+        productId: prep.productId,
+        readingType: prep.readingType,
+        source: prep.source,
+        productDipMmMilliunits: prep.productDipMilli,
+        waterDipMmMilliunits: prep.waterDipMilli,
+        grossObservedVolumeMilliunits: prep.grossObservedVolumeMilliunits,
+        waterVolumeMilliunits: prep.waterVolumeMilliunits,
+        netProductVolumeMilliunits: prep.netProductVolumeMilliunits,
+        recordedAt: nowIso,
+        recordedByUserId: c.var.user!.user.id,
+        notes: prep.notes,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+
+      if (!createRes.success || !createRes.reading) {
+        if (createRes.shiftClosed) {
+          return c.json({
+            success: false,
+            data: null,
+            error: { code: 'SHIFT_CLOSED', message: 'Operational shift is CLOSED.' },
+          }, 409);
+        }
+        return c.json({
+          success: false,
+          data: null,
+          error: { code: 'CONFLICT', message: `Failed to create tank reading for ${prep.tankId}` },
+        }, 409);
+      }
+
+      savedReadings.push(createRes.reading);
+      results.push({
+        tankId: prep.tankId,
+        readingType: prep.readingType,
+        action: 'CREATED' as const,
+        reading: createRes.reading,
+      });
+    }
+  }
+
+  await auditRepo.logAction({
+    id: `aud-${crypto.randomUUID()}`,
+    userId: c.var.user!.user.id,
+    action: 'TANK_STOCK_READING_BATCH_RECORD',
+    entityType: 'OPERATIONAL_SHIFT',
+    entityId: shiftId,
+    newValue: { count: savedReadings.length, shiftId },
+    ipAddress: c.req.header('cf-connecting-ip') || null,
+    userAgent: c.req.header('user-agent') || null,
+    createdAt: nowIso,
+  });
+
+  return c.json({
+    success: true,
+    data: {
+      shiftId,
+      processedCount: savedReadings.length,
+      readings: savedReadings,
+      results,
+    },
+    error: null,
+  }, 200);
 });
 
 export default tankStock;
