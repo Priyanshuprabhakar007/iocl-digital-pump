@@ -352,14 +352,15 @@ pumpOperations.put('/tanks/:id', requirePermission(PERMISSIONS.TANKS_WRITE) as a
     }
 
     if (payload.productId !== tank.productId) {
-      const referencingNozzles = await pumpRepo.findNozzlesReferencingTank(id);
-      if (referencingNozzles.length > 0) {
+      const eligibility = await pumpRepo.checkTankProductChangeEligibility(id);
+      if (!eligibility.canChange) {
         return c.json({
           success: false,
           data: null,
           error: {
-            code: 'TANK_IN_USE',
-            message: `Cannot change tank product because ${referencingNozzles.length} nozzle(s) currently reference this tank.`,
+            code: 'TANK_PRODUCT_CHANGE_BLOCKED',
+            message: eligibility.blockedReason || 'Cannot change tank fuel product due to existing operational dependencies or history.',
+            details: eligibility.details,
           },
         }, 409);
       }

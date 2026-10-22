@@ -467,8 +467,11 @@ export function getPumpInfrastructureErrorMessage(error: any): string {
     case 'PRODUCT_IN_USE':
       return 'Product cannot be deactivated because active tanks or nozzles depend on it.';
 
+    case 'TANK_PRODUCT_CHANGE_BLOCKED':
+      return rawMessage || 'Cannot change tank fuel product because dependent nozzles, historical readings, or fuel receipts are tied to this tank.';
+
     case 'TANK_IN_USE':
-      return 'Tank cannot be deactivated because active nozzles depend on it.';
+      return 'Tank cannot be modified or deactivated because active nozzles depend on it.';
 
     case 'ACTIVE_NOZZLES_DEPEND_ON_TANK':
       return 'Cannot deactivate tank while active nozzles are connected to it.';
@@ -576,4 +579,25 @@ export function getProductCategoryBadgeClass(category?: string | null): string {
     default:
       return 'bg-slate-800 text-slate-300 border-slate-700';
   }
+}
+
+// =========================================================================
+// 7. EDIT NOZZLE DEPENDENCY HELPERS
+// =========================================================================
+
+export function filterTanksForEditNozzle(
+  tanks: Tank[] | null | undefined,
+  productId: string | null | undefined
+): Tank[] {
+  if (!Array.isArray(tanks) || !productId) return [];
+  return tanks.filter(t => t && t.productId === productId && t.status === 'ACTIVE');
+}
+
+export function findTankProduct(
+  tanks: Tank[] | null | undefined,
+  tankId: string | null | undefined
+): string | null {
+  if (!Array.isArray(tanks) || !tankId) return null;
+  const t = tanks.find(tank => tank && tank.id === tankId);
+  return t ? t.productId : null;
 }

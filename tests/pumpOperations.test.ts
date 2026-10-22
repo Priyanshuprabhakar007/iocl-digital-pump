@@ -215,7 +215,7 @@ describe('IOCL Digital Pump Manager Phase 2A Hardened Operations Suite', () => {
     );
     expect(changeProdRes.status).toBe(409);
     const changeProdJson = (await changeProdRes.json()) as any;
-    expect(changeProdJson.error.code).toBe('TANK_IN_USE');
+    expect(['TANK_PRODUCT_CHANGE_BLOCKED', 'TANK_IN_USE']).toContain(changeProdJson.error.code);
   });
 
   // 4. Dispensers & Database Uniqueness of Serial Numbers

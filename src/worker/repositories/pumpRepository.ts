@@ -245,6 +245,80 @@ export class PumpRepository {
     return rows as Nozzle[];
   }
 
+  async checkTankProductChangeEligibility(tankId: string): Promise<{
+    canChange: boolean;
+    blockedReason?: string;
+    details: {
+      nozzlesCount: number;
+      stockReadingsCount: number;
+      receiptLinesCount: number;
+      shiftSnapshotsCount: number;
+    };
+  }> {
+    const [nozzleRes] = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(schema.nozzles)
+      .where(eq(schema.nozzles.tankId, tankId));
+    const nozzlesCount = Number(nozzleRes?.count || 0);
+
+    const [readingRes] = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(schema.tankStockReadings)
+      .where(eq(schema.tankStockReadings.tankId, tankId));
+    const stockReadingsCount = Number(readingRes?.count || 0);
+
+    const [receiptRes] = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(schema.fuelReceiptTankLines)
+      .where(eq(schema.fuelReceiptTankLines.tankId, tankId));
+    const receiptLinesCount = Number(receiptRes?.count || 0);
+
+    const [snapshotRes] = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(schema.operationalShiftTanks)
+      .where(eq(schema.operationalShiftTanks.tankId, tankId));
+    const shiftSnapshotsCount = Number(snapshotRes?.count || 0);
+
+    const details = { nozzlesCount, stockReadingsCount, receiptLinesCount, shiftSnapshotsCount };
+
+    if (nozzlesCount > 0) {
+      return {
+        canChange: false,
+        blockedReason: `Cannot change tank product because ${nozzlesCount} nozzle(s) currently reference this tank.`,
+        details,
+      };
+    }
+
+    if (stockReadingsCount > 0) {
+      return {
+        canChange: false,
+        blockedReason: `Cannot change tank product because ${stockReadingsCount} historical stock reading(s) exist for this tank.`,
+        details,
+      };
+    }
+
+    if (receiptLinesCount > 0) {
+      return {
+        canChange: false,
+        blockedReason: `Cannot change tank product because ${receiptLinesCount} fuel receipt line(s) exist for this tank.`,
+        details,
+      };
+    }
+
+    if (shiftSnapshotsCount > 0) {
+      return {
+        canChange: false,
+        blockedReason: `Cannot change tank product because ${shiftSnapshotsCount} operational shift snapshot(s) exist for this tank.`,
+        details,
+      };
+    }
+
+    return {
+      canChange: true,
+      details,
+    };
+  }
+
   async createTank(data: {
     id: string;
     outletId: string;
