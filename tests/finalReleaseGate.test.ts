@@ -139,10 +139,10 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       expect(pre).toContain('dg_run_intervals');
     });
 
-    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 31, and admin existence', () => {
+    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 32, and admin existence', () => {
       expect(deployContent).toContain('PRAGMA foreign_key_check;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "31" ]; then');
-      expect(deployContent).toContain('ERROR: Expected all 31 migrations to be recorded.');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "32" ]; then');
+      expect(deployContent).toContain('ERROR: Expected all 32 migrations to be recorded.');
       expect(deployContent).toContain("SELECT COUNT(*) AS count FROM users WHERE email = 'admin@iocl.in';");
       expect(deployContent).toContain('if [ "$POST_CNT" -lt "$PRE_CNT" ]; then');
     });

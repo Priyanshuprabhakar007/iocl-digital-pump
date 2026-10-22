@@ -218,10 +218,10 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('ERROR: Remote database contains foreign-key violations.');
     });
 
-    it('2.6 deployment workflow verifies recorded migration count is at least 31', () => {
+    it('2.6 deployment workflow verifies recorded migration count is at least 32', () => {
       expect(deployContent).toContain('SELECT COUNT(*) AS count FROM d1_migrations;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "31" ]; then');
-      expect(deployContent).toContain('ERROR: Expected all 31 migrations to be recorded.');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "32" ]; then');
+      expect(deployContent).toContain('ERROR: Expected all 32 migrations to be recorded.');
     });
 
     it('2.7 deployment workflow verifies production administrator account exists', () => {

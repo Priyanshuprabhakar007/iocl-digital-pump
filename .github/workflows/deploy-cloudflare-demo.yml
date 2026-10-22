@@ -409,6 +409,252 @@ jobs:
 
           echo "[0031] Migration completed and recorded."
 
+      - name: Apply Migration 0032 via Ordered Safe Stages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          MIGRATION_0032="0032_global_designation_and_shift_masters.sql"
+          echo "=================================================="
+          echo "CHECKING MIGRATION 0032: $MIGRATION_0032"
+          echo "=================================================="
+
+          # 1. PRECHECK MIGRATION STATUS
+          RESULT_0032=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$MIGRATION_0032';" \
+            --json \
+            --yes)
+
+          COUNT_0032=$(echo "$RESULT_0032" | jq -r '.[0].results[0].count // 0')
+
+          # 2. CHECK TABLE STATE
+          TABLE_CHECK_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('global_hr_designations', 'global_shift_templates');" \
+            --json \
+            --yes)
+
+          GLOBAL_TABLES_COUNT=$(echo "$TABLE_CHECK_RES" | jq -r '.[0].results | length')
+
+          echo "Precheck 0032: migration recorded in d1_migrations=$COUNT_0032, global master tables count=$GLOBAL_TABLES_COUNT"
+
+          if [ "$COUNT_0032" = "1" ] && [ "$GLOBAL_TABLES_COUNT" = "2" ]; then
+            echo "Already applied: $MIGRATION_0032 (both global master tables verified). Skipping safely."
+            exit 0
+          fi
+
+          if [ "$COUNT_0032" = "0" ] && [ "$GLOBAL_TABLES_COUNT" = "2" ]; then
+            echo "ERROR: [0032] Partial migration state detected: global tables exist but $MIGRATION_0032 is not recorded in d1_migrations. Aborting deployment."
+            exit 1
+          fi
+
+          if [ "$GLOBAL_TABLES_COUNT" = "1" ]; then
+            echo "ERROR: [0032] Inconsistent migration state detected: only one of global_hr_designations / global_shift_templates exists in sqlite_master. Aborting deployment."
+            exit 1
+          fi
+
+          if [ "$COUNT_0032" = "1" ] && [ "$GLOBAL_TABLES_COUNT" = "0" ]; then
+            echo "ERROR: [0032] Inconsistent migration state detected: $MIGRATION_0032 recorded in d1_migrations but global tables missing. Aborting deployment."
+            exit 1
+          fi
+
+          # 3. RUN GLOBAL MASTER CONFLICT DIAGNOSTICS
+          echo "[0032] Running designation conflict diagnostic..."
+          HAS_DESIG_TABLE=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = 'hr_designations';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$HAS_DESIG_TABLE" = "1" ]; then
+            DESIG_CONFLICT_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+              --remote \
+              --command "SELECT UPPER(TRIM(code)) AS normalized_code, COUNT(*) AS count, GROUP_CONCAT(id) AS ids, GROUP_CONCAT(outlet_id) AS outlets, GROUP_CONCAT(name) AS names, GROUP_CONCAT(COALESCE(skill_category, 'NULL')) AS skill_categories, GROUP_CONCAT(status) AS statuses FROM hr_designations GROUP BY UPPER(TRIM(code)) HAVING COUNT(DISTINCT TRIM(name)) > 1 OR COUNT(DISTINCT COALESCE(skill_category, 'NULL')) > 1 OR COUNT(DISTINCT status) > 1;" \
+              --json \
+              --yes)
+
+            DESIG_CONFLICT_COUNT=$(echo "$DESIG_CONFLICT_RES" | jq -r '.[0].results | length')
+            if [ "$DESIG_CONFLICT_COUNT" -gt "0" ]; then
+              echo "ERROR: [0032] Global master conflict detected in hr_designations (groups=$DESIG_CONFLICT_COUNT). Aborting deployment safely without altering DB."
+              echo "$DESIG_CONFLICT_RES" | jq -r '.[0].results[] | "  Conflict in designation code \(.normalized_code): names=\(.names) skills=\(.skill_categories) statuses=\(.statuses) outlets=\(.outlets)"'
+              exit 1
+            fi
+          fi
+
+          echo "[0032] Running shift conflict diagnostic..."
+          HAS_SHIFT_TABLE=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = 'shift_templates';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$HAS_SHIFT_TABLE" = "1" ]; then
+            SHIFT_CONFLICT_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+              --remote \
+              --command "SELECT UPPER(TRIM(code)) AS normalized_code, COUNT(*) AS count, GROUP_CONCAT(id) AS ids, GROUP_CONCAT(outlet_id) AS outlets, GROUP_CONCAT(name) AS names, GROUP_CONCAT(start_time) AS start_times, GROUP_CONCAT(end_time) AS end_times, GROUP_CONCAT(sequence) AS sequences FROM shift_templates GROUP BY UPPER(TRIM(code)) HAVING COUNT(DISTINCT TRIM(name)) > 1 OR COUNT(DISTINCT start_time) > 1 OR COUNT(DISTINCT end_time) > 1 OR COUNT(DISTINCT sequence) > 1;" \
+              --json \
+              --yes)
+
+            SHIFT_CONFLICT_COUNT=$(echo "$SHIFT_CONFLICT_RES" | jq -r '.[0].results | length')
+            if [ "$SHIFT_CONFLICT_COUNT" -gt "0" ]; then
+              echo "ERROR: [0032] Global master conflict detected in shift_templates (groups=$SHIFT_CONFLICT_COUNT). Aborting deployment safely without altering DB."
+              echo "$SHIFT_CONFLICT_RES" | jq -r '.[0].results[] | "  Conflict in shift code \(.normalized_code): names=\(.names) start_times=\(.start_times) end_times=\(.end_times) sequences=\(.sequences) outlets=\(.outlets)"'
+              exit 1
+            fi
+          fi
+          echo "[0032] Conflict diagnostics passed (0 conflicting definitions)."
+
+          # 4. CAPTURE PRE-MIGRATION COUNTS
+          echo "[0032] Capturing pre-migration counts..."
+          get_table_count() {
+            local tbl="$1"
+            local tbl_exists
+            tbl_exists=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+              --remote \
+              --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = '$tbl';" \
+              --json --yes | jq -r '.[0].results[0].count // 0')
+            if [ "$tbl_exists" = "1" ]; then
+              npx wrangler d1 execute iocl-pump-manager-d1 \
+                --remote \
+                --command "SELECT COUNT(*) AS count FROM \"$tbl\";" \
+                --json --yes | jq -r '.[0].results[0].count // 0'
+            else
+              echo "0"
+            fi
+          }
+
+          PRE_0032_OP_SHIFTS=$(get_table_count "operational_shifts")
+          PRE_0032_HR_STAFF=$(get_table_count "hr_staff")
+          PRE_0032_HR_MANPOWER=$(get_table_count "hr_manpower_sanctions")
+          PRE_0032_HR_ROSTER=$(get_table_count "hr_roster_assignments")
+          PRE_0032_HR_ATTENDANCE=$(get_table_count "hr_attendance_records")
+          PRE_0032_HR_NOZZLE=$(get_table_count "hr_nozzle_assignments")
+          PRE_0032_HR_DESIG=$(get_table_count "hr_designations")
+          PRE_0032_SHIFT_TMPL=$(get_table_count "shift_templates")
+
+          echo "[0032] Pre-counts captured: op_shifts=$PRE_0032_OP_SHIFTS, hr_staff=$PRE_0032_HR_STAFF, hr_manpower=$PRE_0032_HR_MANPOWER, hr_roster=$PRE_0032_HR_ROSTER, hr_attendance=$PRE_0032_HR_ATTENDANCE, hr_nozzle=$PRE_0032_HR_NOZZLE, hr_desig=$PRE_0032_HR_DESIG, shift_tmpl=$PRE_0032_SHIFT_TMPL"
+
+          # 5. APPLY 0032 SAFELY IN ORDERED STAGES
+          echo "[0032] Stage A: creating global master tables, indexes, and triggers..."
+          npx wrangler d1 execute iocl-pump-manager-d1 --remote --file=migrations/0032_stages/01_stage_a_create_global_masters.sql --yes
+
+          echo "[0032] Stage B: populating global masters from legacy tables..."
+          npx wrangler d1 execute iocl-pump-manager-d1 --remote --file=migrations/0032_stages/02_stage_b_populate_global_masters.sql --yes
+
+          echo "[0032] Stage C: updating old references to global IDs..."
+          npx wrangler d1 execute iocl-pump-manager-d1 --remote --file=migrations/0032_stages/03_stage_c_update_references.sql --yes
+
+          echo "[0032] Stage D: rebuilding operational_shifts..."
+          npx wrangler d1 execute iocl-pump-manager-d1 --remote --file=migrations/0032_stages/04_stage_d_rebuild_operational_shifts.sql --yes
+
+          echo "[0032] Stage E: rebuilding HR dependent tables..."
+          npx wrangler d1 execute iocl-pump-manager-d1 --remote --file=migrations/0032_stages/05_stage_e_rebuild_hr_tables.sql --yes
+
+          echo "[0032] Stage F: recreating indexes and integrity triggers..."
+          npx wrangler d1 execute iocl-pump-manager-d1 --remote --file=migrations/0032_stages/06_stage_f_triggers_and_indexes.sql --yes
+
+          # 6. POST-MIGRATION VERIFICATION (Stage G)
+          echo "[0032] Stage G: Verifying post-migration state..."
+          VERIFY_TABLES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('global_hr_designations', 'global_shift_templates');" \
+            --json \
+            --yes)
+          POST_GLOBAL_TABLE_COUNT=$(echo "$VERIFY_TABLES" | jq -r '.[0].results | length')
+          if [ "$POST_GLOBAL_TABLE_COUNT" -ne 2 ]; then
+            echo "ERROR: [0032] Both global master tables must exist in sqlite_master (found $POST_GLOBAL_TABLE_COUNT / 2)."
+            exit 1
+          fi
+
+          POST_0032_GLOBAL_DESIG=$(get_table_count "global_hr_designations")
+          POST_0032_GLOBAL_SHIFT=$(get_table_count "global_shift_templates")
+
+          echo "[0032] Global master counts: global_hr_designations=$POST_0032_GLOBAL_DESIG, global_shift_templates=$POST_0032_GLOBAL_SHIFT"
+
+          if [ "$PRE_0032_HR_DESIG" -gt 0 ] && [ "$POST_0032_GLOBAL_DESIG" -le 0 ]; then
+            echo "ERROR: [0032] Legacy hr_designations had $PRE_0032_HR_DESIG records but global_hr_designations is empty."
+            exit 1
+          fi
+
+          if [ "$PRE_0032_SHIFT_TMPL" -gt 0 ] && [ "$POST_0032_GLOBAL_SHIFT" -le 0 ]; then
+            echo "ERROR: [0032] Legacy shift_templates had $PRE_0032_SHIFT_TMPL records but global_shift_templates is empty."
+            exit 1
+          fi
+
+          POST_0032_OP_SHIFTS=$(get_table_count "operational_shifts")
+          POST_0032_HR_STAFF=$(get_table_count "hr_staff")
+          POST_0032_HR_MANPOWER=$(get_table_count "hr_manpower_sanctions")
+          POST_0032_HR_ROSTER=$(get_table_count "hr_roster_assignments")
+          POST_0032_HR_ATTENDANCE=$(get_table_count "hr_attendance_records")
+          POST_0032_HR_NOZZLE=$(get_table_count "hr_nozzle_assignments")
+
+          echo "[0032] Rebuilt table counts check (Post vs Pre):"
+          echo "  operational_shifts: $POST_0032_OP_SHIFTS vs $PRE_0032_OP_SHIFTS"
+          echo "  hr_staff: $POST_0032_HR_STAFF vs $PRE_0032_HR_STAFF"
+          echo "  hr_manpower_sanctions: $POST_0032_HR_MANPOWER vs $PRE_0032_HR_MANPOWER"
+          echo "  hr_roster_assignments: $POST_0032_HR_ROSTER vs $PRE_0032_HR_ROSTER"
+          echo "  hr_attendance_records: $POST_0032_HR_ATTENDANCE vs $PRE_0032_HR_ATTENDANCE"
+          echo "  hr_nozzle_assignments: $POST_0032_HR_NOZZLE vs $PRE_0032_HR_NOZZLE"
+
+          if [ "$POST_0032_OP_SHIFTS" -lt "$PRE_0032_OP_SHIFTS" ]; then echo "ERROR: [0032] operational_shifts count decreased from $PRE_0032_OP_SHIFTS to $POST_0032_OP_SHIFTS"; exit 1; fi
+          if [ "$POST_0032_HR_STAFF" -lt "$PRE_0032_HR_STAFF" ]; then echo "ERROR: [0032] hr_staff count decreased from $PRE_0032_HR_STAFF to $POST_0032_HR_STAFF"; exit 1; fi
+          if [ "$POST_0032_HR_MANPOWER" -lt "$PRE_0032_HR_MANPOWER" ]; then echo "ERROR: [0032] hr_manpower_sanctions count decreased from $PRE_0032_HR_MANPOWER to $POST_0032_HR_MANPOWER"; exit 1; fi
+          if [ "$POST_0032_HR_ROSTER" -lt "$PRE_0032_HR_ROSTER" ]; then echo "ERROR: [0032] hr_roster_assignments count decreased from $PRE_0032_HR_ROSTER to $POST_0032_HR_ROSTER"; exit 1; fi
+          if [ "$POST_0032_HR_ATTENDANCE" -lt "$PRE_0032_HR_ATTENDANCE" ]; then echo "ERROR: [0032] hr_attendance_records count decreased from $PRE_0032_HR_ATTENDANCE to $POST_0032_HR_ATTENDANCE"; exit 1; fi
+          if [ "$POST_0032_HR_NOZZLE" -lt "$PRE_0032_HR_NOZZLE" ]; then echo "ERROR: [0032] hr_nozzle_assignments count decreased from $PRE_0032_HR_NOZZLE to $POST_0032_HR_NOZZLE"; exit 1; fi
+
+          echo "[0032] Running foreign key check..."
+          FK_RESULT_0032=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "PRAGMA foreign_key_check;" \
+            --json \
+            --yes)
+          FK_VIOLATIONS_0032=$(echo "$FK_RESULT_0032" | jq -r '.[0].results | length')
+          if [ "$FK_VIOLATIONS_0032" != "0" ]; then
+            echo "ERROR: [0032] Foreign key violation detected post-migration 0032:"
+            echo "$FK_RESULT_0032"
+            exit 1
+          fi
+          echo "[0032] PRAGMA foreign_key_check passed (0 violations)."
+
+          # 7. CHECK REFERENCES
+          echo "[0032] Checking references to global masters..."
+          ORPHAN_DESIG_COUNT=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM hr_staff s LEFT JOIN global_hr_designations g ON s.designation_id = g.id WHERE g.id IS NULL;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          ORPHAN_SHIFT_COUNT=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM operational_shifts os LEFT JOIN global_shift_templates g ON os.shift_template_id = g.id WHERE g.id IS NULL;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "[0032] Orphan reference counts: hr_staff -> global_hr_designations: $ORPHAN_DESIG_COUNT, operational_shifts -> global_shift_templates: $ORPHAN_SHIFT_COUNT"
+
+          if [ "$ORPHAN_DESIG_COUNT" != "0" ]; then
+            echo "ERROR: [0032] Found $ORPHAN_DESIG_COUNT hr_staff records referencing missing global_hr_designations."
+            exit 1
+          fi
+
+          if [ "$ORPHAN_SHIFT_COUNT" != "0" ]; then
+            echo "ERROR: [0032] Found $ORPHAN_SHIFT_COUNT operational_shifts records referencing missing global_shift_templates."
+            exit 1
+          fi
+          echo "[0032] Reference integrity verified (all orphan counts 0)."
+
+          # 8. RECORD MIGRATION
+          echo "[0032] Recording migration $MIGRATION_0032 in d1_migrations..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('$MIGRATION_0032');" \
+            --yes
+
+          echo "[0032] Migration $MIGRATION_0032 successfully applied and recorded."
+
 
       - name: Verify D1 Migration Completion
         env:
@@ -430,10 +676,41 @@ jobs:
 
           echo "Recorded migrations: $COUNT"
 
-          if [ "$COUNT" -lt "31" ]; then
-            echo "ERROR: Expected all 31 migrations to be recorded."
+          if [ "$COUNT" -lt "32" ]; then
+            echo "ERROR: Expected all 32 migrations to be recorded."
             exit 1
           fi
+
+          # Explicit workflow assertions for global masters
+          GLOBAL_TABLES_CHECK=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('global_hr_designations', 'global_shift_templates');" \
+            --json \
+            --yes)
+          FOUND_GLOBAL_COUNT=$(echo "$GLOBAL_TABLES_CHECK" | jq -r '.[0].results | length')
+          if [ "$FOUND_GLOBAL_COUNT" -ne 2 ]; then
+            echo "ERROR: One or more global master tables are missing from sqlite_master (found $FOUND_GLOBAL_COUNT / 2)."
+            exit 1
+          fi
+
+          LEGACY_SHIFT_COUNT=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM shift_templates;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          GLOBAL_SHIFT_COUNT=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM global_shift_templates;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$LEGACY_SHIFT_COUNT" -gt 0 ] && [ "$GLOBAL_SHIFT_COUNT" -eq 0 ]; then
+            echo "ERROR: global_shift_templates has 0 records when legacy shift_templates had $LEGACY_SHIFT_COUNT records."
+            exit 1
+          fi
+
+          echo "Global masters migration assertions verified successfully."
 
       - name: Verify Remote DG and Report Permission Integrity
         env:
