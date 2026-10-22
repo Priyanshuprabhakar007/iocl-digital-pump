@@ -9,6 +9,7 @@ import { requirePermission } from '../middleware/permission';
 import { PERMISSIONS } from '../../shared/constants';
 import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
 import { GlobalHrDesignationStatusSchema } from '../../shared/validators';
+import type { HrDesignationStatus } from '../../shared/types';
 
 export const hrRoutes = new Hono<{ Bindings: EnvBindings }>();
 
