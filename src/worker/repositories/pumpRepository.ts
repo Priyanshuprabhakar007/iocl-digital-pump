@@ -38,6 +38,16 @@ import {
 } from '../../shared/types';
 import { parseMilliunits, formatMilliunits, MILLIUNIT_SCALE } from '../../shared/precision';
 
+export const SNAPSHOT_INSERT_CHUNK_SIZE = 5;
+
+export function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 export class PumpRepository {
   constructor(private db: AppDatabase) {}
 
@@ -1483,12 +1493,34 @@ export class PumpRepository {
       };
     });
 
-    const nozzleSnapshotInsert = this.db.insert(schema.operationalShiftNozzles).values(snapshotRows);
-    const priceSnapshotInsert = this.db.insert(schema.operationalShiftProductPrices).values(priceSnapshotRows);
-    
-    const batch: any[] = [shiftInsert, nozzleSnapshotInsert, priceSnapshotInsert];
-    if (tankSnapshotRows.length > 0) {
-      batch.push(this.db.insert(schema.operationalShiftTanks).values(tankSnapshotRows));
+    const nozzleChunks = chunkArray(snapshotRows, SNAPSHOT_INSERT_CHUNK_SIZE);
+    const priceChunks = chunkArray(priceSnapshotRows, SNAPSHOT_INSERT_CHUNK_SIZE);
+    const tankChunks = chunkArray(tankSnapshotRows, SNAPSHOT_INSERT_CHUNK_SIZE);
+
+    const batch: any[] = [shiftInsert];
+
+    for (const chunk of nozzleChunks) {
+      if (chunk.length > 0) {
+        batch.push(
+          this.db.insert(schema.operationalShiftNozzles).values(chunk)
+        );
+      }
+    }
+
+    for (const chunk of priceChunks) {
+      if (chunk.length > 0) {
+        batch.push(
+          this.db.insert(schema.operationalShiftProductPrices).values(chunk)
+        );
+      }
+    }
+
+    for (const chunk of tankChunks) {
+      if (chunk.length > 0) {
+        batch.push(
+          this.db.insert(schema.operationalShiftTanks).values(chunk)
+        );
+      }
     }
 
     console.log('[SHIFT_OPEN_BATCH_PRECHECK]', {
@@ -1496,8 +1528,12 @@ export class PumpRepository {
       shiftTemplateId: data.shiftTemplateId,
       businessDate: data.businessDate,
       nozzleSnapshots: snapshotRows.length,
+      nozzleChunks: nozzleChunks.length,
       tankSnapshots: tankSnapshotRows.length,
+      tankChunks: tankChunks.length,
       priceSnapshots: priceSnapshotRows.length,
+      priceChunks: priceChunks.length,
+      batchStatements: batch.length,
       productCodes: priceSnapshotRows.map(x => x.productCode),
     });
 
@@ -1515,8 +1551,12 @@ export class PumpRepository {
           shiftTemplateId: data.shiftTemplateId,
           businessDate: data.businessDate,
           nozzleSnapshots: snapshotRows.length,
+          nozzleChunks: nozzleChunks.length,
           tankSnapshots: tankSnapshotRows.length,
+          tankChunks: tankChunks.length,
           priceSnapshots: priceSnapshotRows.length,
+          priceChunks: priceChunks.length,
+          batchStatements: batch.length,
         })
       );
       throw err;

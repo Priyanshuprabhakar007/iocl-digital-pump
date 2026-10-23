@@ -3,13 +3,15 @@ import { app } from '../src/worker/app';
 import { createLocalD1Database } from '../src/db/localD1';
 import { getDb } from '../src/db';
 import { seedDatabase } from '../src/db/seed';
+import { chunkArray, SNAPSHOT_INSERT_CHUNK_SIZE } from '../src/worker/repositories/pumpRepository';
 import * as schema from '../src/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import fs from 'fs';
 
 const TEST_DB_PATH = './.sqlite/test_open_shift_integration.db';
+const D1_MAX_BOUND_VARIABLES = 100;
 
-describe('Production-Like Open Shift Integration & Snapshot Integrity Suite', () => {
+describe('Production-Like Open Shift Integration & D1 Chunked Batch Suite', () => {
   let localD1: any;
   let env: any;
 
@@ -17,6 +19,11 @@ describe('Production-Like Open Shift Integration & Snapshot Integrity Suite', ()
     if (fs.existsSync(TEST_DB_PATH)) {
       try { fs.unlinkSync(TEST_DB_PATH); } catch (e) {}
     }
+    const walPath = `${TEST_DB_PATH}-wal`;
+    const shmPath = `${TEST_DB_PATH}-shm`;
+    if (fs.existsSync(walPath)) { try { fs.unlinkSync(walPath); } catch (e) {} }
+    if (fs.existsSync(shmPath)) { try { fs.unlinkSync(shmPath); } catch (e) {} }
+
     localD1 = createLocalD1Database(TEST_DB_PATH);
     const db = getDb(localD1);
     await seedDatabase(db);
@@ -30,6 +37,10 @@ describe('Production-Like Open Shift Integration & Snapshot Integrity Suite', ()
     if (fs.existsSync(TEST_DB_PATH)) {
       try { fs.unlinkSync(TEST_DB_PATH); } catch (e) {}
     }
+    const walPath = `${TEST_DB_PATH}-wal`;
+    const shmPath = `${TEST_DB_PATH}-shm`;
+    if (fs.existsSync(walPath)) { try { fs.unlinkSync(walPath); } catch (e) {} }
+    if (fs.existsSync(shmPath)) { try { fs.unlinkSync(shmPath); } catch (e) {} }
   });
 
   async function loginAs(email = 'admin@iocl.in', password = 'Password@123') {
@@ -46,70 +57,187 @@ describe('Production-Like Open Shift Integration & Snapshot Integrity Suite', ()
     return { cookie, user: json.data?.user || json.data };
   }
 
-  it('successfully opens shift, verifies exact snapshots, and blocks duplicate active shift on retry', async () => {
-    const { cookie, user } = await loginAs();
-    expect(user).toBeDefined();
-    const db = getDb(localD1);
+  async function setupCustomOutletTopology(
+    db: ReturnType<typeof getDb>,
+    userId: string,
+    config: {
+      outletId: string;
+      roCode: string;
+      productCount: number;
+      tankCount: number;
+      nozzleCount: number;
+    }
+  ) {
+    const now = new Date().toISOString();
+    const [existingOutlet] = await db.select().from(schema.retailOutlets).limit(1);
 
-    // 1. Get an active outlet (e.g. ro-1001)
-    const [outlet] = await db.select().from(schema.retailOutlets).where(eq(schema.retailOutlets.status, 'ACTIVE')).limit(1);
-    expect(outlet).toBeDefined();
+    await db.insert(schema.retailOutlets).values({
+      ...existingOutlet,
+      id: config.outletId,
+      roCode: config.roCode,
+      name: `Test Outlet ${config.roCode}`,
+      status: 'ACTIVE',
+      createdAt: now,
+      updatedAt: now,
+    });
 
-    // 2. Ensure active product mappings for liquid fuels
-    const products = await db.select().from(schema.products).where(eq(schema.products.status, 'ACTIVE'));
-    const liquidProducts = products.filter(p => p.unit === 'LITRE' && p.category !== 'CNG');
-    expect(liquidProducts.length).toBeGreaterThan(0);
+    const baseProducts = [
+      { id: `prod-${config.roCode}-ms`, code: `MS_${config.roCode}`, name: 'Motor Spirit', category: 'PETROL', unit: 'LITRE' as const },
+      { id: `prod-${config.roCode}-hsd`, code: `HSD_${config.roCode}`, name: 'High Speed Diesel', category: 'DIESEL', unit: 'LITRE' as const },
+      { id: `prod-${config.roCode}-xp95`, code: `XP95_${config.roCode}`, name: 'XtraPremium 95', category: 'PETROL', unit: 'LITRE' as const },
+      { id: `prod-${config.roCode}-xg`, code: `XG_${config.roCode}`, name: 'XtraGreen', category: 'DIESEL', unit: 'LITRE' as const },
+      { id: `prod-${config.roCode}-xp100`, code: `XP100_${config.roCode}`, name: 'XtraPremium 100', category: 'PETROL', unit: 'LITRE' as const },
+    ].slice(0, config.productCount);
 
-    for (const lp of liquidProducts) {
-      const [existingMapping] = await db.select().from(schema.outletProducts).where(
-        and(eq(schema.outletProducts.outletId, outlet.id), eq(schema.outletProducts.productId, lp.id))
-      );
-      if (!existingMapping) {
-        await db.insert(schema.outletProducts).values({
-          id: `op-${crypto.randomUUID()}`,
-          outletId: outlet.id,
-          productId: lp.id,
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          createdBy: user.id,
-        });
-      } else if (existingMapping.status !== 'ACTIVE') {
-        await db.update(schema.outletProducts).set({ status: 'ACTIVE' }).where(eq(schema.outletProducts.id, existingMapping.id));
-      }
+    for (const p of baseProducts) {
+      await db.insert(schema.products).values({
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        category: p.category,
+        unit: p.unit,
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+      });
 
-      const [existingPrice] = await db.select().from(schema.outletProductPrices).where(
-        and(eq(schema.outletProductPrices.outletId, outlet.id), eq(schema.outletProductPrices.productId, lp.id), eq(schema.outletProductPrices.status, 'ACTIVE'))
-      );
-      if (!existingPrice) {
-        await db.insert(schema.outletProductPrices).values({
-          id: `pri-${crypto.randomUUID()}`,
-          outletId: outlet.id,
-          productId: lp.id,
-          pricePaisePerUnit: 100000,
-          effectiveFrom: '2026-01-01',
-          effectiveTo: null,
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          createdBy: user.id,
-        });
-      }
+      await db.insert(schema.outletProducts).values({
+        id: `op-${config.roCode}-${p.id}`,
+        outletId: config.outletId,
+        productId: p.id,
+        status: 'ACTIVE',
+        createdAt: now,
+        createdBy: userId,
+      });
+
+      await db.insert(schema.outletProductPrices).values({
+        id: `pri-${config.roCode}-${p.id}`,
+        outletId: config.outletId,
+        productId: p.id,
+        pricePaisePerUnit: 9650,
+        effectiveFrom: '2026-01-01',
+        effectiveTo: null,
+        status: 'ACTIVE',
+        createdAt: now,
+        createdBy: userId,
+      });
     }
 
-    // 3. Get active shift template
+    const tankIds: { id: string; productId: string }[] = [];
+    for (let t = 1; t <= config.tankCount; t++) {
+      const prod = baseProducts[(t - 1) % baseProducts.length];
+      const tankId = `tank-${config.roCode}-${t}`;
+      await db.insert(schema.tanks).values({
+        id: tankId,
+        outletId: config.outletId,
+        productId: prod.id,
+        tankNumber: t,
+        name: `Tank ${t} (${prod.code})`,
+        capacityLitres: 20000,
+        safeFillCapacityLitres: 19000,
+        minimumOperatingLevelLitres: 500,
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+        createdBy: userId,
+      });
+      tankIds.push({ id: tankId, productId: prod.id });
+    }
+
+    const dispenserCount = Math.ceil(config.nozzleCount / 4);
+    const dispenserIds: string[] = [];
+    for (let d = 1; d <= dispenserCount; d++) {
+      const dispId = `disp-${config.roCode}-${d}`;
+      await db.insert(schema.dispensers).values({
+        id: dispId,
+        outletId: config.outletId,
+        dispenserNumber: d,
+        name: `Dispenser ${d}`,
+        manufacturer: 'Gilbarco',
+        model: 'Encore',
+        serialNumber: `SN-${config.roCode}-${d}`,
+        nozzleCapacity: 6,
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+        createdBy: userId,
+      });
+      dispenserIds.push(dispId);
+    }
+
+    for (let n = 1; n <= config.nozzleCount; n++) {
+      const dispId = dispenserIds[Math.floor((n - 1) / 4)];
+      const tank = tankIds[(n - 1) % tankIds.length];
+      const nozzleNumInDisp = ((n - 1) % 4) + 1;
+      await db.insert(schema.nozzles).values({
+        id: `noz-${config.roCode}-${n}`,
+        outletId: config.outletId,
+        dispenserId: dispId,
+        tankId: tank.id,
+        productId: tank.productId,
+        nozzleNumber: nozzleNumInDisp,
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+        createdBy: userId,
+      });
+    }
+  }
+
+  it('1. chunkArray splits arrays into conservative chunks of size 5 and handles empty arrays safely', () => {
+    expect(SNAPSHOT_INSERT_CHUNK_SIZE).toBe(5);
+    expect(chunkArray([], SNAPSHOT_INSERT_CHUNK_SIZE)).toEqual([]);
+    const sixteen = Array.from({ length: 16 }, (_, i) => i + 1);
+    const chunks = chunkArray(sixteen, SNAPSHOT_INSERT_CHUNK_SIZE);
+    expect(chunks.length).toBe(4);
+    expect(chunks.map(c => c.length)).toEqual([5, 5, 5, 1]);
+  });
+
+  it('2. realistic production outlet (16 nozzles, 5 tanks, 4 products) opens shift within D1 variable limits and prevents duplicates on retry', async () => {
+    const { cookie, user } = await loginAs();
+    const db = getDb(localD1);
+    const outletId = 'ro-prod-16-5-4';
+
+    await setupCustomOutletTopology(db, user.id, {
+      outletId,
+      roCode: 'P1654',
+      productCount: 4,
+      tankCount: 5,
+      nozzleCount: 16,
+    });
+
+    // Enforce Cloudflare D1 strict 100-variable limit per statement in batch()
+    const originalBatch = localD1.batch.bind(localD1);
+    let batchCalls = 0;
+    let capturedStatementCount = 0;
+    let maxVariablesInAnyStatement = 0;
+
+    localD1.batch = async (statements: any[]) => {
+      batchCalls++;
+      capturedStatementCount = statements.length;
+      for (const stmt of statements) {
+        const paramCount = Array.isArray(stmt.params) ? stmt.params.length : 0;
+        if (paramCount > maxVariablesInAnyStatement) {
+          maxVariablesInAnyStatement = paramCount;
+        }
+        if (paramCount > D1_MAX_BOUND_VARIABLES) {
+          throw new Error(`D1_ERROR: too many SQL variables at offset ${paramCount}: SQLITE_ERROR`);
+        }
+      }
+      return originalBatch(statements);
+    };
+
     const [template] = await db.select().from(schema.globalShiftTemplates).where(eq(schema.globalShiftTemplates.status, 'ACTIVE')).limit(1);
-    expect(template).toBeDefined();
+    const businessDate = '2026-10-23';
 
-    const businessDate = new Date().toISOString().split('T')[0];
-
-    // 4. Call POST /api/v1/outlets/:outletId/shifts/open
     const openRes = await app.fetch(
-      new Request(`http://localhost/api/v1/outlets/${outlet.id}/shifts/open`, {
+      new Request(`http://localhost/api/v1/outlets/${outletId}/shifts/open`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
         body: JSON.stringify({
           shiftTemplateId: template.id,
           businessDate,
-          notes: 'Integration test opening shift',
+          notes: 'Realistic 16/5/4 topology shift open',
         }),
       }),
       env
@@ -118,37 +246,153 @@ describe('Production-Like Open Shift Integration & Snapshot Integrity Suite', ()
     const openJson = await openRes.json() as any;
     expect(openRes.status).toBe(201);
     expect(openJson.success).toBe(true);
-    expect(openJson.data).toBeDefined();
     const shiftId = openJson.data.id;
 
-    // 5. Verify exact operational_shifts row
-    const [dbShift] = await db.select().from(schema.operationalShifts).where(eq(schema.operationalShifts.id, shiftId));
-    expect(dbShift).toBeDefined();
-    expect(dbShift.status).toBe('OPEN');
-    expect(dbShift.outletId).toBe(outlet.id);
-    expect(dbShift.shiftTemplateId).toBe(template.id);
+    // Verify atomic single batch call and exact statement count:
+    // 1 shift + 4 nozzle chunks (5,5,5,1) + 1 price chunk (4) + 1 tank chunk (5) = 7 statements
+    expect(batchCalls).toBe(1);
+    expect(capturedStatementCount).toBe(7);
+    expect(maxVariablesInAnyStatement).toBeLessThanOrEqual(D1_MAX_BOUND_VARIABLES);
 
-    // 6. Verify nozzle snapshots, tank snapshots, and price snapshots
+    // Verify exact snapshot counts in DB
+    const shifts = await db.select().from(schema.operationalShifts).where(eq(schema.operationalShifts.outletId, outletId));
     const nozzleSnapshots = await db.select().from(schema.operationalShiftNozzles).where(eq(schema.operationalShiftNozzles.operationalShiftId, shiftId));
     const tankSnapshots = await db.select().from(schema.operationalShiftTanks).where(eq(schema.operationalShiftTanks.operationalShiftId, shiftId));
     const priceSnapshots = await db.select().from(schema.operationalShiftProductPrices).where(eq(schema.operationalShiftProductPrices.operationalShiftId, shiftId));
 
-    expect(nozzleSnapshots.length).toBeGreaterThan(0);
-    expect(priceSnapshots.length).toBeGreaterThan(0);
+    expect(shifts.length).toBe(1);
+    expect(nozzleSnapshots.length).toBe(16);
+    expect(tankSnapshots.length).toBe(5);
+    expect(priceSnapshots.length).toBe(4);
 
-    // 7. Verify no duplicates on retry (opening another active shift for same outlet should fail with 409 conflict)
+    // Verify retry does not duplicate anything
     const retryRes = await app.fetch(
-      new Request(`http://localhost/api/v1/outlets/${outlet.id}/shifts/open`, {
+      new Request(`http://localhost/api/v1/outlets/${outletId}/shifts/open`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
         body: JSON.stringify({
           shiftTemplateId: template.id,
           businessDate,
-          notes: 'Retry opening shift',
+          notes: 'Retry shift open',
         }),
       }),
       env
     );
     expect(retryRes.status).toBe(409);
+
+    const shiftsAfterRetry = await db.select().from(schema.operationalShifts).where(eq(schema.operationalShifts.outletId, outletId));
+    const nozzlesAfterRetry = await db.select().from(schema.operationalShiftNozzles).where(eq(schema.operationalShiftNozzles.operationalShiftId, shiftId));
+    expect(shiftsAfterRetry.length).toBe(1);
+    expect(nozzlesAfterRetry.length).toBe(16);
+  });
+
+  it('3. large topology outlet (40 nozzles, 10 tanks, 5 products) succeeds using chunked atomic batch inserts', async () => {
+    const { cookie, user } = await loginAs();
+    const db = getDb(localD1);
+    const outletId = 'ro-large-40-10-5';
+
+    await setupCustomOutletTopology(db, user.id, {
+      outletId,
+      roCode: 'L40105',
+      productCount: 5,
+      tankCount: 10,
+      nozzleCount: 40,
+    });
+
+    const originalBatch = localD1.batch.bind(localD1);
+    let batchCalls = 0;
+    let capturedStatementCount = 0;
+
+    localD1.batch = async (statements: any[]) => {
+      batchCalls++;
+      capturedStatementCount = statements.length;
+      for (const stmt of statements) {
+        const paramCount = Array.isArray(stmt.params) ? stmt.params.length : 0;
+        if (paramCount > D1_MAX_BOUND_VARIABLES) {
+          throw new Error(`D1_ERROR: too many SQL variables at offset ${paramCount}: SQLITE_ERROR`);
+        }
+      }
+      return originalBatch(statements);
+    };
+
+    const [template] = await db.select().from(schema.globalShiftTemplates).where(eq(schema.globalShiftTemplates.status, 'ACTIVE')).limit(1);
+
+    const openRes = await app.fetch(
+      new Request(`http://localhost/api/v1/outlets/${outletId}/shifts/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          shiftTemplateId: template.id,
+          businessDate: '2026-10-24',
+          notes: 'Large 40/10/5 topology shift open',
+        }),
+      }),
+      env
+    );
+
+    const openJson = await openRes.json() as any;
+    expect(openRes.status).toBe(201);
+    expect(openJson.success).toBe(true);
+    const shiftId = openJson.data.id;
+
+    // 1 shift + 8 nozzle chunks + 1 price chunk + 2 tank chunks = 12 statements
+    expect(batchCalls).toBe(1);
+    expect(capturedStatementCount).toBe(12);
+
+    const nozzleSnapshots = await db.select().from(schema.operationalShiftNozzles).where(eq(schema.operationalShiftNozzles.operationalShiftId, shiftId));
+    const tankSnapshots = await db.select().from(schema.operationalShiftTanks).where(eq(schema.operationalShiftTanks.operationalShiftId, shiftId));
+    const priceSnapshots = await db.select().from(schema.operationalShiftProductPrices).where(eq(schema.operationalShiftProductPrices.operationalShiftId, shiftId));
+
+    expect(nozzleSnapshots.length).toBe(40);
+    expect(tankSnapshots.length).toBe(10);
+    expect(priceSnapshots.length).toBe(5);
+  });
+
+  it('4. preserves full transactional atomicity if any chunked statement in D1 batch fails', async () => {
+    const { cookie, user } = await loginAs();
+    const db = getDb(localD1);
+    const outletId = 'ro-atomic-rollback';
+
+    await setupCustomOutletTopology(db, user.id, {
+      outletId,
+      roCode: 'ATMC1',
+      productCount: 4,
+      tankCount: 5,
+      nozzleCount: 16,
+    });
+
+    // Inject a broken statement at the end of the batch to verify full rollback
+    const originalBatch = localD1.batch.bind(localD1);
+    localD1.batch = async (statements: any[]) => {
+      const failingStmt = localD1.prepare('INSERT INTO non_existent_table VALUES (1)');
+      return originalBatch([...statements, failingStmt]);
+    };
+
+    const [template] = await db.select().from(schema.globalShiftTemplates).where(eq(schema.globalShiftTemplates.status, 'ACTIVE')).limit(1);
+
+    const openRes = await app.fetch(
+      new Request(`http://localhost/api/v1/outlets/${outletId}/shifts/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          shiftTemplateId: template.id,
+          businessDate: '2026-10-25',
+        }),
+      }),
+      env
+    );
+
+    expect(openRes.status).toBe(500);
+
+    // Verify 0 rows were persisted for this outlet
+    const shifts = await db.select().from(schema.operationalShifts).where(eq(schema.operationalShifts.outletId, outletId));
+    const nozzles = await db.select().from(schema.operationalShiftNozzles).where(eq(schema.operationalShiftNozzles.outletId, outletId));
+    const tanks = await db.select().from(schema.operationalShiftTanks).where(eq(schema.operationalShiftTanks.outletId, outletId));
+    const prices = await db.select().from(schema.operationalShiftProductPrices).where(eq(schema.operationalShiftProductPrices.outletId, outletId));
+
+    expect(shifts.length).toBe(0);
+    expect(nozzles.length).toBe(0);
+    expect(tanks.length).toBe(0);
+    expect(prices.length).toBe(0);
   });
 });
