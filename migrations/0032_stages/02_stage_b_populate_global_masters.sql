@@ -54,8 +54,13 @@ INSERT OR IGNORE INTO "global_shift_templates" (
 )
 SELECT
     MIN("id"),
-    "code",
-    "name",
+    UPPER(TRIM("code")),
+    CASE UPPER(TRIM("code"))
+        WHEN 'SHIFT_1' THEN 'Shift 1 (Morning)'
+        WHEN 'SHIFT_2' THEN 'Shift 2 (Evening)'
+        WHEN 'SHIFT_3' THEN 'Shift 3 (Night Overnight)'
+        ELSE "name"
+    END,
     "start_time",
     "end_time",
     "sequence",
@@ -65,4 +70,5 @@ SELECT
     "updated_at"
 FROM "shift_templates"
 GROUP BY UPPER(TRIM("code"));
+
 

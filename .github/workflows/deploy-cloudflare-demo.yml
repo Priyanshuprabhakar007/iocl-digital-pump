@@ -504,9 +504,21 @@ jobs:
             --yes | jq -r '.[0].results[0].count // 0')
 
           if [ "$HAS_SHIFT_TABLE" = "1" ]; then
+            SHIFT_NAME_WARN_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+              --remote \
+              --command "SELECT UPPER(TRIM(code)) AS normalized_code, GROUP_CONCAT(DISTINCT TRIM(name)) AS names FROM shift_templates GROUP BY UPPER(TRIM(code)) HAVING COUNT(DISTINCT TRIM(name)) > 1;" \
+              --json \
+              --yes)
+
+            SHIFT_NAME_WARN_COUNT=$(echo "$SHIFT_NAME_WARN_RES" | jq -r '.[0].results | length')
+            if [ "$SHIFT_NAME_WARN_COUNT" -gt "0" ]; then
+              echo "WARNING: [0032] Legacy shift template naming differences detected (informational only):"
+              echo "$SHIFT_NAME_WARN_RES" | jq -r '.[0].results[] | "  WARNING: Shift code \(.normalized_code) has multiple legacy names: \(.names)"'
+            fi
+
             SHIFT_CONFLICT_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
               --remote \
-              --command "SELECT UPPER(TRIM(code)) AS normalized_code, COUNT(*) AS count, GROUP_CONCAT(id) AS ids, GROUP_CONCAT(outlet_id) AS outlets, GROUP_CONCAT(name) AS names, GROUP_CONCAT(start_time) AS start_times, GROUP_CONCAT(end_time) AS end_times, GROUP_CONCAT(sequence) AS sequences FROM shift_templates GROUP BY UPPER(TRIM(code)) HAVING COUNT(DISTINCT TRIM(name)) > 1 OR COUNT(DISTINCT start_time) > 1 OR COUNT(DISTINCT end_time) > 1 OR COUNT(DISTINCT sequence) > 1;" \
+              --command "SELECT UPPER(TRIM(code)) AS normalized_code, COUNT(*) AS count, GROUP_CONCAT(id) AS ids, GROUP_CONCAT(outlet_id) AS outlets, GROUP_CONCAT(name) AS names, GROUP_CONCAT(start_time) AS start_times, GROUP_CONCAT(end_time) AS end_times, GROUP_CONCAT(sequence) AS sequences FROM shift_templates GROUP BY UPPER(TRIM(code)) HAVING COUNT(DISTINCT start_time) > 1 OR COUNT(DISTINCT end_time) > 1 OR COUNT(DISTINCT sequence) > 1;" \
               --json \
               --yes)
 

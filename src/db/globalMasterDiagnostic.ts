@@ -135,8 +135,8 @@ export function detectDesignationConflicts(sqlite: any): MasterDiagnosticConflic
  * Two shift templates with the same normalized code are conflicting if:
  * - start_time differs
  * - end_time differs
- * - names differ
  * - sequence differs
+ * Name differences are logged as informational warnings and are safe to consolidate.
  */
 export function detectShiftTemplateConflicts(sqlite: any): MasterDiagnosticConflict[] {
   if (!tableExists(sqlite, 'shift_templates')) {
@@ -190,6 +190,7 @@ export function detectShiftTemplateConflicts(sqlite: any): MasterDiagnosticConfl
     const firstNormName = first.name.trim().toUpperCase();
 
     let hasMismatch = false;
+    let hasNameWarning = false;
     let reason = '';
 
     for (let i = 1; i < rows.length; i++) {
@@ -203,16 +204,21 @@ export function detectShiftTemplateConflicts(sqlite: any): MasterDiagnosticConfl
         reason = `Conflicting shift hours for shift code '${group.normalized_code}': (${firstStart} - ${firstEnd}) vs (${currStart} - ${currEnd})`;
         break;
       }
-      if (firstNormName !== currNormName) {
-        hasMismatch = true;
-        reason = `Conflicting names for shift code '${group.normalized_code}': '${first.name}' vs '${curr.name}'`;
-        break;
-      }
       if (first.sequence !== curr.sequence) {
         hasMismatch = true;
         reason = `Conflicting sequence numbers for shift code '${group.normalized_code}': ${first.sequence} vs ${curr.sequence}`;
         break;
       }
+      if (firstNormName !== currNormName) {
+        hasNameWarning = true;
+      }
+    }
+
+    if (hasNameWarning && !hasMismatch) {
+      const distinctNames = Array.from(new Set(rows.map(r => r.name.trim()))).join(', ');
+      console.warn(
+        `WARNING: Shift code ${group.normalized_code} has multiple legacy names: ${distinctNames}`
+      );
     }
 
     if (hasMismatch) {

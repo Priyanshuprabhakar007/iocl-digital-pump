@@ -331,7 +331,8 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     // Conflict diagnostics
     expect(step32Content).toContain('Running designation conflict diagnostic (informational warning only)');
     expect(step32Content).toContain('Proceeding using explicit designation ID mapping.');
-    expect(step32Content).toContain('HAVING COUNT(DISTINCT TRIM(name)) > 1 OR COUNT(DISTINCT start_time) > 1 OR COUNT(DISTINCT end_time) > 1 OR COUNT(DISTINCT sequence) > 1;');
+    expect(step32Content).toContain('HAVING COUNT(DISTINCT start_time) > 1 OR COUNT(DISTINCT end_time) > 1 OR COUNT(DISTINCT sequence) > 1;');
+    expect(step32Content).not.toContain('HAVING COUNT(DISTINCT TRIM(name)) > 1 OR COUNT(DISTINCT start_time) > 1');
 
     // Pre-migration counts
     expect(step32Content).toContain('Capturing pre-migration counts');
@@ -399,5 +400,100 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-a13b3799-ec57-4757-b3c1-c26b8d677eb3');
     expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-c18ae4a5-7b8f-45a7-b50b-51fbbdb3b54d');
     expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-e2411a12-3084-48f4-b8d4-39f37626a59d');
+  });
+
+  // 10. Same shift code + same timing + same sequence + different name is allowed and consolidates to canonical global names
+  it('10. Same shift code + same timing + same sequence + different name is allowed and consolidates to canonical global names', () => {
+    dbPath = `./.sqlite/test_0032_shift_names_${Date.now()}_${Math.random().toString(36).substring(7)}.db`;
+    localD1 = createLocalD1Database(dbPath, {
+      throughMigration: '0031_idempotency_and_unique_constraints.sql',
+    });
+    const rawDb = localD1.getNativeDb();
+    setupPre0032Hierarchy(rawDb);
+
+    rawDb.exec(`
+      INSERT INTO hr_designations (id, outlet_id, code, name, skill_category, status, created_by, created_at, updated_at) VALUES
+        ('desig-54163d40-b7ab-4e62-accd-4350f1f8cf11', 'ro-1', 'CH01', 'COCO Manager', 'SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('desig-5b5ec560-d9f0-452b-a46c-f2bcfb5ff840', 'ro-2', 'CH01', 'COCO Manager', 'SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+
+      INSERT INTO shift_templates (id, outlet_id, code, name, start_time, end_time, sequence, status, created_by, created_at, updated_at) VALUES
+        ('st-ro1-1', 'ro-1', 'SHIFT_1', 'Shift 1 (Morning)', '06:00', '14:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('st-ro2-1', 'ro-2', 'SHIFT_1', 'Morning Shift', '06:00', '14:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('st-ro1-2', 'ro-1', 'SHIFT_2', 'Shift 2 (Evening)', '14:00', '22:00', 2, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('st-ro2-2', 'ro-2', 'SHIFT_2', 'Evening Shift', '14:00', '22:00', 2, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('st-ro1-3', 'ro-1', 'SHIFT_3', 'Shift 3 (Night Overnight)', '22:00', '06:00', 3, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('st-ro2-3', 'ro-2', 'SHIFT_3', 'Night Shift', '22:00', '06:00', 3, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+
+      INSERT INTO operational_shifts (id, outlet_id, shift_template_id, business_date, started_at, status, opened_by_user_id, created_at, updated_at) VALUES
+        ('op-ro1', 'ro-1', 'st-ro1-1', '2026-03-30', '2026-03-30T06:00:00Z', 'CLOSED', 'usr-admin', '2026-03-30T06:00:00Z', '2026-03-30T14:00:00Z'),
+        ('op-ro2', 'ro-2', 'st-ro2-1', '2026-03-30', '2026-03-30T06:00:00Z', 'CLOSED', 'usr-admin', '2026-03-30T06:00:00Z', '2026-03-30T14:00:00Z');
+
+      INSERT INTO hr_staff (id, outlet_id, employee_code, full_name, designation_id, aadhaar_last4, emergency_contact_name, emergency_contact_phone, joining_date, employment_status, created_by, created_at, updated_at) VALUES
+        ('staff-ro2', 'ro-2', 'EMP201', 'Bikram Das', 'desig-5b5ec560-d9f0-452b-a46c-f2bcfb5ff840', '8888', 'Wife', '9999999999', '2026-01-01', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+
+      INSERT INTO hr_roster_assignments (id, outlet_id, staff_id, roster_date, shift_template_id, status, created_by, created_at, updated_at) VALUES
+        ('rost-ro2', 'ro-2', 'staff-ro2', '2026-03-30', 'st-ro2-2', 'SCHEDULED', 'usr-admin', '2026-03-29T00:00:00Z', '2026-03-29T00:00:00Z');
+    `);
+
+    // Naming-only differences must NOT be reported as blocking conflicts
+    const shiftConflicts = detectShiftTemplateConflicts(rawDb);
+    expect(shiftConflicts.length).toBe(0);
+    expect(() => assertNoGlobalMasterSemanticConflictsBeforeMigration(rawDb)).not.toThrow();
+
+    // Migration executes cleanly
+    expect(() => apply0032Stages(rawDb)).not.toThrow();
+
+    // Verify canonical global shift names
+    const globalShifts = rawDb.prepare('SELECT id, code, name, start_time, end_time, sequence FROM global_shift_templates ORDER BY sequence;').all() as any[];
+    expect(globalShifts.length).toBe(3);
+    expect(globalShifts[0]).toMatchObject({ code: 'SHIFT_1', name: 'Shift 1 (Morning)', start_time: '06:00', end_time: '14:00', sequence: 1 });
+    expect(globalShifts[1]).toMatchObject({ code: 'SHIFT_2', name: 'Shift 2 (Evening)', start_time: '14:00', end_time: '22:00', sequence: 2 });
+    expect(globalShifts[2]).toMatchObject({ code: 'SHIFT_3', name: 'Shift 3 (Night Overnight)', start_time: '22:00', end_time: '06:00', sequence: 3 });
+
+    // Verify operational_shifts and hr_roster_assignments references preserved and consolidated
+    const opRo1 = rawDb.prepare('SELECT shift_template_id FROM operational_shifts WHERE id = "op-ro1";').get() as any;
+    const opRo2 = rawDb.prepare('SELECT shift_template_id FROM operational_shifts WHERE id = "op-ro2";').get() as any;
+    expect(opRo1.shift_template_id).toBe(globalShifts[0].id);
+    expect(opRo2.shift_template_id).toBe(globalShifts[0].id);
+
+    const rostRo2 = rawDb.prepare('SELECT shift_template_id FROM hr_roster_assignments WHERE id = "rost-ro2";').get() as any;
+    expect(rostRo2.shift_template_id).toBe(globalShifts[1].id);
+  });
+
+  // 11. Same shift code with different start_time, end_time, or sequence is blocked
+  it('11. Same shift code with different start_time, end_time, or sequence is blocked', () => {
+    dbPath = `./.sqlite/test_0032_shift_blocks_${Date.now()}_${Math.random().toString(36).substring(7)}.db`;
+    localD1 = createLocalD1Database(dbPath, {
+      throughMigration: '0031_idempotency_and_unique_constraints.sql',
+    });
+    const rawDb = localD1.getNativeDb();
+    setupPre0032Hierarchy(rawDb);
+
+    // Case A: different start_time
+    rawDb.exec(`
+      DELETE FROM shift_templates;
+      INSERT INTO shift_templates (id, outlet_id, code, name, start_time, end_time, sequence, status, created_by, created_at, updated_at) VALUES
+        ('s-1', 'ro-1', 'SHIFT_1', 'Shift 1 (Morning)', '06:00', '14:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('s-2', 'ro-2', 'SHIFT_1', 'Shift 1 (Morning)', '07:00', '14:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+    `);
+    expect(() => assertNoGlobalMasterSemanticConflictsBeforeMigration(rawDb)).toThrow('GLOBAL_MASTER_MIGRATION_CONFLICT');
+
+    // Case B: different end_time
+    rawDb.exec(`
+      DELETE FROM shift_templates;
+      INSERT INTO shift_templates (id, outlet_id, code, name, start_time, end_time, sequence, status, created_by, created_at, updated_at) VALUES
+        ('s-1', 'ro-1', 'SHIFT_1', 'Shift 1 (Morning)', '06:00', '14:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('s-2', 'ro-2', 'SHIFT_1', 'Shift 1 (Morning)', '06:00', '15:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+    `);
+    expect(() => assertNoGlobalMasterSemanticConflictsBeforeMigration(rawDb)).toThrow('GLOBAL_MASTER_MIGRATION_CONFLICT');
+
+    // Case C: different sequence
+    rawDb.exec(`
+      DELETE FROM shift_templates;
+      INSERT INTO shift_templates (id, outlet_id, code, name, start_time, end_time, sequence, status, created_by, created_at, updated_at) VALUES
+        ('s-1', 'ro-1', 'SHIFT_1', 'Shift 1 (Morning)', '06:00', '14:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('s-2', 'ro-2', 'SHIFT_1', 'Shift 1 (Morning)', '06:00', '14:00', 2, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+    `);
+    expect(() => assertNoGlobalMasterSemanticConflictsBeforeMigration(rawDb)).toThrow('GLOBAL_MASTER_MIGRATION_CONFLICT');
   });
 });
