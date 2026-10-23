@@ -1004,4 +1004,35 @@ describe('Phase 3: Daily Fuel Operations + DSR Workflow', () => {
     expect(batchTankRes.status).toBe(409);
     expect(((await batchTankRes.json()) as any).error.code).toBe('SHIFT_CLOSED');
   });
+
+  it('26. DailyOperationsPage form controls explicitly define light-form foreground, background, placeholder, caret, and disabled classes', () => {
+    const pageSource = fs.readFileSync('src/frontend/pages/DailyOperationsPage.tsx', 'utf8');
+
+    const inputBlocks = pageSource.match(/<input\b[\s\S]*?\/>/g) || [];
+    const selectBlocks = pageSource.match(/<select\b[\s\S]*?>\s*\{/g) || [];
+    const controlBlocks = [...inputBlocks, ...selectBlocks];
+    expect(controlBlocks.length).toBe(11);
+
+    for (const block of controlBlocks) {
+      expect(block).toContain('text-slate-900');
+      expect(block).toContain('bg-white');
+      expect(block).toContain('disabled:bg-slate-100');
+      expect(block).toContain('disabled:text-slate-500');
+      expect(block).toContain('disabled:cursor-not-allowed');
+      expect(block).toContain('focus:outline-none');
+      expect(block).toContain('focus:ring-2');
+      expect(block).toContain('focus:ring-[#003366]');
+
+      if (block.startsWith('<input')) {
+        expect(block).toContain('caret-slate-900');
+        if (!block.includes('type="date"')) {
+          expect(block).toContain('placeholder:text-slate-400');
+        }
+      }
+    }
+
+    // Conditional amber opening totalizer retains amber state while keeping dark text & caret
+    expect(pageSource).toContain("hasContinuityDiff\n                                    ? 'border-amber-400 bg-amber-50/40'\n                                    : 'border-slate-300 bg-white'");
+  });
 });
+

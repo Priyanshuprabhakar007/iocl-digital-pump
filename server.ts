@@ -13,12 +13,15 @@ async function startServer() {
   // Support reverse-proxy HTTPS preview (Google AI Studio / Cloud Run)
   server.set('trust proxy', true);
 
-  const localDb = createLocalD1Database();
-  try {
-    await seedDatabase(getDb(localDb));
-  } catch (err) {
-    console.error('Initial DB seeding notice:', err);
-  }
+  let localDb: ReturnType<typeof createLocalD1Database>;
+  const dbReadyPromise = (async () => {
+    localDb = createLocalD1Database();
+    try {
+      await seedDatabase(getDb(localDb));
+    } catch (err) {
+      console.error('Initial DB seeding notice:', err);
+    }
+  })();
 
   const localR2 = {
     storage: new Map<string, { buffer: any; metadata: any }>(),
@@ -51,6 +54,7 @@ async function startServer() {
   server.use(async (req, res, next) => {
     if (req.url.startsWith('/api')) {
       try {
+        await dbReadyPromise;
         const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
         const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'localhost:3000';
         const fullUrl = `${protocol}://${host}${req.originalUrl || req.url}`;

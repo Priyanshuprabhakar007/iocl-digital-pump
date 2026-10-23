@@ -719,7 +719,7 @@ export const DailyOperationsPage: React.FC = () => {
               <select
                 value={selectedOutletId}
                 onChange={(e) => setSelectedOutletId(e.target.value)}
-                className="h-9 px-3 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003366]"
+                className="h-9 px-3 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
               >
                 {outlets.map((o) => (
                   <option key={o.id} value={o.id}>
@@ -739,7 +739,7 @@ export const DailyOperationsPage: React.FC = () => {
                   type="date"
                   value={businessDate}
                   onChange={(e) => setBusinessDate(e.target.value)}
-                  className="h-9 pl-3 pr-3 rounded-lg border border-slate-300 bg-white text-sm font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003366]"
+                  className="h-9 pl-3 pr-3 rounded-lg border border-slate-300 bg-white text-sm font-mono font-medium text-slate-900 caret-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -822,7 +822,7 @@ export const DailyOperationsPage: React.FC = () => {
                   <select
                     value={selectedTemplateId}
                     onChange={(e) => setSelectedTemplateId(e.target.value)}
-                    className="h-8 px-2.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-800"
+                    className="h-8 px-2.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                   >
                     {bootstrap.shiftTemplates.map((tpl) => (
                       <option key={tpl.id} value={tpl.id}>
@@ -1174,7 +1174,7 @@ export const DailyOperationsPage: React.FC = () => {
                                       }))
                                     }
                                     onKeyDown={(e) => handleKeyDownOnInput(e, inputRefCounter - 1)}
-                                    className="w-28 h-8 px-2 rounded border border-slate-300 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100"
+                                    className="w-28 h-8 px-2 rounded border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 caret-slate-900 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                                   />
                                   {tank.suggestedOpeningDipMm && !tank.openingReading && (
                                     <div className="text-[10px] text-slate-500 font-mono mt-0.5">
@@ -1205,7 +1205,7 @@ export const DailyOperationsPage: React.FC = () => {
                                       }))
                                     }
                                     onKeyDown={(e) => handleKeyDownOnInput(e, inputRefCounter - 1)}
-                                    className="w-24 h-8 px-2 rounded border border-slate-300 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100"
+                                    className="w-24 h-8 px-2 rounded border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 caret-slate-900 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                                   />
                                 </td>
 
@@ -1249,7 +1249,7 @@ export const DailyOperationsPage: React.FC = () => {
                                       }))
                                     }
                                     onKeyDown={(e) => handleKeyDownOnInput(e, inputRefCounter - 1)}
-                                    className="w-28 h-8 px-2 rounded border border-slate-300 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100"
+                                    className="w-28 h-8 px-2 rounded border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 caret-slate-900 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                                   />
                                 </td>
 
@@ -1279,7 +1279,7 @@ export const DailyOperationsPage: React.FC = () => {
                                         handleSaveSingleTankRow(tank)
                                       )
                                     }
-                                    className="w-24 h-8 px-2 rounded border border-slate-300 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100"
+                                    className="w-24 h-8 px-2 rounded border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 caret-slate-900 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                                   />
                                 </td>
 
@@ -1497,10 +1497,10 @@ export const DailyOperationsPage: React.FC = () => {
                                   }))
                                 }
                                 onKeyDown={(e) => handleKeyDownOnInput(e, inputRefCounter - 1)}
-                                className={`w-32 h-8 px-2 rounded border font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 ${
+                                className={`w-32 h-8 px-2 rounded border text-slate-900 placeholder:text-slate-400 caret-slate-900 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed ${
                                   hasContinuityDiff
                                     ? 'border-amber-400 bg-amber-50/40'
-                                    : 'border-slate-300'
+                                    : 'border-slate-300 bg-white'
                                 }`}
                               />
                               {nozzle.suggestedOpeningTotalizerMilliunits !== null && (
@@ -1530,7 +1530,7 @@ export const DailyOperationsPage: React.FC = () => {
                                         },
                                       }))
                                     }
-                                    className="w-full h-7 px-2 rounded border border-amber-300 bg-white text-xs text-slate-900"
+                                    className="w-full h-7 px-2 rounded border border-amber-300 bg-white text-xs text-slate-900 placeholder:text-slate-400 caret-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                                   />
                                 </div>
                               )}
@@ -1559,7 +1559,7 @@ export const DailyOperationsPage: React.FC = () => {
                                   }))
                                 }
                                 onKeyDown={(e) => handleKeyDownOnInput(e, inputRefCounter - 1)}
-                                className="w-32 h-8 px-2 rounded border border-slate-300 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100"
+                                className="w-32 h-8 px-2 rounded border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 caret-slate-900 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                               />
                             </td>
 
@@ -1589,7 +1589,7 @@ export const DailyOperationsPage: React.FC = () => {
                                     handleSaveSingleNozzleRow(nozzle)
                                   )
                                 }
-                                className="w-24 h-8 px-2 rounded border border-slate-300 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100"
+                                className="w-24 h-8 px-2 rounded border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 caret-slate-900 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                               />
                             </td>
 
