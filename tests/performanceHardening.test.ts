@@ -4,7 +4,12 @@ import { createLocalD1Database } from '../src/db/localD1';
 import { getDb } from '../src/db';
 import { seedDatabase } from '../src/db/seed';
 import fs from 'fs';
-import { apiFetch, clearApiCache } from '../src/frontend/services/api';
+import {
+  apiFetch,
+  clearApiCache,
+  fetchDailyOperationsBootstrap,
+  fetchDailyFuelSummary,
+} from '../src/frontend/services/api';
 
 describe('Performance Hardening & Instrumentation Suite', () => {
   let envDev: { DB: any; DOCUMENTS_BUCKET: any; ENVIRONMENT: string; ALLOWED_ORIGINS?: string };
@@ -249,5 +254,130 @@ describe('Performance Hardening & Instrumentation Suite', () => {
     } finally {
       globalThis.fetch = globalFetch;
     }
+  });
+
+  it('7. fetchDailyOperationsBootstrap and fetchDailyFuelSummary do not send x-skip-cache header over the network', async () => {
+    const capturedCalls: Array<{ url: string; init: RequestInit }> = [];
+    const globalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: any, init?: any) => {
+      capturedCalls.push({ url: String(url), init: init || {} });
+      return new Response(JSON.stringify({ success: true, data: {}, error: null }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    try {
+      await fetchDailyOperationsBootstrap('ro-1001', '2026-10-15');
+      await fetchDailyFuelSummary('ro-1001', '2026-10-15');
+
+      expect(capturedCalls.length).toBe(2);
+
+      // Verify fetchDailyOperationsBootstrap
+      expect(capturedCalls[0].url).toContain('/api/v1/outlets/ro-1001/daily-operations?businessDate=2026-10-15');
+      expect(capturedCalls[0].init.cache).toBe('no-store');
+      const headers0 = (capturedCalls[0].init.headers || {}) as Record<string, string>;
+      expect(headers0['x-skip-cache']).toBeUndefined();
+      expect(headers0['X-Skip-Cache']).toBeUndefined();
+
+      // Verify fetchDailyFuelSummary
+      expect(capturedCalls[1].url).toContain('/api/v1/outlets/ro-1001/fuel/daily-summary?businessDate=2026-10-15');
+      expect(capturedCalls[1].init.cache).toBe('no-store');
+      const headers1 = (capturedCalls[1].init.headers || {}) as Record<string, string>;
+      expect(headers1['x-skip-cache']).toBeUndefined();
+      expect(headers1['X-Skip-Cache']).toBeUndefined();
+    } finally {
+      globalThis.fetch = globalFetch;
+    }
+  });
+
+  it('8. Skip-cache signal bypasses frontend cache and strips x-skip-cache before network fetch', async () => {
+    let fetchCalls = 0;
+    const capturedHeaders: Array<Record<string, string>> = [];
+    const globalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async (_url: any, init?: any) => {
+      fetchCalls++;
+      capturedHeaders.push((init?.headers || {}) as Record<string, string>);
+      return new Response(JSON.stringify({ success: true, data: [{ id: `outlet-${fetchCalls}` }], error: null }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    try {
+      // 1. Populate TTL cache for /api/v1/outlets
+      await apiFetch('/api/v1/outlets');
+      expect(fetchCalls).toBe(1);
+
+      // 2. Normal call hits cache
+      await apiFetch('/api/v1/outlets');
+      expect(fetchCalls).toBe(1);
+
+      // 3. Call with cache: 'no-store' bypasses cache
+      await apiFetch('/api/v1/outlets', { cache: 'no-store' });
+      expect(fetchCalls).toBe(2);
+
+      // 4. Call with headers: { 'x-skip-cache': 'true' } bypasses cache AND strips header before fetch
+      await apiFetch('/api/v1/outlets', { headers: { 'x-skip-cache': 'true' } });
+      expect(fetchCalls).toBe(3);
+      expect(capturedHeaders[2]['x-skip-cache']).toBeUndefined();
+      expect(capturedHeaders[2]['X-Skip-Cache']).toBeUndefined();
+    } finally {
+      globalThis.fetch = globalFetch;
+    }
+  });
+
+  it('9. OPTIONS preflight and Daily Operations GET routes succeed under strict CORS headers without x-skip-cache', async () => {
+    // 1. OPTIONS preflight on daily-operations
+    const preflightRes = await app.fetch(
+      new Request('http://localhost:3000/api/v1/outlets/ro-1001/daily-operations?businessDate=2026-10-15', {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'http://localhost:3000',
+          'Access-Control-Request-Method': 'GET',
+          'Access-Control-Request-Headers': 'Content-Type, Authorization',
+        },
+      }),
+      envDev
+    );
+
+    expect(preflightRes.status).toBe(204);
+    const allowHeaders = preflightRes.headers.get('Access-Control-Allow-Headers') || '';
+    expect(allowHeaders).toBe('Content-Type, Authorization, Cookie, Idempotency-Key');
+    expect(allowHeaders).not.toContain('x-skip-cache');
+
+    // 2. GET /api/v1/outlets/ro-1001/daily-operations
+    const dailyOpsRes = await app.fetch(
+      new Request('http://localhost:3000/api/v1/outlets/ro-1001/daily-operations?businessDate=2026-10-15', {
+        method: 'GET',
+        headers: {
+          Cookie: adminCookie,
+          Origin: 'http://localhost:3000',
+          'Content-Type': 'application/json',
+        },
+      }),
+      envDev
+    );
+    expect(dailyOpsRes.status).toBe(200);
+    expect(dailyOpsRes.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:3000');
+    const dailyOpsJson = (await dailyOpsRes.json()) as any;
+    expect(dailyOpsJson.success).toBe(true);
+
+    // 3. GET /api/v1/outlets/ro-1001/fuel/daily-summary
+    const dailySummaryRes = await app.fetch(
+      new Request('http://localhost:3000/api/v1/outlets/ro-1001/fuel/daily-summary?businessDate=2026-10-15', {
+        method: 'GET',
+        headers: {
+          Cookie: adminCookie,
+          Origin: 'http://localhost:3000',
+          'Content-Type': 'application/json',
+        },
+      }),
+      envDev
+    );
+    expect(dailySummaryRes.status).toBe(200);
+    expect(dailySummaryRes.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:3000');
+    const dailySummaryJson = (await dailySummaryRes.json()) as any;
+    expect(dailySummaryJson.success).toBe(true);
   });
 });

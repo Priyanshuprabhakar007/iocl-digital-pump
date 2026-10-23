@@ -113,8 +113,12 @@ export async function apiFetch<T = unknown>(
 
   const skipCache =
     callerHeaders['x-skip-cache'] === 'true' ||
+    callerHeaders['X-Skip-Cache'] === 'true' ||
     options.cache === 'no-store' ||
     options.cache === 'no-cache';
+
+  delete callerHeaders['x-skip-cache'];
+  delete callerHeaders['X-Skip-Cache'];
 
   const dedupeKey = `${method}:${endpoint}:${authToken || 'anonymous'}`;
 
@@ -339,14 +343,14 @@ export async function apiFetchBlob(
 export async function fetchDailyOperationsBootstrap(outletId: string, businessDate: string) {
   return apiFetch<import('../../shared/types').DailyOperationsBootstrapResponse>(
     `/api/v1/outlets/${outletId}/daily-operations?businessDate=${encodeURIComponent(businessDate)}`,
-    { headers: { 'x-skip-cache': 'true' } }
+    { cache: 'no-store' }
   );
 }
 
 export async function fetchDailyFuelSummary(outletId: string, businessDate: string) {
   return apiFetch<import('../../shared/types').DailyFuelSummary>(
     `/api/v1/outlets/${outletId}/fuel/daily-summary?businessDate=${encodeURIComponent(businessDate)}`,
-    { headers: { 'x-skip-cache': 'true' } }
+    { cache: 'no-store' }
   );
 }
 
