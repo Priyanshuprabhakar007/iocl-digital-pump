@@ -1,5 +1,19 @@
 PRAGMA foreign_keys = OFF;
 
+-- Drop legacy triggers to allow updating references to global masters during migration
+DROP TRIGGER IF EXISTS "trg_hr_staff_insert_integrity";
+DROP TRIGGER IF EXISTS "trg_hr_staff_update_integrity";
+DROP TRIGGER IF EXISTS "trg_hr_staff_identity_immutable";
+DROP TRIGGER IF EXISTS "trg_hr_manpower_insert_integrity";
+DROP TRIGGER IF EXISTS "trg_hr_manpower_identity_immutable";
+DROP TRIGGER IF EXISTS "trg_hr_roster_insert_integrity";
+DROP TRIGGER IF EXISTS "trg_hr_roster_update_integrity";
+DROP TRIGGER IF EXISTS "trg_hr_roster_identity_immutable";
+DROP TRIGGER IF EXISTS "trg_hr_attendance_records_cross_ref_insert";
+DROP TRIGGER IF EXISTS "trg_hr_attendance_records_identity_immutable";
+DROP TRIGGER IF EXISTS "trg_hr_nozzle_assignments_cross_ref_insert";
+DROP TRIGGER IF EXISTS "trg_hr_nozzle_assignments_identity_immutable";
+
 -- 1. Create Global HR Designations Master Table
 CREATE TABLE IF NOT EXISTS "global_hr_designations" (
 	"id" text PRIMARY KEY NOT NULL,

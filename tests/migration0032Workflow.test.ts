@@ -106,8 +106,8 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
 
     rawDb.exec(`
       INSERT INTO hr_designations (id, outlet_id, code, name, skill_category, status, created_by, created_at, updated_at) VALUES
-        ('desig-1', 'ro-1', 'DSM', 'Driveway Sales Manager', 'SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-        ('desig-2', 'ro-1', 'CASHIER', 'Cashier', 'SEMI_SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+        ('desig-54163d40-b7ab-4e62-accd-4350f1f8cf11', 'ro-1', 'CH01', 'COCO Manager', 'SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('desig-85b89423-f6b0-4e96-859f-c9082440a332', 'ro-1', 'CH05', 'Cashier', 'SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
       INSERT INTO shift_templates (id, outlet_id, code, name, start_time, end_time, sequence, status, created_by, created_at, updated_at) VALUES
         ('shift-1', 'ro-1', 'MORNING', 'Morning Shift', '06:00', '14:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
@@ -117,10 +117,10 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
         ('op-1', 'ro-1', 'shift-1', '2026-03-30', '2026-03-30T06:00:00Z', 'CLOSED', 'usr-admin', '2026-03-30T06:00:00Z', '2026-03-30T14:00:00Z');
 
       INSERT INTO hr_staff (id, outlet_id, employee_code, full_name, designation_id, aadhaar_last4, emergency_contact_name, emergency_contact_phone, joining_date, employment_status, created_by, created_at, updated_at) VALUES
-        ('st-1', 'ro-1', 'EMP001', 'Rahul Sharma', 'desig-1', '1234', 'Contact', '9876543210', '2026-01-15', 'ACTIVE', 'usr-admin', '2026-01-15T00:00:00Z', '2026-01-15T00:00:00Z');
+        ('st-1', 'ro-1', 'EMP001', 'Rahul Sharma', 'desig-54163d40-b7ab-4e62-accd-4350f1f8cf11', '1234', 'Contact', '9876543210', '2026-01-15', 'ACTIVE', 'usr-admin', '2026-01-15T00:00:00Z', '2026-01-15T00:00:00Z');
 
       INSERT INTO hr_manpower_sanctions (id, outlet_id, designation_id, sanctioned_count, effective_from, created_by, created_at, updated_at) VALUES
-        ('san-1', 'ro-1', 'desig-1', 4, '2026-01-01', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+        ('san-1', 'ro-1', 'desig-54163d40-b7ab-4e62-accd-4350f1f8cf11', 4, '2026-01-01', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
       INSERT INTO hr_roster_assignments (id, outlet_id, staff_id, roster_date, shift_template_id, status, created_by, created_at, updated_at) VALUES
         ('rost-1', 'ro-1', 'st-1', '2026-03-30', 'shift-1', 'SCHEDULED', 'usr-admin', '2026-03-29T00:00:00Z', '2026-03-29T00:00:00Z');
@@ -132,8 +132,15 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     // Verify global tables populated
     const desigs = rawDb.prepare('SELECT COUNT(*) as count FROM global_hr_designations;').get() as any;
     const shifts = rawDb.prepare('SELECT COUNT(*) as count FROM global_shift_templates;').get() as any;
-    expect(desigs.count).toBe(2);
+    expect(desigs.count).toBeGreaterThanOrEqual(10);
     expect(shifts.count).toBe(2);
+
+    // Verify references updated to canonical global designation ID
+    const updatedStaff = rawDb.prepare('SELECT designation_id FROM hr_staff WHERE id = "st-1";').get() as any;
+    expect(updatedStaff.designation_id).toBe('gdesig-coco-manager');
+
+    const updatedSanction = rawDb.prepare('SELECT designation_id FROM hr_manpower_sanctions WHERE id = "san-1";').get() as any;
+    expect(updatedSanction.designation_id).toBe('gdesig-coco-manager');
 
     // Verify foreign key integrity
     const fkCheck = rawDb.prepare('PRAGMA foreign_key_check;').all() as any[];
@@ -152,8 +159,8 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
 
     rawDb.exec(`
       INSERT INTO hr_designations (id, outlet_id, code, name, skill_category, status, created_by, created_at, updated_at) VALUES
-        ('d-1', 'ro-1', 'CASHIER', 'Outlet Cashier', 'SEMI_SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-        ('d-2', 'ro-2', 'CASHIER', 'Head Cashier', 'HIGHLY_SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+        ('desig-85b89423-f6b0-4e96-859f-c9082440a332', 'ro-1', 'CASHIER', 'Outlet Cashier', 'SEMI_SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('desig-cad800e2-a71f-4327-bd4a-84d362833cf0', 'ro-2', 'CASHIER', 'Head Cashier', 'HIGHLY_SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
     `);
 
     const conflictQuery = `
@@ -237,14 +244,14 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     setupPre0032Hierarchy(rawDb);
 
     rawDb.exec(`
-      INSERT INTO hr_designations (id, outlet_id, code, name, skill_category, status, created_by, created_at, updated_at) VALUES ('d-1', 'ro-1', 'ATTENDANT', 'Pump Attendant', 'SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+      INSERT INTO hr_designations (id, outlet_id, code, name, skill_category, status, created_by, created_at, updated_at) VALUES ('desig-7b7fd190-84e1-46d1-9d44-9c83e30146a2', 'ro-1', 'CH07', 'Customer Attendant', 'SEMI_SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
       INSERT INTO shift_templates (id, outlet_id, code, name, start_time, end_time, sequence, status, created_by, created_at, updated_at) VALUES ('s-1', 'ro-1', 'SHIFT_A', 'Shift A', '06:00', '14:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
       INSERT INTO operational_shifts (id, outlet_id, shift_template_id, business_date, started_at, status, opened_by_user_id, created_at, updated_at) VALUES ('op-1', 'ro-1', 's-1', '2026-03-29', '2026-03-29T06:00:00Z', 'CLOSED', 'usr-admin', '2026-03-29T06:00:00Z', '2026-03-29T14:00:00Z');
       INSERT INTO operational_shifts (id, outlet_id, shift_template_id, business_date, started_at, status, opened_by_user_id, created_at, updated_at) VALUES ('op-2', 'ro-1', 's-1', '2026-03-30', '2026-03-30T06:00:00Z', 'CLOSED', 'usr-admin', '2026-03-30T06:00:00Z', '2026-03-30T14:00:00Z');
 
-      INSERT INTO hr_staff (id, outlet_id, employee_code, full_name, designation_id, aadhaar_last4, emergency_contact_name, emergency_contact_phone, joining_date, employment_status, created_by, created_at, updated_at) VALUES ('st-1', 'ro-1', 'EMP001', 'Aman Verma', 'd-1', '5555', 'Father', '9111111111', '2026-01-01', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
-      INSERT INTO hr_manpower_sanctions (id, outlet_id, designation_id, sanctioned_count, effective_from, created_by, created_at, updated_at) VALUES ('san-1', 'ro-1', 'd-1', 5, '2026-01-01', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+      INSERT INTO hr_staff (id, outlet_id, employee_code, full_name, designation_id, aadhaar_last4, emergency_contact_name, emergency_contact_phone, joining_date, employment_status, created_by, created_at, updated_at) VALUES ('st-1', 'ro-1', 'EMP001', 'Aman Verma', 'desig-7b7fd190-84e1-46d1-9d44-9c83e30146a2', '5555', 'Father', '9111111111', '2026-01-01', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+      INSERT INTO hr_manpower_sanctions (id, outlet_id, designation_id, sanctioned_count, effective_from, created_by, created_at, updated_at) VALUES ('san-1', 'ro-1', 'desig-7b7fd190-84e1-46d1-9d44-9c83e30146a2', 5, '2026-01-01', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
       INSERT INTO hr_roster_assignments (id, outlet_id, staff_id, roster_date, shift_template_id, status, created_by, created_at, updated_at) VALUES ('rost-1', 'ro-1', 'st-1', '2026-03-30', 's-1', 'SCHEDULED', 'usr-admin', '2026-03-29T00:00:00Z', '2026-03-29T00:00:00Z');
       INSERT INTO hr_attendance_records (id, outlet_id, staff_id, roster_assignment_id, attendance_date, shift_template_id, check_in_at, check_in_latitude, check_in_longitude, check_in_accuracy_metres, check_in_distance_metres, check_in_inside_geofence, status, created_by, created_at, updated_at) VALUES ('att-1', 'ro-1', 'st-1', 'rost-1', '2026-03-30', 's-1', '2026-03-30T06:05:00Z', 22.57, 88.36, 5.0, 10.0, 1, 'CHECKED_IN', 'usr-admin', '2026-03-30T06:05:00Z', '2026-03-30T06:05:00Z');
     `);
@@ -284,12 +291,12 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     setupPre0032Hierarchy(rawDb);
 
     rawDb.exec(`
-      INSERT INTO hr_designations (id, outlet_id, code, name, skill_category, status, created_by, created_at, updated_at) VALUES ('d-1', 'ro-1', 'MANAGER', 'Manager', 'HIGHLY_SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+      INSERT INTO hr_designations (id, outlet_id, code, name, skill_category, status, created_by, created_at, updated_at) VALUES ('desig-54163d40-b7ab-4e62-accd-4350f1f8cf11', 'ro-1', 'CH01', 'COCO Manager', 'SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
       INSERT INTO shift_templates (id, outlet_id, code, name, start_time, end_time, sequence, status, created_by, created_at, updated_at) VALUES ('s-1', 'ro-1', 'DAY', 'Day Shift', '08:00', '16:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
       INSERT INTO operational_shifts (id, outlet_id, shift_template_id, business_date, started_at, status, opened_by_user_id, created_at, updated_at) VALUES ('op-1', 'ro-1', 's-1', '2026-03-30', '2026-03-30T08:00:00Z', 'CLOSED', 'usr-admin', '2026-03-30T08:00:00Z', '2026-03-30T16:00:00Z');
-      INSERT INTO hr_staff (id, outlet_id, employee_code, full_name, designation_id, aadhaar_last4, emergency_contact_name, emergency_contact_phone, joining_date, employment_status, created_by, created_at, updated_at) VALUES ('st-1', 'ro-1', 'EMP001', 'Suresh Kumar', 'd-1', '4321', 'Mother', '9888888888', '2026-01-01', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
-      INSERT INTO hr_manpower_sanctions (id, outlet_id, designation_id, sanctioned_count, effective_from, created_by, created_at, updated_at) VALUES ('san-1', 'ro-1', 'd-1', 2, '2026-01-01', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+      INSERT INTO hr_staff (id, outlet_id, employee_code, full_name, designation_id, aadhaar_last4, emergency_contact_name, emergency_contact_phone, joining_date, employment_status, created_by, created_at, updated_at) VALUES ('st-1', 'ro-1', 'EMP001', 'Suresh Kumar', 'desig-54163d40-b7ab-4e62-accd-4350f1f8cf11', '4321', 'Mother', '9888888888', '2026-01-01', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+      INSERT INTO hr_manpower_sanctions (id, outlet_id, designation_id, sanctioned_count, effective_from, created_by, created_at, updated_at) VALUES ('san-1', 'ro-1', 'desig-54163d40-b7ab-4e62-accd-4350f1f8cf11', 2, '2026-01-01', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
       INSERT INTO hr_roster_assignments (id, outlet_id, staff_id, roster_date, shift_template_id, status, created_by, created_at, updated_at) VALUES ('rost-1', 'ro-1', 'st-1', '2026-03-30', 's-1', 'SCHEDULED', 'usr-admin', '2026-03-29T00:00:00Z', '2026-03-29T00:00:00Z');
     `);
 
