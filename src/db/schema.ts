@@ -291,7 +291,7 @@ export const globalShiftTemplates = sqliteTable('global_shift_templates', {
   endTime: text('end_time').notNull(),
   sequence: integer('sequence').notNull().default(1),
   status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
-  createdBy: text('created_by').notNull().references(() => users.id),
+  createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [
@@ -1214,7 +1214,7 @@ export const globalHrDesignations = sqliteTable('global_hr_designations', {
   skillCategory: text('skill_category', { enum: ['HIGHLY_SKILLED', 'SKILLED', 'SEMI_SKILLED', 'UNSKILLED'] }),
   status: text('status', { enum: ['ACTIVE', 'INACTIVE'] }).notNull().default('ACTIVE'),
   notes: text('notes'),
-  createdBy: text('created_by').notNull().references(() => users.id),
+  createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [

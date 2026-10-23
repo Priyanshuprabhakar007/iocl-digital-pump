@@ -38,6 +38,21 @@ WHERE "designation_id" IN (
     'desig-e2411a12-3084-48f4-b8d4-39f37626a59d'
 );
 
+UPDATE "hr_staff"
+SET "designation_id" = (
+    SELECT g.id
+    FROM "global_hr_designations" g
+    JOIN "hr_designations" old ON UPPER(TRIM(old.code)) = UPPER(TRIM(g.code)) OR old.id = g.id
+    WHERE old.id = "hr_staff"."designation_id"
+    LIMIT 1
+)
+WHERE "designation_id" NOT LIKE 'gdesig-%' AND EXISTS (
+    SELECT 1
+    FROM "global_hr_designations" g
+    JOIN "hr_designations" old ON UPPER(TRIM(old.code)) = UPPER(TRIM(g.code)) OR old.id = g.id
+    WHERE old.id = "hr_staff"."designation_id"
+);
+
 -- 4B. Update hr_manpower_sanctions designation references via explicit legacy ID mapping
 UPDATE "hr_manpower_sanctions"
 SET "designation_id" = CASE "designation_id"
@@ -72,6 +87,21 @@ WHERE "designation_id" IN (
     'desig-a13b3799-ec57-4757-b3c1-c26b8d677eb3',
     'desig-c18ae4a5-7b8f-45a7-b50b-51fbbdb3b54d',
     'desig-e2411a12-3084-48f4-b8d4-39f37626a59d'
+);
+
+UPDATE "hr_manpower_sanctions"
+SET "designation_id" = (
+    SELECT g.id
+    FROM "global_hr_designations" g
+    JOIN "hr_designations" old ON UPPER(TRIM(old.code)) = UPPER(TRIM(g.code)) OR old.id = g.id
+    WHERE old.id = "hr_manpower_sanctions"."designation_id"
+    LIMIT 1
+)
+WHERE "designation_id" NOT LIKE 'gdesig-%' AND EXISTS (
+    SELECT 1
+    FROM "global_hr_designations" g
+    JOIN "hr_designations" old ON UPPER(TRIM(old.code)) = UPPER(TRIM(g.code)) OR old.id = g.id
+    WHERE old.id = "hr_manpower_sanctions"."designation_id"
 );
 
 UPDATE "operational_shifts"

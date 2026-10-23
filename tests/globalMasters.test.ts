@@ -159,8 +159,8 @@ describe('Phase 2 Global Masters: Global Designation Master & Global Shift Maste
     expect(Array.isArray(json.data)).toBe(true);
     expect(json.data.length).toBeGreaterThan(0);
     const codes = json.data.map((d: any) => d.code);
-    expect(codes).toContain('DSM');
-    expect(codes).toContain('MANAGER');
+    expect(codes).toContain('CASHIER');
+    expect(codes).toContain('COCO_MANAGER');
   });
 
   // 6. POST /api/v1/hr/designations creates a single global master row
@@ -202,8 +202,8 @@ describe('Phase 2 Global Masters: Global Designation Master & Global Shift Maste
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
         body: JSON.stringify({
-          code: 'DSM',
-          name: 'Duplicate DSM',
+          code: 'CASHIER',
+          name: 'Duplicate Cashier',
           skillCategory: 'SKILLED',
           status: 'ACTIVE',
         }),
@@ -708,7 +708,7 @@ describe('Phase 2 Global Masters: Global Designation Master & Global Shift Maste
         body: JSON.stringify({
           employeeCode: 'EMP-RO1-DSM-01',
           fullName: 'Staff at RO 1001',
-          designationId: 'desig-glb-dsm',
+          designationId: 'gdesig-cashier',
           aadhaarLast4: '1111',
           emergencyContactName: 'Emergency Person 1',
           emergencyContactPhone: '9876543210',
@@ -728,7 +728,7 @@ describe('Phase 2 Global Masters: Global Designation Master & Global Shift Maste
         body: JSON.stringify({
           employeeCode: 'EMP-RO2-DSM-01',
           fullName: 'Staff at RO 1002',
-          designationId: 'desig-glb-dsm',
+          designationId: 'gdesig-cashier',
           aadhaarLast4: '2222',
           emergencyContactName: 'Emergency Person 2',
           emergencyContactPhone: '9876543210',
@@ -753,7 +753,7 @@ describe('Phase 2 Global Masters: Global Designation Master & Global Shift Maste
         body: JSON.stringify({
           employeeCode: 'EMP-RO1-ROST',
           fullName: 'Staff RO1 Rostered',
-          designationId: 'desig-glb-dsm',
+          designationId: 'gdesig-cashier',
           aadhaarLast4: '3333',
           emergencyContactName: 'Emergency Person 1',
           emergencyContactPhone: '9876543210',
@@ -773,7 +773,7 @@ describe('Phase 2 Global Masters: Global Designation Master & Global Shift Maste
         body: JSON.stringify({
           employeeCode: 'EMP-RO2-ROST',
           fullName: 'Staff RO2 Rostered',
-          designationId: 'desig-glb-dsm',
+          designationId: 'gdesig-cashier',
           aadhaarLast4: '4444',
           emergencyContactName: 'Emergency Person 2',
           emergencyContactPhone: '9876543210',
@@ -833,8 +833,8 @@ describe('Phase 2 Global Masters: Global Designation Master & Global Shift Maste
     expect(json.success).toBe(true);
     expect(Array.isArray(json.data)).toBe(true);
     const codes = json.data.map((d: any) => d.code);
-    expect(codes).toContain('DSM');
-    expect(codes).toContain('MANAGER');
+    expect(codes).toContain('CASHIER');
+    expect(codes).toContain('COCO_MANAGER');
   });
 
   // 23. Compatibility route GET /api/v1/outlets/:id/shift-templates returns global list

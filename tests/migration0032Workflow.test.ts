@@ -5,6 +5,7 @@ import { createLocalD1Database } from '../src/db/localD1';
 import {
   detectDesignationConflicts,
   detectShiftTemplateConflicts,
+  assertAllProductionLegacyDesignationsMapped,
 } from '../src/db/globalMasterDiagnostic';
 
 const ROOT_DIR = path.resolve(__dirname, '..');
@@ -393,5 +394,22 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     expect(verifyStepContent).toContain('if [ "$COUNT" -lt "32" ]; then');
     expect(verifyStepContent).toContain("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('global_hr_designations', 'global_shift_templates');");
     expect(verifyStepContent).toContain('global_shift_templates has 0 records when legacy shift_templates had');
+  });
+
+  // 8. Strict production unmapped designation checker throws on unknown production legacy designation ID
+  it('8. Strict production unmapped designation checker throws on unknown production legacy designation ID', () => {
+    dbPath = `./.sqlite/test_0032_unmapped_${Date.now()}_${Math.random().toString(36).substring(7)}.db`;
+    localD1 = createLocalD1Database(dbPath, {
+      throughMigration: '0031_idempotency_and_unique_constraints.sql',
+    });
+    const rawDb = localD1.getNativeDb();
+    setupPre0032Hierarchy(rawDb);
+
+    rawDb.exec(`
+      INSERT INTO hr_designations (id, outlet_id, code, name, skill_category, status, created_by, created_at, updated_at) VALUES
+        ('desig-unknown-prod-id-12345', 'ro-1', 'CUSTOM_ROLE', 'Custom Role', 'SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+    `);
+
+    expect(() => assertAllProductionLegacyDesignationsMapped(rawDb)).toThrow('UNMAPPED_LEGACY_DESIGNATION');
   });
 });

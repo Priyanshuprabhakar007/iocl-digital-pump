@@ -260,20 +260,10 @@ export function detectUnmappedLegacyDesignations(sqlite: any): any[] {
 }
 
 /**
- * Asserts that no conflicting definitions exist in hr_designations or shift_templates before migration,
- * and that all production legacy designations are explicitly mapped.
+ * Asserts that no semantic code conflicts exist in hr_designations or shift_templates before migration.
+ * This check is safe to run on generic local/test fixture databases.
  */
-export function assertNoGlobalMasterConflictsBeforeMigration(sqlite: any): void {
-  const unmapped = detectUnmappedLegacyDesignations(sqlite);
-  if (unmapped.length > 0) {
-    const unmappedLines = unmapped.map(
-      u => `id: ${u.id}, outlet: ${u.outlet_id}, code: ${u.code}, name: ${u.name}, skill: ${u.skill_category}`
-    );
-    throw new Error(
-      `UNMAPPED_LEGACY_DESIGNATION: Found ${unmapped.length} unmapped legacy designation(s) in hr_designations:\n${unmappedLines.join('\n')}`
-    );
-  }
-
+export function assertNoGlobalMasterSemanticConflictsBeforeMigration(sqlite: any): void {
   const desigConflicts = detectDesignationConflicts(sqlite);
   const shiftConflicts = detectShiftTemplateConflicts(sqlite);
 
@@ -296,4 +286,28 @@ export function assertNoGlobalMasterConflictsBeforeMigration(sqlite: any): void 
   throw new Error(
     `GLOBAL_MASTER_MIGRATION_CONFLICT: Cannot apply global masters migration because conflicting definitions were detected across outlets (no rows were modified or deleted):\n${conflictLines.join('\n')}`
   );
+}
+
+/**
+ * Asserts that all legacy designations in hr_designations are explicitly mapped to canonical global IDs.
+ * This strict check is intended for production deployment prechecks and dedicated migration tests.
+ */
+export function assertAllProductionLegacyDesignationsMapped(sqlite: any): void {
+  const unmapped = detectUnmappedLegacyDesignations(sqlite);
+  if (unmapped.length > 0) {
+    const unmappedLines = unmapped.map(
+      u => `id: ${u.id}, outlet: ${u.outlet_id}, code: ${u.code}, name: ${u.name}, skill: ${u.skill_category}`
+    );
+    throw new Error(
+      `UNMAPPED_LEGACY_DESIGNATION: Found ${unmapped.length} unmapped legacy designation(s) in hr_designations:\n${unmappedLines.join('\n')}`
+    );
+  }
+}
+
+/**
+ * Combined pre-migration assertion that checks both semantic conflicts and unmapped production legacy designations.
+ */
+export function assertNoGlobalMasterConflictsBeforeMigration(sqlite: any): void {
+  assertAllProductionLegacyDesignationsMapped(sqlite);
+  assertNoGlobalMasterSemanticConflictsBeforeMigration(sqlite);
 }

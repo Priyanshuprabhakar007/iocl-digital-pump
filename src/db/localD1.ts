@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
 import { assertNoDuplicateRecordsBeforeMigration } from './duplicateDiagnostic';
-import { assertNoGlobalMasterConflictsBeforeMigration } from './globalMasterDiagnostic';
+import { assertNoGlobalMasterSemanticConflictsBeforeMigration } from './globalMasterDiagnostic';
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 
@@ -306,7 +306,7 @@ export class LocalD1Database {
             assertNoDuplicateRecordsBeforeMigration(this.db);
           }
           if (file === '0032_global_designation_and_shift_masters.sql') {
-            assertNoGlobalMasterConflictsBeforeMigration(this.db);
+            assertNoGlobalMasterSemanticConflictsBeforeMigration(this.db);
           }
           const sql = getMigrationSql(migrationsDir, file);
           this.db.exec(sql);

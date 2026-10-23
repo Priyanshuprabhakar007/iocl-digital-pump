@@ -25,7 +25,6 @@ CREATE TABLE IF NOT EXISTS "global_hr_designations" (
 	"created_by" text NOT NULL,
 	"created_at" text NOT NULL,
 	"updated_at" text NOT NULL,
-	FOREIGN KEY ("created_by") REFERENCES "users"("id") ON UPDATE no action ON DELETE no action,
 	CHECK (status IN ('ACTIVE', 'INACTIVE')),
 	CHECK (trim(code) <> ''),
 	CHECK (trim(name) <> ''),
@@ -64,7 +63,6 @@ CREATE TABLE IF NOT EXISTS "global_shift_templates" (
 	"created_by" text NOT NULL,
 	"created_at" text NOT NULL,
 	"updated_at" text NOT NULL,
-	FOREIGN KEY ("created_by") REFERENCES "users"("id") ON UPDATE no action ON DELETE no action,
 	CHECK (status IN ('ACTIVE', 'INACTIVE')),
 	CHECK (trim(code) <> ''),
 	CHECK (trim(name) <> '')
