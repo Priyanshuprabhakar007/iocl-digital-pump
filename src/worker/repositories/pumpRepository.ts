@@ -1252,7 +1252,7 @@ export class PumpRepository {
     notes?: string | null;
     createdAt: string;
     updatedAt: string;
-  }): Promise<{ success: boolean; shift: OperationalShift | null; snapshotsCount: number; error?: string; message?: string }> {
+  }): Promise<{ success: boolean; shift: OperationalShift | null; snapshotsCount: number; error?: string; message?: string; unpricedProducts?: Array<{ id: string; code: string; name: string; unit: string }> }> {
     // 1. Resolve all participating active nozzles with active dispensers, active tanks, active products, and active outlet_products mappings
     const activeParticipatingNozzles = await this.db
       .select({

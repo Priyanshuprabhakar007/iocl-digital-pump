@@ -123,9 +123,9 @@ export const FinancialOperationsPage: React.FC = () => {
     if (results[2].success && results[2].data) {
       setOutletProducts(results[2].data);
       const activeMapped = results[2].data
-        .filter((op: OutletProduct) => op.status === 'ACTIVE' && op.product.status === 'ACTIVE')
+        .filter((op: OutletProduct) => op.status === 'ACTIVE' && op.product && op.product.status === 'ACTIVE')
         .map((op: OutletProduct) => op.product)
-        .filter((p: Product) => (p.unit === 'LITRE' && p.category !== 'CNG') || (p.category === 'CNG' && p.unit === 'KG'));
+        .filter((p: Product) => p && ((p.unit === 'LITRE' && p.category !== 'CNG') || (p.category === 'CNG' && p.unit === 'KG')));
       setProducts(activeMapped);
     }
 
