@@ -6,6 +6,8 @@ import {
   detectDesignationConflicts,
   detectShiftTemplateConflicts,
   assertAllProductionLegacyDesignationsMapped,
+  assertNoGlobalMasterSemanticConflictsBeforeMigration,
+  EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS,
 } from '../src/db/globalMasterDiagnostic';
 
 const ROOT_DIR = path.resolve(__dirname, '..');
@@ -148,8 +150,8 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     expect(fkCheck.length).toBe(0);
   });
 
-  // 3. Conflict detection correctly identifies conflicting designations
-  it('3. Conflict detection correctly identifies conflicting designations', () => {
+  // 3. Conflicting legacy designation CH codes do NOT block migration when every legacy designation ID is explicitly mapped
+  it('3. Conflicting legacy designation CH codes do NOT block migration when every legacy designation ID is explicitly mapped', () => {
     dbPath = `./.sqlite/test_0032_desig_conf_${Date.now()}_${Math.random().toString(36).substring(7)}.db`;
     localD1 = createLocalD1Database(dbPath, {
       throughMigration: '0031_idempotency_and_unique_constraints.sql',
@@ -160,38 +162,24 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
 
     rawDb.exec(`
       INSERT INTO hr_designations (id, outlet_id, code, name, skill_category, status, created_by, created_at, updated_at) VALUES
-        ('desig-85b89423-f6b0-4e96-859f-c9082440a332', 'ro-1', 'CASHIER', 'Outlet Cashier', 'SEMI_SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-        ('desig-cad800e2-a71f-4327-bd4a-84d362833cf0', 'ro-2', 'CASHIER', 'Head Cashier', 'HIGHLY_SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+        ('desig-54163d40-b7ab-4e62-accd-4350f1f8cf11', 'ro-1', 'CH01', 'COCO Manager', 'SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+        ('desig-19d0f3f8-ba1e-4746-80c0-9657d45bd5ab', 'ro-2', 'CH01', 'Pump Manager', 'SKILLED', 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
     `);
 
-    const conflictQuery = `
-      SELECT
-        UPPER(TRIM(code)) AS normalized_code,
-        COUNT(*) AS count,
-        GROUP_CONCAT(id) AS ids,
-        GROUP_CONCAT(outlet_id) AS outlets,
-        GROUP_CONCAT(name) AS names,
-        GROUP_CONCAT(COALESCE(skill_category, 'NULL')) AS skill_categories,
-        GROUP_CONCAT(status) AS statuses
-      FROM hr_designations
-      GROUP BY UPPER(TRIM(code))
-      HAVING
-        COUNT(DISTINCT TRIM(name)) > 1
-        OR COUNT(DISTINCT COALESCE(skill_category, 'NULL')) > 1
-        OR COUNT(DISTINCT status) > 1;
-    `;
-    const conflicts = rawDb.prepare(conflictQuery).all() as any[];
-    expect(conflicts.length).toBe(1);
-    expect(conflicts[0].normalized_code).toBe('CASHIER');
-    expect(conflicts[0].count).toBe(2);
-
+    // Diagnostic function still detects legacy code mismatch
     const tsConflicts = detectDesignationConflicts(rawDb);
-    expect(tsConflicts.length).toBeGreaterThan(0);
-    expect(tsConflicts[0].normalizedCode).toBe('CASHIER');
+    expect(tsConflicts.length).toBe(1);
+    expect(tsConflicts[0].normalizedCode).toBe('CH01');
+
+    // Semantic assertion MUST NOT throw for designation CH code conflicts
+    expect(() => assertNoGlobalMasterSemanticConflictsBeforeMigration(rawDb)).not.toThrow();
+
+    // Migration 0032 execution MUST succeed cleanly
+    expect(() => apply0032Stages(rawDb)).not.toThrow();
   });
 
-  // 4. Conflict detection correctly identifies conflicting shifts
-  it('4. Conflict detection correctly identifies conflicting shifts', () => {
+  // 4. Shift template conflicts still block migration with GLOBAL_MASTER_MIGRATION_CONFLICT
+  it('4. Shift template conflicts still block migration with GLOBAL_MASTER_MIGRATION_CONFLICT', () => {
     dbPath = `./.sqlite/test_0032_shift_conf_${Date.now()}_${Math.random().toString(36).substring(7)}.db`;
     localD1 = createLocalD1Database(dbPath, {
       throughMigration: '0031_idempotency_and_unique_constraints.sql',
@@ -206,32 +194,12 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
         ('s-2', 'ro-2', 'GENERAL', 'General Shift', '10:00', '18:00', 1, 'ACTIVE', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
     `);
 
-    const conflictQuery = `
-      SELECT
-        UPPER(TRIM(code)) AS normalized_code,
-        COUNT(*) AS count,
-        GROUP_CONCAT(id) AS ids,
-        GROUP_CONCAT(outlet_id) AS outlets,
-        GROUP_CONCAT(name) AS names,
-        GROUP_CONCAT(start_time) AS start_times,
-        GROUP_CONCAT(end_time) AS end_times,
-        GROUP_CONCAT(sequence) AS sequences
-      FROM shift_templates
-      GROUP BY UPPER(TRIM(code))
-      HAVING
-        COUNT(DISTINCT TRIM(name)) > 1
-        OR COUNT(DISTINCT start_time) > 1
-        OR COUNT(DISTINCT end_time) > 1
-        OR COUNT(DISTINCT sequence) > 1;
-    `;
-    const conflicts = rawDb.prepare(conflictQuery).all() as any[];
-    expect(conflicts.length).toBe(1);
-    expect(conflicts[0].normalized_code).toBe('GENERAL');
-    expect(conflicts[0].count).toBe(2);
-
     const tsConflicts = detectShiftTemplateConflicts(rawDb);
-    expect(tsConflicts.length).toBeGreaterThan(0);
+    expect(tsConflicts.length).toBe(1);
     expect(tsConflicts[0].normalizedCode).toBe('GENERAL');
+
+    // Semantic assertion MUST throw for shift template conflicts
+    expect(() => assertNoGlobalMasterSemanticConflictsBeforeMigration(rawDb)).toThrow('GLOBAL_MASTER_MIGRATION_CONFLICT');
   });
 
   // 5. Post-migration row counts match pre-migration row counts
@@ -361,7 +329,8 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     expect(step32Content).toContain('Inconsistent migration state detected');
 
     // Conflict diagnostics
-    expect(step32Content).toContain('HAVING COUNT(DISTINCT TRIM(name)) > 1 OR COUNT(DISTINCT COALESCE(skill_category, \'NULL\')) > 1 OR COUNT(DISTINCT status) > 1;');
+    expect(step32Content).toContain('Running designation conflict diagnostic (informational warning only)');
+    expect(step32Content).toContain('Proceeding using explicit designation ID mapping.');
     expect(step32Content).toContain('HAVING COUNT(DISTINCT TRIM(name)) > 1 OR COUNT(DISTINCT start_time) > 1 OR COUNT(DISTINCT end_time) > 1 OR COUNT(DISTINCT sequence) > 1;');
 
     // Pre-migration counts
@@ -411,5 +380,24 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     `);
 
     expect(() => assertAllProductionLegacyDesignationsMapped(rawDb)).toThrow('UNMAPPED_LEGACY_DESIGNATION');
+  });
+
+  // 9. Explicit designation mapping array contains all 14 production designation UUIDs
+  it('9. Explicit designation mapping array contains all 14 production designation UUIDs', () => {
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS.length).toBe(14);
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-54163d40-b7ab-4e62-accd-4350f1f8cf11');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-5b5ec560-d9f0-452b-a46c-f2bcfb5ff840');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-19d0f3f8-ba1e-4746-80c0-9657d45bd5ab');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-deb087be-1961-4a77-babd-2fee3c889c69');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-b3aee108-20d3-40b7-ad2d-1750abf0ee13');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-85b89423-f6b0-4e96-859f-c9082440a332');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-cad800e2-a71f-4327-bd4a-84d362833cf0');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-b3fe3aa3-4b1c-4c4a-9711-66ab2ae2ec45');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-246089cb-4253-49a2-896a-6b4dfbcb104f');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-7b7fd190-84e1-46d1-9d44-9c83e30146a2');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-82b4a909-aabd-4b80-84a4-2119f3b8f8f8');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-a13b3799-ec57-4757-b3c1-c26b8d677eb3');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-c18ae4a5-7b8f-45a7-b50b-51fbbdb3b54d');
+    expect(EXPLICIT_LEGACY_DESIGNATION_MAPPING_IDS).toContain('desig-e2411a12-3084-48f4-b8d4-39f37626a59d');
   });
 });

@@ -482,7 +482,7 @@ jobs:
               exit 1
             fi
 
-            echo "[0032] Running designation conflict diagnostic..."
+            echo "[0032] Running designation conflict diagnostic (informational warning only)..."
             DESIG_CONFLICT_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
               --remote \
               --command "SELECT UPPER(TRIM(code)) AS normalized_code, COUNT(*) AS count, GROUP_CONCAT(id) AS ids, GROUP_CONCAT(outlet_id) AS outlets, GROUP_CONCAT(name) AS names, GROUP_CONCAT(COALESCE(skill_category, 'NULL')) AS skill_categories, GROUP_CONCAT(status) AS statuses FROM hr_designations GROUP BY UPPER(TRIM(code)) HAVING COUNT(DISTINCT TRIM(name)) > 1 OR COUNT(DISTINCT COALESCE(skill_category, 'NULL')) > 1 OR COUNT(DISTINCT status) > 1;" \
@@ -491,9 +491,8 @@ jobs:
 
             DESIG_CONFLICT_COUNT=$(echo "$DESIG_CONFLICT_RES" | jq -r '.[0].results | length')
             if [ "$DESIG_CONFLICT_COUNT" -gt "0" ]; then
-              echo "ERROR: [0032] Global master conflict detected in hr_designations (groups=$DESIG_CONFLICT_COUNT). Aborting deployment safely without altering DB."
-              echo "$DESIG_CONFLICT_RES" | jq -r '.[0].results[] | "  Conflict in designation code \(.normalized_code): names=\(.names) skills=\(.skill_categories) statuses=\(.statuses) outlets=\(.outlets)"'
-              exit 1
+              echo "WARNING: [0032] Legacy outlet-local designation code conflicts detected in hr_designations (groups=$DESIG_CONFLICT_COUNT). Proceeding using explicit designation ID mapping."
+              echo "$DESIG_CONFLICT_RES" | jq -r '.[0].results[] | "  WARNING: Legacy outlet-local designation code \(.normalized_code) has multiple meanings: names=\(.names) skills=\(.skill_categories) outlets=\(.outlets)"'
             fi
           fi
 

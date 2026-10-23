@@ -259,24 +259,22 @@ export function detectUnmappedLegacyDesignations(sqlite: any): any[] {
   );
 }
 
-/**
- * Asserts that no semantic code conflicts exist in hr_designations or shift_templates before migration.
- * This check is safe to run on generic local/test fixture databases.
- */
 export function assertNoGlobalMasterSemanticConflictsBeforeMigration(sqlite: any): void {
   const desigConflicts = detectDesignationConflicts(sqlite);
-  const shiftConflicts = detectShiftTemplateConflicts(sqlite);
+  if (desigConflicts.length > 0) {
+    for (const dc of desigConflicts) {
+      console.warn(
+        `[Migration 0032 Warning] Legacy outlet-local designation code '${dc.normalizedCode}' has multiple meanings across outlets: ${dc.reason}. Proceeding using explicit designation ID mapping.`
+      );
+    }
+  }
 
-  if (desigConflicts.length === 0 && shiftConflicts.length === 0) {
+  const shiftConflicts = detectShiftTemplateConflicts(sqlite);
+  if (shiftConflicts.length === 0) {
     return;
   }
 
   const conflictLines: string[] = [];
-  for (const dc of desigConflicts) {
-    conflictLines.push(
-      `- Designation [${dc.normalizedCode}]: ${dc.reason} (outlets: ${dc.outletIds.join(', ')})`
-    );
-  }
   for (const sc of shiftConflicts) {
     conflictLines.push(
       `- Shift Template [${sc.normalizedCode}]: ${sc.reason} (outlets: ${sc.outletIds.join(', ')})`
@@ -284,7 +282,7 @@ export function assertNoGlobalMasterSemanticConflictsBeforeMigration(sqlite: any
   }
 
   throw new Error(
-    `GLOBAL_MASTER_MIGRATION_CONFLICT: Cannot apply global masters migration because conflicting definitions were detected across outlets (no rows were modified or deleted):\n${conflictLines.join('\n')}`
+    `GLOBAL_MASTER_MIGRATION_CONFLICT: Cannot apply global masters migration because conflicting shift template definitions were detected across outlets (no rows were modified or deleted):\n${conflictLines.join('\n')}`
   );
 }
 
