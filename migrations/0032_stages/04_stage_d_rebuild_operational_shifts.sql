@@ -1,7 +1,7 @@
 PRAGMA foreign_keys = OFF;
 PRAGMA legacy_alter_table = ON;
 
--- 5A. Rebuild operational_shifts
+-- 5A. Rebuild operational_shifts with shift_template_id foreign key reference
 CREATE TABLE "operational_shifts_rebuild" (
   "id" TEXT PRIMARY KEY NOT NULL,
   "outlet_id" TEXT NOT NULL,
@@ -17,6 +17,7 @@ CREATE TABLE "operational_shifts_rebuild" (
   "updated_at" TEXT NOT NULL,
   UNIQUE ("outlet_id", "shift_template_id", "business_date"),
   FOREIGN KEY ("outlet_id") REFERENCES "retail_outlets" ("id") ON DELETE CASCADE,
+  FOREIGN KEY ("shift_template_id") REFERENCES "global_shift_templates" ("id"),
   FOREIGN KEY ("opened_by_user_id") REFERENCES "users" ("id"),
   FOREIGN KEY ("closed_by_user_id") REFERENCES "users" ("id"),
   CHECK ("status" IN ('OPEN', 'CLOSING', 'CLOSED', 'LOCKED'))
@@ -33,3 +34,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_operational_shifts_single_active" ON "ope
 
 PRAGMA legacy_alter_table = OFF;
 PRAGMA foreign_keys = ON;
+
+PRAGMA foreign_key_check;

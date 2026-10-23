@@ -1399,6 +1399,20 @@ export class PumpRepository {
       };
     }
 
+    // Pre-batch FK validation
+    const [stCheck] = await this.db.select().from(schema.globalShiftTemplates).where(eq(schema.globalShiftTemplates.id, data.shiftTemplateId)).limit(1);
+    if (!stCheck) {
+      return { success: false, shift: null, snapshotsCount: 0, error: 'SHIFT_SNAPSHOT_REFERENCE_INVALID', message: 'Shift template reference does not exist.' };
+    }
+    const [userCheck] = await this.db.select().from(schema.users).where(eq(schema.users.id, data.openedByUserId)).limit(1);
+    if (!userCheck) {
+      return { success: false, shift: null, snapshotsCount: 0, error: 'SHIFT_SNAPSHOT_REFERENCE_INVALID', message: 'Opening user reference does not exist.' };
+    }
+    const [outletCheck] = await this.db.select().from(schema.retailOutlets).where(eq(schema.retailOutlets.id, data.outletId)).limit(1);
+    if (!outletCheck) {
+      return { success: false, shift: null, snapshotsCount: 0, error: 'SHIFT_SNAPSHOT_REFERENCE_INVALID', message: 'Outlet reference does not exist.' };
+    }
+
     // 3. Prepare shift insert
     const shiftInsert = this.db.insert(schema.operationalShifts).values({
       id: data.id,
@@ -1477,7 +1491,36 @@ export class PumpRepository {
       batch.push(this.db.insert(schema.operationalShiftTanks).values(tankSnapshotRows));
     }
 
-    await (this.db as any).batch(batch);
+    console.log('[SHIFT_OPEN_BATCH_PRECHECK]', {
+      outletId: data.outletId,
+      shiftTemplateId: data.shiftTemplateId,
+      businessDate: data.businessDate,
+      nozzleSnapshots: snapshotRows.length,
+      tankSnapshots: tankSnapshotRows.length,
+      priceSnapshots: priceSnapshotRows.length,
+      productCodes: priceSnapshotRows.map(x => x.productCode),
+    });
+
+    try {
+      await (this.db as any).batch(batch);
+    } catch (err) {
+      console.error(
+        '[SHIFT_OPEN_BATCH_ERROR]',
+        JSON.stringify({
+          message: err instanceof Error ? err.message : String(err),
+          cause: err instanceof Error && 'cause' in err
+            ? String((err as any).cause)
+            : undefined,
+          outletId: data.outletId,
+          shiftTemplateId: data.shiftTemplateId,
+          businessDate: data.businessDate,
+          nozzleSnapshots: snapshotRows.length,
+          tankSnapshots: tankSnapshotRows.length,
+          priceSnapshots: priceSnapshotRows.length,
+        })
+      );
+      throw err;
+    }
 
     const shift = (await this.findOperationalShiftById(data.id))!;
     return { success: true, shift, snapshotsCount: activeParticipatingNozzles.length };

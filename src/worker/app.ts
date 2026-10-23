@@ -180,7 +180,21 @@ app.onError((err, c) => {
     }, 409);
   }
 
-  console.error('[Worker Server Error]:', err);
+  const errorDetails = {
+    name: err instanceof Error ? err.name : 'UnknownError',
+    message: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+    cause:
+      err instanceof Error && 'cause' in err
+        ? String((err as any).cause)
+        : undefined,
+  };
+
+  console.error(
+    '[Worker Server Error]',
+    JSON.stringify(errorDetails)
+  );
+
   return c.json({
     success: false,
     data: null,
