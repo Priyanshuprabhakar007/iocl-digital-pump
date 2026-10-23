@@ -11,6 +11,7 @@ import {
   BankDeposit,
   ShiftFinancialSummary,
   Product,
+  OutletProduct,
   CollectionType
 } from '../../shared/types';
 import {
@@ -58,6 +59,7 @@ export const FinancialOperationsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'collections' | 'credit-parties' | 'handovers' | 'deposits' | 'prices' | 'reconciliation'>('collections');
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [outletProducts, setOutletProducts] = useState<OutletProduct[]>([]);
   const [prices, setPrices] = useState<ProductPrice[]>([]);
   const [creditParties, setCreditParties] = useState<CreditParty[]>([]);
   const [collections, setCollections] = useState<ShiftCollection[]>([]);
@@ -71,6 +73,8 @@ export const FinancialOperationsPage: React.FC = () => {
 
   // Modals
   const [showPriceModal, setShowPriceModal] = useState(false);
+  const [showEditPriceModal, setShowEditPriceModal] = useState(false);
+  const [editingPrice, setEditingPrice] = useState<ProductPrice | null>(null);
   const [showPartyModal, setShowPartyModal] = useState(false);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [showHandoverModal, setShowHandoverModal] = useState(false);
@@ -102,7 +106,7 @@ export const FinancialOperationsPage: React.FC = () => {
     // Master data
     promises.push(apiFetch<ProductPrice[]>(`/api/v1/outlets/${selectedOutletId}/product-prices`));
     promises.push(apiFetch<CreditParty[]>(`/api/v1/outlets/${selectedOutletId}/credit-parties`));
-    promises.push(apiFetch<Product[]>('/api/v1/products'));
+    promises.push(apiFetch<OutletProduct[]>(`/api/v1/outlets/${selectedOutletId}/products`));
 
     if (selectedShiftId) {
       promises.push(apiFetch<OperationalShift>(`/api/v1/shifts/${selectedShiftId}`));
@@ -116,15 +120,13 @@ export const FinancialOperationsPage: React.FC = () => {
     
     if (results[0].success) setPrices(results[0].data);
     if (results[1].success) setCreditParties(results[1].data);
-    if (results[2].success) {
-      setProducts(
-        results[2].data.filter(
-          (p: Product) =>
-            p.status === 'ACTIVE' &&
-            ((p.unit === 'LITRE' && p.category !== 'CNG') ||
-             (p.category === 'CNG' && p.unit === 'KG'))
-        )
-      );
+    if (results[2].success && results[2].data) {
+      setOutletProducts(results[2].data);
+      const activeMapped = results[2].data
+        .filter((op: OutletProduct) => op.status === 'ACTIVE' && op.product.status === 'ACTIVE')
+        .map((op: OutletProduct) => op.product)
+        .filter((p: Product) => (p.unit === 'LITRE' && p.category !== 'CNG') || (p.category === 'CNG' && p.unit === 'KG'));
+      setProducts(activeMapped);
     }
 
     if (selectedShiftId && results[3]) {
@@ -136,6 +138,29 @@ export const FinancialOperationsPage: React.FC = () => {
     }
 
     setLoadingData(false);
+  };
+
+  const handleUpdatePrice = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingPrice) return;
+    const formData = new FormData(e.currentTarget);
+    const res = await apiFetch(`/api/v1/product-prices/${editingPrice.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        productId: editingPrice.productId,
+        pricePaisePerUnit: formData.get('price'),
+        effectiveFrom: formData.get('effectiveFrom'),
+        effectiveTo: formData.get('effectiveTo') || null,
+      }),
+    });
+    if (res.success) {
+      setActionSuccess('Product price updated successfully');
+      setShowEditPriceModal(false);
+      setEditingPrice(null);
+      refreshData();
+    } else {
+      setActionError(res.error?.message || 'Failed to update product price');
+    }
   };
 
   useEffect(() => {
@@ -812,6 +837,38 @@ export const FinancialOperationsPage: React.FC = () => {
               )}
             </div>
 
+            {/* Price Coverage Summary */}
+            {(() => {
+              const todayStr = getLocalDateInputValue();
+              const pricedProductIdsToday = new Set(
+                prices
+                  .filter(p => p.status === 'ACTIVE' && p.effectiveFrom <= todayStr && (!p.effectiveTo || p.effectiveTo >= todayStr))
+                  .map(p => p.productId)
+              );
+              const unpricedMappedProducts = products.filter(p => !pricedProductIdsToday.has(p.id));
+              const priceCoveragePct = products.length > 0 ? Math.round((pricedProductIdsToday.size / products.length) * 100) : 100;
+              return (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl border ${priceCoveragePct === 100 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>
+                      {priceCoveragePct === 100 ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white">Price Coverage Status (Outlet Mapped Active Products)</div>
+                      <div className="text-[11px] text-slate-400">
+                        {pricedProductIdsToday.size} of {products.length} products have active price configured for today ({priceCoveragePct}%)
+                      </div>
+                    </div>
+                  </div>
+                  {unpricedMappedProducts.length > 0 && (
+                    <div className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-1.5">
+                      <span className="font-bold">Missing today:</span> {unpricedMappedProducts.map(p => p.name).join(', ')}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-800/60 text-slate-400 font-mono uppercase text-[10px] border-b border-slate-800">
@@ -821,6 +878,7 @@ export const FinancialOperationsPage: React.FC = () => {
                     <th className="py-3 px-4">Effective From</th>
                     <th className="py-3 px-4">Effective To</th>
                     <th className="py-3 px-4">Status</th>
+                    {hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && <th className="py-3 px-4 text-center">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
@@ -844,6 +902,16 @@ export const FinancialOperationsPage: React.FC = () => {
                             {p.status}
                           </span>
                         </td>
+                        {hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && (
+                          <td className="py-3 px-4 text-center">
+                            <button
+                              onClick={() => { setEditingPrice(p); setShowEditPriceModal(true); }}
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-orange-500 hover:text-white text-slate-300 rounded-lg text-[10px] font-bold transition-all"
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -1073,6 +1141,62 @@ export const FinancialOperationsPage: React.FC = () => {
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setShowPriceModal(false)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
               <button type="submit" className="px-5 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">Set Price</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showEditPriceModal && editingPrice && hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => { setShowEditPriceModal(false); setEditingPrice(null); }} />
+          <form onSubmit={handleUpdatePrice} className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
+            <h2 className="text-lg font-bold text-white">Edit Product Price</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Product</label>
+                <input
+                  type="text"
+                  disabled
+                  value={products.find(p => p.id === editingPrice.productId)?.name || editingPrice.productId}
+                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2 text-slate-300 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Selling Price (₹ / Unit)</label>
+                <input
+                  name="price"
+                  type="text"
+                  inputMode="decimal"
+                  required
+                  defaultValue={formatPaiseToMoney(editingPrice.pricePaisePerUnit)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Effective From</label>
+                  <input
+                    name="effectiveFrom"
+                    type="date"
+                    required
+                    defaultValue={editingPrice.effectiveFrom}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Effective To (Optional)</label>
+                  <input
+                    name="effectiveTo"
+                    type="date"
+                    defaultValue={editingPrice.effectiveTo || ''}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => { setShowEditPriceModal(false); setEditingPrice(null); }} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-orange-500/20">Save Changes</button>
             </div>
           </form>
         </div>

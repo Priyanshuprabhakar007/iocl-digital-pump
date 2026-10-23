@@ -1371,27 +1371,20 @@ export class PumpRepository {
       }
     });
 
-    if (resolvedPrices.size < productIds.length) {
+    const unpricedProducts = pricedProducts.filter(p => {
+      const pr = resolvedPrices.get(p.id);
+      return !pr || pr.pricePaisePerUnit <= 0;
+    }).map(p => ({ id: p.id, code: p.code, name: p.name, unit: p.unit }));
+
+    if (resolvedPrices.size < productIds.length || unpricedProducts.length > 0) {
       return {
         success: false,
         shift: null,
         snapshotsCount: 0,
         error: 'PRODUCT_PRICE_NOT_CONFIGURED',
         message: 'One or more products in this shift do not have a configured active price for the business date.',
+        unpricedProducts,
       };
-    }
-
-    for (const p of pricedProducts) {
-      const pr = resolvedPrices.get(p.id);
-      if (!pr || pr.pricePaisePerUnit <= 0) {
-        return {
-          success: false,
-          shift: null,
-          snapshotsCount: 0,
-          error: 'PRODUCT_PRICE_NOT_CONFIGURED',
-          message: 'Price must be greater than 0.',
-        };
-      }
     }
 
 

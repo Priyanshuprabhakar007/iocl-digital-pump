@@ -147,6 +147,7 @@ shifts.post('/outlets/:outletId/shifts/open', requirePermission(PERMISSIONS.SHIF
       error: {
         code: openRes.error || 'NO_OPERATIONAL_NOZZLES',
         message: openRes.message || 'Cannot open operational shift: No active nozzles with valid active dependencies exist for this outlet.',
+        ...(openRes.unpricedProducts ? { unpricedProducts: openRes.unpricedProducts } : {}),
       },
     }, 409);
   }
