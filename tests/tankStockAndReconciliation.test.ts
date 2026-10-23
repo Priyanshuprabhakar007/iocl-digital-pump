@@ -1016,4 +1016,216 @@ describe('IOCL Digital Pump Manager Phase 2B Tank Stock, Fuel Receipt & Reconcil
     const r2Json: any = await r2.json();
     expect(r2Json.error.code).toBe('OVERLAPPING_QUALITY_RULE');
   });
+
+  // 16. Tank Calibration Chart Management & Daily Operations Blocker Removal Journey
+  it('16. Complete Tank Calibration Chart lifecycle: 0/1/5 points status, Add/Edit/Delete/Bulk Import, Daily Operations TANK CALIBRATION REQUIRED removal, and tank dip entry success', async () => {
+    const { cookie: adminCookie } = await loginAs('admin@iocl.in');
+    const { getTankCalibrationStatus, buildDummyCalibrationPreset } = await import(
+      '../src/frontend/components/pump/pumpInfrastructureUi'
+    );
+
+    // 1. Create a new 20,000 L MS tank on ro-1001 with 0 calibration points
+    const createTankRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/tanks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          tankNumber: 9,
+          name: 'Tank 9 — MS Dummy',
+          productId: 'prod-ms',
+          capacityLitres: 20000,
+          safeFillCapacityLitres: 19000,
+          minimumOperatingLevelLitres: 1000,
+          status: 'ACTIVE',
+        }),
+      }),
+      env
+    );
+    expect(createTankRes.status).toBe(201);
+    const createdTank = ((await createTankRes.json()) as any).data;
+    const tankId = createdTank.id;
+
+    // 2. Verify 0 calibration points -> Tank card shows Calibration: Missing
+    const list0Res = await app.fetch(
+      new Request(`http://localhost/api/v1/tanks/${tankId}/calibration`, {
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(list0Res.status).toBe(200);
+    const list0Pts = ((await list0Res.json()) as any).data;
+    expect(list0Pts.length).toBe(0);
+    const status0 = getTankCalibrationStatus(list0Pts.length);
+    expect(status0.isConfigured).toBe(false);
+    expect(status0.fullLabel).toBe('Calibration: Missing');
+
+    // 3. Open a shift and verify Daily Operations reports TANK CALIBRATION REQUIRED for Tank #9
+    const openShiftRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          shiftTemplateId: 'st-ro1-1',
+          businessDate: '2026-11-15',
+        }),
+      }),
+      env
+    );
+    expect(openShiftRes.status).toBe(201);
+    const shiftId = ((await openShiftRes.json()) as any).data.id;
+
+    const bootBeforeRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/daily-operations?businessDate=2026-11-15', {
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(bootBeforeRes.status).toBe(200);
+    const bootBeforeData = ((await bootBeforeRes.json()) as any).data;
+    const tank9RowBefore = bootBeforeData.shifts[0].tanks.find((t: any) => t.tankId === tankId);
+    expect(tank9RowBefore).toBeDefined();
+    expect(tank9RowBefore.hasCalibrationChart).toBe(false);
+    expect(tank9RowBefore.calibrationBlocker).toBe('TANK CALIBRATION REQUIRED');
+
+    // 4. Add 1st calibration point (0 mm -> 0 L) succeeds, but 1 point still shows Calibration: Missing
+    const addPt1Res = await app.fetch(
+      new Request(`http://localhost/api/v1/tanks/${tankId}/calibration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ dipMillimetres: '0.000', volumeLitres: '0.000' }),
+      }),
+      env
+    );
+    expect(addPt1Res.status).toBe(201);
+    const pt1 = ((await addPt1Res.json()) as any).data;
+
+    const list1Res = await app.fetch(
+      new Request(`http://localhost/api/v1/tanks/${tankId}/calibration`, {
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    const list1Pts = ((await list1Res.json()) as any).data;
+    expect(list1Pts.length).toBe(1);
+    const status1 = getTankCalibrationStatus(list1Pts.length);
+    expect(status1.isConfigured).toBe(false);
+    expect(status1.fullLabel).toBe('Calibration: Missing');
+
+    // 5. Add 2nd calibration point (500 mm -> 4800 L) succeeds
+    const addPt2Res = await app.fetch(
+      new Request(`http://localhost/api/v1/tanks/${tankId}/calibration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ dipMillimetres: '500.000', volumeLitres: '4800.000' }),
+      }),
+      env
+    );
+    expect(addPt2Res.status).toBe(201);
+    const pt2 = ((await addPt2Res.json()) as any).data;
+
+    // 6. Duplicate dip value fails (409 DUPLICATE_DIP)
+    const dupRes = await app.fetch(
+      new Request(`http://localhost/api/v1/tanks/${tankId}/calibration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ dipMillimetres: '500.000', volumeLitres: '5000.000' }),
+      }),
+      env
+    );
+    expect(dupRes.status).toBe(409);
+    expect(((await dupRes.json()) as any).error.code).toBe('DUPLICATE_DIP');
+
+    // 7. Non-monotonic volume fails (400 NON_MONOTONIC_CALIBRATION)
+    const nonMonoRes = await app.fetch(
+      new Request(`http://localhost/api/v1/tanks/${tankId}/calibration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ dipMillimetres: '1000.000', volumeLitres: '4000.000' }),
+      }),
+      env
+    );
+    expect(nonMonoRes.status).toBe(400);
+    expect(((await nonMonoRes.json()) as any).error.code).toBe('NON_MONOTONIC_CALIBRATION');
+
+    // 8. Edit calibration point succeeds (500 mm -> 5000 L)
+    const editPt2Res = await app.fetch(
+      new Request(`http://localhost/api/v1/tanks/${tankId}/calibration/${pt2.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ dipMillimetres: '500.000', volumeLitres: '5000.000' }),
+      }),
+      env
+    );
+    expect(editPt2Res.status).toBe(200);
+    expect(((await editPt2Res.json()) as any).data.volumeLitreStr).toBe('5000.000');
+
+    // 9. Delete calibration point succeeds
+    const delPt1Res = await app.fetch(
+      new Request(`http://localhost/api/v1/tanks/${tankId}/calibration/${pt1.id}`, {
+        method: 'DELETE',
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(delPt1Res.status).toBe(200);
+
+    // 10. Bulk import of 5 points (20,000 L UAT preset: 0->0, 500->5000, 1000->10000, 1500->15000, 2000->20000) succeeds
+    const presetPoints = buildDummyCalibrationPreset(20000);
+    const bulkRes = await app.fetch(
+      new Request(`http://localhost/api/v1/tanks/${tankId}/calibration/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ points: presetPoints }),
+      }),
+      env
+    );
+    expect(bulkRes.status).toBe(201);
+    const importedPoints = ((await bulkRes.json()) as any).data;
+    expect(importedPoints.length).toBe(5);
+
+    const status5 = getTankCalibrationStatus(importedPoints.length);
+    expect(status5.isConfigured).toBe(true);
+    expect(status5.fullLabel).toBe('Calibration: Configured (5 points)');
+
+    // 11. Daily Operations removes TANK CALIBRATION REQUIRED after calibration exists
+    const bootAfterRes = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/daily-operations?businessDate=2026-11-15', {
+        headers: { Cookie: adminCookie, Origin: 'http://localhost:3000' },
+      }),
+      env
+    );
+    expect(bootAfterRes.status).toBe(200);
+    const bootAfterData = ((await bootAfterRes.json()) as any).data;
+    const tank9RowAfter = bootAfterData.shifts[0].tanks.find((t: any) => t.tankId === tankId);
+    expect(tank9RowAfter).toBeDefined();
+    expect(tank9RowAfter.hasCalibrationChart).toBe(true);
+    expect(tank9RowAfter.calibrationPointCount).toBe(5);
+    expect(tank9RowAfter.calibrationBlocker).toBeNull();
+
+    // 12. Tank dip entry succeeds after calibration is configured (1500 mm -> 15000.000 L)
+    const dipRes = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/tank-readings/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          readings: [
+            {
+              tankId,
+              readingType: 'OPENING',
+              source: 'MANUAL',
+              productDipMm: '1500.000',
+              waterDipMm: '0.000',
+            },
+          ],
+        }),
+      }),
+      env
+    );
+    expect(dipRes.status).toBe(200);
+    const dipData = ((await dipRes.json()) as any).data;
+    expect(dipData.readings.length).toBe(1);
+    expect(dipData.readings[0].grossObservedVolumeStr).toBe('15000.000');
+    expect(dipData.readings[0].netProductVolumeStr).toBe('15000.000');
+  });
 });
+

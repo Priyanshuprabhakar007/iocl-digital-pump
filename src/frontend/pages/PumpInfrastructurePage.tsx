@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { apiFetch } from '../services/api';
+import { apiFetch, clearApiCache } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
   RetailOutlet,
   Product,
   OutletProduct,
   Tank,
+  TankCalibrationPoint,
   Dispenser,
   Nozzle,
   NozzleDiagnosticItem,
@@ -29,6 +30,8 @@ import {
   Sliders,
   ChevronRight,
   Edit2,
+  Trash2,
+  Upload,
   Network,
   AlertTriangle,
   CheckCircle,
@@ -45,6 +48,11 @@ import {
   getProductCategoryBadgeClass,
   filterTanksForEditNozzle,
   findTankProduct,
+  getTankCalibrationStatus,
+  formatCalibrationDisplay,
+  formatDummyCalibrationPresetText,
+  validateSingleCalibrationPoint,
+  parseBulkCalibrationText,
 } from '../components/pump/pumpInfrastructureUi';
 import { PERMISSIONS } from '../../shared/constants';
 
@@ -57,6 +65,9 @@ export const PumpInfrastructurePage: React.FC = () => {
   const canWriteDispensers = hasPermission(PERMISSIONS.DISPENSERS_WRITE);
   const canWriteNozzles = hasPermission(PERMISSIONS.NOZZLES_WRITE);
   const canWriteShifts = hasPermission(PERMISSIONS.SHIFT_TEMPLATES_WRITE);
+  const canWriteTankCalibration = hasPermission(PERMISSIONS.TANK_CALIBRATION_WRITE);
+  const canReadTankCalibration =
+    hasPermission(PERMISSIONS.TANK_CALIBRATION_READ) || canWriteTankCalibration;
 
   const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
   const selectedOutletId = activeOutletId || '';
@@ -80,10 +91,33 @@ export const PumpInfrastructurePage: React.FC = () => {
 
   // Modals
   const [modalType, setModalType] = useState<
-    'mapProduct' | 'addTank' | 'editTank' | 'addDispenser' | 'editDispenser' | 'addNozzle' | 'editNozzle' | 'addShift' | 'editShift' | null
+    | 'mapProduct'
+    | 'addTank'
+    | 'editTank'
+    | 'tankCalibration'
+    | 'addDispenser'
+    | 'editDispenser'
+    | 'addNozzle'
+    | 'editNozzle'
+    | 'addShift'
+    | 'editShift'
+    | null
   >(null);
   const [modalSubmitting, setModalSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+
+  // Tank Calibration Chart states
+  const [tankCalibrationByTankId, setTankCalibrationByTankId] = useState<
+    Record<string, TankCalibrationPoint[]>
+  >({});
+  const [calibratingTank, setCalibratingTank] = useState<Tank | null>(null);
+  const [loadingCalibrationTankId, setLoadingCalibrationTankId] = useState<string | null>(null);
+  const [calEditingPoint, setCalEditingPoint] = useState<TankCalibrationPoint | null>(null);
+  const [calDipInput, setCalDipInput] = useState('');
+  const [calVolumeInput, setCalVolumeInput] = useState('');
+  const [calShowBulkImport, setCalShowBulkImport] = useState(false);
+  const [calBulkText, setCalBulkText] = useState('');
+  const [calAllowOverCapacity, setCalAllowOverCapacity] = useState(false);
 
   // Form states
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -154,6 +188,7 @@ export const PumpInfrastructurePage: React.FC = () => {
     if (!selectedOutletId) {
       setOutletProducts([]);
       setTanks([]);
+      setTankCalibrationByTankId({});
       setDispensers([]);
       setNozzles([]);
       setNozzleDiagnostics(null);
@@ -166,6 +201,7 @@ export const PumpInfrastructurePage: React.FC = () => {
     // Clear stale data prior to fetching
     setOutletProducts([]);
     setTanks([]);
+    setTankCalibrationByTankId({});
     setDispensers([]);
     setNozzles([]);
     setNozzleDiagnostics(null);
@@ -182,7 +218,27 @@ export const PumpInfrastructurePage: React.FC = () => {
 
     const failures: string[] = [];
     if (pRes.success && pRes.data) setOutletProducts(pRes.data); else failures.push('products');
-    if (tRes.success && tRes.data) setTanks(tRes.data); else failures.push('tanks');
+    if (tRes.success && tRes.data) {
+      setTanks(tRes.data);
+      if (canReadTankCalibration && tRes.data.length > 0) {
+        const calEntries = await Promise.all(
+          tRes.data.map(async (tank) => {
+            const calRes = await apiFetch<TankCalibrationPoint[]>(
+              `/api/v1/tanks/${tank.id}/calibration`,
+              { cache: 'no-store' }
+            );
+            return [tank.id, calRes.success && calRes.data ? calRes.data : []] as const;
+          })
+        );
+        const calMap: Record<string, TankCalibrationPoint[]> = {};
+        for (const [tid, pts] of calEntries) {
+          calMap[tid] = pts;
+        }
+        setTankCalibrationByTankId(calMap);
+      }
+    } else {
+      failures.push('tanks');
+    }
     if (dRes.success && dRes.data) setDispensers(dRes.data); else failures.push('dispensers');
     if (nRes.success && nRes.data) setNozzles(nRes.data); else failures.push('nozzles');
     if (diagRes.success && diagRes.data) setNozzleDiagnostics(diagRes.data);
@@ -585,6 +641,209 @@ export const PumpInfrastructurePage: React.FC = () => {
     }
   };
 
+  const notifyCalibrationChanged = (tankId: string) => {
+    clearApiCache();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('iocl:tank-calibration-updated', {
+          detail: { outletId: selectedOutletId, tankId },
+        })
+      );
+    }
+  };
+
+  const refreshTankCalibration = async (tankId: string): Promise<TankCalibrationPoint[]> => {
+    setLoadingCalibrationTankId(tankId);
+    try {
+      const res = await apiFetch<TankCalibrationPoint[]>(`/api/v1/tanks/${tankId}/calibration`, {
+        cache: 'no-store',
+      });
+      const pts = res.success && res.data ? res.data : [];
+      setTankCalibrationByTankId(prev => ({
+        ...prev,
+        [tankId]: pts,
+      }));
+      return pts;
+    } finally {
+      setLoadingCalibrationTankId(null);
+    }
+  };
+
+  const openCalibrationModal = async (t: Tank) => {
+    setCalibratingTank(t);
+    setCalEditingPoint(null);
+    setCalDipInput('');
+    setCalVolumeInput('');
+    setCalShowBulkImport(false);
+    setCalBulkText('');
+    setCalAllowOverCapacity(false);
+    setModalError(null);
+    setModalType('tankCalibration');
+    await refreshTankCalibration(t.id);
+  };
+
+  const startEditCalibrationPoint = (pt: TankCalibrationPoint) => {
+    setCalEditingPoint(pt);
+    setCalDipInput(formatCalibrationDisplay(pt.dipMmStr ?? pt.dipMillimetresMilliunits / 1000));
+    setCalVolumeInput(formatCalibrationDisplay(pt.volumeLitreStr ?? pt.volumeMilliunits / 1000));
+    setModalError(null);
+  };
+
+  const cancelEditCalibrationPoint = () => {
+    setCalEditingPoint(null);
+    setCalDipInput('');
+    setCalVolumeInput('');
+    setModalError(null);
+  };
+
+  const handleSaveCalibrationPoint = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!calibratingTank || modalSubmitting) return;
+    setModalError(null);
+
+    const existingPoints = tankCalibrationByTankId[calibratingTank.id] || [];
+    const validation = validateSingleCalibrationPoint(
+      { dipMillimetres: calDipInput, volumeLitres: calVolumeInput },
+      existingPoints,
+      {
+        editingPointId: calEditingPoint?.id || null,
+        tankCapacityLitres: calibratingTank.capacityLitres,
+        allowOverCapacity: calAllowOverCapacity,
+      }
+    );
+
+    if (!validation.valid || !validation.normalizedPoint) {
+      setModalError(validation.error || 'Invalid calibration point values.');
+      return;
+    }
+
+    setModalSubmitting(true);
+    try {
+      const isEditing = Boolean(calEditingPoint);
+      const endpoint = isEditing
+        ? `/api/v1/tanks/${calibratingTank.id}/calibration/${calEditingPoint!.id}`
+        : `/api/v1/tanks/${calibratingTank.id}/calibration`;
+
+      const res = await apiFetch<TankCalibrationPoint>(endpoint, {
+        method: isEditing ? 'PUT' : 'POST',
+        body: JSON.stringify(validation.normalizedPoint),
+      });
+
+      if (res.success && res.data) {
+        await refreshTankCalibration(calibratingTank.id);
+        notifyCalibrationChanged(calibratingTank.id);
+        setCalEditingPoint(null);
+        setCalDipInput('');
+        setCalVolumeInput('');
+        setSuccessMsg(
+          isEditing
+            ? `Calibration point updated for Tank #${calibratingTank.tankNumber}`
+            : `Calibration point added for Tank #${calibratingTank.tankNumber}`
+        );
+        setTimeout(() => setSuccessMsg(null), 3000);
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
+    }
+  };
+
+  const handleDeleteCalibrationPoint = async (point: TankCalibrationPoint) => {
+    if (!calibratingTank || modalSubmitting) return;
+    setModalError(null);
+    setModalSubmitting(true);
+
+    try {
+      const res = await apiFetch(
+        `/api/v1/tanks/${calibratingTank.id}/calibration/${point.id}`,
+        { method: 'DELETE' }
+      );
+      if (res.success) {
+        await refreshTankCalibration(calibratingTank.id);
+        notifyCalibrationChanged(calibratingTank.id);
+        if (calEditingPoint?.id === point.id) {
+          cancelEditCalibrationPoint();
+        }
+        setSuccessMsg(
+          `Calibration point (${formatCalibrationDisplay(point.dipMmStr)} mm) deleted from Tank #${calibratingTank.tankNumber}`
+        );
+        setTimeout(() => setSuccessMsg(null), 3000);
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
+    }
+  };
+
+  const handleLoadDummyCalibrationPreset = () => {
+    if (!calibratingTank) return;
+    setCalShowBulkImport(true);
+    setCalBulkText(formatDummyCalibrationPresetText(calibratingTank.capacityLitres || 20000));
+    setModalError(null);
+  };
+
+  const handleCalibrationCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setModalError(null);
+    try {
+      const text = await file.text();
+      setCalShowBulkImport(true);
+      setCalBulkText(text);
+    } catch {
+      setModalError('Failed to read the selected CSV file.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleBulkImportCalibration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!calibratingTank || modalSubmitting) return;
+    setModalError(null);
+
+    const parsed = parseBulkCalibrationText(calBulkText, {
+      tankCapacityLitres: calibratingTank.capacityLitres,
+      allowOverCapacity: calAllowOverCapacity,
+    });
+
+    if (!parsed.valid) {
+      setModalError(parsed.error || 'Invalid bulk calibration data.');
+      return;
+    }
+
+    setModalSubmitting(true);
+    try {
+      const res = await apiFetch<TankCalibrationPoint[]>(
+        `/api/v1/tanks/${calibratingTank.id}/calibration/bulk`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ points: parsed.normalizedPoints }),
+        }
+      );
+
+      if (res.success && res.data) {
+        setTankCalibrationByTankId(prev => ({
+          ...prev,
+          [calibratingTank.id]: res.data!,
+        }));
+        notifyCalibrationChanged(calibratingTank.id);
+        setCalShowBulkImport(false);
+        setCalBulkText('');
+        setSuccessMsg(
+          `Imported ${res.data.length} calibration points for Tank #${calibratingTank.tankNumber}`
+        );
+        setTimeout(() => setSuccessMsg(null), 3000);
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
+    }
+  };
+
   const handleAddShift = async (e: React.FormEvent) => {
     e.preventDefault();
     if (modalSubmitting) return;
@@ -927,6 +1186,9 @@ export const PumpInfrastructurePage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {tanks.map(t => {
               const safeFillPercent = Math.min(100, Math.round((t.safeFillCapacityLitres / t.capacityLitres) * 100));
+              const calPoints = tankCalibrationByTankId[t.id] || [];
+              const calStatus = getTankCalibrationStatus(calPoints.length);
+
               return (
                 <div key={t.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
                   <div className="flex items-start justify-between">
@@ -971,15 +1233,51 @@ export const PumpInfrastructurePage: React.FC = () => {
                     </div>
                   </div>
 
-                  {canWriteTanks && (
-                    <div className="pt-2 border-t border-slate-800/80">
-                      <button
-                        onClick={() => openEditTank(t)}
-                        className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+                  {/* Tank Calibration Status Badge */}
+                  <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="text-slate-400">Calibration:</span>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border inline-flex items-center gap-1.5 ${calStatus.badgeClass}`}
                       >
-                        <Edit2 className="w-3.5 h-3.5 text-orange-400" />
-                        <span>Edit Tank</span>
-                      </button>
+                        {calStatus.isConfigured ? (
+                          <CheckCircle className="w-3 h-3 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                        )}
+                        <span>{calStatus.badgeLabel}</span>
+                      </span>
+                    </div>
+                    {!calStatus.isConfigured && calStatus.warningText && (
+                      <div className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 font-mono flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>{calStatus.warningText}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {(canReadTankCalibration || canWriteTanks) && (
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2">
+                      {canReadTankCalibration && (
+                        <button
+                          type="button"
+                          onClick={() => openCalibrationModal(t)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-orange-400 hover:text-orange-300 border border-slate-700/80 rounded-xl text-xs font-semibold transition-colors"
+                        >
+                          <Layers className="w-3.5 h-3.5" />
+                          <span>Calibration Chart</span>
+                        </button>
+                      )}
+                      {canWriteTanks && (
+                        <button
+                          type="button"
+                          onClick={() => openEditTank(t)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-orange-400" />
+                          <span>Edit Tank</span>
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2406,6 +2704,348 @@ export const PumpInfrastructurePage: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Tank Calibration Chart Modal */}
+      {modalType === 'tankCalibration' && calibratingTank && (() => {
+        const calPoints = tankCalibrationByTankId[calibratingTank.id] || [];
+        const calStatus = getTankCalibrationStatus(calPoints.length);
+        const isLoadingPoints = loadingCalibrationTankId === calibratingTank.id;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
+              onClick={() => setModalType(null)}
+            />
+            <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-bold text-white">
+                      Tank Calibration Chart
+                    </h2>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border inline-flex items-center gap-1.5 font-mono ${calStatus.badgeClass}`}
+                    >
+                      {calStatus.isConfigured ? (
+                        <CheckCircle className="w-3 h-3 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                      )}
+                      <span>Calibration: {calStatus.badgeLabel}</span>
+                    </span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs font-mono">
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">TANK</span>
+                      <span className="text-orange-400 font-bold">
+                        Tank #{calibratingTank.tankNumber} — {calibratingTank.productCode || calibratingTank.productName}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">CAPACITY</span>
+                      <span className="text-white font-bold">
+                        {calibratingTank.capacityLitres.toLocaleString()} L
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">SAFE FILL LIMIT</span>
+                      <span className="text-slate-300">
+                        {calibratingTank.safeFillCapacityLitres.toLocaleString()} L
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalType(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {!calStatus.isConfigured && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs rounded-xl font-mono flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    {calStatus.warningText ||
+                      'At least 2 calibration points are required before Daily Operations allows tank dip entry.'}
+                  </span>
+                </div>
+              )}
+
+              {modalError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
+              {/* Calibration Points Table */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+                    Calibration Points ({calPoints.length})
+                  </h3>
+                  {canWriteTankCalibration && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleLoadDummyCalibrationPreset}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 text-[11px] font-mono font-semibold transition-colors"
+                      >
+                        Load 5-Point UAT Preset (0–2000 mm)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCalShowBulkImport(prev => !prev);
+                          setModalError(null);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 text-[11px] font-mono font-semibold transition-colors"
+                      >
+                        <Upload className="w-3 h-3" />
+                        <span>{calShowBulkImport ? 'Hide Bulk Import' : 'Bulk Import Chart'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto bg-slate-950/70 border border-slate-800 rounded-xl max-h-64">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] border-b border-slate-800 sticky top-0">
+                      <tr>
+                        <th className="py-2.5 px-4">Dip (mm)</th>
+                        <th className="py-2.5 px-4">Volume (L)</th>
+                        {canWriteTankCalibration && (
+                          <th className="py-2.5 px-4 text-right">Actions</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {isLoadingPoints ? (
+                        <tr>
+                          <td
+                            colSpan={canWriteTankCalibration ? 3 : 2}
+                            className="py-6 text-center text-slate-500"
+                          >
+                            Loading calibration chart...
+                          </td>
+                        </tr>
+                      ) : calPoints.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={canWriteTankCalibration ? 3 : 2}
+                            className="py-6 text-center text-slate-500"
+                          >
+                            No calibration points configured for this tank yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        calPoints.map(pt => (
+                          <tr key={pt.id} className="hover:bg-slate-800/40">
+                            <td className="py-2 px-4 font-bold text-orange-400">
+                              {formatCalibrationDisplay(pt.dipMmStr ?? pt.dipMillimetresMilliunits / 1000)}
+                            </td>
+                            <td className="py-2 px-4 text-white">
+                              {formatCalibrationDisplay(pt.volumeLitreStr ?? pt.volumeMilliunits / 1000)}
+                            </td>
+                            {canWriteTankCalibration && (
+                              <td className="py-2 px-4 text-right space-x-2">
+                                <button
+                                  type="button"
+                                  disabled={modalSubmitting}
+                                  onClick={() => startEditCalibrationPoint(pt)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px]"
+                                >
+                                  <Edit2 className="w-3 h-3 text-orange-400" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={modalSubmitting}
+                                  onClick={() => handleDeleteCalibrationPoint(pt)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[11px]"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Delete</span>
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Write Controls: Single Point Add/Edit & Bulk Import */}
+              {canWriteTankCalibration ? (
+                <div className="space-y-4 pt-2 border-t border-slate-800">
+                  {/* Single Point Add / Edit Form */}
+                  <form onSubmit={handleSaveCalibrationPoint} className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-white font-mono uppercase">
+                        {calEditingPoint
+                          ? `Edit Point (${formatCalibrationDisplay(calEditingPoint.dipMmStr)} mm)`
+                          : 'Add Calibration Point'}
+                      </h4>
+                      {calEditingPoint && (
+                        <button
+                          type="button"
+                          onClick={cancelEditCalibrationPoint}
+                          className="text-[11px] text-slate-400 hover:text-white font-mono"
+                        >
+                          Cancel Edit
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                      <div>
+                        <label className="block text-[11px] text-slate-400 font-mono mb-1">
+                          Dip (mm)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          placeholder="e.g. 500"
+                          value={calDipInput}
+                          onChange={e => {
+                            setCalDipInput(e.target.value);
+                            setModalError(null);
+                          }}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 font-mono mb-1">
+                          Volume (L)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          placeholder="e.g. 5000"
+                          value={calVolumeInput}
+                          onChange={e => {
+                            setCalVolumeInput(e.target.value);
+                            setModalError(null);
+                          }}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                        />
+                      </div>
+                      <div>
+                        <button
+                          type="submit"
+                          disabled={modalSubmitting}
+                          className="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
+                        >
+                          {modalSubmitting
+                            ? 'Saving...'
+                            : calEditingPoint
+                              ? 'Update Point'
+                              : 'Add Point'}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+
+                  {/* Bulk Import Section */}
+                  {calShowBulkImport && (
+                    <form
+                      onSubmit={handleBulkImportCalibration}
+                      className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h4 className="text-xs font-bold text-white font-mono uppercase">
+                            Bulk Import Calibration Chart
+                          </h4>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Paste rows as <code className="text-orange-400">dipMillimetres,volumeLitres</code> (minimum 2 points, strictly increasing dips, monotonic volumes) or upload a CSV file.
+                          </p>
+                        </div>
+                        <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold">
+                          <Upload className="w-3.5 h-3.5 text-orange-400" />
+                          <span>Upload CSV</span>
+                          <input
+                            type="file"
+                            accept=".csv,.txt,.tsv"
+                            onChange={handleCalibrationCsvUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      <textarea
+                        rows={6}
+                        value={calBulkText}
+                        onChange={e => {
+                          setCalBulkText(e.target.value);
+                          setModalError(null);
+                        }}
+                        placeholder={`0,0\n500,5000\n1000,10000\n1500,15000\n2000,20000`}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                      />
+
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <label className="inline-flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+                          <input
+                            type="checkbox"
+                            checked={calAllowOverCapacity}
+                            onChange={e => setCalAllowOverCapacity(e.target.checked)}
+                            className="rounded border-slate-700 bg-slate-800 text-orange-500"
+                          />
+                          <span>Allow volume above nominal tank capacity ({calibratingTank.capacityLitres.toLocaleString()} L)</span>
+                        </label>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCalShowBulkImport(false);
+                              setModalError(null);
+                            }}
+                            className="px-3 py-1.5 bg-slate-800 rounded-xl text-xs text-slate-300"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={modalSubmitting}
+                            className="px-4 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
+                          >
+                            {modalSubmitting ? 'Importing...' : 'Replace & Import Chart'}
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs text-slate-400 font-mono">
+                  Read-only view (TANK_CALIBRATION_READ). Contact an administrator or authorized officer with TANK_CALIBRATION_WRITE to modify calibration points.
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setModalType(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs text-slate-200 font-semibold"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         );

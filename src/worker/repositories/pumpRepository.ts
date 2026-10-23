@@ -2466,8 +2466,13 @@ export class PumpRepository {
       createdBy,
     }));
 
-    const insertStmt = this.db.insert(schema.tankCalibrationPoints).values(insertRows);
-    await (this.db as any).batch([deleteStmt, insertStmt]);
+    const batchStmts: any[] = [deleteStmt];
+    for (const chunk of chunkArray(insertRows, SNAPSHOT_INSERT_CHUNK_SIZE)) {
+      if (chunk.length > 0) {
+        batchStmts.push(this.db.insert(schema.tankCalibrationPoints).values(chunk));
+      }
+    }
+    await (this.db as any).batch(batchStmts);
 
     return this.listCalibrationPoints(tankId);
   }

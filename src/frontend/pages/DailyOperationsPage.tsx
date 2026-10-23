@@ -200,6 +200,17 @@ export const DailyOperationsPage: React.FC = () => {
     }
   }, [selectedOutletId, businessDate]);
 
+  useEffect(() => {
+    if (!selectedOutletId || !businessDate || typeof window === 'undefined') return;
+    const handleCalibrationUpdated = () => {
+      loadBootstrap(selectedOutletId, businessDate, true);
+    };
+    window.addEventListener('iocl:tank-calibration-updated', handleCalibrationUpdated);
+    return () => {
+      window.removeEventListener('iocl:tank-calibration-updated', handleCalibrationUpdated);
+    };
+  }, [selectedOutletId, businessDate, loadBootstrap]);
+
   const activeWorkspace: DailyOperationsShiftWorkspace | null =
     bootstrap?.shifts.find((s) => s.shift.id === activeShiftId) ||
     (bootstrap?.shifts && bootstrap.shifts.length > 0 ? bootstrap.shifts[0] : null);

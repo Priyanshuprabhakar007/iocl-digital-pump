@@ -500,6 +500,21 @@ export function getPumpInfrastructureErrorMessage(error: any): string {
     case 'INACTIVE_DISPENSER':
       return 'Cannot configure nozzle because the dispenser is inactive.';
 
+    case 'DUPLICATE_DIP':
+      return rawMessage || 'A calibration point for this dip height (mm) already exists.';
+
+    case 'NON_MONOTONIC_CALIBRATION':
+      return rawMessage || 'Calibration volume must increase monotonically with dip height.';
+
+    case 'CALIBRATION_IMPORT_FAILED':
+      return rawMessage || 'Bulk calibration import failed. Please verify dip and volume values.';
+
+    case 'CALIBRATION_NOT_AVAILABLE':
+      return rawMessage || 'Tank calibration chart requires at least 2 calibration points.';
+
+    case 'DIP_OUT_OF_RANGE':
+      return rawMessage || 'Dip measurement is outside the configured calibration chart range.';
+
     case 'FORBIDDEN':
       return 'You do not have permission to perform this infrastructure action.';
 
@@ -601,3 +616,362 @@ export function findTankProduct(
   const t = tanks.find(tank => tank && tank.id === tankId);
   return t ? t.productId : null;
 }
+
+// =========================================================================
+// 8. TANK CALIBRATION CHART HELPERS
+// =========================================================================
+
+export interface TankCalibrationStatusInfo {
+  isConfigured: boolean;
+  pointsCount: number;
+  badgeLabel: string;
+  fullLabel: string;
+  badgeClass: string;
+  warningText: string | null;
+}
+
+export function getTankCalibrationStatus(pointsCount?: number | null): TankCalibrationStatusInfo {
+  const count = Math.max(0, Number(pointsCount) || 0);
+  if (count >= 2) {
+    return {
+      isConfigured: true,
+      pointsCount: count,
+      badgeLabel: `Configured (${count} points)`,
+      fullLabel: `Calibration: Configured (${count} points)`,
+      badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      warningText: null,
+    };
+  }
+  return {
+    isConfigured: false,
+    pointsCount: count,
+    badgeLabel: 'Missing',
+    fullLabel: 'Calibration: Missing',
+    badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    warningText:
+      count === 1
+        ? 'At least 2 calibration points are required before recording tank dips in Daily Operations.'
+        : 'Upload calibration chart before recording dips in Daily Operations.',
+  };
+}
+
+export function formatCalibrationDecimal(value: string | number): string {
+  const cleaned = String(value ?? '').replace(/,/g, '').trim();
+  const num = Number(cleaned);
+  if (!Number.isFinite(num)) {
+    throw new Error(`Invalid calibration numeric value: ${value}`);
+  }
+  return num.toFixed(3);
+}
+
+export function formatCalibrationDisplay(value?: string | number | null): string {
+  if (value === null || value === undefined || value === '') return '0';
+  const cleaned = String(value).replace(/,/g, '').trim();
+  const num = Number(cleaned);
+  if (!Number.isFinite(num)) return String(value);
+  if (Number.isInteger(num)) return String(num);
+  return num.toFixed(3).replace(/\.?0+$/, '');
+}
+
+export interface CalibrationPointInput {
+  dipMillimetres: string;
+  volumeLitres: string;
+}
+
+export function buildDummyCalibrationPreset(capacityLitres = 20000): CalibrationPointInput[] {
+  const cap = Number(capacityLitres) > 0 ? Number(capacityLitres) : 20000;
+  const steps = [0, 0.25, 0.5, 0.75, 1];
+  const maxDipMm = 2000;
+  return steps.map(ratio => ({
+    dipMillimetres: formatCalibrationDecimal(Math.round(maxDipMm * ratio)),
+    volumeLitres: formatCalibrationDecimal(Math.round(cap * ratio)),
+  }));
+}
+
+export function formatDummyCalibrationPresetText(capacityLitres = 20000): string {
+  return buildDummyCalibrationPreset(capacityLitres)
+    .map(pt => `${formatCalibrationDisplay(pt.dipMillimetres)},${formatCalibrationDisplay(pt.volumeLitres)}`)
+    .join('\n');
+}
+
+export interface CalibrationValidationResult {
+  valid: boolean;
+  error: string | null;
+  normalizedPoints: CalibrationPointInput[];
+}
+
+export function validateCalibrationChartPoints(
+  points: Array<{ dipMillimetres: string | number; volumeLitres: string | number }>,
+  options?: {
+    tankCapacityLitres?: number;
+    allowOverCapacity?: boolean;
+    requireMinTwoPoints?: boolean;
+  }
+): CalibrationValidationResult {
+  const requireMinTwo = options?.requireMinTwoPoints !== false;
+  if (!Array.isArray(points) || (requireMinTwo && points.length < 2)) {
+    return {
+      valid: false,
+      error: 'At least 2 calibration points are required to configure a calibration chart.',
+      normalizedPoints: [],
+    };
+  }
+
+  const parsed: Array<{ dipNum: number; volNum: number; dipMillimetres: string; volumeLitres: string }> = [];
+
+  for (let i = 0; i < points.length; i++) {
+    const rawDip = String(points[i]?.dipMillimetres ?? '').replace(/,/g, '').trim();
+    const rawVol = String(points[i]?.volumeLitres ?? '').replace(/,/g, '').trim();
+
+    if (rawDip === '' || rawVol === '') {
+      return {
+        valid: false,
+        error: `Row ${i + 1}: Both Dip (mm) and Volume (L) are required.`,
+        normalizedPoints: [],
+      };
+    }
+
+    const dipNum = Number(rawDip);
+    const volNum = Number(rawVol);
+
+    if (!Number.isFinite(dipNum)) {
+      return {
+        valid: false,
+        error: `Row ${i + 1}: Dip (mm) "${points[i]?.dipMillimetres}" is not a valid number.`,
+        normalizedPoints: [],
+      };
+    }
+    if (!Number.isFinite(volNum)) {
+      return {
+        valid: false,
+        error: `Row ${i + 1}: Volume (L) "${points[i]?.volumeLitres}" is not a valid number.`,
+        normalizedPoints: [],
+      };
+    }
+    if (dipNum < 0) {
+      return {
+        valid: false,
+        error: `Row ${i + 1}: Dip (mm) must be >= 0 (received ${dipNum}).`,
+        normalizedPoints: [],
+      };
+    }
+    if (volNum < 0) {
+      return {
+        valid: false,
+        error: `Row ${i + 1}: Volume (L) must be >= 0 (received ${volNum}).`,
+        normalizedPoints: [],
+      };
+    }
+
+    if (
+      options?.tankCapacityLitres &&
+      options.tankCapacityLitres > 0 &&
+      !options.allowOverCapacity &&
+      volNum > options.tankCapacityLitres
+    ) {
+      return {
+        valid: false,
+        error: `Row ${i + 1}: Volume ${volNum.toLocaleString()} L exceeds tank capacity of ${options.tankCapacityLitres.toLocaleString()} L.`,
+        normalizedPoints: [],
+      };
+    }
+
+    parsed.push({
+      dipNum: Math.round(dipNum * 1000) / 1000,
+      volNum: Math.round(volNum * 1000) / 1000,
+      dipMillimetres: dipNum.toFixed(3),
+      volumeLitres: volNum.toFixed(3),
+    });
+  }
+
+  for (let i = 0; i < parsed.length; i++) {
+    for (let j = i + 1; j < parsed.length; j++) {
+      if (parsed[i].dipNum === parsed[j].dipNum) {
+        return {
+          valid: false,
+          error: `Duplicate dip value ${formatCalibrationDisplay(parsed[i].dipNum)} mm is not allowed.`,
+          normalizedPoints: [],
+        };
+      }
+    }
+  }
+
+  for (let i = 0; i < parsed.length - 1; i++) {
+    if (parsed[i].dipNum >= parsed[i + 1].dipNum) {
+      return {
+        valid: false,
+        error: `Dip values must be strictly increasing (row ${i + 1}: ${formatCalibrationDisplay(parsed[i].dipNum)} mm vs row ${i + 2}: ${formatCalibrationDisplay(parsed[i + 1].dipNum)} mm).`,
+        normalizedPoints: [],
+      };
+    }
+    if (parsed[i].volNum > parsed[i + 1].volNum) {
+      return {
+        valid: false,
+        error: `Volume values must be monotonically increasing: ${formatCalibrationDisplay(parsed[i + 1].volNum)} L at ${formatCalibrationDisplay(parsed[i + 1].dipNum)} mm cannot be less than ${formatCalibrationDisplay(parsed[i].volNum)} L at ${formatCalibrationDisplay(parsed[i].dipNum)} mm.`,
+        normalizedPoints: [],
+      };
+    }
+  }
+
+  return {
+    valid: true,
+    error: null,
+    normalizedPoints: parsed.map(p => ({
+      dipMillimetres: p.dipMillimetres,
+      volumeLitres: p.volumeLitres,
+    })),
+  };
+}
+
+export function validateSingleCalibrationPoint(
+  candidate: { dipMillimetres: string | number; volumeLitres: string | number },
+  existingPoints: Array<{
+    id?: string;
+    dipMillimetresMilliunits?: number;
+    volumeMilliunits?: number;
+    dipMmStr?: string;
+    volumeLitreStr?: string;
+  }>,
+  options?: {
+    editingPointId?: string | null;
+    tankCapacityLitres?: number;
+    allowOverCapacity?: boolean;
+  }
+): { valid: boolean; error: string | null; normalizedPoint: CalibrationPointInput | null } {
+  const singleRes = validateCalibrationChartPoints([candidate], {
+    tankCapacityLitres: options?.tankCapacityLitres,
+    allowOverCapacity: options?.allowOverCapacity,
+    requireMinTwoPoints: false,
+  });
+
+  if (!singleRes.valid || singleRes.normalizedPoints.length === 0) {
+    return { valid: false, error: singleRes.error, normalizedPoint: null };
+  }
+
+  const normalized = singleRes.normalizedPoints[0];
+  const candDipMilli = Math.round(Number(normalized.dipMillimetres) * 1000);
+  const candVolMilli = Math.round(Number(normalized.volumeLitres) * 1000);
+
+  for (const pt of existingPoints || []) {
+    if (options?.editingPointId && pt.id === options.editingPointId) {
+      continue;
+    }
+    const ptDipMilli =
+      typeof pt.dipMillimetresMilliunits === 'number'
+        ? pt.dipMillimetresMilliunits
+        : Math.round(Number(pt.dipMmStr || 0) * 1000);
+    const ptVolMilli =
+      typeof pt.volumeMilliunits === 'number'
+        ? pt.volumeMilliunits
+        : Math.round(Number(pt.volumeLitreStr || 0) * 1000);
+
+    if (ptDipMilli === candDipMilli) {
+      return {
+        valid: false,
+        error: `Calibration point for dip ${formatCalibrationDisplay(normalized.dipMillimetres)} mm already exists.`,
+        normalizedPoint: null,
+      };
+    }
+    if (ptDipMilli < candDipMilli && ptVolMilli > candVolMilli) {
+      return {
+        valid: false,
+        error: `Non-monotonic volume: ${formatCalibrationDisplay(normalized.volumeLitres)} L at ${formatCalibrationDisplay(normalized.dipMillimetres)} mm is less than ${formatCalibrationDisplay(ptVolMilli / 1000)} L at ${formatCalibrationDisplay(ptDipMilli / 1000)} mm.`,
+        normalizedPoint: null,
+      };
+    }
+    if (ptDipMilli > candDipMilli && ptVolMilli < candVolMilli) {
+      return {
+        valid: false,
+        error: `Non-monotonic volume: ${formatCalibrationDisplay(normalized.volumeLitres)} L at ${formatCalibrationDisplay(normalized.dipMillimetres)} mm is greater than ${formatCalibrationDisplay(ptVolMilli / 1000)} L at ${formatCalibrationDisplay(ptDipMilli / 1000)} mm.`,
+        normalizedPoint: null,
+      };
+    }
+  }
+
+  return {
+    valid: true,
+    error: null,
+    normalizedPoint: normalized,
+  };
+}
+
+export function parseBulkCalibrationText(
+  rawText: string,
+  options?: {
+    tankCapacityLitres?: number;
+    allowOverCapacity?: boolean;
+  }
+): CalibrationValidationResult {
+  const lines = String(rawText || '')
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return {
+      valid: false,
+      error: 'Please paste or upload at least 2 calibration points (Dip mm and Volume L).',
+      normalizedPoints: [],
+    };
+  }
+
+  const rawPoints: Array<{ dipMillimetres: string; volumeLitres: string }> = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Skip header line if it starts with non-digit column names like "dip", "dipMillimetres"
+    if (i === 0 && /^[a-zA-Z]/.test(line)) {
+      continue;
+    }
+
+    let dipPart = '';
+    let volPart = '';
+
+    if (line.includes('->')) {
+      const parts = line.split('->');
+      dipPart = parts[0] || '';
+      volPart = parts[1] || '';
+    } else if (line.includes('\t')) {
+      const parts = line.split('\t');
+      dipPart = parts[0] || '';
+      volPart = parts[1] || '';
+    } else if (line.includes(';')) {
+      const parts = line.split(';');
+      dipPart = parts[0] || '';
+      volPart = parts[1] || '';
+    } else if (line.includes(',')) {
+      const parts = line.split(',');
+      if (parts.length === 2) {
+        dipPart = parts[0] || '';
+        volPart = parts[1] || '';
+      } else {
+        return {
+          valid: false,
+          error: `Line ${i + 1}: Expected 2 columns (dipMillimetres, volumeLitres), found ${parts.length}.`,
+          normalizedPoints: [],
+        };
+      }
+    } else {
+      const parts = line.split(/\s+/);
+      dipPart = parts[0] || '';
+      volPart = parts[1] || '';
+    }
+
+    // Strip optional unit suffixes like "mm" or "L" and thousands separators
+    const cleanDip = dipPart.replace(/mm/gi, '').replace(/,/g, '').trim();
+    const cleanVol = volPart.replace(/litres|litre|l/gi, '').replace(/,/g, '').trim();
+
+    rawPoints.push({
+      dipMillimetres: cleanDip,
+      volumeLitres: cleanVol,
+    });
+  }
+
+  return validateCalibrationChartPoints(rawPoints, {
+    tankCapacityLitres: options?.tankCapacityLitres,
+    allowOverCapacity: options?.allowOverCapacity,
+    requireMinTwoPoints: true,
+  });
+}
+

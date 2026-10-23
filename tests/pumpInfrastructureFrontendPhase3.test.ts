@@ -9,6 +9,12 @@ import {
   buildFuelMappingTree,
   getPumpInfrastructureErrorMessage,
   getProductCategoryBadgeClass,
+  getTankCalibrationStatus,
+  buildDummyCalibrationPreset,
+  formatDummyCalibrationPresetText,
+  validateCalibrationChartPoints,
+  validateSingleCalibrationPoint,
+  parseBulkCalibrationText,
 } from '../src/frontend/components/pump/pumpInfrastructureUi';
 import {
   Product,
@@ -385,4 +391,117 @@ describe('Phase 3 Pump Infrastructure Pure Frontend Helpers Suite', () => {
       expect(msg).toContain('broken topology references');
     });
   });
+
+  // =========================================================================
+  // 10. Tank Calibration Chart Management Helpers
+  // =========================================================================
+  describe('Tank Calibration Chart Management Helpers', () => {
+    it('Tank card shows Calibration Missing when 0 points exist', () => {
+      const status = getTankCalibrationStatus(0);
+      expect(status.isConfigured).toBe(false);
+      expect(status.pointsCount).toBe(0);
+      expect(status.badgeLabel).toBe('Missing');
+      expect(status.fullLabel).toBe('Calibration: Missing');
+      expect(status.badgeClass).toContain('amber');
+      expect(status.warningText).toContain('Upload calibration chart');
+    });
+
+    it('Tank card shows Calibration Missing when only 1 point exists', () => {
+      const status = getTankCalibrationStatus(1);
+      expect(status.isConfigured).toBe(false);
+      expect(status.pointsCount).toBe(1);
+      expect(status.badgeLabel).toBe('Missing');
+      expect(status.fullLabel).toBe('Calibration: Missing');
+      expect(status.badgeClass).toContain('amber');
+      expect(status.warningText).toContain('At least 2 calibration points');
+    });
+
+    it('Tank card shows Calibration Configured (5 points) when 5 points exist', () => {
+      const status = getTankCalibrationStatus(5);
+      expect(status.isConfigured).toBe(true);
+      expect(status.pointsCount).toBe(5);
+      expect(status.badgeLabel).toBe('Configured (5 points)');
+      expect(status.fullLabel).toBe('Calibration: Configured (5 points)');
+      expect(status.badgeClass).toContain('emerald');
+      expect(status.warningText).toBeNull();
+    });
+
+    it('generates 5-point dummy/UAT preset for 20,000 L tank (0->0, 500->5000, 1000->10000, 1500->15000, 2000->20000)', () => {
+      const preset = buildDummyCalibrationPreset(20000);
+      expect(preset).toEqual([
+        { dipMillimetres: '0.000', volumeLitres: '0.000' },
+        { dipMillimetres: '500.000', volumeLitres: '5000.000' },
+        { dipMillimetres: '1000.000', volumeLitres: '10000.000' },
+        { dipMillimetres: '1500.000', volumeLitres: '15000.000' },
+        { dipMillimetres: '2000.000', volumeLitres: '20000.000' },
+      ]);
+
+      const text = formatDummyCalibrationPresetText(20000);
+      expect(text).toBe('0,0\n500,5000\n1000,10000\n1500,15000\n2000,20000');
+    });
+
+    it('validates single calibration point against duplicate dip, non-monotonic volume, negative values, and tank capacity', () => {
+      const existing = [
+        { id: 'pt-1', dipMillimetresMilliunits: 0, volumeMilliunits: 0, dipMmStr: '0.000', volumeLitreStr: '0.000' },
+        { id: 'pt-2', dipMillimetresMilliunits: 1000000, volumeMilliunits: 10000000, dipMmStr: '1000.000', volumeLitreStr: '10000.000' },
+      ];
+
+      // Valid point between 0 and 1000
+      const ok = validateSingleCalibrationPoint(
+        { dipMillimetres: '500', volumeLitres: '5000' },
+        existing,
+        { tankCapacityLitres: 20000 }
+      );
+      expect(ok.valid).toBe(true);
+      expect(ok.normalizedPoint).toEqual({ dipMillimetres: '500.000', volumeLitres: '5000.000' });
+
+      // Duplicate dip
+      const dup = validateSingleCalibrationPoint(
+        { dipMillimetres: '1000', volumeLitres: '10000' },
+        existing,
+        { tankCapacityLitres: 20000 }
+      );
+      expect(dup.valid).toBe(false);
+      expect(dup.error).toContain('already exists');
+
+      // Non-monotonic volume (higher dip, lower volume)
+      const nonMono = validateSingleCalibrationPoint(
+        { dipMillimetres: '1500', volumeLitres: '8000' },
+        existing,
+        { tankCapacityLitres: 20000 }
+      );
+      expect(nonMono.valid).toBe(false);
+      expect(nonMono.error).toContain('Non-monotonic volume');
+
+      // Exceeds tank capacity
+      const overCap = validateSingleCalibrationPoint(
+        { dipMillimetres: '2500', volumeLitres: '25000' },
+        existing,
+        { tankCapacityLitres: 20000, allowOverCapacity: false }
+      );
+      expect(overCap.valid).toBe(false);
+      expect(overCap.error).toContain('exceeds tank capacity');
+    });
+
+    it('parses bulk calibration text (CSV, TSV, and arrow syntax) and enforces at least 2 strictly increasing points', () => {
+      const csvRes = parseBulkCalibrationText(
+        'dipMillimetres,volumeLitres\n0,0\n500,5000\n1000,10000\n1500,15000\n2000,20000',
+        { tankCapacityLitres: 20000 }
+      );
+      expect(csvRes.valid).toBe(true);
+      expect(csvRes.normalizedPoints.length).toBe(5);
+
+      const arrowRes = parseBulkCalibrationText(
+        '0 mm -> 0 L\n500 mm -> 5,000 L\n1000 mm -> 10,000 L\n1500 mm -> 15,000 L\n2000 mm -> 20,000 L',
+        { tankCapacityLitres: 20000 }
+      );
+      expect(arrowRes.valid).toBe(true);
+      expect(arrowRes.normalizedPoints.length).toBe(5);
+
+      const singlePointRes = parseBulkCalibrationText('0,0', { tankCapacityLitres: 20000 });
+      expect(singlePointRes.valid).toBe(false);
+      expect(singlePointRes.error).toContain('At least 2 calibration points');
+    });
+  });
 });
+
