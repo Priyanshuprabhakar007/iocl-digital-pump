@@ -30,11 +30,11 @@ This deployment plan governs the production rollout of the **Tank Calibration Ch
 | **8** | Pre-Save CSV Preview & Dry-Run Comparison | **PASS** | UI preview inspects step gaps and diameter bounds; dry-run calculates deltas against printed IOCL charts. |
 | **9** | D1 Statement & SQL Variable Limits | **PASS** | Repository batches points in chunks of 35 items (<= 70 SQL variables), well within D1 limits (100). |
 | **10** | Automated Test Suite Execution | **PASS** | 12/12 dedicated calibration tests passed; 53/53 test files and 1,725+ tests passing across codebase. |
-| **11** | Codebase Compilation & Typing | **PASS** | `compile_applet` passed cleanly with 0 TypeScript/Vite errors. |
-| **12** | Operator Remote Staging Export & Migration | **PENDING** | Operator manual action: export remote D1 dump, apply `0033` to isolated staging DB, verify integrity. |
-| **13** | Remote Production D1 Migration `0033` | **PENDING** | Operator manual action: execute `0033` on remote D1 and record in `d1_migrations`. |
-| **14** | Worker & Frontend Production Deployment | **PENDING** | Operator manual action: run `npm run build && npx wrangler deploy`. |
-| **15** | Post-Deployment Fresh UAT Shift Test | **PENDING** | Operator manual action: record opening/closing dips in a new shift; verify lineage and draft chart safety. |
+| **11** | Codebase Compilation & Typing | **PASS** | `compile_applet` passed cleanly with 0 TypeScript/Vite errors; `npm run typecheck` and `npm run build` succeed. |
+| **12** | GitHub Actions Workflow Integration (0033) | **PASS** | `.github/workflows/deploy-cloudflare-demo.yml` updated with safe, state-aware migration 0033 execution, table count assertions, and 0033 d1_migrations checks. |
+| **13** | Dummy Data Non-Interference Guard | **PASS** | Historical closed COCO 22 dummy shift (`ops-62ee14f1-134d-4f6e-aa19-39dab0aa5df5`) and 57 dependent records preserved 100% intact. |
+| **14** | Browser-Only One-Click Deployment Ready | **READY** | Operable entirely through GitHub web UI (`Actions -> Deploy Cloudflare Demo -> Run workflow`) without terminal commands. |
+| **15** | Post-Deployment Fresh UAT Shift Test | **PENDING** | Operator manual action: record opening/closing dips in a fresh UAT shift; verify lineage and draft chart safety. |
 
 ---
 
@@ -93,9 +93,36 @@ EOF
 
 ---
 
-### Step 2: Remote Production Database Migration
+### Step 2: Preferred One-Click Browser-Only Deployment (Zero Terminal Use)
 
-Once Step 1 passes with zero errors on staging:
+Because `.github/workflows/deploy-cloudflare-demo.yml` has been updated with full Migration 0033 support and rigorous pre/post safety assertions, you can deploy directly from your web browser:
+
+1. Open your GitHub repository in your web browser.
+2. Click on the **Actions** tab.
+3. In the left workflow list, select **Deploy Cloudflare Demo**.
+4. Click the **Run workflow** dropdown on the right:
+   - Branch: `main` (or active release branch)
+   - Click **Run workflow** (green button).
+5. Watch the workflow run in real time. The workflow automatically:
+   - Runs TypeScript typecheck (`bun run typecheck`)
+   - Runs test suite (`bun test`)
+   - Builds frontend client assets (`bun run build`)
+   - Verifies base D1 migrations (0001–0013)
+   - Captures baseline row counts for all operational tables (including preserved COCO 22 data)
+   - Applies trigger migrations (0014–0030)
+   - Applies Migration 0031 with uniqueness diagnostics
+   - Applies Migration 0032 with designation/shift master safeguards
+   - **Applies Migration 0033 with state-awareness, column verification, single active chart constraint, and d1_migrations recording**
+   - Asserts all 33 migrations recorded and `tank_calibration_charts` exists
+   - Verifies DG and reporting permission integrity
+   - Verifies HR skill categories and leave integrity
+   - Validates post-migration table row counts (`POST >= PRE`) to ensure zero operational data loss
+   - Verifies production admin user
+   - Deploys the updated Cloudflare Worker with `npx wrangler deploy`
+
+---
+
+### Step 3: Alternative Manual Operator Deployment (If Terminal is Preferred)
 
 ```bash
 # 2.1 Verify migration 0033 is not already tracked in remote d1_migrations

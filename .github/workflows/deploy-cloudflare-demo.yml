@@ -74,6 +74,8 @@ jobs:
             "operational_shifts"
             "nozzle_meter_readings"
             "tank_stock_readings"
+            "tank_calibration_points"
+            "tank_calibration_charts"
             "fuel_receipts"
             "fuel_receipt_tank_lines"
             "outlet_product_prices"
@@ -691,6 +693,250 @@ jobs:
 
           echo "[0032] Migration $MIGRATION_0032 successfully applied and recorded."
 
+      - name: Apply Migration 0033 via Safe State-Aware Stages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          MIGRATION_0033="0033_tank_calibration_chart_versioning.sql"
+          echo "=================================================="
+          echo "CHECKING MIGRATION 0033: $MIGRATION_0033"
+          echo "=================================================="
+
+          # 1. PRECHECK MIGRATION RECORD IN d1_migrations
+          RESULT_0033=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$MIGRATION_0033';" \
+            --json \
+            --yes)
+
+          COUNT_0033=$(echo "$RESULT_0033" | jq -r '.[0].results[0].count // 0')
+
+          # 2. CHECK PHYSICAL SCHEMA STATE (TABLE & COLUMNS)
+          CHART_TABLE_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = 'tank_calibration_charts';" \
+            --json \
+            --yes)
+          HAS_CHART_TABLE=$(echo "$CHART_TABLE_RES" | jq -r '.[0].results[0].count // 0')
+
+          TCP_COL_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM pragma_table_info('tank_calibration_points') WHERE name = 'chart_id';" \
+            --json \
+            --yes)
+          HAS_TCP_CHART_ID=$(echo "$TCP_COL_RES" | jq -r '.[0].results[0].count // 0')
+
+          OST_COL_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM pragma_table_info('operational_shift_tanks') WHERE name = 'calibration_chart_id';" \
+            --json \
+            --yes)
+          HAS_OST_CHART_ID=$(echo "$OST_COL_RES" | jq -r '.[0].results[0].count // 0')
+
+          TSR_COL_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM pragma_table_info('tank_stock_readings') WHERE name = 'calibration_chart_id';" \
+            --json \
+            --yes)
+          HAS_TSR_CHART_ID=$(echo "$TSR_COL_RES" | jq -r '.[0].results[0].count // 0')
+
+          echo "Precheck 0033: migration recorded in d1_migrations=$COUNT_0033, tank_calibration_charts table=$HAS_CHART_TABLE, tcp.chart_id=$HAS_TCP_CHART_ID, ost.calibration_chart_id=$HAS_OST_CHART_ID, tsr.calibration_chart_id=$HAS_TSR_CHART_ID"
+
+          # 3. STATE DETECTION & SAFETY GUARDS
+          # Clean already applied state: recorded AND all schema elements exist
+          if [ "$COUNT_0033" = "1" ] && [ "$HAS_CHART_TABLE" = "1" ] && [ "$HAS_TCP_CHART_ID" = "1" ] && [ "$HAS_OST_CHART_ID" = "1" ] && [ "$HAS_TSR_CHART_ID" = "1" ]; then
+            echo "Already applied and schema verified: $MIGRATION_0033. Skipping safely without re-execution."
+            exit 0
+          fi
+
+          # Partial / Inconsistent State: schema exists but not recorded in d1_migrations
+          if [ "$COUNT_0033" = "0" ] && ( [ "$HAS_CHART_TABLE" = "1" ] || [ "$HAS_TCP_CHART_ID" = "1" ] || [ "$HAS_OST_CHART_ID" = "1" ] || [ "$HAS_TSR_CHART_ID" = "1" ] ); then
+            echo "ERROR: [0033] Inconsistent or partial migration state detected! Schema elements exist (table=$HAS_CHART_TABLE, tcp.chart_id=$HAS_TCP_CHART_ID, ost.calibration_chart_id=$HAS_OST_CHART_ID, tsr.calibration_chart_id=$HAS_TSR_CHART_ID) but $MIGRATION_0033 is not recorded in d1_migrations. Aborting deployment to prevent duplicate column alteration or schema corruption."
+            exit 1
+          fi
+
+          # Inconsistent State: recorded in d1_migrations but schema elements missing
+          if [ "$COUNT_0033" = "1" ] && ( [ "$HAS_CHART_TABLE" = "0" ] || [ "$HAS_TCP_CHART_ID" = "0" ] || [ "$HAS_OST_CHART_ID" = "0" ] || [ "$HAS_TSR_CHART_ID" = "0" ] ); then
+            echo "ERROR: [0033] Inconsistent migration state detected! $MIGRATION_0033 is recorded in d1_migrations but one or more schema elements are missing (table=$HAS_CHART_TABLE, tcp.chart_id=$HAS_TCP_CHART_ID, ost.calibration_chart_id=$HAS_OST_CHART_ID, tsr.calibration_chart_id=$HAS_TSR_CHART_ID). Aborting deployment."
+            exit 1
+          fi
+
+          # Partial schema element mismatch
+          if [ "$HAS_CHART_TABLE" != "$HAS_TCP_CHART_ID" ] || [ "$HAS_CHART_TABLE" != "$HAS_OST_CHART_ID" ] || [ "$HAS_CHART_TABLE" != "$HAS_TSR_CHART_ID" ]; then
+            echo "ERROR: [0033] Fractured schema state detected among migration 0033 tables and columns. Aborting deployment."
+            exit 1
+          fi
+
+          echo "[0033] Clean unapplied state confirmed. Safe to apply migration."
+
+          # 4. CAPTURE PRE-0033 COUNTS FOR ROW-PRESERVATION VERIFICATION
+          PRE_0033_TCP=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_points;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0033_OST=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM operational_shift_tanks;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0033_TSR=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_stock_readings;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "[0033] Pre-migration counts: tank_calibration_points=$PRE_0033_TCP, operational_shift_tanks=$PRE_0033_OST, tank_stock_readings=$PRE_0033_TSR"
+
+          # 5. EXECUTE MIGRATION 0033
+          echo "[0033] Executing migrations/$MIGRATION_0033..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --file="migrations/$MIGRATION_0033" \
+            --yes
+
+          # 6. POST-MIGRATION SCHEMA AND INTEGRITY VERIFICATION
+          echo "[0033] Verifying table tank_calibration_charts exists..."
+          POST_CHART_TABLE=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = 'tank_calibration_charts';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$POST_CHART_TABLE" -ne 1 ]; then
+            echo "ERROR: [0033] tank_calibration_charts table was not found after applying migration."
+            exit 1
+          fi
+
+          echo "[0033] Verifying columns on modified tables..."
+          POST_TCP_COL=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM pragma_table_info('tank_calibration_points') WHERE name = 'chart_id';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_OST_COL=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM pragma_table_info('operational_shift_tanks') WHERE name = 'calibration_chart_id';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_OST_REV=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM pragma_table_info('operational_shift_tanks') WHERE name = 'calibration_revision';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_TSR_COL=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM pragma_table_info('tank_stock_readings') WHERE name = 'calibration_chart_id';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_TSR_REV=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM pragma_table_info('tank_stock_readings') WHERE name = 'calibration_revision';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$POST_TCP_COL" -ne 1 ] || [ "$POST_OST_COL" -ne 1 ] || [ "$POST_OST_REV" -ne 1 ] || [ "$POST_TSR_COL" -ne 1 ] || [ "$POST_TSR_REV" -ne 1 ]; then
+            echo "ERROR: [0033] Column verification failed! Expected all versioning columns to exist (tcp.chart_id=$POST_TCP_COL, ost.calibration_chart_id=$POST_OST_COL, ost.calibration_revision=$POST_OST_REV, tsr.calibration_chart_id=$POST_TSR_COL, tsr.calibration_revision=$POST_TSR_REV)."
+            exit 1
+          fi
+          echo "[0033] All new schema columns verified successfully."
+
+          # 7. ROW COUNT PRESERVATION CHECK
+          POST_0033_TCP=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_points;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0033_OST=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM operational_shift_tanks;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0033_TSR=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_stock_readings;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "[0033] Row count check (Post vs Pre):"
+          echo "  tank_calibration_points: $POST_0033_TCP vs $PRE_0033_TCP"
+          echo "  operational_shift_tanks: $POST_0033_OST vs $PRE_0033_OST"
+          echo "  tank_stock_readings: $POST_0033_TSR vs $PRE_0033_TSR"
+
+          if [ "$POST_0033_TCP" -lt "$PRE_0033_TCP" ]; then
+            echo "ERROR: [0033] tank_calibration_points row count decreased from $PRE_0033_TCP to $POST_0033_TCP!"
+            exit 1
+          fi
+          if [ "$POST_0033_OST" -lt "$PRE_0033_OST" ]; then
+            echo "ERROR: [0033] operational_shift_tanks row count decreased from $PRE_0033_OST to $POST_0033_OST!"
+            exit 1
+          fi
+          if [ "$POST_0033_TSR" -lt "$PRE_0033_TSR" ]; then
+            echo "ERROR: [0033] tank_stock_readings row count decreased from $PRE_0033_TSR to $POST_0033_TSR!"
+            exit 1
+          fi
+
+          # 8. BUSINESS INTEGRITY CHECKS
+          # Check single ACTIVE chart per tank constraint
+          ACTIVE_CHART_CONFLICTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT tank_id, COUNT(*) AS count FROM tank_calibration_charts WHERE status = 'ACTIVE' GROUP BY tank_id HAVING COUNT(*) > 1;" \
+            --json \
+            --yes)
+          CONFLICT_COUNT=$(echo "$ACTIVE_CHART_CONFLICTS" | jq -r '.[0].results | length')
+          if [ "$CONFLICT_COUNT" -gt 0 ]; then
+            echo "ERROR: [0033] Multiple ACTIVE charts found per tank:"
+            echo "$ACTIVE_CHART_CONFLICTS"
+            exit 1
+          fi
+          echo "[0033] Single ACTIVE chart per tank verified (0 conflicts)."
+
+          # Check calibration points are linked to chart_id
+          UNLINKED_POINTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_points WHERE chart_id IS NULL;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+          if [ "$UNLINKED_POINTS" -ne 0 ]; then
+            echo "ERROR: [0033] Found $UNLINKED_POINTS unlinked calibration points with chart_id IS NULL."
+            exit 1
+          fi
+          echo "[0033] All calibration points successfully linked to chart headers (0 unlinked)."
+
+          # Check foreign key integrity
+          echo "[0033] Running foreign key check..."
+          FK_RESULT_0033=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "PRAGMA foreign_key_check;" \
+            --json \
+            --yes)
+          FK_VIOLATIONS_0033=$(echo "$FK_RESULT_0033" | jq -r '.[0].results | length')
+          if [ "$FK_VIOLATIONS_0033" != "0" ]; then
+            echo "ERROR: [0033] Foreign key violations detected post-migration 0033:"
+            echo "$FK_RESULT_0033"
+            exit 1
+          fi
+          echo "[0033] PRAGMA foreign_key_check passed (0 violations)."
+
+          # 9. RECORD MIGRATION IN d1_migrations
+          echo "[0033] Recording migration $MIGRATION_0033 in d1_migrations..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('$MIGRATION_0033');" \
+            --yes
+
+          echo "[0033] Migration $MIGRATION_0033 successfully applied, verified and recorded."
+
 
       - name: Verify D1 Migration Completion
         env:
@@ -712,10 +958,35 @@ jobs:
 
           echo "Recorded migrations: $COUNT"
 
-          if [ "$COUNT" -lt "32" ]; then
-            echo "ERROR: Expected all 32 migrations to be recorded."
+          if [ "$COUNT" -lt "33" ]; then
+            echo "ERROR: Expected at least 33 migrations to be recorded (found $COUNT)."
             exit 1
           fi
+
+          MIGRATION_0033_RECORDED=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '0033_tank_calibration_chart_versioning.sql';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$MIGRATION_0033_RECORDED" -ne 1 ]; then
+            echo "ERROR: Migration 0033_tank_calibration_chart_versioning.sql is NOT recorded in d1_migrations!"
+            exit 1
+          fi
+          echo "Migration 0033 presence verified in d1_migrations."
+
+          # Explicit workflow assertions for tank calibration versioning table
+          CALIBRATION_TABLE_CHECK=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tank_calibration_charts';" \
+            --json \
+            --yes)
+          FOUND_CALIBRATION_COUNT=$(echo "$CALIBRATION_TABLE_CHECK" | jq -r '.[0].results | length')
+          if [ "$FOUND_CALIBRATION_COUNT" -ne 1 ]; then
+            echo "ERROR: tank_calibration_charts table is missing from sqlite_master."
+            exit 1
+          fi
+          echo "Tank calibration versioning table verified in sqlite_master."
 
           # Explicit workflow assertions for global masters
           GLOBAL_TABLES_CHECK=$(npx wrangler d1 execute iocl-pump-manager-d1 \
@@ -1082,6 +1353,8 @@ jobs:
             "operational_shifts"
             "nozzle_meter_readings"
             "tank_stock_readings"
+            "tank_calibration_points"
+            "tank_calibration_charts"
             "fuel_receipts"
             "fuel_receipt_tank_lines"
             "outlet_product_prices"
