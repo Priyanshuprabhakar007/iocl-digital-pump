@@ -306,19 +306,21 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     expect(fs.existsSync(DEPLOY_WORKFLOW_PATH)).toBe(true);
     const content = fs.readFileSync(DEPLOY_WORKFLOW_PATH, 'utf-8');
 
-    // Check step sequence
+    // Check step sequence: Migration 0031 -> Migration 0032 -> Migration 0033 -> Verify D1 Migration Completion -> Deploy Worker
     const step31Index = content.indexOf('name: Apply Migration 0031 via Ordered Remote Batches');
     const step32Index = content.indexOf('name: Apply Migration 0032 via Ordered Safe Stages');
+    const step33Index = content.indexOf('name: Apply Migration 0033 via Safe State-Aware Stages');
     const verifyMigrationIndex = content.indexOf('name: Verify D1 Migration Completion');
     const deployIndex = content.indexOf('name: Deploy Worker to Cloudflare');
 
     expect(step31Index).toBeGreaterThan(-1);
     expect(step32Index).toBeGreaterThan(step31Index);
-    expect(verifyMigrationIndex).toBeGreaterThan(step32Index);
+    expect(step33Index).toBeGreaterThan(step32Index);
+    expect(verifyMigrationIndex).toBeGreaterThan(step33Index);
     expect(deployIndex).toBeGreaterThan(verifyMigrationIndex);
 
-    // Check required components within Migration 0032 step
-    const step32Content = content.slice(step32Index, verifyMigrationIndex);
+    // Check required components within Migration 0032 step (ending before Migration 0033 step)
+    const step32Content = content.slice(step32Index, step33Index);
 
     // Precheck status
     expect(step32Content).toContain("SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$MIGRATION_0032';");
@@ -359,9 +361,11 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     // Record migration
     expect(step32Content).toContain("INSERT OR IGNORE INTO d1_migrations (name) VALUES ('$MIGRATION_0032');");
 
-    // Verify D1 Migration Completion expects >= 32
+    // Verify D1 Migration Completion expects >= 33 and tracks migration 0033
     const verifyStepContent = content.slice(verifyMigrationIndex, deployIndex);
-    expect(verifyStepContent).toContain('if [ "$COUNT" -lt "32" ]; then');
+    expect(verifyStepContent).toContain('if [ "$COUNT" -lt "33" ]; then');
+    expect(verifyStepContent).toContain('0033_tank_calibration_chart_versioning.sql');
+    expect(verifyStepContent).toContain('tank_calibration_charts');
     expect(verifyStepContent).toContain("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('global_hr_designations', 'global_shift_templates');");
     expect(verifyStepContent).toContain('global_shift_templates has 0 records when legacy shift_templates had');
   });

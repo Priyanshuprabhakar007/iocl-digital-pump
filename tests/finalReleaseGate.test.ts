@@ -130,19 +130,23 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       const pre = parseTables(matches![0]);
       const post = parseTables(matches![1]);
 
-      expect(pre.length).toBe(63);
-      expect(post.length).toBe(63);
-      expect(new Set(pre).size).toBe(63);
-      expect(new Set(post).size).toBe(63);
+      expect(pre.length).toBe(65);
+      expect(post.length).toBe(65);
+      expect(new Set(pre).size).toBe(65);
+      expect(new Set(post).size).toBe(65);
       expect(pre).toEqual(post);
       expect(pre).toContain('dg_daily_logs');
       expect(pre).toContain('dg_run_intervals');
+      expect(pre).toContain('tank_calibration_points');
+      expect(pre).toContain('tank_calibration_charts');
     });
 
-    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 32, and admin existence', () => {
+    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 33, migration 0033 tracking, and admin existence', () => {
       expect(deployContent).toContain('PRAGMA foreign_key_check;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "32" ]; then');
-      expect(deployContent).toContain('ERROR: Expected all 32 migrations to be recorded.');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "33" ]; then');
+      expect(deployContent).toContain('ERROR: Expected at least 33 migrations to be recorded');
+      expect(deployContent).toContain('0033_tank_calibration_chart_versioning.sql');
+      expect(deployContent).toContain('tank_calibration_charts');
       expect(deployContent).toContain("SELECT COUNT(*) AS count FROM users WHERE email = 'admin@iocl.in';");
       expect(deployContent).toContain('if [ "$POST_CNT" -lt "$PRE_CNT" ]; then');
     });

@@ -146,12 +146,12 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       const preTables = parseTablesArray(matches![0]);
       const postTables = parseTablesArray(matches![1]);
 
-      expect(preTables.length).toBe(63);
-      expect(postTables.length).toBe(63);
+      expect(preTables.length).toBe(65);
+      expect(postTables.length).toBe(65);
 
       // Verify unique entries
-      expect(new Set(preTables).size).toBe(63);
-      expect(new Set(postTables).size).toBe(63);
+      expect(new Set(preTables).size).toBe(65);
+      expect(new Set(postTables).size).toBe(65);
 
       // Verify pre and post arrays are identical
       expect(preTables).toEqual(postTables);
@@ -167,6 +167,8 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
         'operational_shifts',
         'nozzle_meter_readings',
         'tank_stock_readings',
+        'tank_calibration_points',
+        'tank_calibration_charts',
         'fuel_receipts',
         'fuel_receipt_tank_lines',
         'outlet_product_prices',
@@ -218,10 +220,12 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('ERROR: Remote database contains foreign-key violations.');
     });
 
-    it('2.6 deployment workflow verifies recorded migration count is at least 32', () => {
+    it('2.6 deployment workflow verifies recorded migration count is at least 33 and tracks migration 0033', () => {
       expect(deployContent).toContain('SELECT COUNT(*) AS count FROM d1_migrations;');
-      expect(deployContent).toContain('if [ "$COUNT" -lt "32" ]; then');
-      expect(deployContent).toContain('ERROR: Expected all 32 migrations to be recorded.');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "33" ]; then');
+      expect(deployContent).toContain('ERROR: Expected at least 33 migrations to be recorded');
+      expect(deployContent).toContain('0033_tank_calibration_chart_versioning.sql');
+      expect(deployContent).toContain('tank_calibration_charts');
     });
 
     it('2.7 deployment workflow verifies production administrator account exists', () => {
