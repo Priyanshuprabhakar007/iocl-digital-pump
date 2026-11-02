@@ -362,6 +362,7 @@ export class LocalD1Database {
 
   close(): void {
     try {
+      this.db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
       this.db.close();
     } catch (e) {
       // ignore if already closed
