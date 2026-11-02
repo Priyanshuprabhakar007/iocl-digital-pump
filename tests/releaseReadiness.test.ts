@@ -40,12 +40,12 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
   // 1. MIGRATION INVENTORY & INTEGRITY
   // ==========================================================================
   describe('1. Migration Inventory & Chronological Sequence', () => {
-    it('1.1 contains exactly 32 migrations numbered sequentially 0001 to 0032 without gaps', () => {
+    it('1.1 contains exactly 33 migrations numbered sequentially 0001 to 0033 without gaps', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR)
         .filter(f => f.endsWith('.sql'))
         .sort();
 
-      expect(files.length).toBe(32);
+      expect(files.length).toBe(33);
 
       const numbers = files.map(f => {
         const match = f.match(/^(\d{4})_/);
@@ -53,18 +53,18 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
         return parseInt(match![1], 10);
       });
 
-      for (let i = 1; i <= 32; i++) {
+      for (let i = 1; i <= 33; i++) {
         expect(numbers[i - 1]).toBe(i);
       }
     });
 
-    it('1.2 does not contain any migration 0033 or higher beyond the frozen baseline', () => {
+    it('1.2 does not contain any migration 0034 or higher beyond the 0033 baseline', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql'));
-      const hasPost0032 = files.some(f => {
+      const hasPost0033 = files.some(f => {
         const num = parseInt(f.slice(0, 4), 10);
-        return num > 32;
+        return num > 33;
       });
-      expect(hasPost0032).toBe(false);
+      expect(hasPost0033).toBe(false);
     });
 
     it('1.3 all 31 migration files are non-empty and have valid SQL contents', () => {

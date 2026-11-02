@@ -512,6 +512,36 @@ export function getPumpInfrastructureErrorMessage(error: any): string {
     case 'CALIBRATION_NOT_AVAILABLE':
       return rawMessage || 'Tank calibration chart requires at least 2 calibration points.';
 
+    case 'CALIBRATION_CHART_LOCKED_HISTORICAL_REFERENCE':
+      return (
+        rawMessage ||
+        'This calibration chart version is referenced by historical tank readings and cannot be modified in place. Create or import a new revision instead.'
+      );
+
+    case 'CALIBRATION_ACTIVATION_FORBIDDEN':
+      return (
+        rawMessage ||
+        'Activating or approving a calibration chart requires explicit tank infrastructure authorization (TANKS_WRITE or ADMIN). Please save as DRAFT instead.'
+      );
+
+    case 'MAX_DIP_RANGE_EXCEEDED':
+      return rawMessage || 'One or more calibration points exceed the configured maximum dip range.';
+
+    case 'MAX_DIP_EXCEEDS_DIAMETER':
+      return rawMessage || 'Configured maximum dip range cannot exceed the tank internal diameter.';
+
+    case 'CAPACITY_CONFLICT':
+      return rawMessage || 'Maximum chart volume exceeds nominal tank capacity.';
+
+    case 'INSUFFICIENT_CALIBRATION_POINTS':
+      return rawMessage || 'At least 2 calibration points are required to approve or activate a chart.';
+
+    case 'CHART_NOT_FOUND':
+      return rawMessage || 'Requested calibration chart revision was not found.';
+
+    case 'INVALID_UNITS':
+      return rawMessage || 'Invalid calibration units. Dip must be in millimetres (mm) and volume in litres (L).';
+
     case 'DIP_OUT_OF_RANGE':
       return rawMessage || 'Dip measurement is outside the configured calibration chart range.';
 
@@ -700,19 +730,37 @@ export interface CalibrationValidationResult {
   normalizedPoints: CalibrationPointInput[];
 }
 
+export interface CalibrationValidationOptions {
+  tankCapacityLitres?: number;
+  allowOverCapacity?: boolean;
+  requireMinTwoPoints?: boolean;
+  maxDipMm?: number;
+  tankDiameterMm?: number;
+}
+
 export function validateCalibrationChartPoints(
   points: Array<{ dipMillimetres: string | number; volumeLitres: string | number }>,
-  options?: {
-    tankCapacityLitres?: number;
-    allowOverCapacity?: boolean;
-    requireMinTwoPoints?: boolean;
-  }
+  options?: CalibrationValidationOptions
 ): CalibrationValidationResult {
   const requireMinTwo = options?.requireMinTwoPoints !== false;
   if (!Array.isArray(points) || (requireMinTwo && points.length < 2)) {
     return {
       valid: false,
       error: 'At least 2 calibration points are required to configure a calibration chart.',
+      normalizedPoints: [],
+    };
+  }
+
+  if (
+    options?.maxDipMm !== undefined &&
+    options.maxDipMm > 0 &&
+    options?.tankDiameterMm !== undefined &&
+    options.tankDiameterMm > 0 &&
+    options.maxDipMm > options.tankDiameterMm
+  ) {
+    return {
+      valid: false,
+      error: `Maximum dip range (${formatCalibrationDisplay(options.maxDipMm)} mm) cannot exceed tank internal diameter (${formatCalibrationDisplay(options.tankDiameterMm)} mm).`,
       normalizedPoints: [],
     };
   }
@@ -759,6 +807,22 @@ export function validateCalibrationChartPoints(
       return {
         valid: false,
         error: `Row ${i + 1}: Volume (L) must be >= 0 (received ${volNum}).`,
+        normalizedPoints: [],
+      };
+    }
+
+    if (options?.maxDipMm !== undefined && options.maxDipMm > 0 && dipNum > options.maxDipMm) {
+      return {
+        valid: false,
+        error: `Row ${i + 1}: Dip ${formatCalibrationDisplay(dipNum)} mm exceeds configured maximum dip range of ${formatCalibrationDisplay(options.maxDipMm)} mm.`,
+        normalizedPoints: [],
+      };
+    }
+
+    if (options?.tankDiameterMm !== undefined && options.tankDiameterMm > 0 && dipNum > options.tankDiameterMm) {
+      return {
+        valid: false,
+        error: `Row ${i + 1}: Dip ${formatCalibrationDisplay(dipNum)} mm exceeds tank internal diameter of ${formatCalibrationDisplay(options.tankDiameterMm)} mm.`,
         normalizedPoints: [],
       };
     }
@@ -836,12 +900,16 @@ export function validateSingleCalibrationPoint(
     editingPointId?: string | null;
     tankCapacityLitres?: number;
     allowOverCapacity?: boolean;
+    maxDipMm?: number;
+    tankDiameterMm?: number;
   }
 ): { valid: boolean; error: string | null; normalizedPoint: CalibrationPointInput | null } {
   const singleRes = validateCalibrationChartPoints([candidate], {
     tankCapacityLitres: options?.tankCapacityLitres,
     allowOverCapacity: options?.allowOverCapacity,
     requireMinTwoPoints: false,
+    maxDipMm: options?.maxDipMm,
+    tankDiameterMm: options?.tankDiameterMm,
   });
 
   if (!singleRes.valid || singleRes.normalizedPoints.length === 0) {
@@ -895,12 +963,15 @@ export function validateSingleCalibrationPoint(
   };
 }
 
+const UNSUPPORTED_HEADER_UNIT_REGEX =
+  /(?:^|[^a-zA-Z])(cm|centimetres?|centimeters?|inch|inches|ft|feet|gallons?|gal|bbl|barrels?|m3|cubic|kl|kilolitres?|kiloliters?)(?:$|[^a-zA-Z])/i;
+
+const UNSUPPORTED_VALUE_UNIT_REGEX =
+  /(?:^|[^a-zA-Z])(cm|inch|in|ft|gal|gallons?|bbl|kl)(?:$|[^a-zA-Z])/i;
+
 export function parseBulkCalibrationText(
   rawText: string,
-  options?: {
-    tankCapacityLitres?: number;
-    allowOverCapacity?: boolean;
-  }
+  options?: CalibrationValidationOptions
 ): CalibrationValidationResult {
   const lines = String(rawText || '')
     .split(/\r?\n/)
@@ -920,9 +991,25 @@ export function parseBulkCalibrationText(
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Skip header line if it starts with non-digit column names like "dip", "dipMillimetres"
+    // Check header line if it starts with non-digit column names like "dip", "dipMillimetres"
     if (i === 0 && /^[a-zA-Z]/.test(line)) {
+      if (UNSUPPORTED_HEADER_UNIT_REGEX.test(line)) {
+        return {
+          valid: false,
+          error:
+            'Invalid units in CSV header: Tank dip must be in millimetres (mm) and volume in litres (L).',
+          normalizedPoints: [],
+        };
+      }
       continue;
+    }
+
+    if (UNSUPPORTED_VALUE_UNIT_REGEX.test(line)) {
+      return {
+        valid: false,
+        error: `Line ${i + 1}: Unsupported unit detected. Tank dip must be in millimetres (mm) and volume in litres (L).`,
+        normalizedPoints: [],
+      };
     }
 
     let dipPart = '';
@@ -972,6 +1059,533 @@ export function parseBulkCalibrationText(
     tankCapacityLitres: options?.tankCapacityLitres,
     allowOverCapacity: options?.allowOverCapacity,
     requireMinTwoPoints: true,
+    maxDipMm: options?.maxDipMm,
+    tankDiameterMm: options?.tankDiameterMm,
   });
 }
+
+export interface CalibrationStepGapWarning {
+  fromDipMm: number;
+  toDipMm: number;
+  actualStepMm: number;
+  expectedStepMm: number;
+  missingCountEstimate: number;
+  message: string;
+}
+
+export interface CalibrationChartDiagnostics {
+  pointsCount: number;
+  minDipMm: number;
+  maxDipMm: number;
+  minVolumeLitres: number;
+  maxVolumeLitres: number;
+  startsAtZeroDip: boolean;
+  dominantStepMm: number | null;
+  isUniformStep: boolean;
+  isNonLinear: boolean;
+  missingStepWarnings: CalibrationStepGapWarning[];
+  exceedsNominalCapacity: boolean;
+  exceedsSafeFillCapacity: boolean;
+}
+
+export function analyzeCalibrationChartDiagnostics(
+  points: Array<{
+    dipMillimetres?: string | number;
+    volumeLitres?: string | number;
+    dipMmStr?: string;
+    volumeLitreStr?: string;
+    dipMillimetresMilliunits?: number;
+    volumeMilliunits?: number;
+  }>,
+  options?: {
+    tankCapacityLitres?: number;
+    safeFillCapacityLitres?: number;
+  }
+): CalibrationChartDiagnostics {
+  if (!Array.isArray(points) || points.length === 0) {
+    return {
+      pointsCount: 0,
+      minDipMm: 0,
+      maxDipMm: 0,
+      minVolumeLitres: 0,
+      maxVolumeLitres: 0,
+      startsAtZeroDip: false,
+      dominantStepMm: null,
+      isUniformStep: true,
+      isNonLinear: false,
+      missingStepWarnings: [],
+      exceedsNominalCapacity: false,
+      exceedsSafeFillCapacity: false,
+    };
+  }
+
+  const numeric = points
+    .map(p => {
+      const dip =
+        typeof p.dipMillimetresMilliunits === 'number'
+          ? p.dipMillimetresMilliunits / 1000
+          : Number(String(p.dipMillimetres ?? p.dipMmStr ?? 0).replace(/,/g, ''));
+      const vol =
+        typeof p.volumeMilliunits === 'number'
+          ? p.volumeMilliunits / 1000
+          : Number(String(p.volumeLitres ?? p.volumeLitreStr ?? 0).replace(/,/g, ''));
+      return {
+        dip: Math.round(dip * 1000) / 1000,
+        vol: Math.round(vol * 1000) / 1000,
+      };
+    })
+    .filter(p => Number.isFinite(p.dip) && Number.isFinite(p.vol))
+    .sort((a, b) => a.dip - b.dip);
+
+  if (numeric.length === 0) {
+    return {
+      pointsCount: 0,
+      minDipMm: 0,
+      maxDipMm: 0,
+      minVolumeLitres: 0,
+      maxVolumeLitres: 0,
+      startsAtZeroDip: false,
+      dominantStepMm: null,
+      isUniformStep: true,
+      isNonLinear: false,
+      missingStepWarnings: [],
+      exceedsNominalCapacity: false,
+      exceedsSafeFillCapacity: false,
+    };
+  }
+
+  const minDipMm = numeric[0].dip;
+  const maxDipMm = numeric[numeric.length - 1].dip;
+  const minVolumeLitres = numeric[0].vol;
+  const maxVolumeLitres = numeric[numeric.length - 1].vol;
+  const startsAtZeroDip = minDipMm === 0;
+
+  const stepCounts = new Map<number, number>();
+  const intervals: Array<{ fromDip: number; toDip: number; dDip: number; dVol: number; slope: number }> = [];
+
+  for (let i = 0; i < numeric.length - 1; i++) {
+    const dDip = Math.round((numeric[i + 1].dip - numeric[i].dip) * 1000) / 1000;
+    const dVol = Math.round((numeric[i + 1].vol - numeric[i].vol) * 1000) / 1000;
+    if (dDip > 0) {
+      stepCounts.set(dDip, (stepCounts.get(dDip) || 0) + 1);
+      intervals.push({
+        fromDip: numeric[i].dip,
+        toDip: numeric[i + 1].dip,
+        dDip,
+        dVol,
+        slope: dVol / dDip,
+      });
+    }
+  }
+
+  let dominantStepMm: number | null = null;
+  let bestFreq = 0;
+  for (const [stepVal, freq] of stepCounts.entries()) {
+    if (freq > bestFreq || (freq === bestFreq && (dominantStepMm === null || stepVal < dominantStepMm))) {
+      bestFreq = freq;
+      dominantStepMm = stepVal;
+    }
+  }
+
+  const missingStepWarnings: CalibrationStepGapWarning[] = [];
+  if (dominantStepMm !== null && dominantStepMm > 0 && intervals.length >= 2) {
+    for (const seg of intervals) {
+      const ratio = seg.dDip / dominantStepMm;
+      if (seg.dDip > dominantStepMm * 1.01 && Math.abs(ratio - Math.round(ratio)) < 0.05 && Math.round(ratio) >= 2) {
+        const missingCountEstimate = Math.round(ratio) - 1;
+        missingStepWarnings.push({
+          fromDipMm: seg.fromDip,
+          toDipMm: seg.toDip,
+          actualStepMm: seg.dDip,
+          expectedStepMm: dominantStepMm,
+          missingCountEstimate,
+          message: `Gap between ${formatCalibrationDisplay(seg.fromDip)} mm and ${formatCalibrationDisplay(seg.toDip)} mm (${formatCalibrationDisplay(seg.dDip)} mm jump vs standard ${formatCalibrationDisplay(dominantStepMm)} mm step; ~${missingCountEstimate} missing point${missingCountEstimate > 1 ? 's' : ''}).`,
+        });
+      } else if (seg.dDip > dominantStepMm * 1.5) {
+        const missingCountEstimate = Math.max(1, Math.floor(seg.dDip / dominantStepMm) - 1);
+        missingStepWarnings.push({
+          fromDipMm: seg.fromDip,
+          toDipMm: seg.toDip,
+          actualStepMm: seg.dDip,
+          expectedStepMm: dominantStepMm,
+          missingCountEstimate,
+          message: `Irregular dip interval between ${formatCalibrationDisplay(seg.fromDip)} mm and ${formatCalibrationDisplay(seg.toDip)} mm (${formatCalibrationDisplay(seg.dDip)} mm vs dominant ${formatCalibrationDisplay(dominantStepMm)} mm step).`,
+        });
+      }
+    }
+  }
+
+  const isUniformStep = stepCounts.size <= 1;
+
+  let isNonLinear = false;
+  if (intervals.length >= 2) {
+    const firstSlope = intervals[0].slope;
+    for (let i = 1; i < intervals.length; i++) {
+      if (Math.abs(intervals[i].slope - firstSlope) > 0.01) {
+        isNonLinear = true;
+        break;
+      }
+    }
+  }
+
+  const exceedsNominalCapacity = Boolean(
+    options?.tankCapacityLitres && options.tankCapacityLitres > 0 && maxVolumeLitres > options.tankCapacityLitres
+  );
+  const exceedsSafeFillCapacity = Boolean(
+    options?.safeFillCapacityLitres &&
+      options.safeFillCapacityLitres > 0 &&
+      maxVolumeLitres > options.safeFillCapacityLitres
+  );
+
+  return {
+    pointsCount: numeric.length,
+    minDipMm,
+    maxDipMm,
+    minVolumeLitres,
+    maxVolumeLitres,
+    startsAtZeroDip,
+    dominantStepMm,
+    isUniformStep,
+    isNonLinear,
+    missingStepWarnings,
+    exceedsNominalCapacity,
+    exceedsSafeFillCapacity,
+  };
+}
+
+export interface CalibrationImportPreview {
+  valid: boolean;
+  error: string | null;
+  normalizedPoints: CalibrationPointInput[];
+  diagnostics: CalibrationChartDiagnostics;
+}
+
+export function buildCalibrationImportPreview(
+  rawText: string,
+  options?: CalibrationValidationOptions & { safeFillCapacityLitres?: number }
+): CalibrationImportPreview {
+  const parsed = parseBulkCalibrationText(rawText, options);
+  const diagnostics = analyzeCalibrationChartDiagnostics(parsed.normalizedPoints, {
+    tankCapacityLitres: options?.tankCapacityLitres,
+    safeFillCapacityLitres: options?.safeFillCapacityLitres,
+  });
+
+  return {
+    valid: parsed.valid,
+    error: parsed.error,
+    normalizedPoints: parsed.normalizedPoints,
+    diagnostics,
+  };
+}
+
+// =========================================================================
+// 9. DRY-RUN VERIFICATION AGAINST PRINTED IOCL CHART HELPERS
+// =========================================================================
+
+export interface DryRunCheckpointInput {
+  dipMm: string;
+  printedVolumeLitres: string;
+}
+
+export interface DryRunCheckpointParseResult {
+  valid: boolean;
+  error: string | null;
+  checkpoints: DryRunCheckpointInput[];
+}
+
+export function parseDryRunCheckpointsText(rawText: string): DryRunCheckpointParseResult {
+  const lines = String(rawText || '')
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return {
+      valid: false,
+      error: 'Please enter at least 1 reference checkpoint (dip_mm, printed_volume_litres).',
+      checkpoints: [],
+    };
+  }
+
+  const checkpoints: DryRunCheckpointInput[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (i === 0 && /^[a-zA-Z]/.test(line)) {
+      continue;
+    }
+
+    let dipPart = '';
+    let volPart = '';
+
+    if (line.includes('->')) {
+      const parts = line.split('->');
+      dipPart = parts[0] || '';
+      volPart = parts[1] || '';
+    } else if (line.includes('\t')) {
+      const parts = line.split('\t');
+      dipPart = parts[0] || '';
+      volPart = parts[1] || '';
+    } else if (line.includes(';')) {
+      const parts = line.split(';');
+      dipPart = parts[0] || '';
+      volPart = parts[1] || '';
+    } else if (line.includes(',')) {
+      const parts = line.split(',');
+      dipPart = parts[0] || '';
+      volPart = parts[1] || '';
+    } else {
+      const parts = line.split(/\s+/);
+      dipPart = parts[0] || '';
+      volPart = parts[1] || '';
+    }
+
+    const cleanDip = dipPart.replace(/mm/gi, '').replace(/,/g, '').trim();
+    const cleanVol = volPart.replace(/litres|litre|l/gi, '').replace(/,/g, '').trim();
+
+    const dipNum = Number(cleanDip);
+    const volNum = Number(cleanVol);
+
+    if (cleanDip === '' || cleanVol === '' || !Number.isFinite(dipNum) || !Number.isFinite(volNum)) {
+      return {
+        valid: false,
+        error: `Line ${i + 1}: Invalid checkpoint "${line}". Expected dip_mm, printed_volume_litres.`,
+        checkpoints: [],
+      };
+    }
+
+    if (dipNum < 0 || volNum < 0) {
+      return {
+        valid: false,
+        error: `Line ${i + 1}: Dip and printed volume must be >= 0.`,
+        checkpoints: [],
+      };
+    }
+
+    checkpoints.push({
+      dipMm: dipNum.toFixed(3),
+      printedVolumeLitres: volNum.toFixed(3),
+    });
+  }
+
+  if (checkpoints.length === 0) {
+    return {
+      valid: false,
+      error: 'Please enter at least 1 reference checkpoint (dip_mm, printed_volume_litres).',
+      checkpoints: [],
+    };
+  }
+
+  return {
+    valid: true,
+    error: null,
+    checkpoints,
+  };
+}
+
+export function buildSampleDryRunCheckpointsText(
+  points: Array<{
+    dipMillimetres?: string | number;
+    volumeLitres?: string | number;
+    dipMmStr?: string;
+    volumeLitreStr?: string;
+    dipMillimetresMilliunits?: number;
+    volumeMilliunits?: number;
+  }>
+): string {
+  const numeric = (points || [])
+    .map(p => {
+      const dip =
+        typeof p.dipMillimetresMilliunits === 'number'
+          ? p.dipMillimetresMilliunits / 1000
+          : Number(String(p.dipMillimetres ?? p.dipMmStr ?? 0).replace(/,/g, ''));
+      const vol =
+        typeof p.volumeMilliunits === 'number'
+          ? p.volumeMilliunits / 1000
+          : Number(String(p.volumeLitres ?? p.volumeLitreStr ?? 0).replace(/,/g, ''));
+      return { dip, vol };
+    })
+    .filter(p => Number.isFinite(p.dip) && Number.isFinite(p.vol))
+    .sort((a, b) => a.dip - b.dip);
+
+  if (numeric.length < 2) {
+    return '0,0\n250,2500\n500,5000\n1250,12500\n2000,20000';
+  }
+
+  const sampleRows: string[] = [];
+  // Include first point, midpoint of first interval, middle point, midpoint of last interval, and last point
+  sampleRows.push(`${formatCalibrationDisplay(numeric[0].dip)},${formatCalibrationDisplay(numeric[0].vol)}`);
+
+  const midDip1 = (numeric[0].dip + numeric[1].dip) / 2;
+  const midVol1 = (numeric[0].vol + numeric[1].vol) / 2;
+  sampleRows.push(`${formatCalibrationDisplay(midDip1)},${formatCalibrationDisplay(midVol1)}`);
+
+  const midIdx = Math.floor(numeric.length / 2);
+  sampleRows.push(`${formatCalibrationDisplay(numeric[midIdx].dip)},${formatCalibrationDisplay(numeric[midIdx].vol)}`);
+
+  if (numeric.length >= 3) {
+    const lastIdx = numeric.length - 1;
+    const prevIdx = lastIdx - 1;
+    const midDip2 = (numeric[prevIdx].dip + numeric[lastIdx].dip) / 2;
+    const midVol2 = (numeric[prevIdx].vol + numeric[lastIdx].vol) / 2;
+    sampleRows.push(`${formatCalibrationDisplay(midDip2)},${formatCalibrationDisplay(midVol2)}`);
+    sampleRows.push(`${formatCalibrationDisplay(numeric[lastIdx].dip)},${formatCalibrationDisplay(numeric[lastIdx].vol)}`);
+  }
+
+  return Array.from(new Set(sampleRows)).join('\n');
+}
+
+export interface ClientDryRunRow {
+  dipMm: string;
+  printedVolumeLitres: string;
+  calculatedVolumeLitres: string | null;
+  deltaLitres: string | null;
+  absDeltaLitres: string | null;
+  deltaPercent: string | null;
+  matchType: 'EXACT_POINT' | 'INTERPOLATED' | 'OUT_OF_RANGE';
+  withinTolerance: boolean;
+  error: string | null;
+}
+
+export interface ClientDryRunReport {
+  pointsCount: number;
+  checkpointsCount: number;
+  passedCount: number;
+  failedCount: number;
+  maxAbsDeltaLitres: string;
+  meanAbsDeltaLitres: string;
+  toleranceLitres: string;
+  rows: ClientDryRunRow[];
+}
+
+export function evaluateCalibrationDryRunClient(
+  points: Array<{
+    dipMillimetres?: string | number;
+    volumeLitres?: string | number;
+    dipMmStr?: string;
+    volumeLitreStr?: string;
+    dipMillimetresMilliunits?: number;
+    volumeMilliunits?: number;
+  }>,
+  checkpoints: DryRunCheckpointInput[],
+  toleranceLitres = 0.5
+): ClientDryRunReport {
+  const sorted = (points || [])
+    .map(p => {
+      const dipMilli =
+        typeof p.dipMillimetresMilliunits === 'number'
+          ? p.dipMillimetresMilliunits
+          : Math.round(Number(String(p.dipMillimetres ?? p.dipMmStr ?? 0).replace(/,/g, '')) * 1000);
+      const volMilli =
+        typeof p.volumeMilliunits === 'number'
+          ? p.volumeMilliunits
+          : Math.round(Number(String(p.volumeLitres ?? p.volumeLitreStr ?? 0).replace(/,/g, '')) * 1000);
+      return { dipMilli, volMilli };
+    })
+    .filter(p => Number.isFinite(p.dipMilli) && Number.isFinite(p.volMilli))
+    .sort((a, b) => a.dipMilli - b.dipMilli);
+
+  const tolMilli = Math.round(toleranceLitres * 1000);
+  const rows: ClientDryRunRow[] = [];
+  let passedCount = 0;
+  let failedCount = 0;
+  let maxAbsDeltaMilli = 0;
+  let sumAbsDeltaMilli = 0;
+  let validComparedCount = 0;
+
+  const minDip = sorted.length > 0 ? sorted[0].dipMilli : 0;
+  const maxDip = sorted.length > 0 ? sorted[sorted.length - 1].dipMilli : 0;
+
+  for (const cp of checkpoints) {
+    const dipMilli = Math.round(Number(cp.dipMm) * 1000);
+    const printedMilli = Math.round(Number(cp.printedVolumeLitres) * 1000);
+
+    if (sorted.length < 2 || dipMilli < minDip || dipMilli > maxDip) {
+      failedCount++;
+      rows.push({
+        dipMm: (dipMilli / 1000).toFixed(3),
+        printedVolumeLitres: (printedMilli / 1000).toFixed(3),
+        calculatedVolumeLitres: null,
+        deltaLitres: null,
+        absDeltaLitres: null,
+        deltaPercent: null,
+        matchType: 'OUT_OF_RANGE',
+        withinTolerance: false,
+        error:
+          sorted.length < 2
+            ? 'At least 2 calibration points are required.'
+            : `Dip ${(dipMilli / 1000).toFixed(3)} mm is outside chart range [${(minDip / 1000).toFixed(3)} - ${(maxDip / 1000).toFixed(3)}] mm.`,
+      });
+      continue;
+    }
+
+    let calcMilli = 0;
+    let isExact = false;
+
+    const exactPt = sorted.find(p => p.dipMilli === dipMilli);
+    if (exactPt) {
+      calcMilli = exactPt.volMilli;
+      isExact = true;
+    } else {
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const p1 = sorted[i];
+        const p2 = sorted[i + 1];
+        if (dipMilli > p1.dipMilli && dipMilli < p2.dipMilli) {
+          const dDip = BigInt(p2.dipMilli - p1.dipMilli);
+          const dVol = BigInt(p2.volMilli - p1.volMilli);
+          const offsetDip = BigInt(dipMilli - p1.dipMilli);
+          const offsetVol = (offsetDip * dVol + dDip / 2n) / dDip;
+          calcMilli = p1.volMilli + Number(offsetVol);
+          break;
+        }
+      }
+    }
+
+    const deltaMilli = calcMilli - printedMilli;
+    const absDeltaMilli = Math.abs(deltaMilli);
+    const withinTolerance = absDeltaMilli <= tolMilli;
+
+    if (withinTolerance) {
+      passedCount++;
+    } else {
+      failedCount++;
+    }
+
+    if (absDeltaMilli > maxAbsDeltaMilli) {
+      maxAbsDeltaMilli = absDeltaMilli;
+    }
+    sumAbsDeltaMilli += absDeltaMilli;
+    validComparedCount++;
+
+    const deltaPct =
+      printedMilli > 0 ? ((deltaMilli / printedMilli) * 100).toFixed(3) : '0.000';
+
+    rows.push({
+      dipMm: (dipMilli / 1000).toFixed(3),
+      printedVolumeLitres: (printedMilli / 1000).toFixed(3),
+      calculatedVolumeLitres: (calcMilli / 1000).toFixed(3),
+      deltaLitres: (deltaMilli / 1000).toFixed(3),
+      absDeltaLitres: (absDeltaMilli / 1000).toFixed(3),
+      deltaPercent: deltaPct,
+      matchType: isExact ? 'EXACT_POINT' : 'INTERPOLATED',
+      withinTolerance,
+      error: null,
+    });
+  }
+
+  const meanAbsDeltaMilli =
+    validComparedCount > 0 ? Math.round(sumAbsDeltaMilli / validComparedCount) : 0;
+
+  return {
+    pointsCount: sorted.length,
+    checkpointsCount: checkpoints.length,
+    passedCount,
+    failedCount,
+    maxAbsDeltaLitres: (maxAbsDeltaMilli / 1000).toFixed(3),
+    meanAbsDeltaLitres: (meanAbsDeltaMilli / 1000).toFixed(3),
+    toleranceLitres: (tolMilli / 1000).toFixed(3),
+    rows,
+  };
+}
+
 

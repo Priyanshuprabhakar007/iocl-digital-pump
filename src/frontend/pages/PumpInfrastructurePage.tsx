@@ -6,7 +6,9 @@ import {
   Product,
   OutletProduct,
   Tank,
+  TankCalibrationChart,
   TankCalibrationPoint,
+  TankCalibrationDryRunReport,
   Dispenser,
   Nozzle,
   NozzleDiagnosticItem,
@@ -35,6 +37,10 @@ import {
   Network,
   AlertTriangle,
   CheckCircle,
+  Lock,
+  GitBranch,
+  FileSpreadsheet,
+  FlaskConical,
 } from 'lucide-react';
 import {
   getDuTypeLabel,
@@ -53,6 +59,12 @@ import {
   formatDummyCalibrationPresetText,
   validateSingleCalibrationPoint,
   parseBulkCalibrationText,
+  buildCalibrationImportPreview,
+  analyzeCalibrationChartDiagnostics,
+  parseDryRunCheckpointsText,
+  buildSampleDryRunCheckpointsText,
+  evaluateCalibrationDryRunClient,
+  ClientDryRunReport,
 } from '../components/pump/pumpInfrastructureUi';
 import { PERMISSIONS } from '../../shared/constants';
 
@@ -66,6 +78,7 @@ export const PumpInfrastructurePage: React.FC = () => {
   const canWriteNozzles = hasPermission(PERMISSIONS.NOZZLES_WRITE);
   const canWriteShifts = hasPermission(PERMISSIONS.SHIFT_TEMPLATES_WRITE);
   const canWriteTankCalibration = hasPermission(PERMISSIONS.TANK_CALIBRATION_WRITE);
+  const canApproveCalibrationChart = canWriteTankCalibration && canWriteTanks;
   const canReadTankCalibration =
     hasPermission(PERMISSIONS.TANK_CALIBRATION_READ) || canWriteTankCalibration;
 
@@ -112,12 +125,32 @@ export const PumpInfrastructurePage: React.FC = () => {
   >({});
   const [calibratingTank, setCalibratingTank] = useState<Tank | null>(null);
   const [loadingCalibrationTankId, setLoadingCalibrationTankId] = useState<string | null>(null);
+  const [calCharts, setCalCharts] = useState<TankCalibrationChart[]>([]);
+  const [calActiveChart, setCalActiveChart] = useState<TankCalibrationChart | null>(null);
+  const [calSelectedChart, setCalSelectedChart] = useState<TankCalibrationChart | null>(null);
+  const [calModalPoints, setCalModalPoints] = useState<TankCalibrationPoint[]>([]);
   const [calEditingPoint, setCalEditingPoint] = useState<TankCalibrationPoint | null>(null);
   const [calDipInput, setCalDipInput] = useState('');
   const [calVolumeInput, setCalVolumeInput] = useState('');
   const [calShowBulkImport, setCalShowBulkImport] = useState(false);
   const [calBulkText, setCalBulkText] = useState('');
   const [calAllowOverCapacity, setCalAllowOverCapacity] = useState(false);
+  const [calDiameterMmInput, setCalDiameterMmInput] = useState('');
+  const [calLengthMmInput, setCalLengthMmInput] = useState('');
+  const [calMaxDipMmInput, setCalMaxDipMmInput] = useState('');
+  const [calSourceFileName, setCalSourceFileName] = useState('');
+  const [calReferenceDocument, setCalReferenceDocument] = useState('');
+  const [calEffectiveFrom, setCalEffectiveFrom] = useState('');
+  const [calNotes, setCalNotes] = useState('');
+  const [calSaveMode, setCalSaveMode] = useState<'ACTIVE' | 'DRAFT'>('DRAFT');
+  const [calShowPreview, setCalShowPreview] = useState(false);
+
+  // Dry-Run Comparison states
+  const [calShowDryRun, setCalShowDryRun] = useState(false);
+  const [calDryRunText, setCalDryRunText] = useState('');
+  const [calDryRunTolerance, setCalDryRunTolerance] = useState('0.500');
+  const [calDryRunSource, setCalDryRunSource] = useState<'SAVED_CHART' | 'CSV_PREVIEW'>('SAVED_CHART');
+  const [calDryRunReport, setCalDryRunReport] = useState<TankCalibrationDryRunReport | ClientDryRunReport | null>(null);
 
   // Form states
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -652,17 +685,56 @@ export const PumpInfrastructurePage: React.FC = () => {
     }
   };
 
-  const refreshTankCalibration = async (tankId: string): Promise<TankCalibrationPoint[]> => {
+  const refreshTankCalibration = async (
+    tankId: string,
+    chartId?: string | null
+  ): Promise<TankCalibrationPoint[]> => {
     setLoadingCalibrationTankId(tankId);
     try {
-      const res = await apiFetch<TankCalibrationPoint[]>(`/api/v1/tanks/${tankId}/calibration`, {
-        cache: 'no-store',
-      });
-      const pts = res.success && res.data ? res.data : [];
-      setTankCalibrationByTankId(prev => ({
-        ...prev,
-        [tankId]: pts,
-      }));
+      const query = chartId ? `?chartId=${encodeURIComponent(chartId)}` : '';
+      const res = (await apiFetch<TankCalibrationPoint[]>(
+        `/api/v1/tanks/${tankId}/calibration${query}`,
+        { cache: 'no-store' }
+      )) as any;
+
+      const pts: TankCalibrationPoint[] = res.success && Array.isArray(res.data) ? res.data : [];
+      const activeChart: TankCalibrationChart | null = res.activeChart ?? null;
+      const selectedChart: TankCalibrationChart | null = res.selectedChart ?? activeChart ?? null;
+      const charts: TankCalibrationChart[] = Array.isArray(res.charts) ? res.charts : [];
+
+      setCalCharts(charts);
+      setCalActiveChart(activeChart);
+      setCalSelectedChart(selectedChart);
+      setCalModalPoints(pts);
+
+      // Keep tankCalibrationByTankId synced with the active chart's points so tank card badges reflect active status
+      if (!chartId || (activeChart && selectedChart && activeChart.id === selectedChart.id)) {
+        setTankCalibrationByTankId(prev => ({
+          ...prev,
+          [tankId]: pts,
+        }));
+      } else if (activeChart) {
+        const activeRes = await apiFetch<TankCalibrationPoint[]>(
+          `/api/v1/tanks/${tankId}/calibration`,
+          { cache: 'no-store' }
+        );
+        if (activeRes.success && Array.isArray(activeRes.data)) {
+          setTankCalibrationByTankId(prev => ({
+            ...prev,
+            [tankId]: activeRes.data!,
+          }));
+        }
+      }
+
+      if (selectedChart) {
+        setCalDiameterMmInput(selectedChart.tankDiameterMmStr ? formatCalibrationDisplay(selectedChart.tankDiameterMmStr) : '');
+        setCalLengthMmInput(selectedChart.tankLengthMmStr ? formatCalibrationDisplay(selectedChart.tankLengthMmStr) : '');
+        setCalMaxDipMmInput(selectedChart.maxDipMmStr ? formatCalibrationDisplay(selectedChart.maxDipMmStr) : '');
+        setCalReferenceDocument(selectedChart.referenceDocument || '');
+        setCalEffectiveFrom(selectedChart.effectiveFrom || '');
+        setCalNotes(selectedChart.notes || '');
+      }
+
       return pts;
     } finally {
       setLoadingCalibrationTankId(null);
@@ -671,15 +743,108 @@ export const PumpInfrastructurePage: React.FC = () => {
 
   const openCalibrationModal = async (t: Tank) => {
     setCalibratingTank(t);
+    setCalCharts([]);
+    setCalActiveChart(null);
+    setCalSelectedChart(null);
+    setCalModalPoints([]);
     setCalEditingPoint(null);
     setCalDipInput('');
     setCalVolumeInput('');
     setCalShowBulkImport(false);
     setCalBulkText('');
     setCalAllowOverCapacity(false);
+    setCalDiameterMmInput('');
+    setCalLengthMmInput('');
+    setCalMaxDipMmInput('');
+    setCalSourceFileName('');
+    setCalReferenceDocument('');
+    setCalEffectiveFrom('');
+    setCalNotes('');
+    setCalSaveMode('DRAFT');
+    setCalShowPreview(false);
+    setCalShowDryRun(false);
+    setCalDryRunText('');
+    setCalDryRunTolerance('0.500');
+    setCalDryRunSource('SAVED_CHART');
+    setCalDryRunReport(null);
     setModalError(null);
     setModalType('tankCalibration');
     await refreshTankCalibration(t.id);
+  };
+
+  const handleSelectCalibrationChartRevision = async (chartId: string) => {
+    if (!calibratingTank) return;
+    setModalError(null);
+    setCalEditingPoint(null);
+    setCalDryRunReport(null);
+    await refreshTankCalibration(calibratingTank.id, chartId || null);
+  };
+
+  const handleUpdateCalibrationChartStatus = async (
+    chartId: string,
+    nextStatus: 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'ARCHIVED'
+  ) => {
+    if (!calibratingTank || modalSubmitting) return;
+    setModalError(null);
+    setModalSubmitting(true);
+    try {
+      const res = await apiFetch<TankCalibrationChart>(
+        `/api/v1/tanks/${calibratingTank.id}/calibration/charts/${chartId}/status`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            status: nextStatus,
+            effectiveFrom: calEffectiveFrom.trim() || null,
+            notes: calNotes.trim() || null,
+          }),
+        }
+      );
+
+      if (res.success && res.data) {
+        await refreshTankCalibration(calibratingTank.id, res.data.id);
+        notifyCalibrationChanged(calibratingTank.id);
+        setSuccessMsg(
+          `Revision #${res.data.revisionNumber} marked as ${res.data.status} for Tank #${calibratingTank.tankNumber}`
+        );
+        setTimeout(() => setSuccessMsg(null), 3000);
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
+    }
+  };
+
+  const handleForkCalibrationRevision = async () => {
+    if (!calibratingTank || modalSubmitting) return;
+    setModalError(null);
+    setModalSubmitting(true);
+    try {
+      const res = (await apiFetch<TankCalibrationChart>(
+        `/api/v1/tanks/${calibratingTank.id}/calibration/charts/fork`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceChartId: calSelectedChart?.id,
+            status: 'DRAFT',
+            notes: calNotes.trim() || `Forked from Rev #${calSelectedChart?.revisionNumber || 1}`,
+          }),
+        }
+      )) as any;
+
+      if (res.success && res.data) {
+        await refreshTankCalibration(calibratingTank.id, res.data.id);
+        notifyCalibrationChanged(calibratingTank.id);
+        setSuccessMsg(
+          `Created editable Draft Revision #${res.data.revisionNumber} for Tank #${calibratingTank.tankNumber}`
+        );
+        setTimeout(() => setSuccessMsg(null), 3000);
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
+    }
   };
 
   const startEditCalibrationPoint = (pt: TankCalibrationPoint) => {
@@ -701,7 +866,13 @@ export const PumpInfrastructurePage: React.FC = () => {
     if (!calibratingTank || modalSubmitting) return;
     setModalError(null);
 
-    const existingPoints = tankCalibrationByTankId[calibratingTank.id] || [];
+    const existingPoints =
+      calModalPoints.length > 0
+        ? calModalPoints
+        : tankCalibrationByTankId[calibratingTank.id] || [];
+    const maxDipNum = calMaxDipMmInput.trim() ? Number(calMaxDipMmInput) : undefined;
+    const diaNum = calDiameterMmInput.trim() ? Number(calDiameterMmInput) : undefined;
+
     const validation = validateSingleCalibrationPoint(
       { dipMillimetres: calDipInput, volumeLitres: calVolumeInput },
       existingPoints,
@@ -709,6 +880,8 @@ export const PumpInfrastructurePage: React.FC = () => {
         editingPointId: calEditingPoint?.id || null,
         tankCapacityLitres: calibratingTank.capacityLitres,
         allowOverCapacity: calAllowOverCapacity,
+        maxDipMm: Number.isFinite(maxDipNum) ? maxDipNum : undefined,
+        tankDiameterMm: Number.isFinite(diaNum) ? diaNum : undefined,
       }
     );
 
@@ -730,7 +903,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       });
 
       if (res.success && res.data) {
-        await refreshTankCalibration(calibratingTank.id);
+        await refreshTankCalibration(calibratingTank.id, res.data.chartId || calSelectedChart?.id || null);
         notifyCalibrationChanged(calibratingTank.id);
         setCalEditingPoint(null);
         setCalDipInput('');
@@ -760,7 +933,7 @@ export const PumpInfrastructurePage: React.FC = () => {
         { method: 'DELETE' }
       );
       if (res.success) {
-        await refreshTankCalibration(calibratingTank.id);
+        await refreshTankCalibration(calibratingTank.id, calSelectedChart?.id || null);
         notifyCalibrationChanged(calibratingTank.id);
         if (calEditingPoint?.id === point.id) {
           cancelEditCalibrationPoint();
@@ -780,7 +953,9 @@ export const PumpInfrastructurePage: React.FC = () => {
   const handleLoadDummyCalibrationPreset = () => {
     if (!calibratingTank) return;
     setCalShowBulkImport(true);
+    setCalShowPreview(true);
     setCalBulkText(formatDummyCalibrationPresetText(calibratingTank.capacityLitres || 20000));
+    setCalSourceFileName('uat-5point-preset.csv');
     setModalError(null);
   };
 
@@ -791,7 +966,9 @@ export const PumpInfrastructurePage: React.FC = () => {
     try {
       const text = await file.text();
       setCalShowBulkImport(true);
+      setCalShowPreview(true);
       setCalBulkText(text);
+      setCalSourceFileName(file.name);
     } catch {
       setModalError('Failed to read the selected CSV file.');
     } finally {
@@ -804,9 +981,15 @@ export const PumpInfrastructurePage: React.FC = () => {
     if (!calibratingTank || modalSubmitting) return;
     setModalError(null);
 
+    const maxDipNum = calMaxDipMmInput.trim() ? Number(calMaxDipMmInput) : undefined;
+    const diaNum = calDiameterMmInput.trim() ? Number(calDiameterMmInput) : undefined;
+    const lenNum = calLengthMmInput.trim() ? Number(calLengthMmInput) : undefined;
+
     const parsed = parseBulkCalibrationText(calBulkText, {
       tankCapacityLitres: calibratingTank.capacityLitres,
       allowOverCapacity: calAllowOverCapacity,
+      maxDipMm: Number.isFinite(maxDipNum) ? maxDipNum : undefined,
+      tankDiameterMm: Number.isFinite(diaNum) ? diaNum : undefined,
     });
 
     if (!parsed.valid) {
@@ -816,28 +999,149 @@ export const PumpInfrastructurePage: React.FC = () => {
 
     setModalSubmitting(true);
     try {
-      const res = await apiFetch<TankCalibrationPoint[]>(
+      const metadataPayload: Record<string, any> = {
+        chartUnitDip: 'MM',
+        chartUnitVolume: 'LITRE',
+      };
+      if (Number.isFinite(diaNum) && diaNum! > 0) {
+        metadataPayload.tankDiameterMm = diaNum!.toFixed(3);
+      }
+      if (Number.isFinite(lenNum) && lenNum! > 0) {
+        metadataPayload.tankLengthMm = lenNum!.toFixed(3);
+      }
+      if (Number.isFinite(maxDipNum) && maxDipNum! > 0) {
+        metadataPayload.maxDipMm = maxDipNum!.toFixed(3);
+      }
+      if (calSourceFileName.trim()) {
+        metadataPayload.sourceFileName = calSourceFileName.trim();
+      }
+      if (calReferenceDocument.trim()) {
+        metadataPayload.referenceDocument = calReferenceDocument.trim();
+      }
+      if (calEffectiveFrom.trim()) {
+        metadataPayload.effectiveFrom = calEffectiveFrom.trim();
+      }
+      if (calNotes.trim()) {
+        metadataPayload.notes = calNotes.trim();
+      }
+
+      const effectiveSaveMode = canApproveCalibrationChart ? calSaveMode : 'DRAFT';
+      const res = (await apiFetch<TankCalibrationPoint[]>(
         `/api/v1/tanks/${calibratingTank.id}/calibration/bulk`,
         {
           method: 'POST',
-          body: JSON.stringify({ points: parsed.normalizedPoints }),
+          body: JSON.stringify({
+            points: parsed.normalizedPoints,
+            metadata: metadataPayload,
+            activateImmediately: effectiveSaveMode === 'ACTIVE',
+            saveMode: effectiveSaveMode,
+            allowOverCapacity: calAllowOverCapacity,
+            chartId: calSelectedChart && !calSelectedChart.isReferenced ? calSelectedChart.id : undefined,
+          }),
+        }
+      )) as any;
+
+      if (res.success && res.data) {
+        const importedChart: TankCalibrationChart | null = res.chart ?? null;
+        await refreshTankCalibration(calibratingTank.id, importedChart?.id || null);
+        notifyCalibrationChanged(calibratingTank.id);
+        setCalShowBulkImport(false);
+        setCalShowPreview(false);
+        setCalBulkText('');
+        setSuccessMsg(
+          importedChart
+            ? `Saved ${res.data.length} points in Revision #${importedChart.revisionNumber} (${importedChart.status}) for Tank #${calibratingTank.tankNumber}`
+            : `Imported ${res.data.length} calibration points for Tank #${calibratingTank.tankNumber}`
+        );
+        setTimeout(() => setSuccessMsg(null), 3500);
+      } else {
+        setModalError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setModalSubmitting(false);
+    }
+  };
+
+  const handleLoadSampleDryRunCheckpoints = () => {
+    if (!calibratingTank) return;
+    setModalError(null);
+    const sourcePts =
+      calDryRunSource === 'CSV_PREVIEW' && calBulkText.trim()
+        ? parseBulkCalibrationText(calBulkText, {
+            tankCapacityLitres: calibratingTank.capacityLitres,
+            allowOverCapacity: true,
+          }).normalizedPoints
+        : calModalPoints.length > 0
+          ? calModalPoints
+          : tankCalibrationByTankId[calibratingTank.id] || [];
+    setCalDryRunText(buildSampleDryRunCheckpointsText(sourcePts));
+  };
+
+  const handleDryRunCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setModalError(null);
+    try {
+      const text = await file.text();
+      setCalDryRunText(text);
+    } catch {
+      setModalError('Failed to read the selected reference checkpoints CSV file.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleRunDryRunComparison = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!calibratingTank || modalSubmitting) return;
+    setModalError(null);
+
+    const parsedCp = parseDryRunCheckpointsText(calDryRunText);
+    if (!parsedCp.valid) {
+      setModalError(parsedCp.error || 'Invalid dry-run checkpoints.');
+      return;
+    }
+
+    const tolNum = Number(calDryRunTolerance);
+    const toleranceLitres = Number.isFinite(tolNum) && tolNum >= 0 ? tolNum : 0.5;
+
+    // If comparing against unsaved CSV preview, evaluate using candidate points
+    let candidatePoints: Array<{ dipMillimetres: string; volumeLitres: string }> | undefined;
+    if (calDryRunSource === 'CSV_PREVIEW') {
+      const parsedPreview = parseBulkCalibrationText(calBulkText, {
+        tankCapacityLitres: calibratingTank.capacityLitres,
+        allowOverCapacity: true,
+      });
+      if (!parsedPreview.valid) {
+        setModalError(parsedPreview.error || 'Please provide valid CSV preview points first.');
+        return;
+      }
+      candidatePoints = parsedPreview.normalizedPoints;
+    }
+
+    setModalSubmitting(true);
+    try {
+      const res = await apiFetch<TankCalibrationDryRunReport>(
+        `/api/v1/tanks/${calibratingTank.id}/calibration/dry-run`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            chartId: calDryRunSource === 'SAVED_CHART' ? calSelectedChart?.id : undefined,
+            candidatePoints,
+            checkpoints: parsedCp.checkpoints,
+            toleranceLitres: toleranceLitres.toFixed(3),
+          }),
         }
       );
 
       if (res.success && res.data) {
-        setTankCalibrationByTankId(prev => ({
-          ...prev,
-          [calibratingTank.id]: res.data!,
-        }));
-        notifyCalibrationChanged(calibratingTank.id);
-        setCalShowBulkImport(false);
-        setCalBulkText('');
-        setSuccessMsg(
-          `Imported ${res.data.length} calibration points for Tank #${calibratingTank.tankNumber}`
-        );
-        setTimeout(() => setSuccessMsg(null), 3000);
+        setCalDryRunReport(res.data);
       } else {
-        setModalError(getPumpInfrastructureErrorMessage(res.error));
+        // Fallback to client-side dry-run evaluator if offline or preview-only
+        const ptsToUse = candidatePoints || calModalPoints;
+        setCalDryRunReport(
+          evaluateCalibrationDryRunClient(ptsToUse, parsedCp.checkpoints, toleranceLitres)
+        );
       }
     } finally {
       setModalSubmitting(false);
@@ -2711,9 +3015,28 @@ export const PumpInfrastructurePage: React.FC = () => {
 
       {/* Tank Calibration Chart Modal */}
       {modalType === 'tankCalibration' && calibratingTank && (() => {
-        const calPoints = tankCalibrationByTankId[calibratingTank.id] || [];
-        const calStatus = getTankCalibrationStatus(calPoints.length);
+        const activePoints = tankCalibrationByTankId[calibratingTank.id] || [];
+        const calPoints = calModalPoints.length > 0 || calSelectedChart ? calModalPoints : activePoints;
+        const calStatus = getTankCalibrationStatus(activePoints.length);
         const isLoadingPoints = loadingCalibrationTankId === calibratingTank.id;
+        const isChartLocked = Boolean(calSelectedChart?.isReferenced);
+        const maxDipNum = calMaxDipMmInput.trim() ? Number(calMaxDipMmInput) : undefined;
+        const diaNum = calDiameterMmInput.trim() ? Number(calDiameterMmInput) : undefined;
+
+        const currentChartDiagnostics = analyzeCalibrationChartDiagnostics(calPoints, {
+          tankCapacityLitres: calibratingTank.capacityLitres,
+          safeFillCapacityLitres: calibratingTank.safeFillCapacityLitres,
+        });
+
+        const csvPreview = calBulkText.trim()
+          ? buildCalibrationImportPreview(calBulkText, {
+              tankCapacityLitres: calibratingTank.capacityLitres,
+              safeFillCapacityLitres: calibratingTank.safeFillCapacityLitres,
+              allowOverCapacity: calAllowOverCapacity,
+              maxDipMm: Number.isFinite(maxDipNum) ? maxDipNum : undefined,
+              tankDiameterMm: Number.isFinite(diaNum) ? diaNum : undefined,
+            })
+          : null;
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -2721,10 +3044,10 @@ export const PumpInfrastructurePage: React.FC = () => {
               className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
               onClick={() => setModalType(null)}
             />
-            <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5">
+            <div className="relative z-10 w-full max-w-4xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5">
               {/* Header */}
               <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
-                <div>
+                <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-lg font-bold text-white">
                       Tank Calibration Chart
@@ -2739,8 +3062,41 @@ export const PumpInfrastructurePage: React.FC = () => {
                       )}
                       <span>Calibration: {calStatus.badgeLabel}</span>
                     </span>
+                    {calSelectedChart && (
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border inline-flex items-center gap-1 font-mono ${
+                          calSelectedChart.status === 'ACTIVE'
+                            ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                            : calSelectedChart.status === 'APPROVED'
+                              ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30'
+                              : calSelectedChart.status === 'DRAFT'
+                                ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                        }`}
+                      >
+                        Rev #{calSelectedChart.revisionNumber} • {calSelectedChart.status}
+                      </span>
+                    )}
+                    {calSelectedChart && (
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border inline-flex items-center gap-1 font-mono ${
+                          isChartLocked
+                            ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                        }`}
+                      >
+                        {isChartLocked ? (
+                          <>
+                            <Lock className="w-3 h-3 shrink-0 text-rose-400" />
+                            <span>Locked (Historical Readings)</span>
+                          </>
+                        ) : (
+                          <span>Editable Revision</span>
+                        )}
+                      </span>
+                    )}
                   </div>
-                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs font-mono">
+                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono">
                     <div>
                       <span className="text-slate-500 block text-[10px]">TANK</span>
                       <span className="text-orange-400 font-bold">
@@ -2748,7 +3104,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[10px]">CAPACITY</span>
+                      <span className="text-slate-500 block text-[10px]">NOMINAL CAPACITY</span>
                       <span className="text-white font-bold">
                         {calibratingTank.capacityLitres.toLocaleString()} L
                       </span>
@@ -2757,6 +3113,12 @@ export const PumpInfrastructurePage: React.FC = () => {
                       <span className="text-slate-500 block text-[10px]">SAFE FILL LIMIT</span>
                       <span className="text-slate-300">
                         {calibratingTank.safeFillCapacityLitres.toLocaleString()} L
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">UNITS</span>
+                      <span className="text-slate-300">
+                        Dip: mm • Vol: Litres (L)
                       </span>
                     </div>
                   </div>
@@ -2770,6 +3132,129 @@ export const PumpInfrastructurePage: React.FC = () => {
                 </button>
               </div>
 
+              {/* Revision Selector & Lifecycle Controls */}
+              {calCharts.length > 0 && (
+                <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-[11px] font-mono text-slate-400 uppercase font-bold">
+                        Chart Revision:
+                      </label>
+                      <select
+                        value={calSelectedChart?.id || ''}
+                        onChange={e => handleSelectCalibrationChartRevision(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                      >
+                        {calCharts.map(ch => (
+                          <option key={ch.id} value={ch.id}>
+                            Rev #{ch.revisionNumber} — {ch.status} ({ch.pointsCount ?? 0} pts)
+                            {ch.isReferenced ? ' [Referenced]' : ''}
+                            {ch.sourceFileName ? ` • ${ch.sourceFileName}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {canWriteTankCalibration && calSelectedChart && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {canApproveCalibrationChart && calSelectedChart.status === 'DRAFT' && (
+                          <button
+                            type="button"
+                            disabled={modalSubmitting || calPoints.length < 2}
+                            onClick={() => handleUpdateCalibrationChartStatus(calSelectedChart.id, 'APPROVED')}
+                            className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 disabled:opacity-50 text-cyan-300 border border-cyan-500/30 text-[11px] font-mono font-semibold"
+                          >
+                            Approve Revision
+                          </button>
+                        )}
+                        {canApproveCalibrationChart &&
+                          (calSelectedChart.status === 'DRAFT' ||
+                            calSelectedChart.status === 'APPROVED') && (
+                          <button
+                            type="button"
+                            disabled={modalSubmitting || calPoints.length < 2}
+                            onClick={() => handleUpdateCalibrationChartStatus(calSelectedChart.id, 'ACTIVE')}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-50 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-bold"
+                          >
+                            Activate Revision #{calSelectedChart.revisionNumber}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          disabled={modalSubmitting}
+                          onClick={handleForkCalibrationRevision}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-slate-700 text-[11px] font-mono font-semibold"
+                        >
+                          <GitBranch className="w-3 h-3 text-orange-400" />
+                          <span>Fork New Draft Revision</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selected Revision Metadata */}
+                  {calSelectedChart && (
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-slate-800/80 text-[11px] font-mono">
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">DIMENSIONS (D × L)</span>
+                        <span className="text-slate-200">
+                          {calSelectedChart.tankDiameterMmStr
+                            ? `${formatCalibrationDisplay(calSelectedChart.tankDiameterMmStr)} mm`
+                            : '—'}{' '}
+                          ×{' '}
+                          {calSelectedChart.tankLengthMmStr
+                            ? `${formatCalibrationDisplay(calSelectedChart.tankLengthMmStr)} mm`
+                            : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">MAX DIP / VOL</span>
+                        <span className="text-slate-200">
+                          {calSelectedChart.maxDipMmStr
+                            ? `${formatCalibrationDisplay(calSelectedChart.maxDipMmStr)} mm`
+                            : `${formatCalibrationDisplay(currentChartDiagnostics.maxDipMm)} mm`}{' '}
+                          /{' '}
+                          {calSelectedChart.chartCapacityLitreStr
+                            ? `${formatCalibrationDisplay(calSelectedChart.chartCapacityLitreStr)} L`
+                            : `${formatCalibrationDisplay(currentChartDiagnostics.maxVolumeLitres)} L`}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">CURVE / STEP</span>
+                        <span className="text-slate-200">
+                          {currentChartDiagnostics.isNonLinear ? 'Non-Linear' : 'Linear'}
+                          {currentChartDiagnostics.dominantStepMm
+                            ? ` (${formatCalibrationDisplay(currentChartDiagnostics.dominantStepMm)} mm)`
+                            : ''}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">SOURCE / CERT</span>
+                        <span className="text-slate-200 truncate block" title={calSelectedChart.sourceFileName || calSelectedChart.referenceDocument || ''}>
+                          {calSelectedChart.sourceFileName || calSelectedChart.referenceDocument || 'Manual / Seed'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">EFFECTIVE FROM</span>
+                        <span className="text-slate-200">
+                          {calSelectedChart.effectiveFrom
+                            ? calSelectedChart.effectiveFrom.slice(0, 10)
+                            : 'Immediate'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {isChartLocked && (
+                    <div className="p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-lg text-[11px] text-amber-200 font-mono flex items-center justify-between gap-2">
+                      <span>
+                        🔒 Revision #{calSelectedChart?.revisionNumber} is referenced by historical tank stock readings and is immutable. To modify calibration points, fork a new draft revision or use Bulk Import (which automatically creates a new revision).
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {!calStatus.isConfigured && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs rounded-xl font-mono flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -2780,6 +3265,22 @@ export const PumpInfrastructurePage: React.FC = () => {
                 </div>
               )}
 
+              {currentChartDiagnostics.missingStepWarnings.length > 0 && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs rounded-xl font-mono space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>
+                      Step Interval Diagnostics ({currentChartDiagnostics.missingStepWarnings.length} gap notice{currentChartDiagnostics.missingStepWarnings.length > 1 ? 's' : ''})
+                    </span>
+                  </div>
+                  <ul className="list-disc list-inside text-[11px] text-amber-200/90 space-y-0.5">
+                    {currentChartDiagnostics.missingStepWarnings.slice(0, 3).map((w, idx) => (
+                      <li key={idx}>{w.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {modalError && (
                 <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -2787,43 +3288,57 @@ export const PumpInfrastructurePage: React.FC = () => {
                 </div>
               )}
 
-              {/* Calibration Points Table */}
+              {/* Calibration Points Table & Action Toolbar */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
                     Calibration Points ({calPoints.length})
+                    {calSelectedChart ? ` — Rev #${calSelectedChart.revisionNumber}` : ''}
                   </h3>
-                  {canWriteTankCalibration && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleLoadDummyCalibrationPreset}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 text-[11px] font-mono font-semibold transition-colors"
-                      >
-                        Load 5-Point UAT Preset (0–2000 mm)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCalShowBulkImport(prev => !prev);
-                          setModalError(null);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 text-[11px] font-mono font-semibold transition-colors"
-                      >
-                        <Upload className="w-3 h-3" />
-                        <span>{calShowBulkImport ? 'Hide Bulk Import' : 'Bulk Import Chart'}</span>
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCalShowDryRun(prev => !prev);
+                        setModalError(null);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-[11px] font-mono font-semibold transition-colors"
+                    >
+                      <FlaskConical className="w-3 h-3" />
+                      <span>{calShowDryRun ? 'Hide Dry-Run Verifier' : 'Dry-Run vs Printed Chart'}</span>
+                    </button>
+                    {canWriteTankCalibration && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleLoadDummyCalibrationPreset}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 text-[11px] font-mono font-semibold transition-colors"
+                        >
+                          Load 5-Point UAT Preset (0–2000 mm)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCalShowBulkImport(prev => !prev);
+                            setModalError(null);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 text-[11px] font-mono font-semibold transition-colors"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>{calShowBulkImport ? 'Hide CSV / Bulk Import' : 'CSV / Bulk Import Chart'}</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto bg-slate-950/70 border border-slate-800 rounded-xl max-h-64">
+                <div className="overflow-x-auto bg-slate-950/70 border border-slate-800 rounded-xl max-h-60">
                   <table className="w-full text-left text-xs font-mono">
                     <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] border-b border-slate-800 sticky top-0">
                       <tr>
                         <th className="py-2.5 px-4">Dip (mm)</th>
                         <th className="py-2.5 px-4">Volume (L)</th>
-                        {canWriteTankCalibration && (
+                        {canWriteTankCalibration && !isChartLocked && (
                           <th className="py-2.5 px-4 text-right">Actions</th>
                         )}
                       </tr>
@@ -2832,7 +3347,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                       {isLoadingPoints ? (
                         <tr>
                           <td
-                            colSpan={canWriteTankCalibration ? 3 : 2}
+                            colSpan={canWriteTankCalibration && !isChartLocked ? 3 : 2}
                             className="py-6 text-center text-slate-500"
                           >
                             Loading calibration chart...
@@ -2841,7 +3356,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                       ) : calPoints.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={canWriteTankCalibration ? 3 : 2}
+                            colSpan={canWriteTankCalibration && !isChartLocked ? 3 : 2}
                             className="py-6 text-center text-slate-500"
                           >
                             No calibration points configured for this tank yet.
@@ -2856,7 +3371,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                             <td className="py-2 px-4 text-white">
                               {formatCalibrationDisplay(pt.volumeLitreStr ?? pt.volumeMilliunits / 1000)}
                             </td>
-                            {canWriteTankCalibration && (
+                            {canWriteTankCalibration && !isChartLocked && (
                               <td className="py-2 px-4 text-right space-x-2">
                                 <button
                                   type="button"
@@ -2886,92 +3401,270 @@ export const PumpInfrastructurePage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Write Controls: Single Point Add/Edit & Bulk Import */}
-              {canWriteTankCalibration ? (
-                <div className="space-y-4 pt-2 border-t border-slate-800">
-                  {/* Single Point Add / Edit Form */}
-                  <form onSubmit={handleSaveCalibrationPoint} className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-white font-mono uppercase">
-                        {calEditingPoint
-                          ? `Edit Point (${formatCalibrationDisplay(calEditingPoint.dipMmStr)} mm)`
-                          : 'Add Calibration Point'}
+              {/* Dry-Run Comparison Against Original Printed IOCL Chart */}
+              {calShowDryRun && (
+                <div className="bg-slate-950/70 border border-cyan-500/30 rounded-xl p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-cyan-300 font-mono uppercase flex items-center gap-1.5">
+                        <FlaskConical className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Dry-Run Comparison vs Printed IOCL Chart</span>
                       </h4>
-                      {calEditingPoint && (
-                        <button
-                          type="button"
-                          onClick={cancelEditCalibrationPoint}
-                          className="text-[11px] text-slate-400 hover:text-white font-mono"
-                        >
-                          Cancel Edit
-                        </button>
-                      )}
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Paste or upload reference checkpoints (<code className="text-cyan-300">dip_mm, printed_volume_litres</code>) from the scanned IOCL chart to verify exact and interpolated volume conversions before or after activation.
+                      </p>
                     </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleLoadSampleDryRunCheckpoints}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-[11px] font-mono font-semibold"
+                      >
+                        Load Sample Checkpoints
+                      </button>
+                      <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-mono font-semibold">
+                        <Upload className="w-3 h-3 text-cyan-400" />
+                        <span>Upload Checkpoints CSV</span>
+                        <input
+                          type="file"
+                          accept=".csv,.txt,.tsv"
+                          onChange={handleDryRunCsvUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                  <form onSubmit={handleRunDryRunComparison} className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-[11px] text-slate-400 font-mono mb-1">
-                          Dip (mm)
+                        <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                          Compare Against
+                        </label>
+                        <select
+                          value={calDryRunSource}
+                          onChange={e => setCalDryRunSource(e.target.value as 'SAVED_CHART' | 'CSV_PREVIEW')}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                        >
+                          <option value="SAVED_CHART">
+                            Selected Saved Revision ({calSelectedChart ? `Rev #${calSelectedChart.revisionNumber}` : 'Active Chart'})
+                          </option>
+                          <option value="CSV_PREVIEW">
+                            Unsaved CSV Import Preview ({csvPreview?.normalizedPoints.length || 0} pts)
+                          </option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                          Acceptable Tolerance (L)
                         </label>
                         <input
                           type="number"
                           step="0.001"
                           min="0"
-                          placeholder="e.g. 500"
-                          value={calDipInput}
-                          onChange={e => {
-                            setCalDipInput(e.target.value);
-                            setModalError(null);
-                          }}
-                          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                          value={calDryRunTolerance}
+                          onChange={e => setCalDryRunTolerance(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
                         />
                       </div>
-                      <div>
-                        <label className="block text-[11px] text-slate-400 font-mono mb-1">
-                          Volume (L)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.001"
-                          min="0"
-                          placeholder="e.g. 5000"
-                          value={calVolumeInput}
-                          onChange={e => {
-                            setCalVolumeInput(e.target.value);
-                            setModalError(null);
-                          }}
-                          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
-                        />
-                      </div>
-                      <div>
+                      <div className="flex items-end">
                         <button
                           type="submit"
                           disabled={modalSubmitting}
-                          className="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
+                          className="w-full py-1.5 px-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold font-mono"
                         >
-                          {modalSubmitting
-                            ? 'Saving...'
-                            : calEditingPoint
-                              ? 'Update Point'
-                              : 'Add Point'}
+                          {modalSubmitting ? 'Evaluating...' : 'Run Dry-Run Verification'}
                         </button>
                       </div>
                     </div>
+
+                    <textarea
+                      rows={4}
+                      value={calDryRunText}
+                      onChange={e => setCalDryRunText(e.target.value)}
+                      placeholder={`dip_mm,printed_volume_litres\n0,0\n250,2500\n500,5000\n1250,12500\n2000,20000`}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                    />
                   </form>
 
-                  {/* Bulk Import Section */}
+                  {calDryRunReport && (
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] font-mono">
+                        <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                          <span className="text-slate-500 block text-[10px]">CHECKPOINTS</span>
+                          <span className="text-white font-bold">{calDryRunReport.checkpointsCount}</span>
+                        </div>
+                        <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                          <span className="text-emerald-400/80 block text-[10px]">PASSED (≤ {formatCalibrationDisplay(calDryRunReport.toleranceLitres)} L)</span>
+                          <span className="text-emerald-300 font-bold">{calDryRunReport.passedCount}</span>
+                        </div>
+                        <div className="p-2 bg-rose-500/10 rounded-lg border border-rose-500/20">
+                          <span className="text-rose-400/80 block text-[10px]">EXCEEDED / OUT OF RANGE</span>
+                          <span className="text-rose-300 font-bold">{calDryRunReport.failedCount}</span>
+                        </div>
+                        <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                          <span className="text-slate-500 block text-[10px]">MAX |DELTA|</span>
+                          <span className="text-white font-bold">{formatCalibrationDisplay(calDryRunReport.maxAbsDeltaLitres)} L</span>
+                        </div>
+                        <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                          <span className="text-slate-500 block text-[10px]">MEAN |DELTA|</span>
+                          <span className="text-white font-bold">{formatCalibrationDisplay(calDryRunReport.meanAbsDeltaLitres)} L</span>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-xl max-h-48">
+                        <table className="w-full text-left text-[11px] font-mono">
+                          <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] border-b border-slate-800 sticky top-0">
+                            <tr>
+                              <th className="py-2 px-3">Dip (mm)</th>
+                              <th className="py-2 px-3">Printed (L)</th>
+                              <th className="py-2 px-3">Calculated (L)</th>
+                              <th className="py-2 px-3">Mode</th>
+                              <th className="py-2 px-3">Delta (L)</th>
+                              <th className="py-2 px-3 text-right">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {calDryRunReport.rows.map((r, idx) => (
+                              <tr key={idx} className="hover:bg-slate-800/40">
+                                <td className="py-1.5 px-3 font-bold text-orange-400">
+                                  {formatCalibrationDisplay(r.dipMm)}
+                                </td>
+                                <td className="py-1.5 px-3 text-slate-200">
+                                  {formatCalibrationDisplay(r.printedVolumeLitres)}
+                                </td>
+                                <td className="py-1.5 px-3 text-white font-semibold">
+                                  {r.calculatedVolumeLitres !== null
+                                    ? formatCalibrationDisplay(r.calculatedVolumeLitres)
+                                    : '—'}
+                                </td>
+                                <td className="py-1.5 px-3">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                      r.matchType === 'EXACT_POINT'
+                                        ? 'bg-emerald-500/15 text-emerald-300'
+                                        : r.matchType === 'INTERPOLATED'
+                                          ? 'bg-cyan-500/15 text-cyan-300'
+                                          : 'bg-rose-500/15 text-rose-300'
+                                    }`}
+                                  >
+                                    {r.matchType}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 px-3 text-slate-200">
+                                  {r.deltaLitres !== null ? `${Number(r.deltaLitres) > 0 ? '+' : ''}${formatCalibrationDisplay(r.deltaLitres)} L` : r.error}
+                                </td>
+                                <td className="py-1.5 px-3 text-right">
+                                  {r.withinTolerance ? (
+                                    <span className="text-emerald-400 font-bold">PASS</span>
+                                  ) : (
+                                    <span className="text-rose-400 font-bold">FAIL</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Write Controls: Single Point Add/Edit & Bulk Import */}
+              {canWriteTankCalibration ? (
+                <div className="space-y-4 pt-2 border-t border-slate-800">
+                  {/* Single Point Add / Edit Form (Disabled if chart is referenced by historical readings) */}
+                  {!isChartLocked && (
+                    <form onSubmit={handleSaveCalibrationPoint} className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-white font-mono uppercase">
+                          {calEditingPoint
+                            ? `Edit Point (${formatCalibrationDisplay(calEditingPoint.dipMmStr)} mm)`
+                            : 'Add Calibration Point'}
+                        </h4>
+                        {calEditingPoint && (
+                          <button
+                            type="button"
+                            onClick={cancelEditCalibrationPoint}
+                            className="text-[11px] text-slate-400 hover:text-white font-mono"
+                          >
+                            Cancel Edit
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                        <div>
+                          <label className="block text-[11px] text-slate-400 font-mono mb-1">
+                            Dip (mm)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            placeholder="e.g. 500"
+                            value={calDipInput}
+                            onChange={e => {
+                              setCalDipInput(e.target.value);
+                              setModalError(null);
+                            }}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-400 font-mono mb-1">
+                            Volume (L)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            placeholder="e.g. 5000"
+                            value={calVolumeInput}
+                            onChange={e => {
+                              setCalVolumeInput(e.target.value);
+                              setModalError(null);
+                            }}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                          />
+                        </div>
+                        <div>
+                          <button
+                            type="submit"
+                            disabled={modalSubmitting}
+                            className="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
+                          >
+                            {modalSubmitting
+                              ? 'Saving...'
+                              : calEditingPoint
+                                ? 'Update Point'
+                                : 'Add Point'}
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* CSV / Bulk Import Section with Metadata & Pre-Save Preview */}
                   {calShowBulkImport && (
                     <form
                       onSubmit={handleBulkImportCalibration}
-                      className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3"
+                      className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-4"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <h4 className="text-xs font-bold text-white font-mono uppercase">
-                            Bulk Import Calibration Chart
+                          <h4 className="text-xs font-bold text-white font-mono uppercase flex items-center gap-1.5">
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-orange-400" />
+                            <span>CSV / Bulk Import Calibration Chart</span>
                           </h4>
                           <p className="text-[11px] text-slate-400 mt-0.5">
-                            Paste rows as <code className="text-orange-400">dipMillimetres,volumeLitres</code> (minimum 2 points, strictly increasing dips, monotonic volumes) or upload a CSV file.
+                            Paste rows as <code className="text-orange-400">dip_mm,volume_litres</code> (non-linear or linear tables supported) or upload an IOCL calibration CSV file.
+                            {isChartLocked && (
+                              <span className="text-amber-300 block mt-0.5">
+                                ℹ️ Because Rev #{calSelectedChart?.revisionNumber} is referenced by historical readings, importing will automatically create a new revision without overwriting historical data.
+                              </span>
+                            )}
                           </p>
                         </div>
                         <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold">
@@ -2986,16 +3679,225 @@ export const PumpInfrastructurePage: React.FC = () => {
                         </label>
                       </div>
 
+                      {/* Chart Dimensions & Metadata Inputs */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                            Tank Diameter (mm)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="1"
+                            placeholder="e.g. 2000"
+                            value={calDiameterMmInput}
+                            onChange={e => setCalDiameterMmInput(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                            Tank Length (mm)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="1"
+                            placeholder="e.g. 6600"
+                            value={calLengthMmInput}
+                            onChange={e => setCalLengthMmInput(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                            Max Dip Limit (mm)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="1"
+                            placeholder="e.g. 2000"
+                            value={calMaxDipMmInput}
+                            onChange={e => setCalMaxDipMmInput(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                            Save Mode
+                          </label>
+                          <select
+                            value={canApproveCalibrationChart ? calSaveMode : 'DRAFT'}
+                            onChange={e => setCalSaveMode(e.target.value as 'ACTIVE' | 'DRAFT')}
+                            disabled={!canApproveCalibrationChart}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono disabled:opacity-60"
+                          >
+                            <option value="DRAFT">Save as Draft Revision (DRAFT)</option>
+                            {canApproveCalibrationChart && (
+                              <option value="ACTIVE">Activate Immediately (ACTIVE)</option>
+                            )}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                            Source File Name
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. iocl_tank1_20kl.csv"
+                            value={calSourceFileName}
+                            onChange={e => setCalSourceFileName(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                            Calibration Cert / Ref Doc
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. W&M/IOCL/2026/01"
+                            value={calReferenceDocument}
+                            onChange={e => setCalReferenceDocument(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                            Effective From Date
+                          </label>
+                          <input
+                            type="date"
+                            value={calEffectiveFrom}
+                            onChange={e => setCalEffectiveFrom(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                            Revision Notes
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Optional notes"
+                            value={calNotes}
+                            onChange={e => setCalNotes(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          />
+                        </div>
+                      </div>
+
                       <textarea
                         rows={6}
                         value={calBulkText}
                         onChange={e => {
                           setCalBulkText(e.target.value);
+                          setCalShowPreview(true);
                           setModalError(null);
                         }}
-                        placeholder={`0,0\n500,5000\n1000,10000\n1500,15000\n2000,20000`}
+                        placeholder={`dip_mm,volume_litres\n0,0\n500,5000\n1000,10000\n1500,15000\n2000,20000`}
                         className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
                       />
+
+                      {/* Pre-Save CSV Validation & Preview Panel */}
+                      {calShowPreview && csvPreview && (
+                        <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2.5 font-mono text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold uppercase text-[11px] text-slate-300">
+                              Pre-Save Import Preview & Validation
+                            </span>
+                            {csvPreview.valid ? (
+                              <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 text-[10px] font-bold">
+                                VALID ({csvPreview.diagnostics.pointsCount} POINTS)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-rose-500/15 text-rose-300 text-[10px] font-bold">
+                                VALIDATION FAILED
+                              </span>
+                            )}
+                          </div>
+
+                          {!csvPreview.valid && csvPreview.error && (
+                            <div className="text-rose-400 text-[11px]">
+                              ❌ {csvPreview.error}
+                            </div>
+                          )}
+
+                          {csvPreview.valid && (
+                            <>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                                <div className="p-2 bg-slate-950/70 rounded border border-slate-800">
+                                  <span className="text-slate-500 block text-[10px]">DIP RANGE</span>
+                                  <span className="text-orange-400 font-bold">
+                                    {formatCalibrationDisplay(csvPreview.diagnostics.minDipMm)} – {formatCalibrationDisplay(csvPreview.diagnostics.maxDipMm)} mm
+                                  </span>
+                                </div>
+                                <div className="p-2 bg-slate-950/70 rounded border border-slate-800">
+                                  <span className="text-slate-500 block text-[10px]">VOLUME RANGE</span>
+                                  <span className="text-white font-bold">
+                                    {formatCalibrationDisplay(csvPreview.diagnostics.minVolumeLitres)} – {formatCalibrationDisplay(csvPreview.diagnostics.maxVolumeLitres)} L
+                                  </span>
+                                </div>
+                                <div className="p-2 bg-slate-950/70 rounded border border-slate-800">
+                                  <span className="text-slate-500 block text-[10px]">DOMINANT STEP</span>
+                                  <span className="text-slate-200">
+                                    {csvPreview.diagnostics.dominantStepMm
+                                      ? `${formatCalibrationDisplay(csvPreview.diagnostics.dominantStepMm)} mm`
+                                      : '—'}
+                                    {csvPreview.diagnostics.isUniformStep ? ' (Uniform)' : ' (Variable)'}
+                                  </span>
+                                </div>
+                                <div className="p-2 bg-slate-950/70 rounded border border-slate-800">
+                                  <span className="text-slate-500 block text-[10px]">CURVE GEOMETRY</span>
+                                  <span className="text-cyan-300">
+                                    {csvPreview.diagnostics.isNonLinear ? 'Non-Linear Table' : 'Linear Table'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {csvPreview.diagnostics.missingStepWarnings.length > 0 && (
+                                <div className="p-2 bg-amber-500/10 border border-amber-500/25 rounded text-[11px] text-amber-200 space-y-0.5">
+                                  <div className="font-bold">
+                                    ⚠️ Missing Step / Interval Warnings ({csvPreview.diagnostics.missingStepWarnings.length}):
+                                  </div>
+                                  {csvPreview.diagnostics.missingStepWarnings.slice(0, 3).map((w, idx) => (
+                                    <div key={idx}>• {w.message}</div>
+                                  ))}
+                                </div>
+                              )}
+
+                              <div className="max-h-36 overflow-y-auto border border-slate-800 rounded-lg">
+                                <table className="w-full text-left text-[11px]">
+                                  <thead className="bg-slate-800/80 text-slate-400 text-[10px] sticky top-0">
+                                    <tr>
+                                      <th className="py-1.5 px-3">#</th>
+                                      <th className="py-1.5 px-3">Dip (mm)</th>
+                                      <th className="py-1.5 px-3">Volume (L)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-800/60">
+                                    {csvPreview.normalizedPoints.slice(0, 10).map((pt, idx) => (
+                                      <tr key={idx}>
+                                        <td className="py-1 px-3 text-slate-500">{idx + 1}</td>
+                                        <td className="py-1 px-3 text-orange-400">{formatCalibrationDisplay(pt.dipMillimetres)}</td>
+                                        <td className="py-1 px-3 text-white">{formatCalibrationDisplay(pt.volumeLitres)}</td>
+                                      </tr>
+                                    ))}
+                                    {csvPreview.normalizedPoints.length > 10 && (
+                                      <tr>
+                                        <td colSpan={3} className="py-1.5 px-3 text-center text-slate-400">
+                                          ... +{csvPreview.normalizedPoints.length - 10} more rows (final row: {formatCalibrationDisplay(csvPreview.normalizedPoints[csvPreview.normalizedPoints.length - 1].dipMillimetres)} mm → {formatCalibrationDisplay(csvPreview.normalizedPoints[csvPreview.normalizedPoints.length - 1].volumeLitres)} L)
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
 
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <label className="inline-flex items-center gap-2 text-[11px] text-slate-400 font-mono">
@@ -3011,6 +3913,13 @@ export const PumpInfrastructurePage: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
+                            onClick={() => setCalShowPreview(prev => !prev)}
+                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs text-cyan-300 font-mono font-semibold"
+                          >
+                            {calShowPreview ? 'Hide Preview' : 'Preview CSV'}
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => {
                               setCalShowBulkImport(false);
                               setModalError(null);
@@ -3024,7 +3933,13 @@ export const PumpInfrastructurePage: React.FC = () => {
                             disabled={modalSubmitting}
                             className="px-4 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
                           >
-                            {modalSubmitting ? 'Importing...' : 'Replace & Import Chart'}
+                            {modalSubmitting
+                              ? 'Importing...'
+                              : isChartLocked
+                                ? `Save as New ${calSaveMode} Revision`
+                                : calSaveMode === 'DRAFT'
+                                  ? 'Save as Draft Revision'
+                                  : 'Save & Activate Chart'}
                           </button>
                         </div>
                       </div>

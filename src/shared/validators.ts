@@ -376,10 +376,63 @@ export const NozzleUnavailabilitySchema = z.object({
 export const TankCalibrationPointSchema = z.object({
   dipMillimetres: StrictDecimalQuantityString,
   volumeLitres: StrictDecimalQuantityString,
+  chartId: z.string().trim().optional().nullable(),
+});
+
+export const TankCalibrationChartMetadataSchema = z.object({
+  chartUnitDip: z.enum(['MM']).default('MM'),
+  chartUnitVolume: z
+    .enum(['LITRE', 'LITRES'])
+    .transform((): 'LITRES' => 'LITRES')
+    .default('LITRES'),
+  tankDiameterMm: StrictDecimalQuantityString.optional().nullable(),
+  tankLengthMm: StrictDecimalQuantityString.optional().nullable(),
+  maxDipMm: StrictDecimalQuantityString.optional().nullable(),
+  chartCapacityLitres: StrictDecimalQuantityString.optional().nullable(),
+  sourceFileName: z.string().trim().max(255).optional().nullable(),
+  referenceDocument: z.string().trim().max(255).optional().nullable(),
+  notes: z.string().trim().max(1000).optional().nullable(),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Effective from date must be YYYY-MM-DD').optional().nullable(),
+  effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Effective to date must be YYYY-MM-DD').optional().nullable(),
 });
 
 export const TankCalibrationBulkSchema = z.object({
   points: z.array(TankCalibrationPointSchema).min(2, 'At least 2 calibration points are required to define a calibration chart'),
+  metadata: TankCalibrationChartMetadataSchema.optional(),
+  activateImmediately: z.boolean().default(false),
+  saveMode: z.enum(['ACTIVE', 'DRAFT', 'APPROVED']).optional(),
+  createNewRevision: z.boolean().optional(),
+  allowOverCapacity: z.boolean().optional(),
+  chartId: z.string().trim().optional().nullable(),
+});
+
+export const TankCalibrationChartStatusUpdateSchema = z.object({
+  status: z.enum(['DRAFT', 'APPROVED', 'ACTIVE', 'ARCHIVED']),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Effective from date must be YYYY-MM-DD').optional().nullable(),
+  effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Effective to date must be YYYY-MM-DD').optional().nullable(),
+  notes: z.string().trim().max(1000).optional().nullable(),
+});
+
+export const TankCalibrationDryRunCheckpointSchema = z
+  .object({
+    dipMillimetres: StrictDecimalQuantityString.optional(),
+    dipMm: StrictDecimalQuantityString.optional(),
+    printedVolumeLitres: StrictDecimalQuantityString,
+  })
+  .refine(d => Boolean(d.dipMillimetres || d.dipMm), {
+    message: 'dipMillimetres or dipMm is required',
+    path: ['dipMillimetres'],
+  })
+  .transform(d => ({
+    dipMillimetres: (d.dipMillimetres || d.dipMm)!,
+    printedVolumeLitres: d.printedVolumeLitres,
+  }));
+
+export const TankCalibrationDryRunSchema = z.object({
+  chartId: z.string().trim().optional().nullable(),
+  candidatePoints: z.array(TankCalibrationPointSchema).optional(),
+  checkpoints: z.array(TankCalibrationDryRunCheckpointSchema).min(1, 'At least 1 printed chart checkpoint is required for dry-run comparison'),
+  toleranceLitres: StrictDecimalQuantityString.optional(),
 });
 
 export const TankStockReadingSchema = z.object({

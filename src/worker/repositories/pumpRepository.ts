@@ -1,6 +1,6 @@
 import { AppDatabase } from '../../db';
 import * as schema from '../../db/schema';
-import { eq, and, or, desc, asc, sql, ne, inArray, lte } from 'drizzle-orm';
+import { eq, and, or, desc, asc, sql, ne, inArray, lte, isNull } from 'drizzle-orm';
 import {
   Product,
   OutletProduct,
@@ -22,6 +22,8 @@ import {
   ShiftEntryGridItem,
   UnitQuantitySummary,
   ProductUnit,
+  TankCalibrationChart,
+  TankCalibrationChartStatus,
   TankCalibrationPoint,
   TankStockReading,
   TankReadingType,
@@ -1460,21 +1462,41 @@ export class PumpRepository {
       createdAt: data.createdAt,
     }));
 
-    const tankSnapshotRows = activeParticipatingTanks.map(t => ({
-      id: `ost-${crypto.randomUUID()}`,
-      operationalShiftId: data.id,
-      outletId: data.outletId,
-      tankId: t.tank.id,
-      tankNumber: t.tank.tankNumber,
-      tankName: t.tank.name,
-      productId: t.product.id,
-      productCode: t.product.code,
-      productName: t.product.name,
-      productUnit: t.product.unit as ProductUnit,
-      capacityMilliunits: Math.round(t.tank.capacityLitres * MILLIUNIT_SCALE),
-      safeFillCapacityMilliunits: Math.round(t.tank.safeFillCapacityLitres * MILLIUNIT_SCALE),
-      createdAt: data.createdAt,
-    }));
+    // Resolve active calibration charts for participating tanks
+    const participatingTankIds = activeParticipatingTanks.map(t => t.tank.id);
+    const activeCalCharts = participatingTankIds.length > 0
+      ? await this.db
+          .select()
+          .from(schema.tankCalibrationCharts)
+          .where(
+            and(
+              inArray(schema.tankCalibrationCharts.tankId, participatingTankIds),
+              eq(schema.tankCalibrationCharts.status, 'ACTIVE')
+            )
+          )
+      : [];
+    const activeCalChartByTankId = new Map(activeCalCharts.map(c => [c.tankId, c]));
+
+    const tankSnapshotRows = activeParticipatingTanks.map(t => {
+      const activeCal = activeCalChartByTankId.get(t.tank.id);
+      return {
+        id: `ost-${crypto.randomUUID()}`,
+        operationalShiftId: data.id,
+        outletId: data.outletId,
+        tankId: t.tank.id,
+        tankNumber: t.tank.tankNumber,
+        tankName: t.tank.name,
+        productId: t.product.id,
+        productCode: t.product.code,
+        productName: t.product.name,
+        productUnit: t.product.unit as ProductUnit,
+        capacityMilliunits: Math.round(t.tank.capacityLitres * MILLIUNIT_SCALE),
+        safeFillCapacityMilliunits: Math.round(t.tank.safeFillCapacityLitres * MILLIUNIT_SCALE),
+        calibrationChartId: activeCal?.id ?? null,
+        calibrationRevision: activeCal?.revisionNumber ?? null,
+        createdAt: data.createdAt,
+      };
+    });
 
     const priceSnapshotRows = pricedProducts.map(p => {
       const pr = resolvedPrices.get(p.id)!;
@@ -2384,15 +2406,338 @@ export class PumpRepository {
   }
 
   // ==========================================
-  // PHASE 2B: TANK CALIBRATION POINTS
+  // PHASE 2B: TANK CALIBRATION CHARTS & POINTS
   // ==========================================
 
-  async listCalibrationPoints(tankId: string): Promise<TankCalibrationPoint[]> {
-    const rows = await this.db
+  private formatCalibrationChartRow(
+    row: typeof schema.tankCalibrationCharts.$inferSelect,
+    extra?: {
+      pointsCount?: number;
+      isReferenced?: boolean;
+      referencedReadingsCount?: number;
+      referencedShiftsCount?: number;
+    }
+  ): TankCalibrationChart {
+    return {
+      ...row,
+      status: row.status as TankCalibrationChartStatus,
+      chartUnitDip: (row.chartUnitDip || 'MM') as 'MM',
+      chartUnitVolume: (row.chartUnitVolume || 'LITRES') as 'LITRES',
+      tankDiameterMmStr:
+        row.tankDiameterMmMilliunits != null
+          ? formatMilliunits(row.tankDiameterMmMilliunits)
+          : null,
+      tankLengthMmStr:
+        row.tankLengthMmMilliunits != null
+          ? formatMilliunits(row.tankLengthMmMilliunits)
+          : null,
+      maxDipMmStr:
+        row.maxDipMmMilliunits != null
+          ? formatMilliunits(row.maxDipMmMilliunits)
+          : null,
+      chartCapacityLitreStr:
+        row.chartCapacityMilliunits != null
+          ? formatMilliunits(row.chartCapacityMilliunits)
+          : null,
+      chartCapacityLitresStr:
+        row.chartCapacityMilliunits != null
+          ? formatMilliunits(row.chartCapacityMilliunits)
+          : null,
+      pointsCount: extra?.pointsCount,
+      isReferenced: extra?.isReferenced ?? false,
+      referencedReadingsCount: extra?.referencedReadingsCount ?? 0,
+      referencedShiftsCount: extra?.referencedShiftsCount ?? 0,
+    };
+  }
+
+  /**
+   * Ensures any legacy unversioned calibration points (`chart_id IS NULL`) for a tank
+   * are linked to an initial Revision 1 ACTIVE chart header without losing data.
+   */
+  async ensureInitialCalibrationChartForLegacyPoints(
+    tankId: string,
+    actorUserId?: string
+  ): Promise<void> {
+    const legacyPoints = await this.db
       .select()
       .from(schema.tankCalibrationPoints)
-      .where(eq(schema.tankCalibrationPoints.tankId, tankId))
+      .where(
+        and(
+          eq(schema.tankCalibrationPoints.tankId, tankId),
+          isNull(schema.tankCalibrationPoints.chartId)
+        )
+      )
       .orderBy(asc(schema.tankCalibrationPoints.dipMillimetresMilliunits));
+
+    if (legacyPoints.length === 0) {
+      return;
+    }
+
+    const existingCharts = await this.db
+      .select()
+      .from(schema.tankCalibrationCharts)
+      .where(eq(schema.tankCalibrationCharts.tankId, tankId))
+      .orderBy(asc(schema.tankCalibrationCharts.revisionNumber));
+
+    let targetChart = existingCharts.find(c => c.status === 'ACTIVE') || existingCharts[0];
+
+    if (!targetChart) {
+      const maxDip = Math.max(...legacyPoints.map(p => p.dipMillimetresMilliunits));
+      const maxVol = Math.max(...legacyPoints.map(p => p.volumeMilliunits));
+      const earliestCreated = legacyPoints[0].createdAt || new Date().toISOString();
+      const creator = actorUserId || legacyPoints[0].createdBy || null;
+      const chartId = `tcc-legacy-${tankId}-r1`;
+
+      await this.db
+        .insert(schema.tankCalibrationCharts)
+        .values({
+          id: chartId,
+          tankId,
+          revisionNumber: 1,
+          status: 'ACTIVE',
+          chartUnitDip: 'MM',
+          chartUnitVolume: 'LITRES',
+          tankDiameterMmMilliunits: maxDip,
+          tankLengthMmMilliunits: null,
+          maxDipMmMilliunits: maxDip,
+          chartCapacityMilliunits: maxVol,
+          sourceFileName: 'legacy-d1-preserved',
+          referenceDocument: 'REV-1-INITIAL',
+          notes: 'Automatically preserved initial calibration chart from existing points',
+          effectiveFrom: earliestCreated.slice(0, 10),
+          effectiveTo: null,
+          approvedBy: creator,
+          approvedAt: earliestCreated,
+          createdAt: earliestCreated,
+          createdBy: creator,
+          updatedAt: earliestCreated,
+          updatedBy: creator,
+        })
+        .onConflictDoNothing();
+
+      const [inserted] = await this.db
+        .select()
+        .from(schema.tankCalibrationCharts)
+        .where(eq(schema.tankCalibrationCharts.id, chartId))
+        .limit(1);
+      targetChart = inserted;
+    }
+
+    if (targetChart) {
+      await this.db
+        .update(schema.tankCalibrationPoints)
+        .set({ chartId: targetChart.id })
+        .where(
+          and(
+            eq(schema.tankCalibrationPoints.tankId, tankId),
+            isNull(schema.tankCalibrationPoints.chartId)
+          )
+        );
+    }
+  }
+
+  /**
+   * Checks whether a specific calibration chart revision is referenced by any saved
+   * historical tank stock readings (`OPENING`, `CLOSING`, `PRE_RECEIPT`, `POST_RECEIPT`, `ADHOC`).
+   */
+  async isCalibrationChartReferenced(
+    tankId: string,
+    chartId: string,
+    revisionNumber?: number
+  ): Promise<{
+    isReferenced: boolean;
+    referencedReadingsCount: number;
+    referencedShiftsCount: number;
+  }> {
+    const readings = await this.db
+      .select({
+        id: schema.tankStockReadings.id,
+        operationalShiftId: schema.tankStockReadings.operationalShiftId,
+        calibrationChartId: schema.tankStockReadings.calibrationChartId,
+      })
+      .from(schema.tankStockReadings)
+      .where(
+        and(
+          eq(schema.tankStockReadings.tankId, tankId),
+          revisionNumber === 1
+            ? or(
+                eq(schema.tankStockReadings.calibrationChartId, chartId),
+                isNull(schema.tankStockReadings.calibrationChartId)
+              )
+            : eq(schema.tankStockReadings.calibrationChartId, chartId)
+        )
+      );
+
+    const shiftIds = new Set(readings.map(r => r.operationalShiftId));
+    return {
+      isReferenced: readings.length > 0,
+      referencedReadingsCount: readings.length,
+      referencedShiftsCount: shiftIds.size,
+    };
+  }
+
+  async listCalibrationCharts(tankId: string): Promise<TankCalibrationChart[]> {
+    await this.ensureInitialCalibrationChartForLegacyPoints(tankId);
+
+    const charts = await this.db
+      .select()
+      .from(schema.tankCalibrationCharts)
+      .where(eq(schema.tankCalibrationCharts.tankId, tankId))
+      .orderBy(desc(schema.tankCalibrationCharts.revisionNumber));
+
+    if (charts.length === 0) {
+      return [];
+    }
+
+    const allPoints = await this.db
+      .select({
+        id: schema.tankCalibrationPoints.id,
+        chartId: schema.tankCalibrationPoints.chartId,
+      })
+      .from(schema.tankCalibrationPoints)
+      .where(eq(schema.tankCalibrationPoints.tankId, tankId));
+
+    const pointsCountByChart = new Map<string, number>();
+    for (const pt of allPoints) {
+      if (pt.chartId) {
+        pointsCountByChart.set(pt.chartId, (pointsCountByChart.get(pt.chartId) || 0) + 1);
+      }
+    }
+
+    const enriched: TankCalibrationChart[] = [];
+    for (const c of charts) {
+      const refStats = await this.isCalibrationChartReferenced(
+        tankId,
+        c.id,
+        c.revisionNumber
+      );
+      enriched.push(
+        this.formatCalibrationChartRow(c, {
+          pointsCount: pointsCountByChart.get(c.id) || 0,
+          ...refStats,
+        })
+      );
+    }
+
+    return enriched;
+  }
+
+  async findCalibrationChartById(chartId: string): Promise<TankCalibrationChart | null> {
+    const [row] = await this.db
+      .select()
+      .from(schema.tankCalibrationCharts)
+      .where(eq(schema.tankCalibrationCharts.id, chartId))
+      .limit(1);
+
+    if (!row) return null;
+
+    const pts = await this.db
+      .select({ id: schema.tankCalibrationPoints.id })
+      .from(schema.tankCalibrationPoints)
+      .where(eq(schema.tankCalibrationPoints.chartId, row.id));
+
+    const refStats = await this.isCalibrationChartReferenced(
+      row.tankId,
+      row.id,
+      row.revisionNumber
+    );
+
+    return this.formatCalibrationChartRow(row, {
+      pointsCount: pts.length,
+      ...refStats,
+    });
+  }
+
+  async findActiveCalibrationChart(tankId: string): Promise<TankCalibrationChart | null> {
+    await this.ensureInitialCalibrationChartForLegacyPoints(tankId);
+
+    const [row] = await this.db
+      .select()
+      .from(schema.tankCalibrationCharts)
+      .where(
+        and(
+          eq(schema.tankCalibrationCharts.tankId, tankId),
+          eq(schema.tankCalibrationCharts.status, 'ACTIVE')
+        )
+      )
+      .limit(1);
+
+    if (!row) return null;
+    return this.findCalibrationChartById(row.id);
+  }
+
+  async listCalibrationPoints(
+    tankId: string,
+    options?: { chartId?: string | null; revisionNumber?: number | null }
+  ): Promise<TankCalibrationPoint[]> {
+    await this.ensureInitialCalibrationChartForLegacyPoints(tankId);
+
+    let targetChartId = options?.chartId || null;
+
+    if (!targetChartId && options?.revisionNumber != null) {
+      const [revChart] = await this.db
+        .select()
+        .from(schema.tankCalibrationCharts)
+        .where(
+          and(
+            eq(schema.tankCalibrationCharts.tankId, tankId),
+            eq(schema.tankCalibrationCharts.revisionNumber, options.revisionNumber)
+          )
+        )
+        .limit(1);
+      if (!revChart) {
+        return [];
+      }
+      targetChartId = revChart.id;
+    }
+
+    if (!targetChartId) {
+      const [activeChart] = await this.db
+        .select()
+        .from(schema.tankCalibrationCharts)
+        .where(
+          and(
+            eq(schema.tankCalibrationCharts.tankId, tankId),
+            eq(schema.tankCalibrationCharts.status, 'ACTIVE')
+          )
+        )
+        .limit(1);
+
+      if (activeChart) {
+        targetChartId = activeChart.id;
+      } else {
+        // If no ACTIVE chart exists yet, check if there are any charts at all
+        const [anyChart] = await this.db
+          .select()
+          .from(schema.tankCalibrationCharts)
+          .where(eq(schema.tankCalibrationCharts.tankId, tankId))
+          .orderBy(desc(schema.tankCalibrationCharts.revisionNumber))
+          .limit(1);
+
+        if (anyChart) {
+          // Note: For operational callers (`listCalibrationPoints(tankId)` without options),
+          // only ACTIVE charts should be treated as operationally calibrated!
+          return [];
+        }
+      }
+    }
+
+    const rows = targetChartId
+      ? await this.db
+          .select()
+          .from(schema.tankCalibrationPoints)
+          .where(
+            and(
+              eq(schema.tankCalibrationPoints.tankId, tankId),
+              eq(schema.tankCalibrationPoints.chartId, targetChartId)
+            )
+          )
+          .orderBy(asc(schema.tankCalibrationPoints.dipMillimetresMilliunits))
+      : await this.db
+          .select()
+          .from(schema.tankCalibrationPoints)
+          .where(eq(schema.tankCalibrationPoints.tankId, tankId))
+          .orderBy(asc(schema.tankCalibrationPoints.dipMillimetresMilliunits));
 
     return rows.map(r => ({
       ...r,
@@ -2411,40 +2756,199 @@ export class PumpRepository {
     };
   }
 
+  /**
+   * Ensures a target calibration chart exists and is NOT locked by historical readings
+   * before allowing in-place single-point mutations (`createCalibrationPoint`, `updateCalibrationPoint`, `deleteCalibrationPoint`).
+   */
+  async resolveEditableChartForSinglePoint(
+    tankId: string,
+    actorUserId: string,
+    preferredChartId?: string | null
+  ): Promise<TankCalibrationChart> {
+    await this.ensureInitialCalibrationChartForLegacyPoints(tankId, actorUserId);
+
+    let chart: TankCalibrationChart | null = null;
+    if (preferredChartId) {
+      chart = await this.findCalibrationChartById(preferredChartId);
+      if (!chart || chart.tankId !== tankId) {
+        const err = new Error('Specified tank calibration chart revision was not found for this tank');
+        (err as any).code = 'CHART_NOT_FOUND';
+        throw err;
+      }
+    } else {
+      chart = await this.findActiveCalibrationChart(tankId);
+      if (!chart) {
+        const charts = await this.listCalibrationCharts(tankId);
+        chart = charts.find(c => c.status === 'DRAFT' || c.status === 'APPROVED') || null;
+      }
+    }
+
+    if (!chart) {
+      const nowIso = new Date().toISOString();
+      const newChartId = `tcc-${tankId}-r1`;
+      await this.db.insert(schema.tankCalibrationCharts).values({
+        id: newChartId,
+        tankId,
+        revisionNumber: 1,
+        status: 'ACTIVE',
+        chartUnitDip: 'MM',
+        chartUnitVolume: 'LITRES',
+        tankDiameterMmMilliunits: null,
+        tankLengthMmMilliunits: null,
+        maxDipMmMilliunits: null,
+        chartCapacityMilliunits: null,
+        sourceFileName: null,
+        referenceDocument: 'REV-1-INITIAL',
+        notes: 'Initial calibration chart created via point entry',
+        effectiveFrom: nowIso.slice(0, 10),
+        effectiveTo: null,
+        approvedBy: actorUserId,
+        approvedAt: nowIso,
+        createdAt: nowIso,
+        createdBy: actorUserId,
+        updatedAt: nowIso,
+        updatedBy: actorUserId,
+      });
+      chart = (await this.findCalibrationChartById(newChartId))!;
+    }
+
+    if (chart.status === 'SUPERSEDED' || chart.status === 'ARCHIVED') {
+      const err = new Error(
+        `Calibration chart Revision #${chart.revisionNumber} is ${chart.status} and cannot be modified in place. Please create or edit a new revision.`
+      );
+      (err as any).code = 'CALIBRATION_CHART_LOCKED_HISTORICAL_REFERENCE';
+      throw err;
+    }
+
+    if (chart.isReferenced) {
+      const err = new Error(
+        `Calibration chart Revision #${chart.revisionNumber} is referenced by ${chart.referencedReadingsCount} saved tank dip reading(s) across ${chart.referencedShiftsCount} shift(s) and cannot be overwritten in place. Create a new chart revision instead.`
+      );
+      (err as any).code = 'CALIBRATION_CHART_LOCKED_HISTORICAL_REFERENCE';
+      throw err;
+    }
+
+    return chart;
+  }
+
+  private async refreshChartComputedBounds(chartId: string, actorUserId?: string): Promise<void> {
+    const pts = await this.db
+      .select()
+      .from(schema.tankCalibrationPoints)
+      .where(eq(schema.tankCalibrationPoints.chartId, chartId))
+      .orderBy(asc(schema.tankCalibrationPoints.dipMillimetresMilliunits));
+
+    const maxDip = pts.length > 0 ? pts[pts.length - 1].dipMillimetresMilliunits : null;
+    const maxVol = pts.length > 0 ? pts[pts.length - 1].volumeMilliunits : null;
+
+    await this.db
+      .update(schema.tankCalibrationCharts)
+      .set({
+        maxDipMmMilliunits: maxDip,
+        chartCapacityMilliunits: maxVol,
+        updatedAt: new Date().toISOString(),
+        ...(actorUserId ? { updatedBy: actorUserId } : {}),
+      })
+      .where(eq(schema.tankCalibrationCharts.id, chartId));
+  }
+
   async createCalibrationPoint(data: {
     id: string;
+    chartId?: string | null;
     tankId: string;
     dipMillimetresMilliunits: number;
     volumeMilliunits: number;
     createdAt: string;
     createdBy: string;
   }): Promise<TankCalibrationPoint> {
-    await this.db.insert(schema.tankCalibrationPoints).values(data);
+    const editableChart = await this.resolveEditableChartForSinglePoint(
+      data.tankId,
+      data.createdBy,
+      data.chartId
+    );
+
+    await this.db.insert(schema.tankCalibrationPoints).values({
+      ...data,
+      chartId: editableChart.id,
+    });
+    await this.refreshChartComputedBounds(editableChart.id, data.createdBy);
     return (await this.findCalibrationPointById(data.id))!;
   }
 
-  async updateCalibrationPoint(id: string, data: Partial<{
-    dipMillimetresMilliunits: number;
-    volumeMilliunits: number;
-  }>): Promise<TankCalibrationPoint | null> {
-    await this.db.update(schema.tankCalibrationPoints).set(data).where(eq(schema.tankCalibrationPoints.id, id));
+  async updateCalibrationPoint(
+    id: string,
+    data: Partial<{
+      dipMillimetresMilliunits: number;
+      volumeMilliunits: number;
+    }>,
+    actorUserId?: string
+  ): Promise<TankCalibrationPoint | null> {
+    const existing = await this.findCalibrationPointById(id);
+    if (!existing) return null;
+
+    const editableChart = await this.resolveEditableChartForSinglePoint(
+      existing.tankId,
+      actorUserId || existing.createdBy,
+      existing.chartId
+    );
+
+    await this.db
+      .update(schema.tankCalibrationPoints)
+      .set(data)
+      .where(eq(schema.tankCalibrationPoints.id, id));
+    await this.refreshChartComputedBounds(editableChart.id, actorUserId);
     return this.findCalibrationPointById(id);
   }
 
-  async deleteCalibrationPoint(id: string): Promise<boolean> {
-    await this.db.delete(schema.tankCalibrationPoints).where(eq(schema.tankCalibrationPoints.id, id));
+  async deleteCalibrationPoint(id: string, actorUserId?: string): Promise<boolean> {
+    const existing = await this.findCalibrationPointById(id);
+    if (!existing) return false;
+
+    const editableChart = await this.resolveEditableChartForSinglePoint(
+      existing.tankId,
+      actorUserId || existing.createdBy,
+      existing.chartId
+    );
+
+    await this.db
+      .delete(schema.tankCalibrationPoints)
+      .where(eq(schema.tankCalibrationPoints.id, id));
+    await this.refreshChartComputedBounds(editableChart.id, actorUserId);
     return true;
   }
 
   async bulkImportCalibrationPoints(
     tankId: string,
     points: Array<{ dipMillimetresMilliunits: number; volumeMilliunits: number }>,
-    createdBy: string
+    createdBy: string,
+    options?: {
+      metadata?: {
+        chartUnitDip?: 'MM';
+        chartUnitVolume?: 'LITRES';
+        tankDiameterMmMilliunits?: number | null;
+        tankLengthMmMilliunits?: number | null;
+        maxDipMmMilliunits?: number | null;
+        chartCapacityMilliunits?: number | null;
+        sourceFileName?: string | null;
+        referenceDocument?: string | null;
+        notes?: string | null;
+        effectiveFrom?: string;
+        effectiveTo?: string | null;
+      };
+      saveMode?: 'ACTIVE' | 'DRAFT' | 'APPROVED';
+      activateImmediately?: boolean;
+      createNewRevision?: boolean;
+      chartId?: string | null;
+    }
   ): Promise<TankCalibrationPoint[]> {
     const nowIso = new Date().toISOString();
     const sorted = [...points].sort((a, b) => a.dipMillimetresMilliunits - b.dipMillimetresMilliunits);
 
-    // Validate monotonicity
+    if (sorted.length < 2) {
+      throw new Error('At least 2 calibration points are required to define a calibration chart');
+    }
+
+    // Validate monotonicity & duplicates
     for (let i = 0; i < sorted.length - 1; i++) {
       if (sorted[i].dipMillimetresMilliunits === sorted[i + 1].dipMillimetresMilliunits) {
         throw new Error(`Duplicate dip height ${formatMilliunits(sorted[i].dipMillimetresMilliunits)} mm in calibration chart`);
@@ -2456,9 +2960,195 @@ export class PumpRepository {
       }
     }
 
-    const deleteStmt = this.db.delete(schema.tankCalibrationPoints).where(eq(schema.tankCalibrationPoints.tankId, tankId));
+    await this.ensureInitialCalibrationChartForLegacyPoints(tankId, createdBy);
+    const existingCharts = await this.listCalibrationCharts(tankId);
+    const maxRevision = existingCharts.reduce(
+      (max, c) => (c.revisionNumber > max ? c.revisionNumber : max),
+      0
+    );
+    const currentActiveChart = existingCharts.find(c => c.status === 'ACTIVE') || null;
+
+    const requestedSaveMode: 'ACTIVE' | 'DRAFT' | 'APPROVED' =
+      options?.activateImmediately === true || options?.saveMode === 'ACTIVE'
+        ? 'ACTIVE'
+        : options?.saveMode === 'APPROVED'
+          ? 'APPROVED'
+          : 'DRAFT';
+    const meta = options?.metadata || {};
+    const computedMaxDip = meta.maxDipMmMilliunits ?? sorted[sorted.length - 1].dipMillimetresMilliunits;
+    const computedMaxVol = meta.chartCapacityMilliunits ?? sorted[sorted.length - 1].volumeMilliunits;
+    const effectiveFrom = meta.effectiveFrom || nowIso.slice(0, 10);
+
+    // Determine whether we can update an unreferenced chart in place or must create a new revision
+    let targetChart: TankCalibrationChart | null = null;
+    if (options?.chartId) {
+      targetChart = existingCharts.find(c => c.id === options.chartId) || null;
+      if (
+        targetChart &&
+        options.createNewRevision === false &&
+        (targetChart.isReferenced ||
+          targetChart.status === 'SUPERSEDED' ||
+          targetChart.status === 'ARCHIVED')
+      ) {
+        const err = new Error(
+          `Calibration chart Revision #${targetChart.revisionNumber} is locked by historical operational records (${targetChart.referencedReadingsCount ?? 0} readings, ${targetChart.referencedShiftsCount ?? 0} shifts) and cannot be overwritten in place.`
+        );
+        (err as any).code = 'CALIBRATION_CHART_LOCKED_HISTORICAL_REFERENCE';
+        throw err;
+      }
+    } else if (!options?.createNewRevision && currentActiveChart && !currentActiveChart.isReferenced && requestedSaveMode === 'ACTIVE') {
+      targetChart = currentActiveChart;
+    }
+
+    const mustCreateNewRevision =
+      !targetChart ||
+      Boolean(options?.createNewRevision) ||
+      Boolean(targetChart.isReferenced) ||
+      targetChart.status === 'SUPERSEDED' ||
+      targetChart.status === 'ARCHIVED' ||
+      (targetChart.status === 'ACTIVE' && requestedSaveMode !== 'ACTIVE');
+
+    const batchStmts: any[] = [];
+    let finalChartId: string;
+
+    if (mustCreateNewRevision) {
+      const nextRevision = maxRevision + 1;
+      finalChartId = `tcc-${tankId}-r${nextRevision}-${crypto.randomUUID().slice(0, 8)}`;
+
+      // If activating immediately, supersede any currently ACTIVE chart for this tank
+      if (requestedSaveMode === 'ACTIVE' && currentActiveChart) {
+        batchStmts.push(
+          this.db
+            .update(schema.tankCalibrationCharts)
+            .set({
+              status: 'SUPERSEDED',
+              effectiveTo: effectiveFrom,
+              updatedAt: nowIso,
+              updatedBy: createdBy,
+            })
+            .where(
+              and(
+                eq(schema.tankCalibrationCharts.tankId, tankId),
+                eq(schema.tankCalibrationCharts.status, 'ACTIVE')
+              )
+            )
+        );
+      }
+
+      batchStmts.push(
+        this.db.insert(schema.tankCalibrationCharts).values({
+          id: finalChartId,
+          tankId,
+          revisionNumber: nextRevision,
+          status: requestedSaveMode,
+          chartUnitDip: 'MM',
+          chartUnitVolume: 'LITRES',
+          tankDiameterMmMilliunits:
+            meta.tankDiameterMmMilliunits ??
+            currentActiveChart?.tankDiameterMmMilliunits ??
+            computedMaxDip,
+          tankLengthMmMilliunits:
+            meta.tankLengthMmMilliunits ??
+            currentActiveChart?.tankLengthMmMilliunits ??
+            null,
+          maxDipMmMilliunits: computedMaxDip,
+          chartCapacityMilliunits: computedMaxVol,
+          sourceFileName: meta.sourceFileName ?? null,
+          referenceDocument: meta.referenceDocument ?? `REV-${nextRevision}`,
+          notes: meta.notes ?? null,
+          effectiveFrom,
+          effectiveTo: meta.effectiveTo ?? null,
+          approvedBy:
+            requestedSaveMode === 'ACTIVE' || requestedSaveMode === 'APPROVED'
+              ? createdBy
+              : null,
+          approvedAt:
+            requestedSaveMode === 'ACTIVE' || requestedSaveMode === 'APPROVED'
+              ? nowIso
+              : null,
+          createdAt: nowIso,
+          createdBy,
+          updatedAt: nowIso,
+          updatedBy: createdBy,
+        })
+      );
+    } else {
+      // Unreferenced chart: safe to update in place
+      finalChartId = targetChart!.id;
+
+      if (requestedSaveMode === 'ACTIVE' && currentActiveChart && currentActiveChart.id !== finalChartId) {
+        batchStmts.push(
+          this.db
+            .update(schema.tankCalibrationCharts)
+            .set({
+              status: 'SUPERSEDED',
+              effectiveTo: effectiveFrom,
+              updatedAt: nowIso,
+              updatedBy: createdBy,
+            })
+            .where(
+              and(
+                eq(schema.tankCalibrationCharts.tankId, tankId),
+                eq(schema.tankCalibrationCharts.status, 'ACTIVE')
+              )
+            )
+        );
+      }
+
+      batchStmts.push(
+        this.db
+          .update(schema.tankCalibrationCharts)
+          .set({
+            status: requestedSaveMode,
+            tankDiameterMmMilliunits:
+              meta.tankDiameterMmMilliunits !== undefined
+                ? meta.tankDiameterMmMilliunits
+                : targetChart!.tankDiameterMmMilliunits ?? computedMaxDip,
+            tankLengthMmMilliunits:
+              meta.tankLengthMmMilliunits !== undefined
+                ? meta.tankLengthMmMilliunits
+                : targetChart!.tankLengthMmMilliunits,
+            maxDipMmMilliunits: computedMaxDip,
+            chartCapacityMilliunits: computedMaxVol,
+            sourceFileName:
+              meta.sourceFileName !== undefined
+                ? meta.sourceFileName
+                : targetChart!.sourceFileName,
+            referenceDocument:
+              meta.referenceDocument !== undefined
+                ? meta.referenceDocument
+                : targetChart!.referenceDocument,
+            notes:
+              meta.notes !== undefined ? meta.notes : targetChart!.notes,
+            effectiveFrom: meta.effectiveFrom || targetChart!.effectiveFrom || effectiveFrom,
+            effectiveTo:
+              meta.effectiveTo !== undefined
+                ? meta.effectiveTo
+                : targetChart!.effectiveTo,
+            approvedBy:
+              requestedSaveMode === 'ACTIVE' || requestedSaveMode === 'APPROVED'
+                ? createdBy
+                : targetChart!.approvedBy,
+            approvedAt:
+              requestedSaveMode === 'ACTIVE' || requestedSaveMode === 'APPROVED'
+                ? nowIso
+                : targetChart!.approvedAt,
+            updatedAt: nowIso,
+            updatedBy: createdBy,
+          })
+          .where(eq(schema.tankCalibrationCharts.id, finalChartId))
+      );
+
+      batchStmts.push(
+        this.db
+          .delete(schema.tankCalibrationPoints)
+          .where(eq(schema.tankCalibrationPoints.chartId, finalChartId))
+      );
+    }
+
     const insertRows = sorted.map(p => ({
       id: `tcp-${crypto.randomUUID()}`,
+      chartId: finalChartId,
       tankId,
       dipMillimetresMilliunits: p.dipMillimetresMilliunits,
       volumeMilliunits: p.volumeMilliunits,
@@ -2466,15 +3156,177 @@ export class PumpRepository {
       createdBy,
     }));
 
-    const batchStmts: any[] = [deleteStmt];
     for (const chunk of chunkArray(insertRows, SNAPSHOT_INSERT_CHUNK_SIZE)) {
       if (chunk.length > 0) {
         batchStmts.push(this.db.insert(schema.tankCalibrationPoints).values(chunk));
       }
     }
+
     await (this.db as any).batch(batchStmts);
 
-    return this.listCalibrationPoints(tankId);
+    return this.listCalibrationPoints(tankId, { chartId: finalChartId });
+  }
+
+  /**
+   * Transitions a calibration chart revision (`DRAFT -> APPROVED`, `DRAFT/APPROVED -> ACTIVE`, or `ARCHIVED`).
+   * Activating a revision atomically marks any previous ACTIVE revision for the tank as `SUPERSEDED`.
+   */
+  async updateCalibrationChartStatus(
+    tankId: string,
+    chartId: string,
+    nextStatus: 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'ARCHIVED',
+    actorUserId: string,
+    options?: {
+      effectiveFrom?: string;
+      effectiveTo?: string | null;
+      notes?: string | null;
+    }
+  ): Promise<TankCalibrationChart> {
+    const chart = await this.findCalibrationChartById(chartId);
+    if (!chart || chart.tankId !== tankId) {
+      const err = new Error('Tank calibration chart revision not found');
+      (err as any).code = 'CHART_NOT_FOUND';
+      throw err;
+    }
+
+    if (
+      chart.status === 'SUPERSEDED' ||
+      chart.status === 'ARCHIVED' ||
+      (chart.isReferenced && (nextStatus === 'DRAFT' || nextStatus === 'ARCHIVED' || nextStatus === 'APPROVED')) ||
+      (chart.status === 'ACTIVE' && (nextStatus === 'DRAFT' || nextStatus === 'APPROVED'))
+    ) {
+      const err = new Error(
+        `Calibration chart Revision #${chart.revisionNumber} (${chart.status}) is immutable or referenced by historical operational records and cannot transition to ${nextStatus}. Fork a new revision instead.`
+      );
+      (err as any).code = 'CALIBRATION_CHART_LOCKED_HISTORICAL_REFERENCE';
+      throw err;
+    }
+
+    const pts = await this.listCalibrationPoints(tankId, { chartId });
+    if ((nextStatus === 'APPROVED' || nextStatus === 'ACTIVE') && pts.length < 2) {
+      const err = new Error(
+        'Cannot approve or activate a calibration chart revision with fewer than 2 calibration points'
+      );
+      (err as any).code = 'INSUFFICIENT_CALIBRATION_POINTS';
+      throw err;
+    }
+
+    const nowIso = new Date().toISOString();
+    const effectiveFrom = options?.effectiveFrom || chart.effectiveFrom || nowIso.slice(0, 10);
+    const batchStmts: any[] = [];
+
+    if (nextStatus === 'ACTIVE') {
+      batchStmts.push(
+        this.db
+          .update(schema.tankCalibrationCharts)
+          .set({
+            status: 'SUPERSEDED',
+            effectiveTo: effectiveFrom,
+            updatedAt: nowIso,
+            updatedBy: actorUserId,
+          })
+          .where(
+            and(
+              eq(schema.tankCalibrationCharts.tankId, tankId),
+              eq(schema.tankCalibrationCharts.status, 'ACTIVE'),
+              ne(schema.tankCalibrationCharts.id, chartId)
+            )
+          )
+      );
+    }
+
+    batchStmts.push(
+      this.db
+        .update(schema.tankCalibrationCharts)
+        .set({
+          status: nextStatus,
+          effectiveFrom,
+          effectiveTo:
+            options?.effectiveTo !== undefined
+              ? options.effectiveTo
+              : nextStatus === 'ARCHIVED'
+                ? nowIso.slice(0, 10)
+                : chart.effectiveTo,
+          notes: options?.notes !== undefined ? options.notes : chart.notes,
+          approvedBy:
+            nextStatus === 'APPROVED' || nextStatus === 'ACTIVE'
+              ? actorUserId
+              : chart.approvedBy,
+          approvedAt:
+            nextStatus === 'APPROVED' || nextStatus === 'ACTIVE'
+              ? nowIso
+              : chart.approvedAt,
+          updatedAt: nowIso,
+          updatedBy: actorUserId,
+        })
+        .where(eq(schema.tankCalibrationCharts.id, chartId))
+    );
+
+    await (this.db as any).batch(batchStmts);
+    return (await this.findCalibrationChartById(chartId))!;
+  }
+
+  /**
+   * Forks an existing chart revision (e.g. a locked ACTIVE chart) into a new DRAFT (or ACTIVE)
+   * revision so single points or metadata can be edited without mutating historical readings.
+   */
+  async forkCalibrationChartRevision(
+    tankId: string,
+    sourceChartId: string | null,
+    actorUserId: string,
+    options?: {
+      saveMode?: 'DRAFT' | 'ACTIVE';
+      notes?: string | null;
+      effectiveFrom?: string;
+    }
+  ): Promise<{ chart: TankCalibrationChart; points: TankCalibrationPoint[] }> {
+    await this.ensureInitialCalibrationChartForLegacyPoints(tankId, actorUserId);
+
+    const sourceChart = sourceChartId
+      ? await this.findCalibrationChartById(sourceChartId)
+      : await this.findActiveCalibrationChart(tankId);
+
+    if (!sourceChart || sourceChart.tankId !== tankId) {
+      const err = new Error('Source calibration chart revision not found for this tank');
+      (err as any).code = 'CHART_NOT_FOUND';
+      throw err;
+    }
+
+    const sourcePoints = await this.listCalibrationPoints(tankId, {
+      chartId: sourceChart.id,
+    });
+
+    const newPoints = await this.bulkImportCalibrationPoints(
+      tankId,
+      sourcePoints.map(p => ({
+        dipMillimetresMilliunits: p.dipMillimetresMilliunits,
+        volumeMilliunits: p.volumeMilliunits,
+      })),
+      actorUserId,
+      {
+        createNewRevision: true,
+        saveMode: options?.saveMode || 'DRAFT',
+        metadata: {
+          tankDiameterMmMilliunits: sourceChart.tankDiameterMmMilliunits,
+          tankLengthMmMilliunits: sourceChart.tankLengthMmMilliunits,
+          maxDipMmMilliunits: sourceChart.maxDipMmMilliunits,
+          chartCapacityMilliunits: sourceChart.chartCapacityMilliunits,
+          sourceFileName: sourceChart.sourceFileName,
+          referenceDocument: `CLONED-FROM-REV-${sourceChart.revisionNumber}`,
+          notes:
+            options?.notes ||
+            `Cloned from Revision #${sourceChart.revisionNumber} for controlled update`,
+          effectiveFrom: options?.effectiveFrom || new Date().toISOString().slice(0, 10),
+        },
+      }
+    );
+
+    const newChartId = newPoints[0]?.chartId;
+    const newChart = newChartId
+      ? (await this.findCalibrationChartById(newChartId))!
+      : (await this.listCalibrationCharts(tankId))[0];
+
+    return { chart: newChart, points: newPoints };
   }
 
   // ==========================================
@@ -2606,6 +3458,8 @@ export class PumpRepository {
     grossObservedVolumeMilliunits: number;
     waterVolumeMilliunits: number;
     netProductVolumeMilliunits: number;
+    calibrationChartId?: string | null;
+    calibrationRevision?: number | null;
     recordedAt: string;
     recordedByUserId: string;
     notes?: string | null;
@@ -2617,12 +3471,14 @@ export class PumpRepository {
             id, operational_shift_id, outlet_id, tank_id, product_id,
             reading_type, source, product_dip_mm_milliunits, water_dip_mm_milliunits,
             gross_observed_volume_milliunits, water_volume_milliunits, net_product_volume_milliunits,
+            calibration_chart_id, calibration_revision,
             recorded_at, recorded_by_user_id, notes, created_at, updated_at
           )
           SELECT 
             ${data.id}, ${data.operationalShiftId}, ${data.outletId}, ${data.tankId}, ${data.productId},
             ${data.readingType}, ${data.source}, ${data.productDipMmMilliunits}, ${data.waterDipMmMilliunits},
             ${data.grossObservedVolumeMilliunits}, ${data.waterVolumeMilliunits}, ${data.netProductVolumeMilliunits},
+            ${data.calibrationChartId ?? null}, ${data.calibrationRevision ?? null},
             ${data.recordedAt}, ${data.recordedByUserId}, ${data.notes || null}, ${data.createdAt}, ${data.updatedAt}
           WHERE EXISTS (
             SELECT 1 FROM operational_shifts WHERE id = ${data.operationalShiftId} AND status = 'OPEN'
@@ -2697,6 +3553,8 @@ export class PumpRepository {
       grossObservedVolumeMilliunits: number;
       waterVolumeMilliunits: number;
       netProductVolumeMilliunits: number;
+      calibrationChartId?: string | null;
+      calibrationRevision?: number | null;
       recordedAt: string;
       recordedByUserId: string;
       notes?: string | null;
@@ -2712,6 +3570,8 @@ export class PumpRepository {
             gross_observed_volume_milliunits = ${data.grossObservedVolumeMilliunits},
             water_volume_milliunits = ${data.waterVolumeMilliunits},
             net_product_volume_milliunits = ${data.netProductVolumeMilliunits},
+            calibration_chart_id = COALESCE(${data.calibrationChartId ?? null}, calibration_chart_id),
+            calibration_revision = COALESCE(${data.calibrationRevision ?? null}, calibration_revision),
             recorded_at = ${data.recordedAt},
             recorded_by_user_id = ${data.recordedByUserId},
             notes = ${data.notes || null},
@@ -2748,6 +3608,8 @@ export class PumpRepository {
     grossObservedVolumeMilliunits: number;
     waterVolumeMilliunits: number;
     netProductVolumeMilliunits: number;
+    calibrationChartId?: string | null;
+    calibrationRevision?: number | null;
     recordedAt: string;
     recordedByUserId: string;
     notes?: string | null;

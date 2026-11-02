@@ -518,8 +518,44 @@ export interface ShiftEntryGridItem {
 // Phase 2B: Tank Stock, Calibration, Receipts & Reconciliation Types
 // ==========================================
 
+export type TankCalibrationChartStatus = 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'SUPERSEDED' | 'ARCHIVED';
+
+export interface TankCalibrationChart {
+  id: string;
+  tankId: string;
+  revisionNumber: number;
+  status: TankCalibrationChartStatus;
+  chartUnitDip: 'MM';
+  chartUnitVolume: 'LITRES';
+  tankDiameterMmMilliunits: number | null;
+  tankLengthMmMilliunits: number | null;
+  maxDipMmMilliunits: number | null;
+  chartCapacityMilliunits: number | null;
+  tankDiameterMmStr?: string | null;
+  tankLengthMmStr?: string | null;
+  maxDipMmStr?: string | null;
+  chartCapacityLitresStr?: string | null;
+  chartCapacityLitreStr?: string | null;
+  sourceFileName: string | null;
+  referenceDocument: string | null;
+  notes: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+  pointsCount?: number;
+  isReferenced?: boolean;
+  referencedReadingsCount?: number;
+  referencedShiftsCount?: number;
+}
+
 export interface TankCalibrationPoint {
   id: string;
+  chartId?: string | null;
   tankId: string;
   dipMillimetresMilliunits: number;
   volumeMilliunits: number;
@@ -527,6 +563,54 @@ export interface TankCalibrationPoint {
   volumeLitreStr?: string;
   createdAt: string;
   createdBy: string;
+}
+
+export interface TankCalibrationDryRunCheckpoint {
+  dipMillimetres: string;
+  printedVolumeLitres: string;
+}
+
+export interface TankCalibrationDryRunComparisonRow {
+  dipMillimetresMilliunits: number;
+  dipMmStr: string;
+  dipMm: string;
+  printedVolumeMilliunits: number;
+  printedVolumeLitresStr: string;
+  printedVolumeLitres: string;
+  calculatedVolumeMilliunits: number | null;
+  calculatedVolumeLitresStr: string | null;
+  calculatedVolumeLitres: string | null;
+  deltaMilliunits: number | null;
+  deltaLitresStr: string | null;
+  deltaLitres: string | null;
+  absDeltaLitres?: string | null;
+  deltaPercent: number | string | null;
+  matchType: 'EXACT' | 'EXACT_POINT' | 'INTERPOLATED' | 'OUT_OF_RANGE';
+  withinTolerance: boolean;
+  error?: string | null;
+  lowerPointDipMmStr?: string | null;
+  upperPointDipMmStr?: string | null;
+}
+
+export interface TankCalibrationDryRunReport {
+  tankId: string;
+  chartId: string | null;
+  revisionNumber: number | null;
+  totalCheckpoints: number;
+  checkpointsCount: number;
+  passedCount: number;
+  failedCount: number;
+  exactMatches: number;
+  interpolatedMatches: number;
+  outOfRangeCount: number;
+  maxAbsDeltaMilliunits: number;
+  maxAbsDeltaLitresStr: string;
+  maxAbsDeltaLitres: string;
+  meanAbsDeltaLitres: string;
+  allWithinTolerance: boolean;
+  toleranceLitresStr: string;
+  toleranceLitres: string;
+  rows: TankCalibrationDryRunComparisonRow[];
 }
 
 export interface OperationalShiftTankSnapshot {
@@ -544,6 +628,8 @@ export interface OperationalShiftTankSnapshot {
   safeFillCapacityMilliunits: number;
   capacityLitresStr?: string;
   safeFillLitresStr?: string;
+  calibrationChartId?: string | null;
+  calibrationRevision?: number | null;
   createdAt: string;
 }
 
@@ -563,6 +649,8 @@ export interface TankStockReading {
   grossObservedVolumeMilliunits: number;
   waterVolumeMilliunits: number;
   netProductVolumeMilliunits: number;
+  calibrationChartId?: string | null;
+  calibrationRevision?: number | null;
   productDipMmStr?: string;
   waterDipMmStr?: string;
   grossObservedVolumeStr?: string;

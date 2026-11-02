@@ -1175,7 +1175,7 @@ describe('IOCL Digital Pump Manager Phase 2B Tank Stock, Fuel Receipt & Reconcil
       new Request(`http://localhost/api/v1/tanks/${tankId}/calibration/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: adminCookie, Origin: 'http://localhost:3000' },
-        body: JSON.stringify({ points: presetPoints }),
+        body: JSON.stringify({ points: presetPoints, activateImmediately: true }),
       }),
       env
     );

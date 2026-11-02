@@ -407,16 +407,47 @@ export const nozzleUnavailabilityRecords = sqliteTable('nozzle_unavailability_re
 // Phase 2B: Tank Stock, Calibration, Fuel Receipt & Reconciliation
 // ==========================================
 
+export const tankCalibrationCharts = sqliteTable('tank_calibration_charts', {
+  id: text('id').primaryKey(),
+  tankId: text('tank_id').notNull().references(() => tanks.id, { onDelete: 'cascade' }),
+  revisionNumber: integer('revision_number').notNull().default(1),
+  status: text('status', { enum: ['DRAFT', 'APPROVED', 'ACTIVE', 'SUPERSEDED', 'ARCHIVED'] }).notNull().default('ACTIVE'),
+  chartUnitDip: text('chart_unit_dip', { enum: ['MM'] }).notNull().default('MM'),
+  chartUnitVolume: text('chart_unit_volume', { enum: ['LITRES'] }).notNull().default('LITRES'),
+  tankDiameterMmMilliunits: integer('tank_diameter_mm_milliunits'),
+  tankLengthMmMilliunits: integer('tank_length_mm_milliunits'),
+  maxDipMmMilliunits: integer('max_dip_mm_milliunits'),
+  chartCapacityMilliunits: integer('chart_capacity_milliunits'),
+  sourceFileName: text('source_file_name'),
+  referenceDocument: text('reference_document'),
+  notes: text('notes'),
+  effectiveFrom: text('effective_from').notNull(),
+  effectiveTo: text('effective_to'),
+  approvedBy: text('approved_by').references(() => users.id),
+  approvedAt: text('approved_at'),
+  createdAt: text('created_at').notNull(),
+  createdBy: text('created_by').references(() => users.id),
+  updatedAt: text('updated_at').notNull(),
+  updatedBy: text('updated_by').references(() => users.id),
+}, (table) => [
+  uniqueIndex('uq_tcc_tank_revision').on(table.tankId, table.revisionNumber),
+  uniqueIndex('uq_tcc_single_active_per_tank').on(table.tankId).where(sql`status = 'ACTIVE'`),
+  index('idx_tcc_tank_status').on(table.tankId, table.status),
+]);
+
 export const tankCalibrationPoints = sqliteTable('tank_calibration_points', {
   id: text('id').primaryKey(),
+  chartId: text('chart_id').references(() => tankCalibrationCharts.id, { onDelete: 'cascade' }),
   tankId: text('tank_id').notNull().references(() => tanks.id, { onDelete: 'cascade' }),
   dipMillimetresMilliunits: integer('dip_millimetres_milliunits').notNull(),
   volumeMilliunits: integer('volume_milliunits').notNull(),
   createdAt: text('created_at').notNull(),
   createdBy: text('created_by').notNull().references(() => users.id),
 }, (table) => [
-  uniqueIndex('idx_tcp_tank_dip').on(table.tankId, table.dipMillimetresMilliunits),
+  uniqueIndex('idx_tcp_chart_dip').on(table.chartId, table.dipMillimetresMilliunits).where(sql`chart_id IS NOT NULL`),
+  uniqueIndex('idx_tcp_legacy_tank_dip').on(table.tankId, table.dipMillimetresMilliunits).where(sql`chart_id IS NULL`),
   index('idx_tcp_tank_id').on(table.tankId),
+  index('idx_tcp_chart_id').on(table.chartId),
 ]);
 
 export const operationalShiftTanks = sqliteTable('operational_shift_tanks', {
@@ -432,11 +463,14 @@ export const operationalShiftTanks = sqliteTable('operational_shift_tanks', {
   productUnit: text('product_unit').notNull().default('LITRE'),
   capacityMilliunits: integer('capacity_milliunits').notNull(),
   safeFillCapacityMilliunits: integer('safe_fill_capacity_milliunits').notNull(),
+  calibrationChartId: text('calibration_chart_id').references(() => tankCalibrationCharts.id),
+  calibrationRevision: integer('calibration_revision'),
   createdAt: text('created_at').notNull(),
 }, (table) => [
   uniqueIndex('idx_ost_shift_tank').on(table.operationalShiftId, table.tankId),
   index('idx_ost_shift_id').on(table.operationalShiftId),
   index('idx_ost_outlet_id').on(table.outletId),
+  index('idx_ost_calibration_chart_id').on(table.calibrationChartId),
 ]);
 
 export const tankStockReadings = sqliteTable('tank_stock_readings', {
@@ -452,6 +486,8 @@ export const tankStockReadings = sqliteTable('tank_stock_readings', {
   grossObservedVolumeMilliunits: integer('gross_observed_volume_milliunits').notNull(),
   waterVolumeMilliunits: integer('water_volume_milliunits').notNull().default(0),
   netProductVolumeMilliunits: integer('net_product_volume_milliunits').notNull(),
+  calibrationChartId: text('calibration_chart_id').references(() => tankCalibrationCharts.id),
+  calibrationRevision: integer('calibration_revision'),
   recordedAt: text('recorded_at').notNull(),
   recordedByUserId: text('recorded_by_user_id').notNull().references(() => users.id),
   notes: text('notes'),
@@ -463,6 +499,7 @@ export const tankStockReadings = sqliteTable('tank_stock_readings', {
   index('idx_tsr_shift_id').on(table.operationalShiftId),
   index('idx_tsr_outlet_id').on(table.outletId),
   index('idx_tsr_tank_id').on(table.tankId),
+  index('idx_tsr_calibration_chart_id').on(table.calibrationChartId),
 ]);
 
 export const fuelReceipts = sqliteTable('fuel_receipts', {

@@ -139,10 +139,10 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     expect(shifts.count).toBe(2);
 
     // Verify references updated to canonical global designation ID
-    const updatedStaff = rawDb.prepare('SELECT designation_id FROM hr_staff WHERE id = "st-1";').get() as any;
+    const updatedStaff = rawDb.prepare("SELECT designation_id FROM hr_staff WHERE id = 'st-1';").get() as any;
     expect(updatedStaff.designation_id).toBe('gdesig-coco-manager');
 
-    const updatedSanction = rawDb.prepare('SELECT designation_id FROM hr_manpower_sanctions WHERE id = "san-1";').get() as any;
+    const updatedSanction = rawDb.prepare("SELECT designation_id FROM hr_manpower_sanctions WHERE id = 'san-1';").get() as any;
     expect(updatedSanction.designation_id).toBe('gdesig-coco-manager');
 
     // Verify foreign key integrity
@@ -451,12 +451,12 @@ describe('Migration 0032 & Deployment Workflow Suite', () => {
     expect(globalShifts[2]).toMatchObject({ code: 'SHIFT_3', name: 'Shift 3 (Night Overnight)', start_time: '22:00', end_time: '06:00', sequence: 3 });
 
     // Verify operational_shifts and hr_roster_assignments references preserved and consolidated
-    const opRo1 = rawDb.prepare('SELECT shift_template_id FROM operational_shifts WHERE id = "op-ro1";').get() as any;
-    const opRo2 = rawDb.prepare('SELECT shift_template_id FROM operational_shifts WHERE id = "op-ro2";').get() as any;
+    const opRo1 = rawDb.prepare("SELECT shift_template_id FROM operational_shifts WHERE id = 'op-ro1';").get() as any;
+    const opRo2 = rawDb.prepare("SELECT shift_template_id FROM operational_shifts WHERE id = 'op-ro2';").get() as any;
     expect(opRo1.shift_template_id).toBe(globalShifts[0].id);
     expect(opRo2.shift_template_id).toBe(globalShifts[0].id);
 
-    const rostRo2 = rawDb.prepare('SELECT shift_template_id FROM hr_roster_assignments WHERE id = "rost-ro2";').get() as any;
+    const rostRo2 = rawDb.prepare("SELECT shift_template_id FROM hr_roster_assignments WHERE id = 'rost-ro2';").get() as any;
     expect(rostRo2.shift_template_id).toBe(globalShifts[1].id);
   });
 

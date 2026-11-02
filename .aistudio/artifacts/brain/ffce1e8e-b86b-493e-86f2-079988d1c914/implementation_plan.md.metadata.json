@@ -1,0 +1,6 @@
+{
+  "summary":  "Updated release and deployment plan for the IOCL Tank Calibration Versioning enhancement. Preserves all existing live historical readings, calibration points, and shifts; skips synthetic COCO 22 fixture recreation; details isolated staging verification, D1 migration tracking, dual-authorization activation, and fresh UAT shift testing procedures.",
+  "updatedAt":  "2026-11-02T06:24:00.845814030Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

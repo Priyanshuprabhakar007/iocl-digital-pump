@@ -585,20 +585,16 @@ export class FuelDailyOperationsService {
         .where(inArray(fuelReceipts.operationalShiftId, shiftIds)),
     ]);
 
-    // Check calibration points for all unique tanks in snapshots
+    // Check active calibration points for all unique tanks in snapshots
+    const repo = new PumpRepository(db);
     const uniqueTankIds = Array.from(new Set(tankSnapshots.map((t) => t.tankId)));
-    const calibrationRows =
-      uniqueTankIds.length > 0
-        ? await db
-            .select()
-            .from(tankCalibrationPoints)
-            .where(inArray(tankCalibrationPoints.tankId, uniqueTankIds))
-        : [];
-
     const calibrationCountByTankId = new Map<string, number>();
-    for (const c of calibrationRows) {
-      calibrationCountByTankId.set(c.tankId, (calibrationCountByTankId.get(c.tankId) || 0) + 1);
-    }
+    await Promise.all(
+      uniqueTankIds.map(async (tid) => {
+        const pts = await repo.listCalibrationPoints(tid);
+        calibrationCountByTankId.set(tid, pts.length);
+      })
+    );
 
     const completedReceiptLines = receiptLinesList
       .filter((r) => r.receipt.status === 'COMPLETED')

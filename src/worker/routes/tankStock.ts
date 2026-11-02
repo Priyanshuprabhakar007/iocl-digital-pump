@@ -194,13 +194,20 @@ tankStock.post('/shifts/:shiftId/tank-readings', requirePermission(PERMISSIONS.T
   // Authoritative volume derivation via calibration service
   let grossObservedVolumeMilliunits: number;
   let waterVolumeMilliunits = 0;
+  let calibrationChartId: string | null = null;
+  let calibrationRevision: number | null = null;
 
   try {
+    await pumpRepo.ensureInitialCalibrationChartForLegacyPoints(tankId, c.var.user!.user.id);
     const grossResult = await TankCalibrationService.convertDipToVolume(db, tankId, productDipMilli);
     grossObservedVolumeMilliunits = grossResult.calculatedVolumeMilliunits;
+    calibrationChartId = grossResult.calibrationChartId;
+    calibrationRevision = grossResult.calibrationRevision;
 
     if (waterDipMilli > 0) {
-      const waterResult = await TankCalibrationService.convertDipToVolume(db, tankId, waterDipMilli);
+      const waterResult = await TankCalibrationService.convertDipToVolume(db, tankId, waterDipMilli, {
+        chartId: calibrationChartId,
+      });
       waterVolumeMilliunits = waterResult.calculatedVolumeMilliunits;
     }
   } catch (err: any) {
@@ -244,6 +251,8 @@ tankStock.post('/shifts/:shiftId/tank-readings', requirePermission(PERMISSIONS.T
     grossObservedVolumeMilliunits,
     waterVolumeMilliunits,
     netProductVolumeMilliunits,
+    calibrationChartId,
+    calibrationRevision,
     recordedAt: nowIso,
     recordedByUserId: c.var.user!.user.id,
     notes: notes || null,
@@ -335,6 +344,8 @@ tankStock.post('/shifts/:shiftId/tank-readings/batch', requirePermission(PERMISS
     grossObservedVolumeMilliunits: number;
     waterVolumeMilliunits: number;
     netProductVolumeMilliunits: number;
+    calibrationChartId: string | null;
+    calibrationRevision: number | null;
     notes: string | null;
   }> = [];
 
@@ -379,12 +390,19 @@ tankStock.post('/shifts/:shiftId/tank-readings/batch', requirePermission(PERMISS
 
     let grossObservedVolumeMilliunits = 0;
     let waterVolumeMilliunits = 0;
+    let calibrationChartId: string | null = null;
+    let calibrationRevision: number | null = null;
     try {
+      await pumpRepo.ensureInitialCalibrationChartForLegacyPoints(row.tankId, c.var.user!.user.id);
       const grossResult = await TankCalibrationService.convertDipToVolume(db, row.tankId, productDipMilli);
       grossObservedVolumeMilliunits = grossResult.calculatedVolumeMilliunits;
+      calibrationChartId = grossResult.calibrationChartId;
+      calibrationRevision = grossResult.calibrationRevision;
 
       if (waterDipMilli > 0) {
-        const waterResult = await TankCalibrationService.convertDipToVolume(db, row.tankId, waterDipMilli);
+        const waterResult = await TankCalibrationService.convertDipToVolume(db, row.tankId, waterDipMilli, {
+          chartId: calibrationChartId,
+        });
         waterVolumeMilliunits = waterResult.calculatedVolumeMilliunits;
       }
     } catch (err: any) {
@@ -422,6 +440,8 @@ tankStock.post('/shifts/:shiftId/tank-readings/batch', requirePermission(PERMISS
       grossObservedVolumeMilliunits,
       waterVolumeMilliunits,
       netProductVolumeMilliunits,
+      calibrationChartId,
+      calibrationRevision,
       notes: row.notes || null,
     });
   }
@@ -444,6 +464,8 @@ tankStock.post('/shifts/:shiftId/tank-readings/batch', requirePermission(PERMISS
         grossObservedVolumeMilliunits: prep.grossObservedVolumeMilliunits,
         waterVolumeMilliunits: prep.waterVolumeMilliunits,
         netProductVolumeMilliunits: prep.netProductVolumeMilliunits,
+        calibrationChartId: prep.calibrationChartId,
+        calibrationRevision: prep.calibrationRevision,
         recordedAt: nowIso,
         recordedByUserId: c.var.user!.user.id,
         notes: prep.notes,
@@ -487,6 +509,8 @@ tankStock.post('/shifts/:shiftId/tank-readings/batch', requirePermission(PERMISS
         grossObservedVolumeMilliunits: prep.grossObservedVolumeMilliunits,
         waterVolumeMilliunits: prep.waterVolumeMilliunits,
         netProductVolumeMilliunits: prep.netProductVolumeMilliunits,
+        calibrationChartId: prep.calibrationChartId,
+        calibrationRevision: prep.calibrationRevision,
         recordedAt: nowIso,
         recordedByUserId: c.var.user!.user.id,
         notes: prep.notes,

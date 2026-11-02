@@ -39,12 +39,12 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
   // 2. MIGRATION FREEZE CONTRACT (0001 - 0030)
   // ==========================================================================
   describe('2. Migration Freeze & Sequence Integrity', () => {
-    it('2.1 exactly 32 migrations exist, ordered sequentially 0001 to 0032 without gaps or migrations beyond 0032', () => {
+    it('2.1 exactly 33 migrations exist, ordered sequentially 0001 to 0033 without gaps or migrations beyond 0033', () => {
       const files = fs.readdirSync(MIGRATIONS_DIR)
         .filter(f => f.endsWith('.sql'))
         .sort();
 
-      expect(files.length).toBe(32);
+      expect(files.length).toBe(33);
 
       const numbers = files.map(f => {
         const match = f.match(/^(\d{4})_/);
@@ -52,14 +52,14 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
         return parseInt(match![1], 10);
       });
 
-      for (let i = 1; i <= 32; i++) {
+      for (let i = 1; i <= 33; i++) {
         expect(numbers[i - 1]).toBe(i);
       }
 
-      const hasPost0032 = files.some(
-        f => parseInt(f.slice(0, 4), 10) > 32
+      const hasPost0033 = files.some(
+        f => parseInt(f.slice(0, 4), 10) > 33
       );
-      expect(hasPost0032).toBe(false);
+      expect(hasPost0033).toBe(false);
     });
 
     it('2.2 migration 0028 is DG Daily Operations & Monthly Reporting', () => {
