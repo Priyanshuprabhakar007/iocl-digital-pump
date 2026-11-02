@@ -574,7 +574,7 @@ tankCalibration.post('/tanks/:tankId/calibration/bulk', requirePermission(PERMIS
               sourceFileName: metadata.sourceFileName ?? null,
               referenceDocument: metadata.referenceDocument ?? null,
               notes: metadata.notes ?? null,
-              effectiveFrom: metadata.effectiveFrom,
+              effectiveFrom: metadata.effectiveFrom ?? undefined,
               effectiveTo: metadata.effectiveTo ?? null,
             }
           : undefined,
@@ -690,7 +690,7 @@ tankCalibration.post('/tanks/:tankId/calibration/charts/:chartId/status', requir
       parseResult.data.status,
       c.var.user!.user.id,
       {
-        effectiveFrom: parseResult.data.effectiveFrom,
+        effectiveFrom: parseResult.data.effectiveFrom ?? undefined,
         effectiveTo: parseResult.data.effectiveTo,
         notes: parseResult.data.notes,
       }

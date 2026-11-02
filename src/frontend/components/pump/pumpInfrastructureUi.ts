@@ -1086,6 +1086,15 @@ export interface CalibrationChartDiagnostics {
   missingStepWarnings: CalibrationStepGapWarning[];
   exceedsNominalCapacity: boolean;
   exceedsSafeFillCapacity: boolean;
+  exceedsMaxDip?: boolean;
+  exceedsDiameter?: boolean;
+}
+
+export interface CalibrationDiagnosticsOptions {
+  tankCapacityLitres?: number;
+  safeFillCapacityLitres?: number;
+  tankDiameterMm?: number;
+  maxDipMm?: number;
 }
 
 export function analyzeCalibrationChartDiagnostics(
@@ -1097,10 +1106,7 @@ export function analyzeCalibrationChartDiagnostics(
     dipMillimetresMilliunits?: number;
     volumeMilliunits?: number;
   }>,
-  options?: {
-    tankCapacityLitres?: number;
-    safeFillCapacityLitres?: number;
-  }
+  options?: CalibrationDiagnosticsOptions
 ): CalibrationChartDiagnostics {
   if (!Array.isArray(points) || points.length === 0) {
     return {
@@ -1116,6 +1122,8 @@ export function analyzeCalibrationChartDiagnostics(
       missingStepWarnings: [],
       exceedsNominalCapacity: false,
       exceedsSafeFillCapacity: false,
+      exceedsMaxDip: false,
+      exceedsDiameter: false,
     };
   }
 
@@ -1236,6 +1244,12 @@ export function analyzeCalibrationChartDiagnostics(
       options.safeFillCapacityLitres > 0 &&
       maxVolumeLitres > options.safeFillCapacityLitres
   );
+  const exceedsMaxDip = Boolean(
+    options?.maxDipMm && options.maxDipMm > 0 && maxDipMm > options.maxDipMm
+  );
+  const exceedsDiameter = Boolean(
+    options?.tankDiameterMm && options.tankDiameterMm > 0 && maxDipMm > options.tankDiameterMm
+  );
 
   return {
     pointsCount: numeric.length,
@@ -1250,6 +1264,8 @@ export function analyzeCalibrationChartDiagnostics(
     missingStepWarnings,
     exceedsNominalCapacity,
     exceedsSafeFillCapacity,
+    exceedsMaxDip,
+    exceedsDiameter,
   };
 }
 
@@ -1268,6 +1284,8 @@ export function buildCalibrationImportPreview(
   const diagnostics = analyzeCalibrationChartDiagnostics(parsed.normalizedPoints, {
     tankCapacityLitres: options?.tankCapacityLitres,
     safeFillCapacityLitres: options?.safeFillCapacityLitres,
+    tankDiameterMm: options?.tankDiameterMm,
+    maxDipMm: options?.maxDipMm,
   });
 
   return {
