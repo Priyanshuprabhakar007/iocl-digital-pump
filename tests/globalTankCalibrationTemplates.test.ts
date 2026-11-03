@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import Database from 'better-sqlite3';
 import { createLocalD1Database } from '../src/db/localD1';
 import { getDb } from '../src/db';
 import { seedDatabase } from '../src/db/seed';
@@ -551,7 +550,7 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
         expect(std50.max_dip_mm_milliunits).toBe(3000000);
         expect(std50.status).toBe('DRAFT');
 
-        const fkViolations = sqlite.pragma('foreign_key_check') as any[];
+        const fkViolations = sqlite.prepare('PRAGMA foreign_key_check;').all() as any[];
         expect(fkViolations.length).toBe(0);
       } finally {
         preD1.close();
