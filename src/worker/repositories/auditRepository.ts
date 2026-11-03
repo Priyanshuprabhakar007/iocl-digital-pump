@@ -1,6 +1,6 @@
 import { AppDatabase } from '../../db';
 import * as schema from '../../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { AuditLog } from '../../shared/types';
 
 export class AuditRepository {
@@ -43,20 +43,40 @@ export class AuditRepository {
     });
   }
 
-  async listLogs(limit = 100, offset = 0): Promise<AuditLog[]> {
-    const res = await this.db
+  async listLogs(
+    limit = 100,
+    offset = 0,
+    filters?: { entityType?: string; entityId?: string }
+  ): Promise<AuditLog[]> {
+    const conditions: any[] = [];
+    if (filters?.entityType) {
+      conditions.push(eq(schema.auditLogs.entityType, filters.entityType));
+    }
+    if (filters?.entityId) {
+      conditions.push(eq(schema.auditLogs.entityId, filters.entityId));
+    }
+
+    let query = this.db
       .select({
         log: schema.auditLogs,
         userName: schema.users.name,
         userEmail: schema.users.email,
       })
       .from(schema.auditLogs)
-      .leftJoin(schema.users, eq(schema.auditLogs.userId, schema.users.id))
+      .leftJoin(schema.users, eq(schema.auditLogs.userId, schema.users.id)) as any;
+
+    if (conditions.length === 1) {
+      query = query.where(conditions[0]);
+    } else if (conditions.length > 1) {
+      query = query.where(and(...conditions));
+    }
+
+    const res = await query
       .orderBy(desc(schema.auditLogs.createdAt))
       .limit(limit)
       .offset(offset);
 
-    return res.map(r => ({
+    return res.map((r: any) => ({
       id: r.log.id,
       userId: r.log.userId,
       action: r.log.action,
@@ -72,3 +92,4 @@ export class AuditRepository {
     }));
   }
 }
+

@@ -67,6 +67,7 @@ import {
   ClientDryRunReport,
 } from '../components/pump/pumpInfrastructureUi';
 import { PERMISSIONS } from '../../shared/constants';
+import { GlobalCalibrationMasterSection } from '../components/pump/GlobalCalibrationMasterSection';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
 
@@ -87,7 +88,7 @@ export const PumpInfrastructurePage: React.FC = () => {
   const setSelectedOutletId = setActiveOutletId;
 
   // Active Sub-tab
-  const [activeTab, setActiveTab] = useState<'products' | 'tanks' | 'dispensers' | 'nozzles' | 'shifts' | 'fuelMapping'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'tanks' | 'globalCalibration' | 'dispensers' | 'nozzles' | 'shifts' | 'fuelMapping'>('products');
 
   // Outlet-specific data
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
@@ -1362,6 +1363,21 @@ export const PumpInfrastructurePage: React.FC = () => {
           <span>Underground Tanks ({tanks.length})</span>
         </button>
 
+        {canReadTankCalibration && (
+          <button
+            onClick={() => setActiveTab('globalCalibration')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === 'globalCalibration'
+                ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+            data-testid="tab-global-calibration-masters"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Global Calibration Masters</span>
+          </button>
+        )}
+
         <button
           onClick={() => setActiveTab('dispensers')}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
@@ -1460,31 +1476,58 @@ export const PumpInfrastructurePage: React.FC = () => {
         </div>
       )}
 
+      {/* 2A. GLOBAL CALIBRATION MASTERS */}
+      {activeTab === 'globalCalibration' && canReadTankCalibration && (
+        <GlobalCalibrationMasterSection
+          selectedOutletId={selectedOutletId}
+          selectedOutletName={
+            selectedOutlet ? `${selectedOutlet.roCode} — ${selectedOutlet.name}` : undefined
+          }
+          canWriteTankCalibration={canWriteTankCalibration}
+          canApproveCalibrationChart={canApproveCalibrationChart}
+          onCalibrationAssigned={() => {
+            loadOutletData();
+          }}
+        />
+      )}
+
       {/* 2. UNDERGROUND TANKS */}
       {activeTab === 'tanks' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
               Underground Storage Tanks (UST)
             </h2>
-            {canWriteTanks && (
-              <button
-                onClick={() => {
-                  setTankNumber(tanks.length + 1);
-                  setTankName(`Tank ${tanks.length + 1}`);
-                  setSelectedProductId(outletProducts[0]?.productId || '');
-                  setTankCapacity(20000);
-                  setTankSafeFill(19000);
-                  setTankMinOperating(1000);
-                  setModalError(null);
-                  setModalType('addTank');
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Storage Tank</span>
-              </button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {canReadTankCalibration && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('globalCalibration')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-orange-300 border border-orange-500/30 rounded-lg text-xs font-mono font-bold transition-colors"
+                >
+                  <Layers className="w-3.5 h-3.5 text-orange-400" />
+                  <span>Global Calibration Masters (20 KL / 50 KL)</span>
+                </button>
+              )}
+              {canWriteTanks && (
+                <button
+                  onClick={() => {
+                    setTankNumber(tanks.length + 1);
+                    setTankName(`Tank ${tanks.length + 1}`);
+                    setSelectedProductId(outletProducts[0]?.productId || '');
+                    setTankCapacity(20000);
+                    setTankSafeFill(19000);
+                    setTankMinOperating(1000);
+                    setModalError(null);
+                    setModalType('addTank');
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Storage Tank</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

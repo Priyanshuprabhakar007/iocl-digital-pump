@@ -5,6 +5,14 @@ import { createLocalD1Database } from '../src/db/localD1';
 import { getDb } from '../src/db';
 import { seedDatabase } from '../src/db/seed';
 import { app } from '../src/worker/app';
+import {
+  getGlobalTemplateStatusBadge,
+  formatGlobalTemplateDimensions,
+  generateVerifiedCylindricalCalibrationCsv,
+  buildGlobalTemplateImportPreview,
+  canApproveGlobalTemplate,
+  formatGlobalCalibrationAuditLogEntry,
+} from '../src/frontend/components/pump/pumpInfrastructureUi';
 
 function generateVerifiedCylindricalCsv(maxDipMm: number, nominalCapacityLitres: number, stepMm = 10): string {
   const lines = ['dip_mm,volume_litres'];
@@ -560,4 +568,257 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
       }
     });
   });
+
+  describe('7. Complete Global Calibration Master UI & Safe Assignment Workflow', () => {
+    it('7.1 validates Global Calibration Master UI helpers for status badges, dimensions, CSV preview, and approval gating', () => {
+      const draftZeroBadge = getGlobalTemplateStatusBadge('DRAFT', 0);
+      expect(draftZeroBadge.label).toBe('DRAFT');
+      expect(draftZeroBadge.isApproved).toBe(false);
+      expect(draftZeroBadge.hasValidatedPoints).toBe(false);
+
+      const draftPopulatedBadge = getGlobalTemplateStatusBadge('DRAFT', 211);
+      expect(draftPopulatedBadge.label).toBe('DRAFT');
+      expect(draftPopulatedBadge.hasValidatedPoints).toBe(true);
+
+      const approvedBadge = getGlobalTemplateStatusBadge('APPROVED', 211);
+      expect(approvedBadge.isApproved).toBe(true);
+
+      const dims20 = formatGlobalTemplateDimensions({
+        tankDiameterMm: 2100,
+        tankLengthMm: 6250,
+        maxDipMm: 2100,
+      });
+      expect(dims20.summaryLabel).toContain('2,100 mm Dia');
+      expect(dims20.summaryLabel).toContain('6,250 mm Len');
+      expect(dims20.summaryLabel).toContain('Max Dip 2,100 mm');
+
+      const csv20 = generateVerifiedCylindricalCalibrationCsv(2100, 20000, 10);
+      const preview20 = buildGlobalTemplateImportPreview(csv20, {
+        code: 'STANDARD_20KL',
+        nominalCapacityLitres: 20000,
+        tankDiameterMm: 2100,
+        maxDipMm: 2100,
+      });
+      expect(preview20.valid).toBe(true);
+      expect(preview20.startsAtZero).toBe(true);
+      expect(preview20.reachesMaxDip).toBe(true);
+      expect(preview20.saveStatusDefault).toBe('DRAFT');
+      expect(preview20.diagnostics.pointsCount).toBe(211);
+
+      const incompletePreview = buildGlobalTemplateImportPreview(
+        'dip_mm,volume_litres\n0,0\n1500,14000',
+        {
+          code: 'STANDARD_20KL',
+          nominalCapacityLitres: 20000,
+          tankDiameterMm: 2100,
+          maxDipMm: 2100,
+        }
+      );
+      expect(incompletePreview.valid).toBe(false);
+      expect(incompletePreview.error).toContain('Max Dip 2100.000 mm');
+
+      expect(canApproveGlobalTemplate({ status: 'DRAFT', pointsCount: 0 }, true).allowed).toBe(false);
+      expect(canApproveGlobalTemplate({ status: 'DRAFT', pointsCount: 211 }, false).allowed).toBe(false);
+      expect(canApproveGlobalTemplate({ status: 'DRAFT', pointsCount: 211 }, true).allowed).toBe(true);
+
+      const auditEntry = formatGlobalCalibrationAuditLogEntry({
+        action: 'GLOBAL_CALIBRATION_TEMPLATE_IMPORT',
+        createdAt: '2026-11-02T10:00:00Z',
+        userName: 'System Admin',
+        newValueJson: JSON.stringify({
+          code: 'STANDARD_20KL',
+          status: 'DRAFT',
+          pointsCount: 211,
+          sourceFileName: 'IOCL_STANDARD_20KL.csv',
+        }),
+      });
+      expect(auditEntry.actionBadge).toBe('CSV IMPORT');
+      expect(auditEntry.summary).toContain('STANDARD_20KL');
+      expect(auditEntry.summary).toContain('DRAFT');
+    });
+
+    it('7.2 saves imported CSV points as DRAFT by default when status is omitted, then supports separate authorised approval', async () => {
+      // Revert STANDARD_20KL to DRAFT and re-import without specifying status
+      const csv20kl = generateVerifiedCylindricalCsv(2100, 20000, 10);
+      const importRes = await app.request('/api/v1/calibration-templates/STANDARD_20KL/import', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          csvText: csv20kl,
+          sourceFileName: 'IOCL_STANDARD_20KL_DRAFT_DEFAULT.csv',
+          referenceDocument: 'IOCL-ENGG-STD-20KL-DRAFT',
+        }),
+      }, { DB: localD1 });
+
+      expect(importRes.status).toBe(200);
+      const importJson = await importRes.json() as any;
+      expect(importJson.success).toBe(true);
+      expect(importJson.data.status).toBe('DRAFT');
+      expect(importJson.data.pointsCount).toBe(211);
+      expect(importJson.data.approvedBy).toBeNull();
+
+      // Separate authorised approval action
+      const approveRes = await app.request('/api/v1/calibration-templates/STANDARD_20KL/status', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'APPROVED' }),
+      }, { DB: localD1 });
+
+      expect(approveRes.status).toBe(200);
+      const approveJson = await approveRes.json() as any;
+      expect(approveJson.success).toBe(true);
+      expect(approveJson.data.status).toBe('APPROVED');
+      expect(approveJson.data.approvedBy).toBeDefined();
+    });
+
+    it('7.3 lists eligible COCO tanks by capacity and physical dimensions, defaults assignment to DRAFT (never replacing ACTIVE charts), and preserves COCO 22 Tank #1 Revision #2 DRAFT', async () => {
+      const sqlite = localD1.getNativeDb();
+      const nowIso = '2026-10-25T08:00:00Z';
+      const coco22OutletId = 'ro-coco22-ui-test';
+
+      sqlite.exec(`
+        INSERT OR IGNORE INTO retail_outlets (
+          id, ro_code, name, outlet_type, state_id, division_id, sales_area_id,
+          address, city, district, pincode, status, created_at, updated_at
+        ) VALUES (
+          '${coco22OutletId}', '396187', 'COCO 22', 'COCO', 'state-wb', 'div-kol', 'sa-cen',
+          'COCO 22 Highway Plot', 'Kolkata', 'Kolkata', '700022', 'ACTIVE', '${nowIso}', '${nowIso}'
+        );
+
+        INSERT OR IGNORE INTO tanks (
+          id, outlet_id, tank_number, name, product_id,
+          capacity_litres, safe_fill_capacity_litres, minimum_operating_level_litres,
+          status, commissioned_at, created_at, created_by, updated_at
+        ) VALUES
+          ('tank-coco22-1', '${coco22OutletId}', 1, 'Tank 1 - MS', 'prod-ms', 20000, 19000, 1000, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tank-coco22-2', '${coco22OutletId}', 2, 'Tank 2 - HSD', 'prod-hsd', 20000, 19000, 1000, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}');
+
+        INSERT OR IGNORE INTO tank_calibration_charts (
+          id, tank_id, revision_number, status, effective_from, notes, created_by, created_at, updated_at, approved_by, approved_at
+        ) VALUES
+          ('tcc-coco22-1-r1', 'tank-coco22-1', 1, 'ACTIVE', '2026-01-01', 'COCO 22 Tank 1 Active Rev 1', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tcc-coco22-1-r2-draft', 'tank-coco22-1', 2, 'DRAFT', '2026-03-01', 'COCO 22 Tank #1 Revision #2 DRAFT', 'user-admin', '${nowIso}', '${nowIso}', NULL, NULL),
+          ('tcc-coco22-2-r1', 'tank-coco22-2', 1, 'ACTIVE', '2026-01-01', 'COCO 22 Tank 2 Active Rev 1', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}');
+
+        INSERT OR IGNORE INTO tank_calibration_points (id, tank_id, chart_id, dip_millimetres_milliunits, volume_milliunits, created_by, created_at) VALUES
+          ('tcp-coco22-1-r1-0', 'tank-coco22-1', 'tcc-coco22-1-r1', 0, 0, 'user-admin', '${nowIso}'),
+          ('tcp-coco22-1-r1-1', 'tank-coco22-1', 'tcc-coco22-1-r1', 2000000, 20000000, 'user-admin', '${nowIso}'),
+          ('tcp-coco22-1-r2-0', 'tank-coco22-1', 'tcc-coco22-1-r2-draft', 0, 0, 'user-admin', '${nowIso}'),
+          ('tcp-coco22-1-r2-1', 'tank-coco22-1', 'tcc-coco22-1-r2-draft', 2100000, 20000000, 'user-admin', '${nowIso}'),
+          ('tcp-coco22-2-r1-0', 'tank-coco22-2', 'tcc-coco22-2-r1', 0, 0, 'user-admin', '${nowIso}'),
+          ('tcp-coco22-2-r1-1', 'tank-coco22-2', 'tcc-coco22-2-r1', 2000000, 20000000, 'user-admin', '${nowIso}');
+      `);
+
+      // 1. Fetch eligible COCO tanks for STANDARD_20KL
+      const eligibleRes = await app.request(
+        `/api/v1/calibration-templates/STANDARD_20KL/eligible-tanks?outletId=${coco22OutletId}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${adminToken}` },
+        },
+        { DB: localD1 }
+      );
+      expect(eligibleRes.status).toBe(200);
+      const eligibleJson = await eligibleRes.json() as any;
+      expect(eligibleJson.success).toBe(true);
+      expect(eligibleJson.data.tanks.length).toBe(2);
+
+      const tank1Item = eligibleJson.data.tanks.find((t: any) => t.tankId === 'tank-coco22-1');
+      expect(tank1Item).toBeDefined();
+      expect(tank1Item.hasProtectedDraft).toBe(true);
+      expect(tank1Item.existingDraftChart.id).toBe('tcc-coco22-1-r2-draft');
+      expect(tank1Item.existingDraftChart.revisionNumber).toBe(2);
+      expect(tank1Item.physicalDimensions.diameterMm).toBe(2100);
+      expect(tank1Item.physicalDimensions.lengthMm).toBe(6250);
+
+      // 2. Preview assignment for both COCO 22 Tank 1 and Tank 2
+      const previewRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/assign-preview',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tankIds: ['tank-coco22-1', 'tank-coco22-2'],
+          }),
+        },
+        { DB: localD1 }
+      );
+      expect(previewRes.status).toBe(200);
+      const previewJson = await previewRes.json() as any;
+      expect(previewJson.data.previews[0].hasProtectedDraft).toBe(true);
+      expect(previewJson.data.previews[0].targetStatus).toBe('DRAFT');
+      expect(previewJson.data.previews[1].hasProtectedDraft).toBe(false);
+      expect(previewJson.data.previews[1].targetRevisionNumber).toBe(2);
+
+      // 3. Assign without activateImmediately (default safe mode: activateImmediately = false)
+      const assignRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/assign',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tankIds: ['tank-coco22-1', 'tank-coco22-2'],
+            notes: 'Safe UI assignment as DRAFT',
+          }),
+        },
+        { DB: localD1 }
+      );
+      expect(assignRes.status).toBe(200);
+      const assignJson = await assignRes.json() as any;
+      expect(assignJson.success).toBe(true);
+
+      const a1 = assignJson.data.assignments.find((a: any) => a.tankId === 'tank-coco22-1');
+      expect(a1.preservedExistingDraft).toBe(true);
+      expect(a1.chartId).toBe('tcc-coco22-1-r2-draft');
+      expect(a1.revisionNumber).toBe(2);
+      expect(a1.status).toBe('DRAFT');
+
+      const a2 = assignJson.data.assignments.find((a: any) => a.tankId === 'tank-coco22-2');
+      expect(a2.preservedExistingDraft).toBe(false);
+      expect(a2.revisionNumber).toBe(2);
+      expect(a2.status).toBe('DRAFT');
+      expect(a2.pointsCount).toBe(211);
+
+      // Verify Tank 1 Rev 1 ACTIVE and Rev 2 DRAFT are 100% preserved
+      const t1Rev1 = sqlite.prepare("SELECT * FROM tank_calibration_charts WHERE id = 'tcc-coco22-1-r1'").get() as any;
+      expect(t1Rev1.status).toBe('ACTIVE');
+      const t1Rev2 = sqlite.prepare("SELECT * FROM tank_calibration_charts WHERE id = 'tcc-coco22-1-r2-draft'").get() as any;
+      expect(t1Rev2.status).toBe('DRAFT');
+      expect(t1Rev2.notes).toBe('COCO 22 Tank #1 Revision #2 DRAFT');
+
+      // Verify Tank 2 Rev 1 ACTIVE is still ACTIVE (never auto-replaced)
+      const t2Rev1 = sqlite.prepare("SELECT * FROM tank_calibration_charts WHERE id = 'tcc-coco22-2-r1'").get() as any;
+      expect(t2Rev1.status).toBe('ACTIVE');
+
+      // 4. Verify Global Calibration Master audit trail endpoint
+      const auditRes = await app.request(
+        '/api/v1/calibration-templates/audit-logs',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${adminToken}` },
+        },
+        { DB: localD1 }
+      );
+      expect(auditRes.status).toBe(200);
+      const auditJson = await auditRes.json() as any;
+      expect(auditJson.success).toBe(true);
+      expect(auditJson.data.length).toBeGreaterThanOrEqual(3);
+      expect(
+        auditJson.data.every((l: any) => l.entityType === 'GLOBAL_TANK_CALIBRATION_TEMPLATE')
+      ).toBe(true);
+    });
+  });
 });
+

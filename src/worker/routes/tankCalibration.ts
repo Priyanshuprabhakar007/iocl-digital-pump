@@ -955,6 +955,57 @@ tankCalibration.get('/calibration-templates', requirePermission(PERMISSIONS.TANK
   });
 });
 
+// GET /api/v1/calibration-templates/audit-logs - List audit trail for global calibration templates
+tankCalibration.get('/calibration-templates/audit-logs', requirePermission(PERMISSIONS.TANK_CALIBRATION_READ) as any, async (c: AppContext) => {
+  const db = getDb(c.env.DB);
+  const auditRepo = new AuditRepository(db);
+
+  const limitParam = c.req.query('limit');
+  const entityId = c.req.query('entityId') || undefined;
+  const limit = limitParam !== undefined ? Math.min(200, Math.max(1, parseInt(limitParam, 10) || 50)) : 50;
+
+  const logs = await auditRepo.listLogs(limit, 0, {
+    entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
+    entityId,
+  });
+
+  return c.json({
+    success: true,
+    data: logs,
+    error: null,
+  });
+});
+
+// GET /api/v1/calibration-templates/:id/eligible-tanks - List eligible COCO tanks by capacity and physical dimensions
+tankCalibration.get('/calibration-templates/:id/eligible-tanks', requirePermission(PERMISSIONS.TANK_CALIBRATION_READ) as any, async (c: AppContext) => {
+  const id = c.req.param('id') || '';
+  if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Template ID is required' } }, 400);
+
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+
+  const outletId = c.req.query('outletId') || undefined;
+  const includeNonMatching = c.req.query('includeNonMatching') === 'true';
+
+  try {
+    const result = await pumpRepo.listEligibleCocoTanksForTemplate(id, {
+      outletId,
+      includeNonMatching,
+    });
+    return c.json({
+      success: true,
+      data: result,
+      error: null,
+    });
+  } catch (err: any) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: err.code || 'NOT_FOUND', message: err.message },
+    }, 404);
+  }
+});
+
 // GET /api/v1/calibration-templates/:id - Get global template details with points
 tankCalibration.get('/calibration-templates/:id', requirePermission(PERMISSIONS.TANK_CALIBRATION_READ) as any, async (c: AppContext) => {
   const id = c.req.param('id') || '';
@@ -1106,7 +1157,7 @@ tankCalibration.post('/calibration-templates', requirePermission(PERMISSIONS.TAN
           parsedPoints,
           userCtx.user.id,
           {
-            status: requestedStatus === 'ACTIVE' ? 'ACTIVE' : requestedStatus === 'DRAFT' ? 'DRAFT' : 'APPROVED',
+            status: requestedStatus === 'ACTIVE' ? 'ACTIVE' : requestedStatus === 'APPROVED' ? 'APPROVED' : 'DRAFT',
             sourceFileName,
             referenceDocument,
             notes,
@@ -1202,7 +1253,8 @@ tankCalibration.post('/calibration-templates', requirePermission(PERMISSIONS.TAN
 });
 
 // POST /api/v1/calibration-templates/:id/import (and PUT /api/v1/calibration-templates/:id/points)
-// Import complete verified CSV or JSON dip-to-volume calibration points into STANDARD_20KL, STANDARD_50KL, or any global template
+// Import complete verified CSV or JSON dip-to-volume calibration points into STANDARD_20KL, STANDARD_50KL, or any global template.
+// Saves imported templates as DRAFT by default unless status: 'APPROVED' is explicitly provided.
 const handleGlobalTemplateImport = async (c: AppContext) => {
   const id = c.req.param('id') || '';
   if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Template ID or code is required' } }, 400);
@@ -1239,9 +1291,23 @@ const handleGlobalTemplateImport = async (c: AppContext) => {
     }, 400);
   }
 
-  const targetStatus = body.status && ['DRAFT', 'APPROVED', 'ACTIVE'].includes(body.status)
-    ? body.status
-    : 'APPROVED';
+  const targetStatus: 'DRAFT' | 'APPROVED' | 'ACTIVE' =
+    body.status && ['DRAFT', 'APPROVED', 'ACTIVE'].includes(body.status)
+      ? body.status
+      : body.approveImmediately === true
+        ? 'APPROVED'
+        : 'DRAFT';
+
+  if ((targetStatus === 'APPROVED' || targetStatus === 'ACTIVE') && !canAuthorizeCalibrationActivation(c)) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Only authorized calibration administrators can mark a global template as APPROVED',
+      },
+    }, 403);
+  }
 
   try {
     const updated = await pumpRepo.importGlobalTankCalibrationTemplatePoints(
@@ -1295,7 +1361,7 @@ const handleGlobalTemplateImport = async (c: AppContext) => {
 tankCalibration.post('/calibration-templates/:id/import', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, handleGlobalTemplateImport as any);
 tankCalibration.put('/calibration-templates/:id/points', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, handleGlobalTemplateImport as any);
 
-// POST /api/v1/calibration-templates/:id/status - Update global template status
+// POST /api/v1/calibration-templates/:id/status - Separate authorised approval action after chart verification
 tankCalibration.post('/calibration-templates/:id/status', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, async (c: AppContext) => {
   const id = c.req.param('id') || '';
   if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Template ID is required' } }, 400);
@@ -1312,6 +1378,14 @@ tankCalibration.post('/calibration-templates/:id/status', requirePermission(PERM
     return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Valid status is required' } }, 400);
   }
 
+  if ((status === 'APPROVED' || status === 'ACTIVE') && !canAuthorizeCalibrationActivation(c)) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'FORBIDDEN', message: 'Only authorized calibration administrators can approve global calibration templates' },
+    }, 403);
+  }
+
   const nowIso = new Date().toISOString();
   try {
     const updated = await pumpRepo.updateGlobalTankCalibrationTemplateStatus(id, status, userCtx.user.id, nowIso);
@@ -1325,7 +1399,7 @@ tankCalibration.post('/calibration-templates/:id/status', requirePermission(PERM
       action: 'GLOBAL_CALIBRATION_TEMPLATE_STATUS_UPDATE',
       entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
       entityId: updated.id,
-      newValue: { status },
+      newValue: { code: updated.code, status, pointsCount: updated.pointsCount },
       ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
       userAgent: c.req.header('user-agent') || 'Worker API',
       createdAt: nowIso,
@@ -1383,29 +1457,48 @@ tankCalibration.post('/calibration-templates/:id/assign-preview', requirePermiss
 
     const charts = await pumpRepo.listCalibrationCharts(tankId);
     const activeChart = charts.find(ch => ch.status === 'ACTIVE') || null;
+    const draftChart = charts.find(ch => ch.status === 'DRAFT') || null;
 
     const capDiff = Math.abs(tank.capacityLitres - template.nominalCapacityLitres);
     const isCompatible = capDiff <= 5000;
+    const nextRev = (charts.reduce((m, c) => Math.max(m, c.revisionNumber), 0)) + 1;
 
     previews.push({
       tankId: tank.id,
       tankNumber: tank.tankNumber,
       tankName: tank.name,
       outletId: tank.outletId,
+      productCode: tank.productCode,
       productName: tank.productName,
       capacityLitres: tank.capacityLitres,
+      physicalDimensions: {
+        diameterMm: template.tankDiameterMm,
+        lengthMm: template.tankLengthMm,
+        maxDipMm: template.maxDipMm,
+      },
       currentActiveChart: activeChart ? {
         id: activeChart.id,
         revisionNumber: activeChart.revisionNumber,
         pointsCount: activeChart.pointsCount,
         status: activeChart.status,
       } : null,
-      targetRevisionNumber: (charts.reduce((m, c) => Math.max(m, c.revisionNumber), 0)) + 1,
+      existingDraftChart: draftChart ? {
+        id: draftChart.id,
+        revisionNumber: draftChart.revisionNumber,
+        pointsCount: draftChart.pointsCount,
+        status: draftChart.status,
+        notes: draftChart.notes,
+      } : null,
+      hasProtectedDraft: Boolean(draftChart),
+      targetRevisionNumber: draftChart ? draftChart.revisionNumber : nextRev,
+      targetStatus: 'DRAFT',
       isCompatible,
       capacityDifferenceLitres: capDiff,
-      recommendation: isCompatible
-        ? 'Compatible standard tank capacity'
-        : `Capacity variance of ${capDiff} L requires technical verification`,
+      recommendation: draftChart
+        ? `Existing Rev #${draftChart.revisionNumber} DRAFT is preserved (will not overwrite)`
+        : isCompatible
+          ? `Compatible standard tank capacity — will create Rev #${nextRev} DRAFT (ACTIVE chart preserved)`
+          : `Capacity variance of ${capDiff} L requires technical verification`,
     });
   }
 
@@ -1421,6 +1514,7 @@ tankCalibration.post('/calibration-templates/:id/assign-preview', requirePermiss
 });
 
 // POST /api/v1/calibration-templates/:id/assign - Assign global template to multiple tanks (with explicit tank-wise confirmation)
+// Never automatically replaces ACTIVE tank charts or historical revisions unless activateImmediately: true is explicitly requested.
 tankCalibration.post('/calibration-templates/:id/assign', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, async (c: AppContext) => {
   const id = c.req.param('id') || '';
   if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Template ID is required' } }, 400);
@@ -1439,15 +1533,18 @@ tankCalibration.post('/calibration-templates/:id/assign', requirePermission(PERM
   }
 
   const body = await c.req.json().catch(() => ({}));
-  const { tankIds, activateImmediately, notes } = body;
+  const { tankIds, activateImmediately, preserveExistingDraft, notes } = body;
 
   if (!Array.isArray(tankIds) || tankIds.length === 0) {
     return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'tankIds array is required' } }, 400);
   }
 
+  const shouldActivateImmediately = activateImmediately === true;
+
   try {
     const result = await pumpRepo.assignGlobalTemplateToTanks(id, tankIds, userCtx.user.id, {
-      activateImmediately: activateImmediately !== false,
+      activateImmediately: shouldActivateImmediately,
+      preserveExistingDraft: preserveExistingDraft !== false,
       notes,
     });
 
@@ -1457,12 +1554,13 @@ tankCalibration.post('/calibration-templates/:id/assign', requirePermission(PERM
       userId: userCtx.user.id,
       action: 'GLOBAL_CALIBRATION_TEMPLATE_ASSIGN',
       entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
-      entityId: id,
+      entityId: result.template.id,
       newValue: {
         templateCode: result.template.code,
         tanksCount: result.assignments.length,
         tankIds,
-        activateImmediately: activateImmediately !== false,
+        activateImmediately: shouldActivateImmediately,
+        preservedDraftsCount: result.assignments.filter((a: any) => a.preservedExistingDraft).length,
       },
       ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
       userAgent: c.req.header('user-agent') || 'Worker API',
@@ -1484,4 +1582,5 @@ tankCalibration.post('/calibration-templates/:id/assign', requirePermission(PERM
 });
 
 export default tankCalibration;
+
 

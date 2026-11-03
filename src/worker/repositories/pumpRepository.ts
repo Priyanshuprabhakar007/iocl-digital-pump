@@ -4692,18 +4692,20 @@ export class PumpRepository {
     const targetStatus: 'DRAFT' | 'APPROVED' | 'ACTIVE' =
       options?.status
         ? options.status
-        : options?.approveImmediately === false
-          ? 'DRAFT'
-          : 'APPROVED';
+        : options?.approveImmediately === true
+          ? 'APPROVED'
+          : 'DRAFT';
 
     const requiresApprovalValidation = targetStatus === 'APPROVED' || targetStatus === 'ACTIVE';
+    const isStandardReferenceTemplate =
+      existing.code === 'STANDARD_20KL' || existing.code === 'STANDARD_50KL';
 
     const validatedPoints = this.validateGlobalTemplatePoints(points, {
       nominalCapacityLitres: existing.nominalCapacityLitres,
       tankDiameterMmMilliunits: effectiveDiameter,
       maxDipMmMilliunits: effectiveMaxDip,
       allowOverCapacity: options?.allowOverCapacity,
-      requireCompleteRange: requiresApprovalValidation,
+      requireCompleteRange: requiresApprovalValidation || isStandardReferenceTemplate,
     });
 
     const nowIso = new Date().toISOString();
@@ -4826,12 +4828,186 @@ export class PumpRepository {
     };
   }
 
+  private resolveTankPhysicalDimensions(
+    capacityLitres: number,
+    activeChart: any | null,
+    draftChart: any | null
+  ): {
+    diameterMm: number | null;
+    lengthMm: number | null;
+    maxDipMm: number | null;
+    source: 'ACTIVE_CHART' | 'DRAFT_CHART' | 'STANDARD_IOCL_REFERENCE';
+  } {
+    if (
+      activeChart &&
+      activeChart.tankDiameterMmMilliunits &&
+      activeChart.tankLengthMmMilliunits &&
+      activeChart.maxDipMmMilliunits
+    ) {
+      return {
+        diameterMm: Math.round(activeChart.tankDiameterMmMilliunits / 1000),
+        lengthMm: Math.round(activeChart.tankLengthMmMilliunits / 1000),
+        maxDipMm: Math.round(activeChart.maxDipMmMilliunits / 1000),
+        source: 'ACTIVE_CHART',
+      };
+    }
+    if (
+      draftChart &&
+      draftChart.tankDiameterMmMilliunits &&
+      draftChart.tankLengthMmMilliunits &&
+      draftChart.maxDipMmMilliunits
+    ) {
+      return {
+        diameterMm: Math.round(draftChart.tankDiameterMmMilliunits / 1000),
+        lengthMm: Math.round(draftChart.tankLengthMmMilliunits / 1000),
+        maxDipMm: Math.round(draftChart.maxDipMmMilliunits / 1000),
+        source: 'DRAFT_CHART',
+      };
+    }
+    if (Math.abs(capacityLitres - 20000) <= 5000) {
+      return {
+        diameterMm: 2100,
+        lengthMm: 6250,
+        maxDipMm: 2100,
+        source: 'STANDARD_IOCL_REFERENCE',
+      };
+    }
+    if (Math.abs(capacityLitres - 50000) <= 5000) {
+      return {
+        diameterMm: 3000,
+        lengthMm: 7500,
+        maxDipMm: 3000,
+        source: 'STANDARD_IOCL_REFERENCE',
+      };
+    }
+    return {
+      diameterMm: null,
+      lengthMm: null,
+      maxDipMm: null,
+      source: 'STANDARD_IOCL_REFERENCE',
+    };
+  }
+
+  async listEligibleCocoTanksForTemplate(
+    templateIdOrCode: string,
+    options?: { outletId?: string; includeNonMatching?: boolean }
+  ): Promise<{
+    template: any;
+    tanks: any[];
+  }> {
+    const template = await this.findGlobalTankCalibrationTemplateById(templateIdOrCode);
+    if (!template) {
+      const err = new Error(`Global calibration template not found: ${templateIdOrCode}`);
+      (err as any).code = 'NOT_FOUND';
+      throw err;
+    }
+
+    const conditions: any[] = [eq(schema.retailOutlets.outletType, 'COCO')];
+    if (options?.outletId) {
+      conditions.push(eq(schema.tanks.outletId, options.outletId));
+    }
+
+    const rows = await this.db
+      .select({
+        tank: schema.tanks,
+        outletCode: schema.retailOutlets.roCode,
+        outletName: schema.retailOutlets.name,
+        outletType: schema.retailOutlets.outletType,
+        productCode: schema.products.code,
+        productName: schema.products.name,
+      })
+      .from(schema.tanks)
+      .innerJoin(schema.retailOutlets, eq(schema.tanks.outletId, schema.retailOutlets.id))
+      .innerJoin(schema.products, eq(schema.tanks.productId, schema.products.id))
+      .where(conditions.length === 1 ? conditions[0] : and(...conditions))
+      .orderBy(asc(schema.retailOutlets.roCode), asc(schema.tanks.tankNumber));
+
+    const eligible: any[] = [];
+    const templateDia = template.tankDiameterMm;
+    const templateLen = template.tankLengthMm;
+    const templateMaxDip = template.maxDipMm;
+
+    for (const r of rows) {
+      const charts = await this.listCalibrationCharts(r.tank.id);
+      const activeChart = charts.find(ch => ch.status === 'ACTIVE') || null;
+      const draftChart = charts.find(ch => ch.status === 'DRAFT') || null;
+      const physicalDimensions = this.resolveTankPhysicalDimensions(
+        r.tank.capacityLitres,
+        activeChart,
+        draftChart
+      );
+
+      const capDiff = Math.abs(r.tank.capacityLitres - template.nominalCapacityLitres);
+      const isCapacityMatch = capDiff <= 5000;
+      const isDimensionMatch =
+        templateDia && templateLen && physicalDimensions.diameterMm && physicalDimensions.lengthMm
+          ? Math.abs(physicalDimensions.diameterMm - templateDia) <= 100 &&
+            Math.abs(physicalDimensions.lengthMm - templateLen) <= 350 &&
+            (!templateMaxDip || !physicalDimensions.maxDipMm || Math.abs(physicalDimensions.maxDipMm - templateMaxDip) <= 100)
+          : isCapacityMatch;
+      const isCompatible = isCapacityMatch && isDimensionMatch;
+
+      if (!options?.includeNonMatching && !isCompatible) {
+        continue;
+      }
+
+      const maxRev = charts.reduce((m, c) => Math.max(m, c.revisionNumber), 0);
+
+      eligible.push({
+        tankId: r.tank.id,
+        tankNumber: r.tank.tankNumber,
+        tankName: r.tank.name,
+        outletId: r.tank.outletId,
+        outletCode: r.outletCode,
+        outletName: r.outletName,
+        outletType: r.outletType,
+        productId: r.tank.productId,
+        productCode: r.productCode,
+        productName: r.productName,
+        capacityLitres: r.tank.capacityLitres,
+        safeFillCapacityLitres: r.tank.safeFillCapacityLitres,
+        status: r.tank.status,
+        physicalDimensions,
+        currentActiveChart: activeChart
+          ? {
+              id: activeChart.id,
+              revisionNumber: activeChart.revisionNumber,
+              pointsCount: activeChart.pointsCount ?? 0,
+              status: activeChart.status,
+              sourceTemplateId: (activeChart as any).sourceTemplateId ?? null,
+            }
+          : null,
+        existingDraftChart: draftChart
+          ? {
+              id: draftChart.id,
+              revisionNumber: draftChart.revisionNumber,
+              pointsCount: draftChart.pointsCount ?? 0,
+              status: draftChart.status,
+              notes: draftChart.notes ?? null,
+              sourceFileName: draftChart.sourceFileName ?? null,
+            }
+          : null,
+        hasProtectedDraft: Boolean(draftChart),
+        isCapacityMatch,
+        isDimensionMatch,
+        isCompatible,
+        targetRevisionNumber: maxRev + 1,
+      });
+    }
+
+    return {
+      template,
+      tanks: eligible,
+    };
+  }
+
   async assignGlobalTemplateToTanks(
     templateIdOrCode: string,
     tankIds: string[],
     userId: string,
     options?: {
       activateImmediately?: boolean;
+      preserveExistingDraft?: boolean;
       notes?: string;
     }
   ): Promise<{
@@ -4843,6 +5019,7 @@ export class PumpRepository {
       revisionNumber: number;
       status: string;
       pointsCount: number;
+      preservedExistingDraft?: boolean;
     }>;
   }> {
     const template = await this.findGlobalTankCalibrationTemplateById(templateIdOrCode);
@@ -4861,7 +5038,9 @@ export class PumpRepository {
 
     const nowIso = new Date().toISOString();
     const effectiveFrom = nowIso.slice(0, 10);
-    const activate = options?.activateImmediately !== false;
+    // Never automatically replace ACTIVE tank charts or historical revisions unless explicitly requested
+    const activate = options?.activateImmediately === true;
+    const preserveExistingDraft = options?.preserveExistingDraft !== false;
 
     const assignments: Array<{
       tankId: string;
@@ -4870,6 +5049,7 @@ export class PumpRepository {
       revisionNumber: number;
       status: string;
       pointsCount: number;
+      preservedExistingDraft?: boolean;
     }> = [];
 
     for (const tankId of tankIds) {
@@ -4877,6 +5057,22 @@ export class PumpRepository {
       if (!tank) continue;
 
       const charts = await this.listCalibrationCharts(tankId);
+      const existingDraft = charts.find(c => c.status === 'DRAFT') || null;
+
+      // Preserve existing DRAFT revisions (such as COCO 22 Tank #1 Revision #2 DRAFT)
+      if (!activate && preserveExistingDraft && existingDraft) {
+        assignments.push({
+          tankId: tank.id,
+          tankName: tank.name,
+          chartId: existingDraft.id,
+          revisionNumber: existingDraft.revisionNumber,
+          status: 'DRAFT',
+          pointsCount: existingDraft.pointsCount ?? 0,
+          preservedExistingDraft: true,
+        });
+        continue;
+      }
+
       const maxRev = charts.reduce((m, c) => Math.max(m, c.revisionNumber), 0);
       const nextRev = maxRev + 1;
       const chartId = `tcc-${tankId}-r${nextRev}-${Date.now().toString(36)}`;
@@ -4948,6 +5144,7 @@ export class PumpRepository {
         revisionNumber: nextRev,
         status: chartStatus,
         pointsCount: points.length,
+        preservedExistingDraft: false,
       });
     }
 

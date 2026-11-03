@@ -565,6 +565,134 @@ export interface TankCalibrationPoint {
   createdBy: string;
 }
 
+export interface GlobalTankCalibrationPoint {
+  id: string;
+  templateId: string;
+  dipMillimetresMilliunits: number;
+  volumeMilliunits: number;
+  dipMillimetres: number;
+  volumeLitres: number;
+  dipMmStr: string;
+  volumeLitreStr: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface GlobalTankCalibrationTemplate {
+  id: string;
+  code: string;
+  name: string;
+  nominalCapacityLitres: number;
+  chartUnitDip: 'MM';
+  chartUnitVolume: 'LITRES';
+  tankDiameterMmMilliunits: number | null;
+  tankLengthMmMilliunits: number | null;
+  maxDipMmMilliunits: number | null;
+  tankDiameterMm: number | null;
+  tankLengthMm: number | null;
+  maxDipMm: number | null;
+  tankDiameterMmStr: string | null;
+  tankLengthMmStr: string | null;
+  maxDipMmStr: string | null;
+  revisionNumber: number;
+  status: TankCalibrationChartStatus;
+  sourceFileName: string | null;
+  referenceDocument: string | null;
+  notes: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  pointsCount: number;
+  points?: GlobalTankCalibrationPoint[];
+}
+
+export interface EligibleCocoTankItem {
+  tankId: string;
+  tankNumber: number;
+  tankName: string;
+  outletId: string;
+  outletCode: string;
+  outletName: string;
+  outletType: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  capacityLitres: number;
+  safeFillCapacityLitres: number;
+  status: string;
+  physicalDimensions: {
+    diameterMm: number | null;
+    lengthMm: number | null;
+    maxDipMm: number | null;
+    source: 'ACTIVE_CHART' | 'DRAFT_CHART' | 'STANDARD_IOCL_REFERENCE';
+  };
+  currentActiveChart: {
+    id: string;
+    revisionNumber: number;
+    pointsCount: number;
+    status: TankCalibrationChartStatus;
+    sourceTemplateId?: string | null;
+  } | null;
+  existingDraftChart: {
+    id: string;
+    revisionNumber: number;
+    pointsCount: number;
+    status: TankCalibrationChartStatus;
+    notes?: string | null;
+    sourceFileName?: string | null;
+  } | null;
+  hasProtectedDraft: boolean;
+  isCapacityMatch: boolean;
+  isDimensionMatch: boolean;
+  isCompatible: boolean;
+  targetRevisionNumber: number;
+}
+
+export interface GlobalTemplateAssignmentPreviewItem {
+  tankId: string;
+  tankNumber: number;
+  tankName: string;
+  outletId: string;
+  outletCode?: string;
+  outletName?: string;
+  outletType?: string;
+  productCode?: string;
+  productName?: string;
+  capacityLitres: number;
+  physicalDimensions?: {
+    diameterMm: number | null;
+    lengthMm: number | null;
+    maxDipMm: number | null;
+  };
+  currentActiveChart: {
+    id: string;
+    revisionNumber: number;
+    pointsCount?: number;
+    status: string;
+  } | null;
+  existingDraftChart?: {
+    id: string;
+    revisionNumber: number;
+    pointsCount?: number;
+    status: string;
+    notes?: string | null;
+  } | null;
+  hasProtectedDraft?: boolean;
+  targetRevisionNumber: number;
+  targetStatus?: TankCalibrationChartStatus;
+  isCompatible: boolean;
+  capacityDifferenceLitres: number;
+  recommendation: string;
+}
+
+export interface GlobalTemplateAssignmentPreviewResponse {
+  template: GlobalTankCalibrationTemplate;
+  totalTanksSelected: number;
+  previews: GlobalTemplateAssignmentPreviewItem[];
+}
+
 export interface TankCalibrationDryRunCheckpoint {
   dipMillimetres: string;
   printedVolumeLitres: string;

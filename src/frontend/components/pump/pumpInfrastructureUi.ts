@@ -585,6 +585,15 @@ export function getPumpInfrastructureErrorMessage(error: any): string {
   if (combined.includes('NOZZLE_OUTLET_PRODUCT_NOT_MAPPED')) {
     return 'Product is not mapped to this retail outlet.';
   }
+  if (combined.includes('TEMPLATE_POINTS_NOT_VALIDATED')) {
+    return 'Reference templates cannot be marked APPROVED unless complete dip-to-volume calibration points have been imported and validated.';
+  }
+  if (combined.includes('INCOMPLETE_CALIBRATION_RANGE')) {
+    return rawMessage || 'Calibration points must start at 0 mm (0 L) and cover the full reference Max Dip range.';
+  }
+  if (combined.includes('ASSIGNMENT_FAILED')) {
+    return rawMessage || 'Global calibration template assignment failed. Verify that the template is APPROVED and has validated points.';
+  }
 
   // Strict Sanitization: Never expose raw SQLite / SQL / D1 / stack traces
   if (
@@ -1605,5 +1614,272 @@ export function evaluateCalibrationDryRunClient(
     rows,
   };
 }
+
+// =========================================================================
+// 12. GLOBAL CALIBRATION MASTER HELPERS (Migration 0034)
+// =========================================================================
+
+export interface GlobalTemplateStatusBadgeInfo {
+  label: string;
+  badgeClass: string;
+  readinessLabel: string;
+  isApproved: boolean;
+  hasValidatedPoints: boolean;
+}
+
+export function getGlobalTemplateStatusBadge(
+  status?: string | null,
+  pointsCount?: number | null
+): GlobalTemplateStatusBadgeInfo {
+  const st = (status || 'DRAFT').toUpperCase();
+  const count = Math.max(0, Number(pointsCount) || 0);
+  const hasValidatedPoints = count >= 2;
+
+  if (st === 'APPROVED' || st === 'ACTIVE') {
+    return {
+      label: st,
+      badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+      readinessLabel: hasValidatedPoints
+        ? `Verified & Approved (${count} points)`
+        : 'Approved',
+      isApproved: true,
+      hasValidatedPoints,
+    };
+  }
+
+  if (st === 'DRAFT') {
+    return {
+      label: 'DRAFT',
+      badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+      readinessLabel: hasValidatedPoints
+        ? `Points Imported (${count} pts) — Pending Verification & Approval`
+        : 'Header Initialized (0 points) — Awaiting CSV Import',
+      isApproved: false,
+      hasValidatedPoints,
+    };
+  }
+
+  return {
+    label: st,
+    badgeClass: 'bg-slate-800 text-slate-400 border-slate-700',
+    readinessLabel: `${st} (${count} points)`,
+    isApproved: false,
+    hasValidatedPoints,
+  };
+}
+
+export function formatGlobalTemplateDimensions(template: {
+  tankDiameterMm?: number | null;
+  tankLengthMm?: number | null;
+  maxDipMm?: number | null;
+}): {
+  diameterLabel: string;
+  lengthLabel: string;
+  maxDipLabel: string;
+  summaryLabel: string;
+} {
+  const dia = template.tankDiameterMm ? `${template.tankDiameterMm.toLocaleString()} mm` : '—';
+  const len = template.tankLengthMm ? `${template.tankLengthMm.toLocaleString()} mm` : '—';
+  const dip = template.maxDipMm ? `${template.maxDipMm.toLocaleString()} mm` : '—';
+  return {
+    diameterLabel: dia,
+    lengthLabel: len,
+    maxDipLabel: dip,
+    summaryLabel: `${dia} Dia × ${len} Len • Max Dip ${dip}`,
+  };
+}
+
+export function generateVerifiedCylindricalCalibrationCsv(
+  maxDipMm: number,
+  nominalCapacityLitres: number,
+  stepMm = 10
+): string {
+  const safeMaxDip = Math.max(100, Number(maxDipMm) || 2100);
+  const safeCap = Math.max(1000, Number(nominalCapacityLitres) || 20000);
+  const safeStep = Math.max(1, Number(stepMm) || 10);
+
+  const lines = ['dip_mm,volume_litres'];
+  const radius = safeMaxDip / 2;
+  const fullArea = Math.PI * radius * radius;
+
+  for (let h = 0; h <= safeMaxDip; h += safeStep) {
+    let ratio = 0;
+    if (h <= 0) {
+      ratio = 0;
+    } else if (h >= safeMaxDip) {
+      ratio = 1;
+    } else {
+      const term1 = radius * radius * Math.acos((radius - h) / radius);
+      const term2 = (radius - h) * Math.sqrt(Math.max(0, 2 * radius * h - h * h));
+      ratio = (term1 - term2) / fullArea;
+    }
+    const vol = Math.min(safeCap, Math.max(0, ratio * safeCap));
+    lines.push(`${h.toFixed(3)},${vol.toFixed(3)}`);
+  }
+
+  return lines.join('\n');
+}
+
+export interface GlobalTemplateImportPreviewResult extends CalibrationImportPreview {
+  startsAtZero: boolean;
+  reachesMaxDip: boolean;
+  expectedMaxDipMm: number | null;
+  expectedCapacityLitres: number;
+  saveStatusDefault: 'DRAFT';
+}
+
+export function buildGlobalTemplateImportPreview(
+  rawText: string,
+  template: {
+    code?: string;
+    nominalCapacityLitres: number;
+    tankDiameterMm?: number | null;
+    maxDipMm?: number | null;
+  },
+  options?: {
+    allowOverCapacity?: boolean;
+  }
+): GlobalTemplateImportPreviewResult {
+  const expectedMaxDip = template.maxDipMm ?? template.tankDiameterMm ?? null;
+  const basePreview = buildCalibrationImportPreview(rawText, {
+    tankCapacityLitres: template.nominalCapacityLitres,
+    allowOverCapacity: options?.allowOverCapacity,
+    maxDipMm: expectedMaxDip ?? undefined,
+    tankDiameterMm: template.tankDiameterMm ?? undefined,
+  });
+
+  if (!basePreview.valid) {
+    return {
+      ...basePreview,
+      startsAtZero: false,
+      reachesMaxDip: false,
+      expectedMaxDipMm: expectedMaxDip,
+      expectedCapacityLitres: template.nominalCapacityLitres,
+      saveStatusDefault: 'DRAFT',
+    };
+  }
+
+  const minDipNum = Number(basePreview.diagnostics.minDipMm);
+  const maxDipNum = Number(basePreview.diagnostics.maxDipMm);
+  const startsAtZero = Math.abs(minDipNum) < 0.001;
+  const reachesMaxDip =
+    expectedMaxDip !== null ? Math.abs(maxDipNum - expectedMaxDip) < 0.001 : maxDipNum > 0;
+
+  let rangeError: string | null = null;
+  if (!startsAtZero) {
+    rangeError = `Global reference template ${template.code || ''} requires calibration points starting at 0.000 mm dip (found ${basePreview.diagnostics.minDipMm} mm).`;
+  } else if (expectedMaxDip !== null && !reachesMaxDip) {
+    rangeError = `Global reference template ${template.code || ''} requires complete dip coverage up to Max Dip ${expectedMaxDip.toFixed(3)} mm (found max dip ${basePreview.diagnostics.maxDipMm} mm).`;
+  }
+
+  return {
+    ...basePreview,
+    valid: basePreview.valid && !rangeError,
+    error: rangeError || basePreview.error,
+    startsAtZero,
+    reachesMaxDip,
+    expectedMaxDipMm: expectedMaxDip,
+    expectedCapacityLitres: template.nominalCapacityLitres,
+    saveStatusDefault: 'DRAFT',
+  };
+}
+
+export function canApproveGlobalTemplate(
+  template: {
+    status?: string | null;
+    pointsCount?: number | null;
+  } | null | undefined,
+  hasApprovalPermission: boolean
+): {
+  allowed: boolean;
+  reason: string | null;
+} {
+  if (!template) {
+    return { allowed: false, reason: 'No template selected.' };
+  }
+  if (!hasApprovalPermission) {
+    return {
+      allowed: false,
+      reason: 'Only authorised calibration administrators can approve global calibration templates.',
+    };
+  }
+  const count = Math.max(0, Number(template.pointsCount) || 0);
+  if (count < 2) {
+    return {
+      allowed: false,
+      reason: 'Reference templates cannot be marked APPROVED until complete dip-to-volume points are imported and validated.',
+    };
+  }
+  if (template.status === 'APPROVED') {
+    return {
+      allowed: false,
+      reason: 'Template is already APPROVED.',
+    };
+  }
+  return { allowed: true, reason: null };
+}
+
+export function formatGlobalCalibrationAuditLogEntry(log: {
+  action: string;
+  createdAt: string;
+  userName?: string;
+  newValueJson?: string | null;
+}): {
+  actionBadge: string;
+  actionBadgeClass: string;
+  summary: string;
+} {
+  let parsed: Record<string, any> = {};
+  if (log.newValueJson) {
+    try {
+      parsed = JSON.parse(log.newValueJson);
+    } catch {
+      parsed = {};
+    }
+  }
+
+  const act = (log.action || '').toUpperCase();
+  if (act.includes('IMPORT')) {
+    return {
+      actionBadge: 'CSV IMPORT',
+      actionBadgeClass: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
+      summary: `Imported ${parsed.pointsCount ?? 0} verified points into ${parsed.code || 'template'} as ${parsed.status || 'DRAFT'}${parsed.sourceFileName ? ` (${parsed.sourceFileName})` : ''}`,
+    };
+  }
+  if (act.includes('STATUS_UPDATE')) {
+    return {
+      actionBadge: `STATUS → ${parsed.status || 'UPDATED'}`,
+      actionBadgeClass:
+        parsed.status === 'APPROVED'
+          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+          : 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+      summary: `Marked ${parsed.code || 'global template'} as ${parsed.status || 'APPROVED'}`,
+    };
+  }
+  if (act.includes('ASSIGN')) {
+    const preservedNote =
+      parsed.preservedDraftsCount && parsed.preservedDraftsCount > 0
+        ? ` (${parsed.preservedDraftsCount} existing DRAFT revision preserved)`
+        : '';
+    return {
+      actionBadge: 'TANK ASSIGNMENT',
+      actionBadgeClass: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+      summary: `Assigned ${parsed.templateCode || 'template'} to ${parsed.tanksCount ?? 0} tank(s) (${parsed.activateImmediately ? 'ACTIVE' : 'DRAFT — Active Charts Preserved'})${preservedNote}`,
+    };
+  }
+  if (act.includes('CREATE')) {
+    return {
+      actionBadge: 'TEMPLATE CREATED',
+      actionBadgeClass: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+      summary: `Created ${parsed.code || 'template'} (${parsed.nominalCapacityLitres ? `${Number(parsed.nominalCapacityLitres).toLocaleString()} L` : ''}) in ${parsed.status || 'DRAFT'} status`,
+    };
+  }
+  return {
+    actionBadge: act || 'AUDIT',
+    actionBadgeClass: 'bg-slate-800 text-slate-300 border-slate-700',
+    summary: log.newValueJson || 'Global calibration template operation recorded',
+  };
+}
+
 
 
