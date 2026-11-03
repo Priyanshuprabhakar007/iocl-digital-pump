@@ -4396,27 +4396,40 @@ export class PumpRepository {
       ...r,
       pointsCount: countMap.get(r.id) || 0,
       nominalCapacityLitresStr: r.nominalCapacityLitres.toString(),
+      maxDipMm: r.maxDipMmMilliunits != null ? r.maxDipMmMilliunits / 1000 : null,
+      tankDiameterMm: r.tankDiameterMmMilliunits != null ? r.tankDiameterMmMilliunits / 1000 : null,
+      tankLengthMm: r.tankLengthMmMilliunits != null ? r.tankLengthMmMilliunits / 1000 : null,
       maxDipMmStr: r.maxDipMmMilliunits != null ? formatMilliunits(r.maxDipMmMilliunits) : null,
       tankDiameterMmStr: r.tankDiameterMmMilliunits != null ? formatMilliunits(r.tankDiameterMmMilliunits) : null,
       tankLengthMmStr: r.tankLengthMmMilliunits != null ? formatMilliunits(r.tankLengthMmMilliunits) : null,
     }));
   }
 
-  async findGlobalTankCalibrationTemplateById(id: string): Promise<any | null> {
-    const [row] = await this.db
+  async findGlobalTankCalibrationTemplateById(idOrCode: string): Promise<any | null> {
+    let [row] = await this.db
       .select()
       .from(schema.globalTankCalibrationTemplates)
-      .where(eq(schema.globalTankCalibrationTemplates.id, id));
+      .where(eq(schema.globalTankCalibrationTemplates.id, idOrCode));
+
+    if (!row) {
+      [row] = await this.db
+        .select()
+        .from(schema.globalTankCalibrationTemplates)
+        .where(eq(schema.globalTankCalibrationTemplates.code, idOrCode.toUpperCase()));
+    }
 
     if (!row) return null;
 
-    const points = await this.listGlobalTankCalibrationTemplatePoints(id);
+    const points = await this.listGlobalTankCalibrationTemplatePoints(row.id);
 
     return {
       ...row,
       pointsCount: points.length,
       points,
       nominalCapacityLitresStr: row.nominalCapacityLitres.toString(),
+      maxDipMm: row.maxDipMmMilliunits != null ? row.maxDipMmMilliunits / 1000 : null,
+      tankDiameterMm: row.tankDiameterMmMilliunits != null ? row.tankDiameterMmMilliunits / 1000 : null,
+      tankLengthMm: row.tankLengthMmMilliunits != null ? row.tankLengthMmMilliunits / 1000 : null,
       maxDipMmStr: row.maxDipMmMilliunits != null ? formatMilliunits(row.maxDipMmMilliunits) : null,
       tankDiameterMmStr: row.tankDiameterMmMilliunits != null ? formatMilliunits(row.tankDiameterMmMilliunits) : null,
       tankLengthMmStr: row.tankLengthMmMilliunits != null ? formatMilliunits(row.tankLengthMmMilliunits) : null,
@@ -4449,6 +4462,114 @@ export class PumpRepository {
     }));
   }
 
+  validateGlobalTemplatePoints(
+    points: Array<{ dipMillimetresMilliunits: number; volumeMilliunits: number }>,
+    options: {
+      nominalCapacityLitres: number;
+      tankDiameterMmMilliunits?: number | null;
+      maxDipMmMilliunits?: number | null;
+      allowOverCapacity?: boolean;
+      requireCompleteRange?: boolean;
+    }
+  ): Array<{ dipMillimetresMilliunits: number; volumeMilliunits: number }> {
+    if (!Array.isArray(points) || points.length < 2) {
+      const err = new Error('At least 2 validated dip-to-volume calibration points are required');
+      (err as any).code = 'TEMPLATE_POINTS_REQUIRED';
+      throw err;
+    }
+
+    const sorted = [...points].sort((a, b) => a.dipMillimetresMilliunits - b.dipMillimetresMilliunits);
+
+    for (let i = 0; i < sorted.length; i++) {
+      const pt = sorted[i];
+      if (!Number.isFinite(pt.dipMillimetresMilliunits) || !Number.isFinite(pt.volumeMilliunits)) {
+        const err = new Error(`Invalid calibration point at row ${i + 1}`);
+        (err as any).code = 'INVALID_POINT_VALUE';
+        throw err;
+      }
+      if (pt.dipMillimetresMilliunits < 0 || pt.volumeMilliunits < 0) {
+        const err = new Error(`Negative dip or volume is not allowed (row ${i + 1})`);
+        (err as any).code = 'NEGATIVE_POINT_VALUE';
+        throw err;
+      }
+      if (i < sorted.length - 1) {
+        if (pt.dipMillimetresMilliunits === sorted[i + 1].dipMillimetresMilliunits) {
+          const err = new Error(
+            `Duplicate dip height ${formatMilliunits(pt.dipMillimetresMilliunits)} mm in global calibration template`
+          );
+          (err as any).code = 'DUPLICATE_DIP';
+          throw err;
+        }
+        if (pt.volumeMilliunits > sorted[i + 1].volumeMilliunits) {
+          const err = new Error(
+            `Non-monotonic calibration chart: volume ${formatMilliunits(pt.volumeMilliunits)} L at ${formatMilliunits(pt.dipMillimetresMilliunits)} mm is greater than volume ${formatMilliunits(sorted[i + 1].volumeMilliunits)} L at ${formatMilliunits(sorted[i + 1].dipMillimetresMilliunits)} mm`
+          );
+          (err as any).code = 'NON_MONOTONIC_CALIBRATION';
+          throw err;
+        }
+      }
+    }
+
+    const maxPointDip = sorted[sorted.length - 1].dipMillimetresMilliunits;
+    const maxPointVol = sorted[sorted.length - 1].volumeMilliunits;
+
+    if (
+      options.maxDipMmMilliunits != null &&
+      options.tankDiameterMmMilliunits != null &&
+      options.maxDipMmMilliunits > options.tankDiameterMmMilliunits
+    ) {
+      const err = new Error(
+        `Configured maximum dip (${formatMilliunits(options.maxDipMmMilliunits)} mm) cannot exceed tank diameter (${formatMilliunits(options.tankDiameterMmMilliunits)} mm)`
+      );
+      (err as any).code = 'MAX_DIP_EXCEEDS_DIAMETER';
+      throw err;
+    }
+
+    if (options.maxDipMmMilliunits != null && maxPointDip > options.maxDipMmMilliunits) {
+      const err = new Error(
+        `Chart maximum dip ${formatMilliunits(maxPointDip)} mm exceeds declared maximum dip range ${formatMilliunits(options.maxDipMmMilliunits)} mm`
+      );
+      (err as any).code = 'MAX_DIP_RANGE_EXCEEDED';
+      throw err;
+    }
+
+    if (options.tankDiameterMmMilliunits != null && maxPointDip > options.tankDiameterMmMilliunits) {
+      const err = new Error(
+        `Chart maximum dip ${formatMilliunits(maxPointDip)} mm exceeds internal tank diameter ${formatMilliunits(options.tankDiameterMmMilliunits)} mm`
+      );
+      (err as any).code = 'MAX_DIP_EXCEEDS_DIAMETER';
+      throw err;
+    }
+
+    const nominalCapacityMilliunits = Math.round(options.nominalCapacityLitres * 1000);
+    if (!options.allowOverCapacity && maxPointVol > nominalCapacityMilliunits) {
+      const err = new Error(
+        `Chart maximum volume ${formatMilliunits(maxPointVol)} L exceeds nominal template capacity ${options.nominalCapacityLitres.toLocaleString()} L`
+      );
+      (err as any).code = 'CAPACITY_CONFLICT';
+      throw err;
+    }
+
+    if (options.requireCompleteRange) {
+      if (sorted[0].dipMillimetresMilliunits !== 0) {
+        const err = new Error(
+          `Approved global calibration template must start at 0.000 mm dip (found ${formatMilliunits(sorted[0].dipMillimetresMilliunits)} mm)`
+        );
+        (err as any).code = 'INCOMPLETE_CALIBRATION_RANGE';
+        throw err;
+      }
+      if (options.maxDipMmMilliunits != null && maxPointDip !== options.maxDipMmMilliunits) {
+        const err = new Error(
+          `Approved global calibration template must cover full max dip range up to ${formatMilliunits(options.maxDipMmMilliunits)} mm (found max dip ${formatMilliunits(maxPointDip)} mm)`
+        );
+        (err as any).code = 'INCOMPLETE_CALIBRATION_RANGE';
+        throw err;
+      }
+    }
+
+    return sorted;
+  }
+
   async createGlobalTankCalibrationTemplate(data: {
     id: string;
     code: string;
@@ -4465,18 +4586,54 @@ export class PumpRepository {
     createdAt: string;
     approvedBy?: string | null;
     approvedAt?: string | null;
+    allowOverCapacity?: boolean;
   }, points: Array<{ dipMillimetresMilliunits: number; volumeMilliunits: number }>): Promise<any> {
     const codeUpper = data.code.toUpperCase();
-    await this.db.insert(schema.globalTankCalibrationTemplates).values({
-      ...data,
-      code: codeUpper,
-      revisionNumber: 1,
-      status: data.status || 'APPROVED',
-      updatedAt: data.createdAt,
-    });
+    const requestedStatus = data.status || 'DRAFT';
+    const requiresApprovalValidation = requestedStatus === 'APPROVED' || requestedStatus === 'ACTIVE';
 
-    if (points.length > 0) {
-      const ptRows = points.map((p, idx) => ({
+    if (requiresApprovalValidation && (!points || points.length < 2)) {
+      const err = new Error(
+        'Cannot label global calibration template as APPROVED unless actual dip-to-volume points have been imported and validated'
+      );
+      (err as any).code = 'TEMPLATE_POINTS_NOT_VALIDATED';
+      throw err;
+    }
+
+    const validatedPoints = points && points.length > 0
+      ? this.validateGlobalTemplatePoints(points, {
+          nominalCapacityLitres: data.nominalCapacityLitres,
+          tankDiameterMmMilliunits: data.tankDiameterMmMilliunits,
+          maxDipMmMilliunits: data.maxDipMmMilliunits,
+          allowOverCapacity: data.allowOverCapacity,
+          requireCompleteRange: requiresApprovalValidation,
+        })
+      : [];
+
+    const batchStmts: any[] = [
+      this.db.insert(schema.globalTankCalibrationTemplates).values({
+        id: data.id,
+        code: codeUpper,
+        name: data.name,
+        nominalCapacityLitres: data.nominalCapacityLitres,
+        tankDiameterMmMilliunits: data.tankDiameterMmMilliunits ?? null,
+        tankLengthMmMilliunits: data.tankLengthMmMilliunits ?? null,
+        maxDipMmMilliunits: data.maxDipMmMilliunits ?? null,
+        revisionNumber: 1,
+        status: requestedStatus,
+        sourceFileName: data.sourceFileName ?? null,
+        referenceDocument: data.referenceDocument ?? null,
+        notes: data.notes ?? null,
+        createdBy: data.createdBy,
+        createdAt: data.createdAt,
+        approvedBy: requiresApprovalValidation ? (data.approvedBy ?? data.createdBy) : null,
+        approvedAt: requiresApprovalValidation ? (data.approvedAt ?? data.createdAt) : null,
+        updatedAt: data.createdAt,
+      }),
+    ];
+
+    if (validatedPoints.length > 0) {
+      const ptRows = validatedPoints.map((p, idx) => ({
         id: `gtctp-${data.id}-${idx + 1}`,
         templateId: data.id,
         dipMillimetresMilliunits: p.dipMillimetresMilliunits,
@@ -4484,28 +4641,159 @@ export class PumpRepository {
         createdAt: data.createdAt,
         createdBy: data.createdBy,
       }));
-      await this.db.insert(schema.globalTankCalibrationTemplatePoints).values(ptRows);
+      for (const chunk of chunkArray(ptRows, SNAPSHOT_INSERT_CHUNK_SIZE)) {
+        if (chunk.length > 0) {
+          batchStmts.push(this.db.insert(schema.globalTankCalibrationTemplatePoints).values(chunk));
+        }
+      }
     }
+
+    await (this.db as any).batch(batchStmts);
 
     return (await this.findGlobalTankCalibrationTemplateById(data.id))!;
   }
 
+  async importGlobalTankCalibrationTemplatePoints(
+    idOrCode: string,
+    points: Array<{ dipMillimetresMilliunits: number; volumeMilliunits: number }>,
+    actorUserId: string,
+    options?: {
+      status?: 'DRAFT' | 'APPROVED' | 'ACTIVE';
+      approveImmediately?: boolean;
+      allowOverCapacity?: boolean;
+      tankDiameterMmMilliunits?: number | null;
+      tankLengthMmMilliunits?: number | null;
+      maxDipMmMilliunits?: number | null;
+      sourceFileName?: string | null;
+      referenceDocument?: string | null;
+      notes?: string | null;
+    }
+  ): Promise<any> {
+    const existing = await this.findGlobalTankCalibrationTemplateById(idOrCode);
+    if (!existing) {
+      const err = new Error(`Global calibration template not found: ${idOrCode}`);
+      (err as any).code = 'NOT_FOUND';
+      throw err;
+    }
+
+    const effectiveDiameter =
+      options?.tankDiameterMmMilliunits !== undefined
+        ? options.tankDiameterMmMilliunits
+        : existing.tankDiameterMmMilliunits;
+    const effectiveLength =
+      options?.tankLengthMmMilliunits !== undefined
+        ? options.tankLengthMmMilliunits
+        : existing.tankLengthMmMilliunits;
+    const effectiveMaxDip =
+      options?.maxDipMmMilliunits !== undefined
+        ? options.maxDipMmMilliunits
+        : existing.maxDipMmMilliunits;
+
+    const targetStatus: 'DRAFT' | 'APPROVED' | 'ACTIVE' =
+      options?.status
+        ? options.status
+        : options?.approveImmediately === false
+          ? 'DRAFT'
+          : 'APPROVED';
+
+    const requiresApprovalValidation = targetStatus === 'APPROVED' || targetStatus === 'ACTIVE';
+
+    const validatedPoints = this.validateGlobalTemplatePoints(points, {
+      nominalCapacityLitres: existing.nominalCapacityLitres,
+      tankDiameterMmMilliunits: effectiveDiameter,
+      maxDipMmMilliunits: effectiveMaxDip,
+      allowOverCapacity: options?.allowOverCapacity,
+      requireCompleteRange: requiresApprovalValidation,
+    });
+
+    const nowIso = new Date().toISOString();
+    const batchStmts: any[] = [
+      this.db
+        .delete(schema.globalTankCalibrationTemplatePoints)
+        .where(eq(schema.globalTankCalibrationTemplatePoints.templateId, existing.id)),
+      this.db
+        .update(schema.globalTankCalibrationTemplates)
+        .set({
+          tankDiameterMmMilliunits: effectiveDiameter,
+          tankLengthMmMilliunits: effectiveLength,
+          maxDipMmMilliunits: effectiveMaxDip ?? validatedPoints[validatedPoints.length - 1].dipMillimetresMilliunits,
+          status: targetStatus,
+          sourceFileName: options?.sourceFileName !== undefined ? options.sourceFileName : existing.sourceFileName,
+          referenceDocument:
+            options?.referenceDocument !== undefined ? options.referenceDocument : existing.referenceDocument,
+          notes: options?.notes !== undefined ? options.notes : existing.notes,
+          approvedBy: requiresApprovalValidation ? actorUserId : null,
+          approvedAt: requiresApprovalValidation ? nowIso : null,
+          updatedAt: nowIso,
+        })
+        .where(eq(schema.globalTankCalibrationTemplates.id, existing.id)),
+    ];
+
+    const ptRows = validatedPoints.map((p, idx) => ({
+      id: `gtctp-${existing.id}-${idx + 1}`,
+      templateId: existing.id,
+      dipMillimetresMilliunits: p.dipMillimetresMilliunits,
+      volumeMilliunits: p.volumeMilliunits,
+      createdAt: nowIso,
+      createdBy: actorUserId,
+    }));
+
+    for (const chunk of chunkArray(ptRows, SNAPSHOT_INSERT_CHUNK_SIZE)) {
+      if (chunk.length > 0) {
+        batchStmts.push(this.db.insert(schema.globalTankCalibrationTemplatePoints).values(chunk));
+      }
+    }
+
+    await (this.db as any).batch(batchStmts);
+
+    return (await this.findGlobalTankCalibrationTemplateById(existing.id))!;
+  }
+
   async updateGlobalTankCalibrationTemplateStatus(
-    id: string,
+    idOrCode: string,
     status: 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'SUPERSEDED' | 'ARCHIVED',
     userId: string,
     updatedAt: string
   ): Promise<any | null> {
+    const existing = await this.findGlobalTankCalibrationTemplateById(idOrCode);
+    if (!existing) return null;
+
+    if (status === 'APPROVED' || status === 'ACTIVE') {
+      const rawPoints = (existing.points || []).map((p: any) => ({
+        dipMillimetresMilliunits: p.dipMillimetresMilliunits,
+        volumeMilliunits: p.volumeMilliunits,
+      }));
+      if (rawPoints.length < 2) {
+        const err = new Error(
+          `Cannot mark global template ${existing.code} as ${status} unless complete dip-to-volume calibration points have been imported and validated`
+        );
+        (err as any).code = 'TEMPLATE_POINTS_NOT_VALIDATED';
+        throw err;
+      }
+      this.validateGlobalTemplatePoints(rawPoints, {
+        nominalCapacityLitres: existing.nominalCapacityLitres,
+        tankDiameterMmMilliunits: existing.tankDiameterMmMilliunits,
+        maxDipMmMilliunits: existing.maxDipMmMilliunits,
+        requireCompleteRange: true,
+      });
+    }
+
     const updates: any = {
       status,
       updatedAt,
     };
-    if (status === 'APPROVED') {
+    if (status === 'APPROVED' || status === 'ACTIVE') {
       updates.approvedBy = userId;
       updates.approvedAt = updatedAt;
+    } else if (status === 'DRAFT') {
+      updates.approvedBy = null;
+      updates.approvedAt = null;
     }
-    await this.db.update(schema.globalTankCalibrationTemplates).set(updates).where(eq(schema.globalTankCalibrationTemplates.id, id));
-    return this.findGlobalTankCalibrationTemplateById(id);
+    await this.db
+      .update(schema.globalTankCalibrationTemplates)
+      .set(updates)
+      .where(eq(schema.globalTankCalibrationTemplates.id, existing.id));
+    return this.findGlobalTankCalibrationTemplateById(existing.id);
   }
 
   async suggestGlobalTemplateForTank(tankId: string): Promise<{
@@ -4521,6 +4809,7 @@ export class PumpRepository {
     let minDiff = Infinity;
 
     for (const t of templates) {
+      if ((t.pointsCount || 0) < 2) continue;
       const diff = Math.abs(t.nominalCapacityLitres - tank.capacityLitres);
       if (diff < minDiff && diff <= 5000) {
         minDiff = diff;
@@ -4532,13 +4821,13 @@ export class PumpRepository {
       tank,
       suggestedTemplate: bestMatch,
       matchReason: bestMatch
-        ? `Capacity ${tank.capacityLitres} L matches standard template ${bestMatch.code} (${bestMatch.nominalCapacityLitres} L)`
-        : 'No exact standard capacity match found within tolerance',
+        ? `Capacity ${tank.capacityLitres} L matches validated standard template ${bestMatch.code} (${bestMatch.nominalCapacityLitres} L)`
+        : 'No validated APPROVED standard capacity template found within tolerance',
     };
   }
 
   async assignGlobalTemplateToTanks(
-    templateId: string,
+    templateIdOrCode: string,
     tankIds: string[],
     userId: string,
     options?: {
@@ -4556,11 +4845,19 @@ export class PumpRepository {
       pointsCount: number;
     }>;
   }> {
-    const template = await this.findGlobalTankCalibrationTemplateById(templateId);
-    if (!template) throw new Error(`Global calibration template not found: ${templateId}`);
+    const template = await this.findGlobalTankCalibrationTemplateById(templateIdOrCode);
+    if (!template) throw new Error(`Global calibration template not found: ${templateIdOrCode}`);
 
-    const points = await this.listGlobalTankCalibrationTemplatePoints(templateId);
-    if (points.length === 0) throw new Error(`Global template ${template.code} has no calibration points`);
+    if (template.status !== 'APPROVED' && template.status !== 'ACTIVE') {
+      throw new Error(
+        `Global template ${template.code} is in ${template.status} status and cannot be assigned to tanks until its dip-to-volume points are imported, validated, and marked APPROVED`
+      );
+    }
+
+    const points = await this.listGlobalTankCalibrationTemplatePoints(template.id);
+    if (points.length < 2) {
+      throw new Error(`Global template ${template.code} has no validated calibration points`);
+    }
 
     const nowIso = new Date().toISOString();
     const effectiveFrom = nowIso.slice(0, 10);
@@ -4585,40 +4882,46 @@ export class PumpRepository {
       const chartId = `tcc-${tankId}-r${nextRev}-${Date.now().toString(36)}`;
       const chartStatus = activate ? 'ACTIVE' : 'DRAFT';
 
+      const batchStmts: any[] = [];
+
       if (activate) {
         for (const c of charts) {
           if (c.status === 'ACTIVE') {
-            await this.db
-              .update(schema.tankCalibrationCharts)
-              .set({ status: 'SUPERSEDED', effectiveTo: effectiveFrom, updatedAt: nowIso, updatedBy: userId })
-              .where(eq(schema.tankCalibrationCharts.id, c.id));
+            batchStmts.push(
+              this.db
+                .update(schema.tankCalibrationCharts)
+                .set({ status: 'SUPERSEDED', effectiveTo: effectiveFrom, updatedAt: nowIso, updatedBy: userId })
+                .where(eq(schema.tankCalibrationCharts.id, c.id))
+            );
           }
         }
       }
 
-      await this.db.insert(schema.tankCalibrationCharts).values({
-        id: chartId,
-        tankId: tankId,
-        sourceTemplateId: template.id,
-        revisionNumber: nextRev,
-        status: chartStatus,
-        chartUnitDip: 'MM',
-        chartUnitVolume: 'LITRES',
-        tankDiameterMmMilliunits: template.tankDiameterMmMilliunits,
-        tankLengthMmMilliunits: template.tankLengthMmMilliunits,
-        maxDipMmMilliunits: template.maxDipMmMilliunits,
-        chartCapacityMilliunits: template.nominalCapacityLitres * 1000,
-        sourceFileName: template.sourceFileName || `global-template-${template.code}`,
-        referenceDocument: `ASSIGNED-${template.code}-REV${nextRev}`,
-        notes: options?.notes || `Assigned from global calibration template ${template.code}`,
-        effectiveFrom: effectiveFrom,
-        approvedBy: activate ? userId : null,
-        approvedAt: activate ? nowIso : null,
-        createdAt: nowIso,
-        createdBy: userId,
-        updatedAt: nowIso,
-        updatedBy: userId,
-      });
+      batchStmts.push(
+        this.db.insert(schema.tankCalibrationCharts).values({
+          id: chartId,
+          tankId: tankId,
+          sourceTemplateId: template.id,
+          revisionNumber: nextRev,
+          status: chartStatus,
+          chartUnitDip: 'MM',
+          chartUnitVolume: 'LITRES',
+          tankDiameterMmMilliunits: template.tankDiameterMmMilliunits,
+          tankLengthMmMilliunits: template.tankLengthMmMilliunits,
+          maxDipMmMilliunits: template.maxDipMmMilliunits,
+          chartCapacityMilliunits: template.nominalCapacityLitres * 1000,
+          sourceFileName: template.sourceFileName || `global-template-${template.code}`,
+          referenceDocument: `ASSIGNED-${template.code}-REV${nextRev}`,
+          notes: options?.notes || `Assigned from global calibration template ${template.code}`,
+          effectiveFrom: effectiveFrom,
+          approvedBy: activate ? userId : null,
+          approvedAt: activate ? nowIso : null,
+          createdAt: nowIso,
+          createdBy: userId,
+          updatedAt: nowIso,
+          updatedBy: userId,
+        })
+      );
 
       const ptValues = points.map((p, idx) => ({
         id: `tcp-${chartId}-${idx + 1}`,
@@ -4630,7 +4933,13 @@ export class PumpRepository {
         createdBy: userId,
       }));
 
-      await this.db.insert(schema.tankCalibrationPoints).values(ptValues);
+      for (const chunk of chunkArray(ptValues, SNAPSHOT_INSERT_CHUNK_SIZE)) {
+        if (chunk.length > 0) {
+          batchStmts.push(this.db.insert(schema.tankCalibrationPoints).values(chunk));
+        }
+      }
+
+      await (this.db as any).batch(batchStmts);
 
       assignments.push({
         tankId: tank.id,

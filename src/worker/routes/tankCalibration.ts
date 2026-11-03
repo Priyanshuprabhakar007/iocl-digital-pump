@@ -975,7 +975,89 @@ tankCalibration.get('/calibration-templates/:id', requirePermission(PERMISSIONS.
   });
 });
 
-// POST /api/v1/calibration-templates - Create a new global calibration template
+function parseGlobalTemplateCsvOrPoints(body: any): {
+  parsedPoints: { dipMillimetresMilliunits: number; volumeMilliunits: number }[];
+  parseErrors: string[];
+} {
+  const parseErrors: string[] = [];
+  const parsedPoints: { dipMillimetresMilliunits: number; volumeMilliunits: number }[] = [];
+
+  const rawText = typeof body?.csvText === 'string'
+    ? body.csvText
+    : typeof body?.csvData === 'string'
+      ? body.csvData
+      : typeof body?.rawText === 'string'
+        ? body.rawText
+        : null;
+
+  if (rawText !== null && rawText.trim().length > 0) {
+    const lines = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const lineNum = i + 1;
+      const trimmed = lines[i].trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+
+      // Skip header line
+      if (/^(dip|height|depth|mm|level)/i.test(trimmed) && /(vol|lit|ltr|cap)/i.test(trimmed)) {
+        continue;
+      }
+
+      if (/\b(cm|centimet|inch|in\b|ft|feet|gal|gallon|bbl|barrel|\bkl\b|kilolit)/i.test(trimmed)) {
+        parseErrors.push(`Line ${lineNum}: Invalid unit detected. Only dip in mm and volume in Litres are permitted.`);
+        continue;
+      }
+
+      const tokens = trimmed.split(/[\t,;]+|\s{2,}/).map((t: string) => t.trim()).filter(Boolean);
+      const parts = tokens.length === 1 && trimmed.includes(' ')
+        ? trimmed.split(/\s+/).map((t: string) => t.trim()).filter(Boolean)
+        : tokens;
+
+      if (parts.length < 2) {
+        parseErrors.push(`Line ${lineNum}: Expected 2 columns (Dip mm, Volume Litres).`);
+        continue;
+      }
+
+      const cleanDip = parts[0].replace(/mm$/i, '').trim();
+      const cleanVol = parts[1].replace(/(litres|litre|ltrs|ltr|l)$/i, '').trim();
+      const dipVal = Number(cleanDip);
+      const volVal = Number(cleanVol);
+
+      if (!Number.isFinite(dipVal) || !Number.isFinite(volVal) || cleanDip === '' || cleanVol === '') {
+        parseErrors.push(`Line ${lineNum}: Invalid numeric values ('${parts[0]}', '${parts[1]}').`);
+        continue;
+      }
+
+      parsedPoints.push({
+        dipMillimetresMilliunits: Math.round(dipVal * 1000),
+        volumeMilliunits: Math.round(volVal * 1000),
+      });
+    }
+  } else if (Array.isArray(body?.points)) {
+    for (let i = 0; i < body.points.length; i++) {
+      const pt = body.points[i];
+      const rawDip = pt?.dipMillimetres ?? pt?.dipMm ?? pt?.dip_mm;
+      const rawVol = pt?.volumeLitres ?? pt?.volumeLitre ?? pt?.volume_litres;
+      if (rawDip === undefined || rawDip === null || rawVol === undefined || rawVol === null) {
+        parseErrors.push(`Point ${i + 1}: dipMillimetres and volumeLitres are required.`);
+        continue;
+      }
+      const dipVal = Number(rawDip);
+      const volVal = Number(rawVol);
+      if (!Number.isFinite(dipVal) || !Number.isFinite(volVal)) {
+        parseErrors.push(`Point ${i + 1}: Invalid numeric values ('${rawDip}', '${rawVol}').`);
+        continue;
+      }
+      parsedPoints.push({
+        dipMillimetresMilliunits: parseMilliunits(rawDip),
+        volumeMilliunits: parseMilliunits(rawVol),
+      });
+    }
+  }
+
+  return { parsedPoints, parseErrors };
+}
+
+// POST /api/v1/calibration-templates - Create a new global calibration template (or import into an unpopulated DRAFT template)
 tankCalibration.post('/calibration-templates', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, async (c: AppContext) => {
   const db = getDb(c.env.DB);
   const pumpRepo = new PumpRepository(db);
@@ -983,18 +1065,84 @@ tankCalibration.post('/calibration-templates', requirePermission(PERMISSIONS.TAN
   const userCtx = c.var.user!;
 
   const body = await c.req.json().catch(() => ({}));
-  const { code, name, nominalCapacityLitres, tankDiameterMm, tankLengthMm, maxDipMm, points, sourceFileName, referenceDocument, notes, status } = body;
+  const { code, name, nominalCapacityLitres, tankDiameterMm, tankLengthMm, maxDipMm, sourceFileName, referenceDocument, notes, status, overwrite, upsert } = body;
 
-  if (!code || !name || !nominalCapacityLitres || !Array.isArray(points) || points.length < 2) {
+  if (!code || !name || !nominalCapacityLitres) {
     return c.json({
       success: false,
       data: null,
-      error: { code: 'BAD_REQUEST', message: 'code, name, nominalCapacityLitres, and at least 2 points are required' },
+      error: { code: 'BAD_REQUEST', message: 'code, name, and nominalCapacityLitres are required' },
+    }, 400);
+  }
+
+  const { parsedPoints, parseErrors } = parseGlobalTemplateCsvOrPoints(body);
+  if (parseErrors.length > 0) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'CSV_PARSE_ERROR', message: parseErrors.slice(0, 5).join(' ') },
+    }, 400);
+  }
+
+  const requestedStatus = status || 'DRAFT';
+  if ((requestedStatus === 'APPROVED' || requestedStatus === 'ACTIVE') && parsedPoints.length < 2) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'TEMPLATE_POINTS_NOT_VALIDATED',
+        message: 'Reference templates cannot be marked APPROVED unless actual dip-to-volume points (at least 2 points) are imported and validated.',
+      },
     }, 400);
   }
 
   const existing = await pumpRepo.findGlobalTankCalibrationTemplateByCode(code);
   if (existing) {
+    const canPopulateExistingDraft = existing.status === 'DRAFT' && (existing.pointsCount || 0) === 0 && parsedPoints.length >= 2;
+    if (overwrite === true || upsert === true || canPopulateExistingDraft) {
+      try {
+        const imported = await pumpRepo.importGlobalTankCalibrationTemplatePoints(
+          existing.id,
+          parsedPoints,
+          userCtx.user.id,
+          {
+            status: requestedStatus === 'ACTIVE' ? 'ACTIVE' : requestedStatus === 'DRAFT' ? 'DRAFT' : 'APPROVED',
+            sourceFileName,
+            referenceDocument,
+            notes,
+            tankDiameterMmMilliunits: tankDiameterMm ? parseMilliunits(tankDiameterMm) : undefined,
+            tankLengthMmMilliunits: tankLengthMm ? parseMilliunits(tankLengthMm) : undefined,
+            maxDipMmMilliunits: maxDipMm ? parseMilliunits(maxDipMm) : undefined,
+          }
+        );
+
+        const nowIso = new Date().toISOString();
+        await auditRepo.logAction({
+          id: `audit-gtct-import-${Date.now()}`,
+          userId: userCtx.user.id,
+          action: 'GLOBAL_CALIBRATION_TEMPLATE_IMPORT',
+          entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
+          entityId: existing.id,
+          newValue: { code: existing.code, status: imported.status, pointsCount: parsedPoints.length, sourceFileName },
+          ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
+          userAgent: c.req.header('user-agent') || 'Worker API',
+          createdAt: nowIso,
+        });
+
+        return c.json({
+          success: true,
+          data: imported,
+          error: null,
+        }, 200);
+      } catch (err: any) {
+        return c.json({
+          success: false,
+          data: null,
+          error: { code: err.code || 'VALIDATION_ERROR', message: err.message },
+        }, 400);
+      }
+    }
+
     return c.json({
       success: false,
       data: null,
@@ -1005,50 +1153,147 @@ tankCalibration.post('/calibration-templates', requirePermission(PERMISSIONS.TAN
   const templateId = `gtct-${code.toLowerCase().replace(/[^a-z0-9_-]/g, '')}-${Date.now().toString(36)}`;
   const nowIso = new Date().toISOString();
 
-  const parsedPoints = points.map((pt: any) => ({
-    dipMillimetresMilliunits: parseMilliunits(pt.dipMillimetres || pt.dipMm),
-    volumeMilliunits: parseMilliunits(pt.volumeLitres || pt.volumeLitre),
-  }));
+  try {
+    const created = await pumpRepo.createGlobalTankCalibrationTemplate(
+      {
+        id: templateId,
+        code,
+        name,
+        nominalCapacityLitres: Number(nominalCapacityLitres),
+        tankDiameterMmMilliunits: tankDiameterMm ? parseMilliunits(tankDiameterMm) : null,
+        tankLengthMmMilliunits: tankLengthMm ? parseMilliunits(tankLengthMm) : null,
+        maxDipMmMilliunits: maxDipMm ? parseMilliunits(maxDipMm) : null,
+        status: requestedStatus,
+        sourceFileName,
+        referenceDocument,
+        notes,
+        createdBy: userCtx.user.id,
+        createdAt: nowIso,
+        approvedBy: requestedStatus === 'APPROVED' || requestedStatus === 'ACTIVE' ? userCtx.user.id : null,
+        approvedAt: requestedStatus === 'APPROVED' || requestedStatus === 'ACTIVE' ? nowIso : null,
+      },
+      parsedPoints
+    );
 
-  const created = await pumpRepo.createGlobalTankCalibrationTemplate(
-    {
-      id: templateId,
-      code,
-      name,
-      nominalCapacityLitres: Number(nominalCapacityLitres),
-      tankDiameterMmMilliunits: tankDiameterMm ? parseMilliunits(tankDiameterMm) : null,
-      tankLengthMmMilliunits: tankLengthMm ? parseMilliunits(tankLengthMm) : null,
-      maxDipMmMilliunits: maxDipMm ? parseMilliunits(maxDipMm) : null,
-      status: status || 'APPROVED',
-      sourceFileName,
-      referenceDocument,
-      notes,
-      createdBy: userCtx.user.id,
+    await auditRepo.logAction({
+      id: `audit-gtct-create-${Date.now()}`,
+      userId: userCtx.user.id,
+      action: 'GLOBAL_CALIBRATION_TEMPLATE_CREATE',
+      entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
+      entityId: templateId,
+      newValue: { code, name, nominalCapacityLitres, status: created.status, pointsCount: parsedPoints.length },
+      ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
+      userAgent: c.req.header('user-agent') || 'Worker API',
       createdAt: nowIso,
-      approvedBy: userCtx.user.id,
-      approvedAt: nowIso,
-    },
-    parsedPoints
-  );
+    });
 
-  await auditRepo.logAction({
-    id: `audit-gtct-create-${Date.now()}`,
-    userId: userCtx.user.id,
-    action: 'GLOBAL_CALIBRATION_TEMPLATE_CREATE',
-    entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
-    entityId: templateId,
-    newValue: { code, name, nominalCapacityLitres, pointsCount: points.length },
-    ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
-    userAgent: c.req.header('user-agent') || 'Worker API',
-    createdAt: nowIso,
-  });
-
-  return c.json({
-    success: true,
-    data: created,
-    error: null,
-  }, 201);
+    return c.json({
+      success: true,
+      data: created,
+      error: null,
+    }, 201);
+  } catch (err: any) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: err.code || 'VALIDATION_ERROR', message: err.message },
+    }, 400);
+  }
 });
+
+// POST /api/v1/calibration-templates/:id/import (and PUT /api/v1/calibration-templates/:id/points)
+// Import complete verified CSV or JSON dip-to-volume calibration points into STANDARD_20KL, STANDARD_50KL, or any global template
+const handleGlobalTemplateImport = async (c: AppContext) => {
+  const id = c.req.param('id') || '';
+  if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Template ID or code is required' } }, 400);
+
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+  const auditRepo = new AuditRepository(db);
+  const userCtx = c.var.user!;
+
+  const existing = await pumpRepo.findGlobalTankCalibrationTemplateById(id);
+  if (!existing) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: `Global calibration template '${id}' not found` } }, 404);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const { parsedPoints, parseErrors } = parseGlobalTemplateCsvOrPoints(body);
+
+  if (parseErrors.length > 0) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: 'CSV_PARSE_ERROR', message: parseErrors.slice(0, 5).join(' ') },
+    }, 400);
+  }
+
+  if (parsedPoints.length < 2) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'Complete verified calibration data (csvText or points array with at least 2 dip-to-volume rows) is required for import.',
+      },
+    }, 400);
+  }
+
+  const targetStatus = body.status && ['DRAFT', 'APPROVED', 'ACTIVE'].includes(body.status)
+    ? body.status
+    : 'APPROVED';
+
+  try {
+    const updated = await pumpRepo.importGlobalTankCalibrationTemplatePoints(
+      existing.id,
+      parsedPoints,
+      userCtx.user.id,
+      {
+        status: targetStatus,
+        sourceFileName: body.sourceFileName,
+        referenceDocument: body.referenceDocument,
+        notes: body.notes,
+        tankDiameterMmMilliunits: body.tankDiameterMm ? parseMilliunits(body.tankDiameterMm) : undefined,
+        tankLengthMmMilliunits: body.tankLengthMm ? parseMilliunits(body.tankLengthMm) : undefined,
+        maxDipMmMilliunits: body.maxDipMm ? parseMilliunits(body.maxDipMm) : undefined,
+      }
+    );
+
+    const nowIso = new Date().toISOString();
+    await auditRepo.logAction({
+      id: `audit-gtct-import-${Date.now()}`,
+      userId: userCtx.user.id,
+      action: 'GLOBAL_CALIBRATION_TEMPLATE_IMPORT',
+      entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
+      entityId: existing.id,
+      newValue: {
+        code: existing.code,
+        status: updated.status,
+        pointsCount: parsedPoints.length,
+        sourceFileName: updated.sourceFileName,
+        referenceDocument: updated.referenceDocument,
+      },
+      ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
+      userAgent: c.req.header('user-agent') || 'Worker API',
+      createdAt: nowIso,
+    });
+
+    return c.json({
+      success: true,
+      data: updated,
+      error: null,
+    }, 200);
+  } catch (err: any) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: err.code || 'VALIDATION_ERROR', message: err.message },
+    }, 400);
+  }
+};
+
+tankCalibration.post('/calibration-templates/:id/import', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, handleGlobalTemplateImport as any);
+tankCalibration.put('/calibration-templates/:id/points', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, handleGlobalTemplateImport as any);
 
 // POST /api/v1/calibration-templates/:id/status - Update global template status
 tankCalibration.post('/calibration-templates/:id/status', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, async (c: AppContext) => {
@@ -1068,24 +1313,32 @@ tankCalibration.post('/calibration-templates/:id/status', requirePermission(PERM
   }
 
   const nowIso = new Date().toISOString();
-  const updated = await pumpRepo.updateGlobalTankCalibrationTemplateStatus(id, status, userCtx.user.id, nowIso);
-  if (!updated) {
-    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Global template not found' } }, 404);
+  try {
+    const updated = await pumpRepo.updateGlobalTankCalibrationTemplateStatus(id, status, userCtx.user.id, nowIso);
+    if (!updated) {
+      return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Global template not found' } }, 404);
+    }
+
+    await auditRepo.logAction({
+      id: `audit-gtct-status-${Date.now()}`,
+      userId: userCtx.user.id,
+      action: 'GLOBAL_CALIBRATION_TEMPLATE_STATUS_UPDATE',
+      entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
+      entityId: updated.id,
+      newValue: { status },
+      ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
+      userAgent: c.req.header('user-agent') || 'Worker API',
+      createdAt: nowIso,
+    });
+
+    return c.json({ success: true, data: updated, error: null });
+  } catch (err: any) {
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: err.code || 'VALIDATION_ERROR', message: err.message },
+    }, 400);
   }
-
-  await auditRepo.logAction({
-    id: `audit-gtct-status-${Date.now()}`,
-    userId: userCtx.user.id,
-    action: 'GLOBAL_CALIBRATION_TEMPLATE_STATUS_UPDATE',
-    entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
-    entityId: id,
-    newValue: { status },
-    ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
-    userAgent: c.req.header('user-agent') || 'Worker API',
-    createdAt: nowIso,
-  });
-
-  return c.json({ success: true, data: updated, error: null });
 });
 
 // GET /api/v1/tanks/:tankId/suggested-template - Get matching global template for a tank

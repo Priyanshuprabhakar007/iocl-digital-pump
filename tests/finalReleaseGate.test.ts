@@ -141,14 +141,23 @@ describe('Stage F4: Final Release Candidate Gate Suite', () => {
       expect(pre).toContain('tank_calibration_charts');
     });
 
-    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 33, migration 0033 tracking, and admin existence', () => {
+    it('3.3 deployment workflow enforces PRAGMA foreign_key_check, migration count >= 34, migration 0033 & 0034 tracking before deploy, and admin existence', () => {
       expect(deployContent).toContain('PRAGMA foreign_key_check;');
       expect(deployContent).toContain('if [ "$COUNT" -lt "33" ]; then');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "34" ]; then');
       expect(deployContent).toContain('ERROR: Expected at least 33 migrations to be recorded');
+      expect(deployContent).toContain('ERROR: Expected at least 34 migrations to be recorded');
       expect(deployContent).toContain('0033_tank_calibration_chart_versioning.sql');
+      expect(deployContent).toContain('0034_global_tank_calibration_templates.sql');
       expect(deployContent).toContain('tank_calibration_charts');
+      expect(deployContent).toContain('global_tank_calibration_templates');
       expect(deployContent).toContain("SELECT COUNT(*) AS count FROM users WHERE email = 'admin@iocl.in';");
       expect(deployContent).toContain('if [ "$POST_CNT" -lt "$PRE_CNT" ]; then');
+
+      const idx0034 = deployContent.indexOf('Apply Migration 0034 via Safe State-Aware Stages');
+      const idxDeploy = deployContent.indexOf('npx wrangler deploy');
+      expect(idx0034).toBeGreaterThan(0);
+      expect(idxDeploy).toBeGreaterThan(idx0034);
     });
   });
 

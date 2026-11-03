@@ -416,7 +416,7 @@ export const globalTankCalibrationTemplates = sqliteTable('global_tank_calibrati
   tankLengthMmMilliunits: integer('tank_length_mm_milliunits'),
   maxDipMmMilliunits: integer('max_dip_mm_milliunits'),
   revisionNumber: integer('revision_number').notNull().default(1),
-  status: text('status', { enum: ['DRAFT', 'APPROVED', 'ACTIVE', 'SUPERSEDED', 'ARCHIVED'] }).notNull().default('APPROVED'),
+  status: text('status', { enum: ['DRAFT', 'APPROVED', 'ACTIVE', 'SUPERSEDED', 'ARCHIVED'] }).notNull().default('DRAFT'),
   sourceFileName: text('source_file_name'),
   referenceDocument: text('reference_document'),
   notes: text('notes'),

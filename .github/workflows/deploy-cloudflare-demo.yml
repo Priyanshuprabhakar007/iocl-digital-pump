@@ -938,6 +938,293 @@ jobs:
           echo "[0033] Migration $MIGRATION_0033 successfully applied, verified and recorded."
 
 
+      - name: Apply Migration 0034 via Safe State-Aware Stages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          MIGRATION_0034="0034_global_tank_calibration_templates.sql"
+          echo "=================================================="
+          echo "CHECKING MIGRATION 0034: $MIGRATION_0034"
+          echo "=================================================="
+
+          # 1. PRECHECK MIGRATION RECORD IN d1_migrations
+          RESULT_0034=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$MIGRATION_0034';" \
+            --json \
+            --yes)
+
+          COUNT_0034=$(echo "$RESULT_0034" | jq -r '.[0].results[0].count // 0')
+
+          # 2. CHECK PHYSICAL SCHEMA STATE (TABLES & SOURCE_TEMPLATE_ID COLUMN)
+          GTCT_TABLE_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = 'global_tank_calibration_templates';" \
+            --json \
+            --yes)
+          HAS_GTCT_TABLE=$(echo "$GTCT_TABLE_RES" | jq -r '.[0].results[0].count // 0')
+
+          GTCTP_TABLE_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = 'global_tank_calibration_template_points';" \
+            --json \
+            --yes)
+          HAS_GTCTP_TABLE=$(echo "$GTCTP_TABLE_RES" | jq -r '.[0].results[0].count // 0')
+
+          TCC_SRC_COL_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM pragma_table_info('tank_calibration_charts') WHERE name = 'source_template_id';" \
+            --json \
+            --yes)
+          HAS_TCC_SRC_COL=$(echo "$TCC_SRC_COL_RES" | jq -r '.[0].results[0].count // 0')
+
+          echo "Precheck 0034: migration recorded in d1_migrations=$COUNT_0034, global_tank_calibration_templates=$HAS_GTCT_TABLE, global_tank_calibration_template_points=$HAS_GTCTP_TABLE, tcc.source_template_id=$HAS_TCC_SRC_COL"
+
+          # 3. STATE DETECTION & SAFETY GUARDS
+          if [ "$COUNT_0034" = "1" ] && [ "$HAS_GTCT_TABLE" = "1" ] && [ "$HAS_GTCTP_TABLE" = "1" ] && [ "$HAS_TCC_SRC_COL" = "1" ]; then
+            echo "Already applied and schema verified: $MIGRATION_0034. Enforcing IOCL reference dimensions and DRAFT safety for unpopulated headers..."
+            npx wrangler d1 execute iocl-pump-manager-d1 \
+              --remote \
+              --command "
+                UPDATE global_tank_calibration_templates
+                SET tank_diameter_mm_milliunits = 2100000,
+                    tank_length_mm_milliunits = 6250000,
+                    max_dip_mm_milliunits = 2100000
+                WHERE code = 'STANDARD_20KL';
+
+                UPDATE global_tank_calibration_templates
+                SET tank_diameter_mm_milliunits = 3000000,
+                    tank_length_mm_milliunits = 7500000,
+                    max_dip_mm_milliunits = 3000000
+                WHERE code = 'STANDARD_50KL';
+
+                UPDATE global_tank_calibration_templates
+                SET status = 'DRAFT',
+                    approved_by = NULL,
+                    approved_at = NULL
+                WHERE (
+                  SELECT COUNT(*) FROM global_tank_calibration_template_points p
+                  WHERE p.template_id = global_tank_calibration_templates.id
+                ) < 2;
+              " \
+              --yes
+            echo "[0034] Reference dimensions and DRAFT safety verified. Skipping re-execution."
+            exit 0
+          fi
+
+          # Partial / Inconsistent State: schema exists but not recorded in d1_migrations
+          if [ "$COUNT_0034" = "0" ] && ( [ "$HAS_GTCT_TABLE" = "1" ] || [ "$HAS_GTCTP_TABLE" = "1" ] || [ "$HAS_TCC_SRC_COL" = "1" ] ); then
+            echo "ERROR: [0034] Inconsistent or partial migration state detected! Schema elements exist (gtct=$HAS_GTCT_TABLE, gtctp=$HAS_GTCTP_TABLE, tcc.source_template_id=$HAS_TCC_SRC_COL) but $MIGRATION_0034 is not recorded in d1_migrations. Aborting deployment to prevent duplicate column alteration or schema corruption."
+            exit 1
+          fi
+
+          # Inconsistent State: recorded in d1_migrations but schema elements missing
+          if [ "$COUNT_0034" = "1" ] && ( [ "$HAS_GTCT_TABLE" = "0" ] || [ "$HAS_GTCTP_TABLE" = "0" ] || [ "$HAS_TCC_SRC_COL" = "0" ] ); then
+            echo "ERROR: [0034] Inconsistent migration state detected! $MIGRATION_0034 is recorded in d1_migrations but one or more schema elements are missing (gtct=$HAS_GTCT_TABLE, gtctp=$HAS_GTCTP_TABLE, tcc.source_template_id=$HAS_TCC_SRC_COL). Aborting deployment."
+            exit 1
+          fi
+
+          # Partial schema element mismatch
+          if [ "$HAS_GTCT_TABLE" != "$HAS_GTCTP_TABLE" ] || [ "$HAS_GTCT_TABLE" != "$HAS_TCC_SRC_COL" ]; then
+            echo "ERROR: [0034] Fractured schema state detected among migration 0034 tables and columns. Aborting deployment."
+            exit 1
+          fi
+
+          echo "[0034] Clean unapplied state confirmed. Safe to apply migration."
+
+          # 4. CAPTURE PRE-0034 COUNTS FOR COCO TANKS, REVISION 1 CHARTS, TANK #1 REVISION 2 DRAFT, AND SHIFT DATA
+          PRE_0034_TANKS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tanks;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0034_TCC=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_charts;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0034_REV1_CHARTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_charts WHERE revision_number = 1;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0034_REV2_DRAFTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_charts WHERE revision_number = 2 AND status = 'DRAFT';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0034_TCP=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_points;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0034_SHIFTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM operational_shifts;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0034_OST=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM operational_shift_tanks;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0034_TSR=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_stock_readings;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "[0034] Pre-migration counts: tanks=$PRE_0034_TANKS, charts=$PRE_0034_TCC (rev1=$PRE_0034_REV1_CHARTS, rev2_draft=$PRE_0034_REV2_DRAFTS), points=$PRE_0034_TCP, shifts=$PRE_0034_SHIFTS, ost=$PRE_0034_OST, tsr=$PRE_0034_TSR"
+
+          # 5. EXECUTE MIGRATION 0034
+          echo "[0034] Executing migrations/$MIGRATION_0034..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --file="migrations/$MIGRATION_0034" \
+            --yes
+
+          # 6. POST-MIGRATION SCHEMA AND IOCL DIMENSION VERIFICATION
+          echo "[0034] Verifying tables global_tank_calibration_templates and global_tank_calibration_template_points..."
+          POST_GTCT_TABLE=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = 'global_tank_calibration_templates';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_GTCTP_TABLE=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = 'global_tank_calibration_template_points';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_TCC_SRC_COL=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM pragma_table_info('tank_calibration_charts') WHERE name = 'source_template_id';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$POST_GTCT_TABLE" -ne 1 ] || [ "$POST_GTCTP_TABLE" -ne 1 ] || [ "$POST_TCC_SRC_COL" -ne 1 ]; then
+            echo "ERROR: [0034] Schema verification failed! (gtct=$POST_GTCT_TABLE, gtctp=$POST_GTCTP_TABLE, tcc.source_template_id=$POST_TCC_SRC_COL)."
+            exit 1
+          fi
+
+          # Verify IOCL reference dimensions and DRAFT status for STANDARD_20KL and STANDARD_50KL
+          STD20_VERIFY=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM global_tank_calibration_templates WHERE code = 'STANDARD_20KL' AND nominal_capacity_litres = 20000 AND tank_diameter_mm_milliunits = 2100000 AND tank_length_mm_milliunits = 6250000 AND max_dip_mm_milliunits = 2100000 AND status = 'DRAFT';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          STD50_VERIFY=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM global_tank_calibration_templates WHERE code = 'STANDARD_50KL' AND nominal_capacity_litres = 50000 AND tank_diameter_mm_milliunits = 3000000 AND tank_length_mm_milliunits = 7500000 AND max_dip_mm_milliunits = 3000000 AND status = 'DRAFT';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$STD20_VERIFY" -ne 1 ] || [ "$STD50_VERIFY" -ne 1 ]; then
+            echo "ERROR: [0034] Reference template dimension/status verification failed (STD20_VERIFY=$STD20_VERIFY, STD50_VERIFY=$STD50_VERIFY)!"
+            exit 1
+          fi
+          echo "[0034] Verified STANDARD_20KL (2100x6250x2100 mm, DRAFT) and STANDARD_50KL (3000x7500x3000 mm, DRAFT)."
+
+          # 7. ROW COUNT & DATA PRESERVATION CHECK
+          POST_0034_TANKS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tanks;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0034_TCC=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_charts;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0034_REV1_CHARTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_charts WHERE revision_number = 1;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0034_REV2_DRAFTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_charts WHERE revision_number = 2 AND status = 'DRAFT';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0034_TCP=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_points;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0034_SHIFTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM operational_shifts;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0034_OST=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM operational_shift_tanks;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0034_TSR=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_stock_readings;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "[0034] Row count preservation check (Post vs Pre):"
+          echo "  tanks: $POST_0034_TANKS vs $PRE_0034_TANKS"
+          echo "  tank_calibration_charts: $POST_0034_TCC vs $PRE_0034_TCC"
+          echo "  revision 1 charts: $POST_0034_REV1_CHARTS vs $PRE_0034_REV1_CHARTS"
+          echo "  revision 2 DRAFT charts: $POST_0034_REV2_DRAFTS vs $PRE_0034_REV2_DRAFTS"
+          echo "  tank_calibration_points: $POST_0034_TCP vs $PRE_0034_TCP"
+          echo "  operational_shifts: $POST_0034_SHIFTS vs $PRE_0034_SHIFTS"
+          echo "  operational_shift_tanks: $POST_0034_OST vs $PRE_0034_OST"
+          echo "  tank_stock_readings: $POST_0034_TSR vs $PRE_0034_TSR"
+
+          if [ "$POST_0034_TANKS" -lt "$PRE_0034_TANKS" ] || [ "$POST_0034_TCC" -lt "$PRE_0034_TCC" ] || [ "$POST_0034_REV1_CHARTS" -lt "$PRE_0034_REV1_CHARTS" ] || [ "$POST_0034_REV2_DRAFTS" -lt "$PRE_0034_REV2_DRAFTS" ] || [ "$POST_0034_TCP" -lt "$PRE_0034_TCP" ] || [ "$POST_0034_SHIFTS" -lt "$PRE_0034_SHIFTS" ] || [ "$POST_0034_OST" -lt "$PRE_0034_OST" ] || [ "$POST_0034_TSR" -lt "$PRE_0034_TSR" ]; then
+            echo "ERROR: [0034] Historical tank, calibration revision, or shift data count decreased after migration 0034!"
+            exit 1
+          fi
+
+          # 8. FOREIGN KEY CHECK
+          echo "[0034] Running foreign key check..."
+          FK_RESULT_0034=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "PRAGMA foreign_key_check;" \
+            --json \
+            --yes)
+          FK_VIOLATIONS_0034=$(echo "$FK_RESULT_0034" | jq -r '.[0].results | length')
+          if [ "$FK_VIOLATIONS_0034" != "0" ]; then
+            echo "ERROR: [0034] Foreign key violations detected post-migration 0034:"
+            echo "$FK_RESULT_0034"
+            exit 1
+          fi
+          echo "[0034] PRAGMA foreign_key_check passed (0 violations)."
+
+          # 9. RECORD MIGRATION IN d1_migrations
+          echo "[0034] Recording migration $MIGRATION_0034 in d1_migrations..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('$MIGRATION_0034');" \
+            --yes
+
+          echo "[0034] Migration $MIGRATION_0034 successfully applied, verified and recorded."
+
+
       - name: Verify D1 Migration Completion
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -963,6 +1250,11 @@ jobs:
             exit 1
           fi
 
+          if [ "$COUNT" -lt "34" ]; then
+            echo "ERROR: Expected at least 34 migrations to be recorded (found $COUNT)."
+            exit 1
+          fi
+
           MIGRATION_0033_RECORDED=$(npx wrangler d1 execute iocl-pump-manager-d1 \
             --remote \
             --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '0033_tank_calibration_chart_versioning.sql';" \
@@ -974,6 +1266,18 @@ jobs:
             exit 1
           fi
           echo "Migration 0033 presence verified in d1_migrations."
+
+          MIGRATION_0034_RECORDED=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '0034_global_tank_calibration_templates.sql';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$MIGRATION_0034_RECORDED" -ne 1 ]; then
+            echo "ERROR: Migration 0034_global_tank_calibration_templates.sql is NOT recorded in d1_migrations!"
+            exit 1
+          fi
+          echo "Migration 0034 presence verified in d1_migrations."
 
           # Explicit workflow assertions for tank calibration versioning table
           CALIBRATION_TABLE_CHECK=$(npx wrangler d1 execute iocl-pump-manager-d1 \
@@ -987,6 +1291,19 @@ jobs:
             exit 1
           fi
           echo "Tank calibration versioning table verified in sqlite_master."
+
+          # Explicit workflow assertions for global tank calibration template tables
+          GLOBAL_CALIBRATION_TABLES_CHECK=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('global_tank_calibration_templates', 'global_tank_calibration_template_points');" \
+            --json \
+            --yes)
+          FOUND_GLOBAL_CALIBRATION_COUNT=$(echo "$GLOBAL_CALIBRATION_TABLES_CHECK" | jq -r '.[0].results | length')
+          if [ "$FOUND_GLOBAL_CALIBRATION_COUNT" -ne 2 ]; then
+            echo "ERROR: Global tank calibration template tables are missing from sqlite_master (found $FOUND_GLOBAL_CALIBRATION_COUNT / 2)."
+            exit 1
+          fi
+          echo "Global tank calibration template tables verified in sqlite_master."
 
           # Explicit workflow assertions for global masters
           GLOBAL_TABLES_CHECK=$(npx wrangler d1 execute iocl-pump-manager-d1 \

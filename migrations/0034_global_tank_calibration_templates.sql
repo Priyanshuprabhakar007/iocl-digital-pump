@@ -3,6 +3,8 @@
 -- =============================================================================
 -- Introduces reusable global tank calibration templates (e.g. STANDARD_20KL, STANDARD_50KL)
 -- while preserving tank-wise calibration chart revisions, historical readings, and DSRs.
+-- Reference templates are initialized in DRAFT status with official IOCL reference dimensions
+-- and must not be marked APPROVED until complete verified dip-to-volume points are imported.
 
 -- 1. Create global_tank_calibration_templates header table
 CREATE TABLE IF NOT EXISTS `global_tank_calibration_templates` (
@@ -14,7 +16,7 @@ CREATE TABLE IF NOT EXISTS `global_tank_calibration_templates` (
   `tank_length_mm_milliunits` INTEGER,
   `max_dip_mm_milliunits` INTEGER,
   `revision_number` INTEGER NOT NULL DEFAULT 1,
-  `status` TEXT NOT NULL DEFAULT 'APPROVED' CHECK(`status` IN ('DRAFT', 'APPROVED', 'ACTIVE', 'SUPERSEDED', 'ARCHIVED')),
+  `status` TEXT NOT NULL DEFAULT 'DRAFT' CHECK(`status` IN ('DRAFT', 'APPROVED', 'ACTIVE', 'SUPERSEDED', 'ARCHIVED')),
   `source_file_name` TEXT,
   `reference_document` TEXT,
   `notes` TEXT,
@@ -57,7 +59,8 @@ ALTER TABLE `tank_calibration_charts`
 CREATE INDEX IF NOT EXISTS `idx_tcc_source_template_id`
   ON `tank_calibration_charts` (`source_template_id`);
 
--- 4. Seed Standard 20 KL Global Calibration Template Header
+-- 4. Seed Standard 20 KL Global Calibration Template Header (DRAFT until verified CSV points imported)
+-- IOCL Reference Dimensions: Diameter = 2100 mm, Length = 6250 mm, Max Dip = 2100 mm
 INSERT OR IGNORE INTO `global_tank_calibration_templates` (
   `id`,
   `code`,
@@ -81,22 +84,23 @@ INSERT OR IGNORE INTO `global_tank_calibration_templates` (
   'STANDARD_20KL',
   'Standard 20,000 Litre Tank Calibration Chart',
   20000,
-  2000000,
-  6500000,
-  2000000,
+  2100000,
+  6250000,
+  2100000,
   1,
-  'APPROVED',
+  'DRAFT',
   'iocl_standard_20kl_calibration.pdf',
   'IOCL-STD-TANK-20KL-REV1',
-  'Official IOCL standard calibration table for 20 KL horizontal cylindrical underground storage tanks.',
+  'Official IOCL reference dimensions (Diameter 2100 mm, Length 6250 mm, Max Dip 2100 mm) for 20 KL horizontal cylindrical underground storage tanks. Import and validate complete dip-to-volume CSV data before approval.',
   NULL,
   '2026-01-01T00:00:00.000Z',
   NULL,
-  '2026-01-01T00:00:00.000Z',
+  NULL,
   '2026-01-01T00:00:00.000Z'
 );
 
--- 5. Seed Standard 50 KL Global Calibration Template Header
+-- 5. Seed Standard 50 KL Global Calibration Template Header (DRAFT until verified CSV points imported)
+-- IOCL Reference Dimensions: Diameter = 3000 mm, Length = 7500 mm, Max Dip = 3000 mm
 INSERT OR IGNORE INTO `global_tank_calibration_templates` (
   `id`,
   `code`,
@@ -121,16 +125,16 @@ INSERT OR IGNORE INTO `global_tank_calibration_templates` (
   'Standard 50,000 Litre Tank Calibration Chart',
   50000,
   3000000,
-  7200000,
+  7500000,
   3000000,
   1,
-  'APPROVED',
+  'DRAFT',
   'iocl_standard_50kl_calibration.pdf',
   'IOCL-STD-TANK-50KL-REV1',
-  'Official IOCL standard calibration reference chart for 50 KL high-capacity underground storage tanks.',
+  'Official IOCL reference dimensions (Diameter 3000 mm, Length 7500 mm, Max Dip 3000 mm) for 50 KL high-capacity underground storage tanks. Import and validate complete dip-to-volume CSV data before approval.',
   NULL,
   '2026-01-01T00:00:00.000Z',
   NULL,
-  '2026-01-01T00:00:00.000Z',
+  NULL,
   '2026-01-01T00:00:00.000Z'
 );

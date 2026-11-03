@@ -220,12 +220,22 @@ describe('Stage F3: Production Data Safety & Release Readiness Suite', () => {
       expect(deployContent).toContain('ERROR: Remote database contains foreign-key violations.');
     });
 
-    it('2.6 deployment workflow verifies recorded migration count is at least 33 and tracks migration 0033', () => {
+    it('2.6 deployment workflow verifies recorded migration count is at least 34, tracks migrations 0033 and 0034, and applies migration 0034 before worker deploy', () => {
       expect(deployContent).toContain('SELECT COUNT(*) AS count FROM d1_migrations;');
       expect(deployContent).toContain('if [ "$COUNT" -lt "33" ]; then');
+      expect(deployContent).toContain('if [ "$COUNT" -lt "34" ]; then');
       expect(deployContent).toContain('ERROR: Expected at least 33 migrations to be recorded');
+      expect(deployContent).toContain('ERROR: Expected at least 34 migrations to be recorded');
       expect(deployContent).toContain('0033_tank_calibration_chart_versioning.sql');
+      expect(deployContent).toContain('0034_global_tank_calibration_templates.sql');
       expect(deployContent).toContain('tank_calibration_charts');
+      expect(deployContent).toContain('global_tank_calibration_templates');
+      expect(deployContent).toContain('global_tank_calibration_template_points');
+
+      const idx0034 = deployContent.indexOf('Apply Migration 0034 via Safe State-Aware Stages');
+      const idxDeploy = deployContent.indexOf('npx wrangler deploy');
+      expect(idx0034).toBeGreaterThan(0);
+      expect(idxDeploy).toBeGreaterThan(idx0034);
     });
 
     it('2.7 deployment workflow verifies production administrator account exists', () => {
