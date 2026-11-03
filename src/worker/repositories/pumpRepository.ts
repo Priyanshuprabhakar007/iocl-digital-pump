@@ -4363,4 +4363,288 @@ export class PumpRepository {
   async deleteStockReconciliation(shiftId: string): Promise<void> {
     await this.db.delete(schema.shiftStockReconciliations).where(eq(schema.shiftStockReconciliations.operationalShiftId, shiftId));
   }
+
+  // ==========================================
+  // 21. GLOBAL TANK CALIBRATION TEMPLATES
+  // ==========================================
+
+  async listGlobalTankCalibrationTemplates(options?: { status?: string; nominalCapacityLitres?: number }): Promise<any[]> {
+    let query = this.db.select().from(schema.globalTankCalibrationTemplates);
+    const conditions: any[] = [];
+    if (options?.status) {
+      conditions.push(eq(schema.globalTankCalibrationTemplates.status, options.status as any));
+    }
+    if (options?.nominalCapacityLitres) {
+      conditions.push(eq(schema.globalTankCalibrationTemplates.nominalCapacityLitres, options.nominalCapacityLitres));
+    }
+    const rows = conditions.length > 0
+      ? await query.where(and(...conditions)).orderBy(desc(schema.globalTankCalibrationTemplates.createdAt))
+      : await query.orderBy(desc(schema.globalTankCalibrationTemplates.createdAt));
+
+    const points = await this.db.select({
+      templateId: schema.globalTankCalibrationTemplatePoints.templateId,
+      count: sql<number>`count(*)`,
+    }).from(schema.globalTankCalibrationTemplatePoints)
+      .groupBy(schema.globalTankCalibrationTemplatePoints.templateId);
+
+    const countMap = new Map<string, number>();
+    for (const p of points) {
+      countMap.set(p.templateId, Number(p.count || 0));
+    }
+
+    return rows.map(r => ({
+      ...r,
+      pointsCount: countMap.get(r.id) || 0,
+      nominalCapacityLitresStr: r.nominalCapacityLitres.toString(),
+      maxDipMmStr: r.maxDipMmMilliunits != null ? formatMilliunits(r.maxDipMmMilliunits) : null,
+      tankDiameterMmStr: r.tankDiameterMmMilliunits != null ? formatMilliunits(r.tankDiameterMmMilliunits) : null,
+      tankLengthMmStr: r.tankLengthMmMilliunits != null ? formatMilliunits(r.tankLengthMmMilliunits) : null,
+    }));
+  }
+
+  async findGlobalTankCalibrationTemplateById(id: string): Promise<any | null> {
+    const [row] = await this.db
+      .select()
+      .from(schema.globalTankCalibrationTemplates)
+      .where(eq(schema.globalTankCalibrationTemplates.id, id));
+
+    if (!row) return null;
+
+    const points = await this.listGlobalTankCalibrationTemplatePoints(id);
+
+    return {
+      ...row,
+      pointsCount: points.length,
+      points,
+      nominalCapacityLitresStr: row.nominalCapacityLitres.toString(),
+      maxDipMmStr: row.maxDipMmMilliunits != null ? formatMilliunits(row.maxDipMmMilliunits) : null,
+      tankDiameterMmStr: row.tankDiameterMmMilliunits != null ? formatMilliunits(row.tankDiameterMmMilliunits) : null,
+      tankLengthMmStr: row.tankLengthMmMilliunits != null ? formatMilliunits(row.tankLengthMmMilliunits) : null,
+    };
+  }
+
+  async findGlobalTankCalibrationTemplateByCode(code: string): Promise<any | null> {
+    const [row] = await this.db
+      .select()
+      .from(schema.globalTankCalibrationTemplates)
+      .where(eq(schema.globalTankCalibrationTemplates.code, code.toUpperCase()));
+
+    if (!row) return null;
+    return this.findGlobalTankCalibrationTemplateById(row.id);
+  }
+
+  async listGlobalTankCalibrationTemplatePoints(templateId: string): Promise<any[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.globalTankCalibrationTemplatePoints)
+      .where(eq(schema.globalTankCalibrationTemplatePoints.templateId, templateId))
+      .orderBy(asc(schema.globalTankCalibrationTemplatePoints.dipMillimetresMilliunits));
+
+    return rows.map(r => ({
+      ...r,
+      dipMmStr: formatMilliunits(r.dipMillimetresMilliunits),
+      volumeLitreStr: formatMilliunits(r.volumeMilliunits),
+      dipMillimetres: r.dipMillimetresMilliunits / 1000,
+      volumeLitres: r.volumeMilliunits / 1000,
+    }));
+  }
+
+  async createGlobalTankCalibrationTemplate(data: {
+    id: string;
+    code: string;
+    name: string;
+    nominalCapacityLitres: number;
+    tankDiameterMmMilliunits?: number | null;
+    tankLengthMmMilliunits?: number | null;
+    maxDipMmMilliunits?: number | null;
+    status?: 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'SUPERSEDED' | 'ARCHIVED';
+    sourceFileName?: string | null;
+    referenceDocument?: string | null;
+    notes?: string | null;
+    createdBy: string;
+    createdAt: string;
+    approvedBy?: string | null;
+    approvedAt?: string | null;
+  }, points: Array<{ dipMillimetresMilliunits: number; volumeMilliunits: number }>): Promise<any> {
+    const codeUpper = data.code.toUpperCase();
+    await this.db.insert(schema.globalTankCalibrationTemplates).values({
+      ...data,
+      code: codeUpper,
+      revisionNumber: 1,
+      status: data.status || 'APPROVED',
+      updatedAt: data.createdAt,
+    });
+
+    if (points.length > 0) {
+      const ptRows = points.map((p, idx) => ({
+        id: `gtctp-${data.id}-${idx + 1}`,
+        templateId: data.id,
+        dipMillimetresMilliunits: p.dipMillimetresMilliunits,
+        volumeMilliunits: p.volumeMilliunits,
+        createdAt: data.createdAt,
+        createdBy: data.createdBy,
+      }));
+      await this.db.insert(schema.globalTankCalibrationTemplatePoints).values(ptRows);
+    }
+
+    return (await this.findGlobalTankCalibrationTemplateById(data.id))!;
+  }
+
+  async updateGlobalTankCalibrationTemplateStatus(
+    id: string,
+    status: 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'SUPERSEDED' | 'ARCHIVED',
+    userId: string,
+    updatedAt: string
+  ): Promise<any | null> {
+    const updates: any = {
+      status,
+      updatedAt,
+    };
+    if (status === 'APPROVED') {
+      updates.approvedBy = userId;
+      updates.approvedAt = updatedAt;
+    }
+    await this.db.update(schema.globalTankCalibrationTemplates).set(updates).where(eq(schema.globalTankCalibrationTemplates.id, id));
+    return this.findGlobalTankCalibrationTemplateById(id);
+  }
+
+  async suggestGlobalTemplateForTank(tankId: string): Promise<{
+    tank: Tank;
+    suggestedTemplate: any | null;
+    matchReason: string;
+  }> {
+    const tank = await this.findTankById(tankId);
+    if (!tank) throw new Error(`Tank not found: ${tankId}`);
+
+    const templates = await this.listGlobalTankCalibrationTemplates({ status: 'APPROVED' });
+    let bestMatch: any | null = null;
+    let minDiff = Infinity;
+
+    for (const t of templates) {
+      const diff = Math.abs(t.nominalCapacityLitres - tank.capacityLitres);
+      if (diff < minDiff && diff <= 5000) {
+        minDiff = diff;
+        bestMatch = t;
+      }
+    }
+
+    return {
+      tank,
+      suggestedTemplate: bestMatch,
+      matchReason: bestMatch
+        ? `Capacity ${tank.capacityLitres} L matches standard template ${bestMatch.code} (${bestMatch.nominalCapacityLitres} L)`
+        : 'No exact standard capacity match found within tolerance',
+    };
+  }
+
+  async assignGlobalTemplateToTanks(
+    templateId: string,
+    tankIds: string[],
+    userId: string,
+    options?: {
+      activateImmediately?: boolean;
+      notes?: string;
+    }
+  ): Promise<{
+    template: any;
+    assignments: Array<{
+      tankId: string;
+      tankName: string;
+      chartId: string;
+      revisionNumber: number;
+      status: string;
+      pointsCount: number;
+    }>;
+  }> {
+    const template = await this.findGlobalTankCalibrationTemplateById(templateId);
+    if (!template) throw new Error(`Global calibration template not found: ${templateId}`);
+
+    const points = await this.listGlobalTankCalibrationTemplatePoints(templateId);
+    if (points.length === 0) throw new Error(`Global template ${template.code} has no calibration points`);
+
+    const nowIso = new Date().toISOString();
+    const effectiveFrom = nowIso.slice(0, 10);
+    const activate = options?.activateImmediately !== false;
+
+    const assignments: Array<{
+      tankId: string;
+      tankName: string;
+      chartId: string;
+      revisionNumber: number;
+      status: string;
+      pointsCount: number;
+    }> = [];
+
+    for (const tankId of tankIds) {
+      const tank = await this.findTankById(tankId);
+      if (!tank) continue;
+
+      const charts = await this.listCalibrationCharts(tankId);
+      const maxRev = charts.reduce((m, c) => Math.max(m, c.revisionNumber), 0);
+      const nextRev = maxRev + 1;
+      const chartId = `tcc-${tankId}-r${nextRev}-${Date.now().toString(36)}`;
+      const chartStatus = activate ? 'ACTIVE' : 'DRAFT';
+
+      if (activate) {
+        for (const c of charts) {
+          if (c.status === 'ACTIVE') {
+            await this.db
+              .update(schema.tankCalibrationCharts)
+              .set({ status: 'SUPERSEDED', effectiveTo: effectiveFrom, updatedAt: nowIso, updatedBy: userId })
+              .where(eq(schema.tankCalibrationCharts.id, c.id));
+          }
+        }
+      }
+
+      await this.db.insert(schema.tankCalibrationCharts).values({
+        id: chartId,
+        tankId: tankId,
+        sourceTemplateId: template.id,
+        revisionNumber: nextRev,
+        status: chartStatus,
+        chartUnitDip: 'MM',
+        chartUnitVolume: 'LITRES',
+        tankDiameterMmMilliunits: template.tankDiameterMmMilliunits,
+        tankLengthMmMilliunits: template.tankLengthMmMilliunits,
+        maxDipMmMilliunits: template.maxDipMmMilliunits,
+        chartCapacityMilliunits: template.nominalCapacityLitres * 1000,
+        sourceFileName: template.sourceFileName || `global-template-${template.code}`,
+        referenceDocument: `ASSIGNED-${template.code}-REV${nextRev}`,
+        notes: options?.notes || `Assigned from global calibration template ${template.code}`,
+        effectiveFrom: effectiveFrom,
+        approvedBy: activate ? userId : null,
+        approvedAt: activate ? nowIso : null,
+        createdAt: nowIso,
+        createdBy: userId,
+        updatedAt: nowIso,
+        updatedBy: userId,
+      });
+
+      const ptValues = points.map((p, idx) => ({
+        id: `tcp-${chartId}-${idx + 1}`,
+        chartId: chartId,
+        tankId: tankId,
+        dipMillimetresMilliunits: p.dipMillimetresMilliunits,
+        volumeMilliunits: p.volumeMilliunits,
+        createdAt: nowIso,
+        createdBy: userId,
+      }));
+
+      await this.db.insert(schema.tankCalibrationPoints).values(ptValues);
+
+      assignments.push({
+        tankId: tank.id,
+        tankName: tank.name,
+        chartId: chartId,
+        revisionNumber: nextRev,
+        status: chartStatus,
+        pointsCount: points.length,
+      });
+    }
+
+    return {
+      template,
+      assignments,
+    };
+  }
 }

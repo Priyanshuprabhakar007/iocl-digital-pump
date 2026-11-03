@@ -875,4 +875,76 @@ export async function seedDatabase(db: AppDatabase) {
       updatedAt: now,
     },
   ]).onConflictDoNothing();
+
+  // 21. Seed Global Tank Calibration Templates & Template Points
+  await db.insert(schema.globalTankCalibrationTemplates).values([
+    {
+      id: 'gtct-std-20kl',
+      code: 'STANDARD_20KL',
+      name: 'Standard 20,000 Litre Tank Calibration Chart',
+      nominalCapacityLitres: 20000,
+      tankDiameterMmMilliunits: 2000000,
+      tankLengthMmMilliunits: 6500000,
+      maxDipMmMilliunits: 2000000,
+      revisionNumber: 1,
+      status: 'APPROVED',
+      sourceFileName: 'iocl_standard_20kl_calibration.pdf',
+      referenceDocument: 'IOCL-STD-TANK-20KL-REV1',
+      notes: 'Official IOCL standard calibration table for 20 KL horizontal cylindrical underground storage tanks.',
+      createdBy: 'user-admin',
+      createdAt: now,
+      approvedBy: 'user-admin',
+      approvedAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'gtct-std-50kl',
+      code: 'STANDARD_50KL',
+      name: 'Standard 50,000 Litre Tank Calibration Chart',
+      nominalCapacityLitres: 50000,
+      tankDiameterMmMilliunits: 3000000,
+      tankLengthMmMilliunits: 7200000,
+      maxDipMmMilliunits: 3000000,
+      revisionNumber: 1,
+      status: 'APPROVED',
+      sourceFileName: 'iocl_standard_50kl_calibration.pdf',
+      referenceDocument: 'IOCL-STD-TANK-50KL-REV1',
+      notes: 'Official IOCL standard calibration reference chart for 50 KL high-capacity underground storage tanks.',
+      createdBy: 'user-admin',
+      createdAt: now,
+      approvedBy: 'user-admin',
+      approvedAt: now,
+      updatedAt: now,
+    },
+  ]).onConflictDoNothing();
+
+  const points20kl = [];
+  for (let dipMm = 0; dipMm <= 2000; dipMm += 10) {
+    const dipMilli = dipMm * 1000;
+    const volMilli = Math.round((dipMm / 2000) * 20000000);
+    points20kl.push({
+      id: `gtctp-20kl-${dipMm}`,
+      templateId: 'gtct-std-20kl',
+      dipMillimetresMilliunits: dipMilli,
+      volumeMilliunits: volMilli,
+      createdAt: now,
+      createdBy: 'user-admin',
+    });
+  }
+  await db.insert(schema.globalTankCalibrationTemplatePoints).values(points20kl).onConflictDoNothing();
+
+  const points50kl = [];
+  for (let dipMm = 0; dipMm <= 3000; dipMm += 10) {
+    const dipMilli = dipMm * 1000;
+    const volMilli = Math.round((dipMm / 3000) * 50000000);
+    points50kl.push({
+      id: `gtctp-50kl-${dipMm}`,
+      templateId: 'gtct-std-50kl',
+      dipMillimetresMilliunits: dipMilli,
+      volumeMilliunits: volMilli,
+      createdAt: now,
+      createdBy: 'user-admin',
+    });
+  }
+  await db.insert(schema.globalTankCalibrationTemplatePoints).values(points50kl).onConflictDoNothing();
 }

@@ -1572,6 +1572,10 @@ describe('Tank Calibration Chart Versioning, Non-Linear Tables, CSV Preview, Dry
       const stagingRaw = stagingD1.getNativeDb();
       const migration0033Sql = fs.readFileSync(MIGRATION_0033_PATH, 'utf-8');
       stagingRaw.exec(migration0033Sql);
+      const migration0034Path = path.resolve(ROOT_DIR, 'migrations/0034_global_tank_calibration_templates.sql');
+      if (fs.existsSync(migration0034Path)) {
+        stagingRaw.exec(fs.readFileSync(migration0034Path, 'utf-8'));
+      }
 
       // Verify backup DB was NOT modified (still at 0032, no tank_calibration_charts table)
       const backupCheckD1 = createLocalD1Database(backupDbPath, {

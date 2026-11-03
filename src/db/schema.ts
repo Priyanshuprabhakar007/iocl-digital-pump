@@ -407,9 +407,46 @@ export const nozzleUnavailabilityRecords = sqliteTable('nozzle_unavailability_re
 // Phase 2B: Tank Stock, Calibration, Fuel Receipt & Reconciliation
 // ==========================================
 
+export const globalTankCalibrationTemplates = sqliteTable('global_tank_calibration_templates', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull(),
+  name: text('name').notNull(),
+  nominalCapacityLitres: integer('nominal_capacity_litres').notNull(),
+  tankDiameterMmMilliunits: integer('tank_diameter_mm_milliunits'),
+  tankLengthMmMilliunits: integer('tank_length_mm_milliunits'),
+  maxDipMmMilliunits: integer('max_dip_mm_milliunits'),
+  revisionNumber: integer('revision_number').notNull().default(1),
+  status: text('status', { enum: ['DRAFT', 'APPROVED', 'ACTIVE', 'SUPERSEDED', 'ARCHIVED'] }).notNull().default('APPROVED'),
+  sourceFileName: text('source_file_name'),
+  referenceDocument: text('reference_document'),
+  notes: text('notes'),
+  createdBy: text('created_by').references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  approvedBy: text('approved_by').references(() => users.id),
+  approvedAt: text('approved_at'),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uq_gtct_code').on(table.code),
+  index('idx_gtct_status').on(table.status),
+  index('idx_gtct_capacity').on(table.nominalCapacityLitres),
+]);
+
+export const globalTankCalibrationTemplatePoints = sqliteTable('global_tank_calibration_template_points', {
+  id: text('id').primaryKey(),
+  templateId: text('template_id').notNull().references(() => globalTankCalibrationTemplates.id, { onDelete: 'cascade' }),
+  dipMillimetresMilliunits: integer('dip_millimetres_milliunits').notNull(),
+  volumeMilliunits: integer('volume_milliunits').notNull(),
+  createdAt: text('created_at').notNull(),
+  createdBy: text('created_by').references(() => users.id),
+}, (table) => [
+  uniqueIndex('idx_gtctp_template_dip').on(table.templateId, table.dipMillimetresMilliunits),
+  index('idx_gtctp_template_id').on(table.templateId),
+]);
+
 export const tankCalibrationCharts = sqliteTable('tank_calibration_charts', {
   id: text('id').primaryKey(),
   tankId: text('tank_id').notNull().references(() => tanks.id, { onDelete: 'cascade' }),
+  sourceTemplateId: text('source_template_id').references(() => globalTankCalibrationTemplates.id),
   revisionNumber: integer('revision_number').notNull().default(1),
   status: text('status', { enum: ['DRAFT', 'APPROVED', 'ACTIVE', 'SUPERSEDED', 'ARCHIVED'] }).notNull().default('ACTIVE'),
   chartUnitDip: text('chart_unit_dip', { enum: ['MM'] }).notNull().default('MM'),
@@ -433,6 +470,7 @@ export const tankCalibrationCharts = sqliteTable('tank_calibration_charts', {
   uniqueIndex('uq_tcc_tank_revision').on(table.tankId, table.revisionNumber),
   uniqueIndex('uq_tcc_single_active_per_tank').on(table.tankId).where(sql`status = 'ACTIVE'`),
   index('idx_tcc_tank_status').on(table.tankId, table.status),
+  index('idx_tcc_source_template_id').on(table.sourceTemplateId),
 ]);
 
 export const tankCalibrationPoints = sqliteTable('tank_calibration_points', {
