@@ -4,6 +4,7 @@ import {
   Tank,
   Dispenser,
   Nozzle,
+  EligibleCocoTankItem,
 } from '../../../shared/types';
 
 // =========================================================================
@@ -599,6 +600,18 @@ export function getPumpInfrastructureErrorMessage(error: any): string {
   }
   if (combined.includes('OVER_CAPACITY_CONFIRMATION_REQUIRED')) {
     return rawMessage || 'Explicit confirmation of above-nominal chart volume (up to the +10% ceiling) is required before approving this template.';
+  }
+  if (combined.includes('UNVERIFIED_TANK_DIMENSIONS')) {
+    return (
+      rawMessage ||
+      'Selected tank is UNVERIFIED: missing verified tank-specific physical dimensions or calibration certification. Operational assignment is blocked until verified.'
+    );
+  }
+  if (combined.includes('INCOMPATIBLE_TANK')) {
+    return (
+      rawMessage ||
+      'Selected tank is incompatible with this Global Calibration Master template (nominal capacity or verified physical dimension mismatch).'
+    );
   }
 
   // Strict Sanitization: Never expose raw SQLite / SQL / D1 / stack traces
@@ -1976,6 +1989,109 @@ export function formatGlobalCalibrationAuditLogEntry(log: {
     summary: log.newValueJson || 'Global calibration template operation recorded',
   };
 }
+
+export function isCocoTankVerifiedAndEligible(
+  tank: Partial<EligibleCocoTankItem> | null | undefined
+): boolean {
+  if (!tank) return false;
+  return Boolean(
+    tank.isCompatible === true &&
+      (tank.eligibilityStatus === 'ELIGIBLE' || tank.eligibilityStatus === undefined) &&
+      tank.isCapacityMatch !== false &&
+      tank.isDimensionMatch !== false &&
+      tank.isDimensionVerified !== false &&
+      tank.isCertified !== false
+  );
+}
+
+export function isCocoTankSelectionDisabled(
+  tank: Partial<EligibleCocoTankItem> | null | undefined
+): boolean {
+  if (!tank) return true;
+  if (!isCocoTankVerifiedAndEligible(tank)) return true;
+  if (tank.hasProtectedDraft) return true;
+  return false;
+}
+
+export function partitionCocoTanksByEligibility(
+  tanks?: EligibleCocoTankItem[] | null
+): {
+  eligibleTanks: EligibleCocoTankItem[];
+  ineligibleOrUnverifiedTanks: EligibleCocoTankItem[];
+} {
+  const list = Array.isArray(tanks) ? tanks : [];
+  const eligibleTanks: EligibleCocoTankItem[] = [];
+  const ineligibleOrUnverifiedTanks: EligibleCocoTankItem[] = [];
+
+  for (const tank of list) {
+    if (!tank) continue;
+    if (isCocoTankVerifiedAndEligible(tank)) {
+      eligibleTanks.push(tank);
+    } else {
+      ineligibleOrUnverifiedTanks.push(tank);
+    }
+  }
+
+  return {
+    eligibleTanks,
+    ineligibleOrUnverifiedTanks,
+  };
+}
+
+export function getSelectableEligibleTankIds(
+  tanks?: EligibleCocoTankItem[] | null
+): string[] {
+  const { eligibleTanks } = partitionCocoTanksByEligibility(tanks);
+  return eligibleTanks
+    .filter(t => !isCocoTankSelectionDisabled(t))
+    .map(t => t.tankId);
+}
+
+export function getCocoTankEligibilityBadge(
+  tank: Partial<EligibleCocoTankItem> | null | undefined
+): {
+  label: 'ELIGIBLE' | 'UNVERIFIED' | 'INELIGIBLE';
+  badgeClass: string;
+  reason: string;
+} {
+  if (!tank) {
+    return {
+      label: 'INELIGIBLE',
+      badgeClass: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+      reason: 'Tank data unavailable.',
+    };
+  }
+
+  if (isCocoTankVerifiedAndEligible(tank)) {
+    return {
+      label: 'ELIGIBLE',
+      badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+      reason: 'Verified nominal capacity, tank-specific dimensions, and calibration certification.',
+    };
+  }
+
+  if (
+    tank.eligibilityStatus === 'UNVERIFIED' ||
+    (tank.isCapacityMatch && (!tank.isDimensionVerified || !tank.isCertified))
+  ) {
+    return {
+      label: 'UNVERIFIED',
+      badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+      reason:
+        tank.ineligibilityReason ||
+        'UNVERIFIED: Missing verified tank-specific physical dimensions (diameter, length, max dip) or calibration certification.',
+    };
+  }
+
+  return {
+    label: 'INELIGIBLE',
+    badgeClass: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+    reason:
+      tank.ineligibilityReason ||
+      'Tank nominal capacity or physical dimensions do not match this Global Calibration Master template.',
+  };
+}
+
 
 
 

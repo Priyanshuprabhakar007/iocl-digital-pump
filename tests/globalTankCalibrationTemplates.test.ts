@@ -12,6 +12,10 @@ import {
   buildGlobalTemplateImportPreview,
   canApproveGlobalTemplate,
   formatGlobalCalibrationAuditLogEntry,
+  partitionCocoTanksByEligibility,
+  getSelectableEligibleTankIds,
+  isCocoTankSelectionDisabled,
+  getCocoTankEligibilityBadge,
 } from '../src/frontend/components/pump/pumpInfrastructureUi';
 
 function generateVerifiedCylindricalCsv(maxDipMm: number, nominalCapacityLitres: number, stepMm = 10): string {
@@ -323,8 +327,36 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
   });
 
   describe('4. Template Matching, Multi-Tank Preview & Bulk Assignment', () => {
-    it('4.1 suggests STANDARD_20KL template for a 20 KL underground tank after approval', async () => {
-      const res = await app.request('/api/v1/tanks/tank-ro1-1/suggested-template', {
+    beforeAll(() => {
+      const sqlite = localD1.getNativeDb();
+      const nowIso = '2026-10-20T08:00:00Z';
+      sqlite.exec(`
+        INSERT OR IGNORE INTO tanks (
+          id, outlet_id, tank_number, name, product_id,
+          capacity_litres, safe_fill_capacity_litres, minimum_operating_level_litres,
+          status, commissioned_at, created_at, created_by, updated_at
+        ) VALUES
+          ('tank-ro1-std20-1', 'ro-1001', 4, 'Tank 4 - MS (Verified 20 KL)', 'prod-ms', 20000, 19000, 1000, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tank-ro1-std20-2', 'ro-1001', 5, 'Tank 5 - HSD (Verified 20 KL)', 'prod-hsd', 20000, 19000, 1000, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}');
+
+        INSERT OR IGNORE INTO tank_calibration_charts (
+          id, tank_id, revision_number, status, chart_unit_dip, chart_unit_volume,
+          tank_diameter_mm_milliunits, tank_length_mm_milliunits, max_dip_mm_milliunits, chart_capacity_milliunits,
+          source_file_name, reference_document, effective_from, notes, created_by, created_at, updated_at, approved_by, approved_at
+        ) VALUES
+          ('tcc-ro1-std20-1-r1', 'tank-ro1-std20-1', 1, 'ACTIVE', 'MM', 'LITRES', 2100000, 6250000, 2100000, 20000000, 'IOCL-STD20-T4.csv', 'CERT-RO1-T4-20KL', '2026-01-01', 'Verified 20 KL chart', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tcc-ro1-std20-2-r1', 'tank-ro1-std20-2', 1, 'ACTIVE', 'MM', 'LITRES', 2100000, 6250000, 2100000, 20000000, 'IOCL-STD20-T5.csv', 'CERT-RO1-T5-20KL', '2026-01-01', 'Verified 20 KL chart', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}');
+
+        INSERT OR IGNORE INTO tank_calibration_points (id, tank_id, chart_id, dip_millimetres_milliunits, volume_milliunits, created_by, created_at) VALUES
+          ('tcp-ro1-std20-1-0', 'tank-ro1-std20-1', 'tcc-ro1-std20-1-r1', 0, 0, 'user-admin', '${nowIso}'),
+          ('tcp-ro1-std20-1-1', 'tank-ro1-std20-1', 'tcc-ro1-std20-1-r1', 2100000, 20000000, 'user-admin', '${nowIso}'),
+          ('tcp-ro1-std20-2-0', 'tank-ro1-std20-2', 'tcc-ro1-std20-2-r1', 0, 0, 'user-admin', '${nowIso}'),
+          ('tcp-ro1-std20-2-1', 'tank-ro1-std20-2', 'tcc-ro1-std20-2-r1', 2100000, 20000000, 'user-admin', '${nowIso}');
+      `);
+    });
+
+    it('4.1 suggests STANDARD_20KL template only for a verified 20 KL underground tank with matching 2100x6250x2100 mm dimensions', async () => {
+      const res = await app.request('/api/v1/tanks/tank-ro1-std20-1/suggested-template', {
         method: 'GET',
         headers: { Authorization: `Bearer ${adminToken}` },
       }, { DB: localD1 });
@@ -334,9 +366,10 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
       expect(json.success).toBe(true);
       expect(json.data.suggestedTemplate).toBeDefined();
       expect(json.data.suggestedTemplate.code).toBe('STANDARD_20KL');
+      expect(json.data.eligibilityStatus).toBe('ELIGIBLE');
     });
 
-    it('4.2 previews assignment of STANDARD_20KL template to COCO 22 tanks', async () => {
+    it('4.2 previews assignment of STANDARD_20KL template to verified 20 KL COCO tanks', async () => {
       const res = await app.request('/api/v1/calibration-templates/gtct-std-20kl/assign-preview', {
         method: 'POST',
         headers: {
@@ -344,7 +377,7 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          tankIds: ['tank-ro1-1', 'tank-ro1-2'],
+          tankIds: ['tank-ro1-std20-1', 'tank-ro1-std20-2'],
         }),
       }, { DB: localD1 });
 
@@ -353,9 +386,10 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
       expect(json.success).toBe(true);
       expect(json.data.totalTanksSelected).toBe(2);
       expect(json.data.previews[0].isCompatible).toBe(true);
+      expect(json.data.previews[0].targetStatus).toBe('DRAFT');
     });
 
-    it('4.3 assigns STANDARD_20KL template to COCO 22 Tank 1, creating Revision 2 and preserving historical chart', async () => {
+    it('4.3 assigns STANDARD_20KL template to verified 20 KL COCO tank as Revision 2 DRAFT only (preserving Revision 1 ACTIVE chart)', async () => {
       const res = await app.request('/api/v1/calibration-templates/gtct-std-20kl/assign', {
         method: 'POST',
         headers: {
@@ -363,8 +397,8 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          tankIds: ['tank-ro1-1'],
-          activateImmediately: true,
+          tankIds: ['tank-ro1-std20-1'],
+          activateImmediately: true, // Even if passed true, backend strictly keeps assignment DRAFT only
           notes: 'Standardized operational calibration via Global Calibration Master',
         }),
       }, { DB: localD1 });
@@ -375,12 +409,13 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
       expect(json.data.assignments.length).toBe(1);
 
       const assignment = json.data.assignments[0];
-      expect(assignment.tankId).toBe('tank-ro1-1');
-      expect(assignment.status).toBe('ACTIVE');
+      expect(assignment.tankId).toBe('tank-ro1-std20-1');
+      expect(assignment.status).toBe('DRAFT');
+      expect(assignment.revisionNumber).toBe(2);
       expect(assignment.pointsCount).toBe(211);
 
-      // Verify tank chart list now has Revision 2 ACTIVE and Revision 1 SUPERSEDED
-      const chartsRes = await app.request('/api/v1/tanks/tank-ro1-1/calibration/charts', {
+      // Verify tank chart list still has Revision 1 ACTIVE untouched and Revision 2 as DRAFT
+      const chartsRes = await app.request('/api/v1/tanks/tank-ro1-std20-1/calibration/charts', {
         method: 'GET',
         headers: { Authorization: `Bearer ${adminToken}` },
       }, { DB: localD1 });
@@ -388,11 +423,14 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
       expect(chartsJson.data.charts.length).toBeGreaterThanOrEqual(2);
 
       const activeChart = chartsJson.data.activeChart;
-      expect(activeChart.sourceTemplateId).toBe('gtct-std-20kl');
+      expect(activeChart.id).toBe('tcc-ro1-std20-1-r1');
+      expect(activeChart.revisionNumber).toBe(1);
       expect(activeChart.status).toBe('ACTIVE');
 
-      const superseded = chartsJson.data.charts.find((c: any) => c.status === 'SUPERSEDED');
-      expect(superseded).toBeDefined();
+      const draftChart = chartsJson.data.charts.find((c: any) => c.revisionNumber === 2);
+      expect(draftChart).toBeDefined();
+      expect(draftChart.sourceTemplateId).toBe('gtct-std-20kl');
+      expect(draftChart.status).toBe('DRAFT');
     });
   });
 
@@ -700,11 +738,13 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
           ('tank-coco22-2', '${coco22OutletId}', 2, 'Tank 2 - HSD', 'prod-hsd', 20000, 19000, 1000, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}');
 
         INSERT OR IGNORE INTO tank_calibration_charts (
-          id, tank_id, revision_number, status, effective_from, notes, created_by, created_at, updated_at, approved_by, approved_at
+          id, tank_id, revision_number, status, chart_unit_dip, chart_unit_volume,
+          tank_diameter_mm_milliunits, tank_length_mm_milliunits, max_dip_mm_milliunits, chart_capacity_milliunits,
+          source_file_name, reference_document, effective_from, notes, created_by, created_at, updated_at, approved_by, approved_at
         ) VALUES
-          ('tcc-coco22-1-r1', 'tank-coco22-1', 1, 'ACTIVE', '2026-01-01', 'COCO 22 Tank 1 Active Rev 1', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
-          ('tcc-coco22-1-r2-draft', 'tank-coco22-1', 2, 'DRAFT', '2026-03-01', 'COCO 22 Tank #1 Revision #2 DRAFT', 'user-admin', '${nowIso}', '${nowIso}', NULL, NULL),
-          ('tcc-coco22-2-r1', 'tank-coco22-2', 1, 'ACTIVE', '2026-01-01', 'COCO 22 Tank 2 Active Rev 1', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}');
+          ('tcc-coco22-1-r1', 'tank-coco22-1', 1, 'ACTIVE', 'MM', 'LITRES', 2100000, 6250000, 2100000, 20000000, 'COCO22-T1-R1.csv', 'CERT-COCO22-T1-R1', '2026-01-01', 'COCO 22 Tank 1 Active Rev 1', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tcc-coco22-1-r2-draft', 'tank-coco22-1', 2, 'DRAFT', 'MM', 'LITRES', 2100000, 6250000, 2100000, 20000000, 'COCO22-T1-R2.csv', 'CERT-COCO22-T1-R2', '2026-03-01', 'COCO 22 Tank #1 Revision #2 DRAFT', 'user-admin', '${nowIso}', '${nowIso}', NULL, NULL),
+          ('tcc-coco22-2-r1', 'tank-coco22-2', 1, 'ACTIVE', 'MM', 'LITRES', 2100000, 6250000, 2100000, 20000000, 'COCO22-T2-R1.csv', 'CERT-COCO22-T2-R1', '2026-01-01', 'COCO 22 Tank 2 Active Rev 1', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}');
 
         INSERT OR IGNORE INTO tank_calibration_points (id, tank_id, chart_id, dip_millimetres_milliunits, volume_milliunits, created_by, created_at) VALUES
           ('tcp-coco22-1-r1-0', 'tank-coco22-1', 'tcc-coco22-1-r1', 0, 0, 'user-admin', '${nowIso}'),
@@ -1057,6 +1097,381 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
       expect(approveConfirmedJson.data.maxVolumeLitres).toBe(21648.3);
     });
   });
+
+  describe('9. Unsafe Tank Eligibility Fix: 15 KL, 20 KL, 25 KL, 50 KL & Missing-Dimension (UNVERIFIED) Tanks', () => {
+    const eligibilityOutletId = 'ro-coco-eligibility-matrix';
+
+    beforeAll(() => {
+      const sqlite = localD1.getNativeDb();
+      const nowIso = '2026-10-28T08:00:00Z';
+
+      sqlite.exec(`
+        INSERT OR IGNORE INTO retail_outlets (
+          id, ro_code, name, outlet_type, state_id, division_id, sales_area_id,
+          address, city, district, pincode, status, created_at, updated_at
+        ) VALUES (
+          '${eligibilityOutletId}', '396199', 'COCO Matrix Test Station', 'COCO', 'state-wb', 'div-kol', 'sa-cen',
+          'NH-2 Bypass', 'Kolkata', 'Kolkata', '700099', 'ACTIVE', '${nowIso}', '${nowIso}'
+        );
+
+        INSERT OR IGNORE INTO tanks (
+          id, outlet_id, tank_number, name, product_id,
+          capacity_litres, safe_fill_capacity_litres, minimum_operating_level_litres,
+          status, commissioned_at, created_at, created_by, updated_at
+        ) VALUES
+          ('tank-elig-15kl', '${eligibilityOutletId}', 1, 'Tank 1 - XP95 (15 KL)', 'prod-xp95', 15000, 14250, 1000, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tank-elig-20kl-verified', '${eligibilityOutletId}', 2, 'Tank 2 - MS (20 KL Verified)', 'prod-ms', 20000, 19000, 1000, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tank-elig-20kl-unverified', '${eligibilityOutletId}', 3, 'Tank 3 - MS (20 KL Missing Dims)', 'prod-ms', 20000, 19000, 1000, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tank-elig-20kl-uncertified', '${eligibilityOutletId}', 4, 'Tank 4 - MS (20 KL Missing Cert)', 'prod-ms', 20000, 19000, 1000, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tank-elig-25kl', '${eligibilityOutletId}', 5, 'Tank 5 - HSD (25 KL)', 'prod-hsd', 25000, 23750, 1500, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tank-elig-50kl-verified', '${eligibilityOutletId}', 6, 'Tank 6 - HSD (50 KL Verified)', 'prod-hsd', 50000, 47500, 2500, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          ('tank-elig-50kl-unverified', '${eligibilityOutletId}', 7, 'Tank 7 - HSD (50 KL Missing Dims)', 'prod-hsd', 50000, 47500, 2500, 'ACTIVE', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}');
+
+        INSERT OR IGNORE INTO tank_calibration_charts (
+          id, tank_id, revision_number, status, chart_unit_dip, chart_unit_volume,
+          tank_diameter_mm_milliunits, tank_length_mm_milliunits, max_dip_mm_milliunits, chart_capacity_milliunits,
+          source_file_name, reference_document, effective_from, notes, created_by, created_at, updated_at, approved_by, approved_at
+        ) VALUES
+          -- 15 KL with legacy NULL length (must never infer 2100x6250)
+          ('tcc-elig-15kl-r1', 'tank-elig-15kl', 1, 'ACTIVE', 'MM', 'LITRES', 2000000, NULL, 2000000, 15000000, 'legacy-d1-preserved', NULL, '2026-01-01', 'Legacy 15 KL', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          -- 20 KL with verified 2100x6250x2100 mm & certification
+          ('tcc-elig-20kl-ver-r1', 'tank-elig-20kl-verified', 1, 'ACTIVE', 'MM', 'LITRES', 2100000, 6250000, 2100000, 20000000, 'IOCL_20KL_VERIFIED.csv', 'CERT-20KL-D2100-L6250', '2026-01-01', 'Verified 20 KL', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          -- 20 KL with missing dimensions (NULL diameter/length)
+          ('tcc-elig-20kl-unver-r1', 'tank-elig-20kl-unverified', 1, 'ACTIVE', 'MM', 'LITRES', NULL, NULL, 2000000, 20000000, 'legacy-d1-preserved', NULL, '2026-01-01', 'Unverified 20 KL', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          -- 20 KL with dimensions but missing certification / reference document
+          ('tcc-elig-20kl-uncert-r1', 'tank-elig-20kl-uncertified', 1, 'DRAFT', 'MM', 'LITRES', 2100000, 6250000, 2100000, 20000000, NULL, NULL, '2026-01-01', 'Uncertified 20 KL', 'user-admin', '${nowIso}', '${nowIso}', NULL, NULL),
+          -- 25 KL with legacy NULL length (must never infer 2100x6250)
+          ('tcc-elig-25kl-r1', 'tank-elig-25kl', 1, 'ACTIVE', 'MM', 'LITRES', 2200000, NULL, 2200000, 25000000, 'legacy-d1-preserved', NULL, '2026-01-01', 'Legacy 25 KL', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          -- 50 KL with verified 3000x7500x3000 mm & certification
+          ('tcc-elig-50kl-ver-r1', 'tank-elig-50kl-verified', 1, 'ACTIVE', 'MM', 'LITRES', 3000000, 7500000, 3000000, 50000000, 'IOCL_50KL_VERIFIED.csv', 'CERT-50KL-D3000-L7500', '2026-01-01', 'Verified 50 KL', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}'),
+          -- 50 KL with missing dimensions (NULL length)
+          ('tcc-elig-50kl-unver-r1', 'tank-elig-50kl-unverified', 1, 'ACTIVE', 'MM', 'LITRES', 3000000, NULL, 3000000, 50000000, 'legacy-d1-preserved', NULL, '2026-01-01', 'Unverified 50 KL', 'user-admin', '${nowIso}', '${nowIso}', 'user-admin', '${nowIso}');
+      `);
+    });
+
+    it('9.1 enforces exact nominal capacity (no ±5,000 L tolerance) and verified tank-specific dimensions for 15 KL, 20 KL, 25 KL, 50 KL, and missing-dimension tanks', async () => {
+      // 1. Evaluate against STANDARD_20KL (20,000 L, 2100x6250x2100 mm)
+      const res20 = await app.request(
+        `/api/v1/calibration-templates/STANDARD_20KL/eligible-tanks?outletId=${eligibilityOutletId}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${adminToken}` },
+        },
+        { DB: localD1 }
+      );
+      expect(res20.status).toBe(200);
+      const json20 = (await res20.json()) as any;
+      expect(json20.success).toBe(true);
+
+      const tanks20: any[] = json20.data.tanks;
+      const byId20 = new Map(tanks20.map(t => [t.tankId, t]));
+
+      // 15 KL tank -> INELIGIBLE (capacity mismatch, dimensions NOT inferred as 2100x6250)
+      const t15 = byId20.get('tank-elig-15kl');
+      expect(t15).toBeDefined();
+      expect(t15.isCapacityMatch).toBe(false);
+      expect(t15.isCompatible).toBe(false);
+      expect(t15.eligibilityStatus).toBe('INELIGIBLE');
+      expect(t15.physicalDimensions.diameterMm).toBeNull();
+      expect(t15.physicalDimensions.lengthMm).toBeNull();
+      expect(t15.ineligibilityReason).toContain('Nominal capacity mismatch: Tank is 15,000 L');
+
+      // 25 KL tank -> INELIGIBLE (capacity mismatch, dimensions NOT inferred as 2100x6250)
+      const t25 = byId20.get('tank-elig-25kl');
+      expect(t25).toBeDefined();
+      expect(t25.isCapacityMatch).toBe(false);
+      expect(t25.isCompatible).toBe(false);
+      expect(t25.eligibilityStatus).toBe('INELIGIBLE');
+      expect(t25.physicalDimensions.diameterMm).toBeNull();
+      expect(t25.physicalDimensions.lengthMm).toBeNull();
+      expect(t25.ineligibilityReason).toContain('Nominal capacity mismatch: Tank is 25,000 L');
+
+      // 50 KL tank -> INELIGIBLE for STANDARD_20KL
+      const t50On20 = byId20.get('tank-elig-50kl-verified');
+      expect(t50On20).toBeDefined();
+      expect(t50On20.isCapacityMatch).toBe(false);
+      expect(t50On20.isCompatible).toBe(false);
+      expect(t50On20.eligibilityStatus).toBe('INELIGIBLE');
+
+      // 20 KL missing dimensions -> UNVERIFIED (blocked from assignment)
+      const t20Unver = byId20.get('tank-elig-20kl-unverified');
+      expect(t20Unver).toBeDefined();
+      expect(t20Unver.isCapacityMatch).toBe(true);
+      expect(t20Unver.isDimensionVerified).toBe(false);
+      expect(t20Unver.isCompatible).toBe(false);
+      expect(t20Unver.eligibilityStatus).toBe('UNVERIFIED');
+      expect(t20Unver.physicalDimensions.diameterMm).toBeNull();
+      expect(t20Unver.physicalDimensions.lengthMm).toBeNull();
+      expect(t20Unver.ineligibilityReason).toContain('UNVERIFIED: Missing verified tank-specific physical dimensions');
+
+      // 20 KL missing certification -> UNVERIFIED (blocked from assignment)
+      const t20Uncert = byId20.get('tank-elig-20kl-uncertified');
+      expect(t20Uncert).toBeDefined();
+      expect(t20Uncert.isCapacityMatch).toBe(true);
+      expect(t20Uncert.isDimensionVerified).toBe(true);
+      expect(t20Uncert.isCertified).toBe(false);
+      expect(t20Uncert.isCompatible).toBe(false);
+      expect(t20Uncert.eligibilityStatus).toBe('UNVERIFIED');
+      expect(t20Uncert.ineligibilityReason).toContain('UNVERIFIED: Missing calibration certification');
+
+      // 20 KL verified (2100x6250x2100 mm + certification) -> ELIGIBLE
+      const t20Ver = byId20.get('tank-elig-20kl-verified');
+      expect(t20Ver).toBeDefined();
+      expect(t20Ver.isCapacityMatch).toBe(true);
+      expect(t20Ver.isDimensionVerified).toBe(true);
+      expect(t20Ver.isCertified).toBe(true);
+      expect(t20Ver.isDimensionMatch).toBe(true);
+      expect(t20Ver.isCompatible).toBe(true);
+      expect(t20Ver.eligibilityStatus).toBe('ELIGIBLE');
+      expect(t20Ver.ineligibilityReason).toBeNull();
+
+      // Verify seeded Park Street RO (ro-1001) master data was NOT silently altered:
+      // tank-ro1-1 (20 KL, 2500x4500x2500 mm), tank-ro1-2 (25 KL), tank-ro1-3 (15 KL) are all INELIGIBLE for STANDARD_20KL
+      const ro1Res = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/eligible-tanks?outletId=ro-1001',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${adminToken}` },
+        },
+        { DB: localD1 }
+      );
+      const ro1Tanks: any[] = ((await ro1Res.json()) as any).data.tanks;
+      const ro1ById = new Map(ro1Tanks.map(t => [t.tankId, t]));
+
+      const seededT1 = ro1ById.get('tank-ro1-1');
+      expect(seededT1.capacityLitres).toBe(20000);
+      expect(seededT1.physicalDimensions.diameterMm).toBe(2500);
+      expect(seededT1.physicalDimensions.lengthMm).toBe(4500);
+      expect(seededT1.isCompatible).toBe(false);
+      expect(seededT1.eligibilityStatus).toBe('INELIGIBLE');
+      expect(seededT1.ineligibilityReason).toContain('Physical dimension mismatch');
+
+      expect(ro1ById.get('tank-ro1-2').isCompatible).toBe(false);
+      expect(ro1ById.get('tank-ro1-2').eligibilityStatus).toBe('INELIGIBLE');
+      expect(ro1ById.get('tank-ro1-3').isCompatible).toBe(false);
+      expect(ro1ById.get('tank-ro1-3').eligibilityStatus).toBe('INELIGIBLE');
+
+      // 2. Evaluate against STANDARD_50KL (50,000 L, 3000x7500x3000 mm)
+      const res50 = await app.request(
+        `/api/v1/calibration-templates/STANDARD_50KL/eligible-tanks?outletId=${eligibilityOutletId}`,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${adminToken}` },
+        },
+        { DB: localD1 }
+      );
+      expect(res50.status).toBe(200);
+      const json50 = (await res50.json()) as any;
+      const byId50 = new Map(json50.data.tanks.map((t: any) => [t.tankId, t]));
+
+      const t50Ver: any = byId50.get('tank-elig-50kl-verified');
+      expect(t50Ver.isCapacityMatch).toBe(true);
+      expect(t50Ver.isDimensionVerified).toBe(true);
+      expect(t50Ver.isDimensionMatch).toBe(true);
+      expect(t50Ver.isCompatible).toBe(true);
+      expect(t50Ver.eligibilityStatus).toBe('ELIGIBLE');
+
+      const t50Unver: any = byId50.get('tank-elig-50kl-unverified');
+      expect(t50Unver.isCapacityMatch).toBe(true);
+      expect(t50Unver.isDimensionVerified).toBe(false);
+      expect(t50Unver.isCompatible).toBe(false);
+      expect(t50Unver.eligibilityStatus).toBe('UNVERIFIED');
+
+      const t20On50: any = byId50.get('tank-elig-20kl-verified');
+      expect(t20On50.isCapacityMatch).toBe(false);
+      expect(t20On50.isCompatible).toBe(false);
+      expect(t20On50.eligibilityStatus).toBe('INELIGIBLE');
+    });
+
+    it('9.2 partitions eligible vs ineligible/unverified tanks in UI, disables checkboxes for ineligible/unverified/protected-draft tanks, and selects only verified compatible tanks without protected draft', async () => {
+      const res20 = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/eligible-tanks',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${adminToken}` },
+        },
+        { DB: localD1 }
+      );
+      const allTanks: any[] = ((await res20.json()) as any).data.tanks;
+
+      const { eligibleTanks, ineligibleOrUnverifiedTanks } =
+        partitionCocoTanksByEligibility(allTanks);
+
+      // Eligible tanks must ONLY contain verified 20 KL tanks with 2100x6250x2100 mm dimensions
+      expect(eligibleTanks.length).toBeGreaterThanOrEqual(2);
+      expect(
+        eligibleTanks.every(
+          t =>
+            t.capacityLitres === 20000 &&
+            t.physicalDimensions.diameterMm === 2100 &&
+            t.physicalDimensions.lengthMm === 6250 &&
+            t.isDimensionVerified &&
+            t.isCertified &&
+            t.isCompatible &&
+            t.eligibilityStatus === 'ELIGIBLE'
+        )
+      ).toBe(true);
+
+      // Ineligible or unverified tanks must include 15 KL, 25 KL, 50 KL, dimension-mismatched 20 KL (tank-ro1-1), and missing-dimension 20 KL
+      const ineligibleIds = new Set(ineligibleOrUnverifiedTanks.map(t => t.tankId));
+      expect(ineligibleIds.has('tank-elig-15kl')).toBe(true);
+      expect(ineligibleIds.has('tank-elig-25kl')).toBe(true);
+      expect(ineligibleIds.has('tank-elig-50kl-verified')).toBe(true);
+      expect(ineligibleIds.has('tank-elig-20kl-unverified')).toBe(true);
+      expect(ineligibleIds.has('tank-elig-20kl-uncertified')).toBe(true);
+      expect(ineligibleIds.has('tank-ro1-1')).toBe(true);
+      expect(ineligibleIds.has('tank-ro1-2')).toBe(true);
+      expect(ineligibleIds.has('tank-ro1-3')).toBe(true);
+
+      // Every ineligible or unverified tank must have its checkbox disabled and a clear badge reason
+      for (const t of ineligibleOrUnverifiedTanks) {
+        expect(isCocoTankSelectionDisabled(t)).toBe(true);
+        const badge = getCocoTankEligibilityBadge(t);
+        expect(['UNVERIFIED', 'INELIGIBLE']).toContain(badge.label);
+        expect(badge.reason.length).toBeGreaterThan(10);
+      }
+
+      // Select Eligible Tanks must ONLY select verified compatible tanks WITHOUT an existing protected DRAFT
+      const selectableIds = getSelectableEligibleTankIds(allTanks);
+      expect(selectableIds).toContain('tank-elig-20kl-verified');
+      // COCO 22 Tank #1 (tank-coco22-1) has protected Rev #2 DRAFT, so it must NOT be selected by Select Eligible Tanks
+      expect(selectableIds).not.toContain('tank-coco22-1');
+      expect(selectableIds).not.toContain('tank-elig-15kl');
+      expect(selectableIds).not.toContain('tank-elig-25kl');
+      expect(selectableIds).not.toContain('tank-elig-20kl-unverified');
+      expect(selectableIds).not.toContain('tank-ro1-1');
+    });
+
+    it('9.3 enforces user authorisation and tank compatibility on backend for both assignment preview and final assignment', async () => {
+      // 1. Unauthorised user (Field Officer without TANKS_WRITE / ADMIN) is blocked with 403 FORBIDDEN on BOTH preview and assign
+      const foPreviewRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/assign-preview',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${fieldOfficerToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ tankIds: ['tank-elig-20kl-verified'] }),
+        },
+        { DB: localD1 }
+      );
+      expect(foPreviewRes.status).toBe(403);
+
+      const foAssignRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/assign',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${fieldOfficerToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ tankIds: ['tank-elig-20kl-verified'] }),
+        },
+        { DB: localD1 }
+      );
+      expect(foAssignRes.status).toBe(403);
+
+      // 2. Submitting 15 KL, 25 KL, 50 KL, or dimension-mismatched 20 KL tank IDs directly to /assign-preview or /assign is rejected with 400 INCOMPATIBLE_TANK
+      for (const badTankId of [
+        'tank-elig-15kl',
+        'tank-elig-25kl',
+        'tank-elig-50kl-verified',
+        'tank-ro1-1',
+        'tank-ro1-2',
+        'tank-ro1-3',
+      ]) {
+        const prevBad = await app.request(
+          '/api/v1/calibration-templates/STANDARD_20KL/assign-preview',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ tankIds: [badTankId] }),
+          },
+          { DB: localD1 }
+        );
+        expect(prevBad.status).toBe(400);
+        const prevBadJson = (await prevBad.json()) as any;
+        expect(prevBadJson.error.code).toBe('INCOMPATIBLE_TANK');
+
+        const assignBad = await app.request(
+          '/api/v1/calibration-templates/STANDARD_20KL/assign',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ tankIds: [badTankId] }),
+          },
+          { DB: localD1 }
+        );
+        expect(assignBad.status).toBe(400);
+        const assignBadJson = (await assignBad.json()) as any;
+        expect(assignBadJson.error.code).toBe('INCOMPATIBLE_TANK');
+      }
+
+      // 3. Submitting UNVERIFIED (missing-dimension or missing-certification) tank IDs directly to /assign-preview or /assign is rejected with 400 UNVERIFIED_TANK_DIMENSIONS
+      for (const unverifiedTankId of ['tank-elig-20kl-unverified', 'tank-elig-20kl-uncertified']) {
+        const prevUnver = await app.request(
+          '/api/v1/calibration-templates/STANDARD_20KL/assign-preview',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ tankIds: [unverifiedTankId] }),
+          },
+          { DB: localD1 }
+        );
+        expect(prevUnver.status).toBe(400);
+        const prevUnverJson = (await prevUnver.json()) as any;
+        expect(prevUnverJson.error.code).toBe('UNVERIFIED_TANK_DIMENSIONS');
+
+        const assignUnver = await app.request(
+          '/api/v1/calibration-templates/STANDARD_20KL/assign',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ tankIds: [unverifiedTankId] }),
+          },
+          { DB: localD1 }
+        );
+        expect(assignUnver.status).toBe(400);
+        const assignUnverJson = (await assignUnver.json()) as any;
+        expect(assignUnverJson.error.code).toBe('UNVERIFIED_TANK_DIMENSIONS');
+      }
+
+      // 4. Valid assignment to verified 20 KL tank creates DRAFT only and preserves ACTIVE chart
+      const validAssignRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/assign',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tankIds: ['tank-elig-20kl-verified'],
+            activateImmediately: true,
+          }),
+        },
+        { DB: localD1 }
+      );
+      expect(validAssignRes.status).toBe(200);
+      const validAssignJson = (await validAssignRes.json()) as any;
+      expect(validAssignJson.data.assignments[0].status).toBe('DRAFT');
+      expect(validAssignJson.data.assignments[0].revisionNumber).toBe(2);
+    });
+  });
 });
+
 
 

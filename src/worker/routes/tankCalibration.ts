@@ -1477,17 +1477,24 @@ tankCalibration.get('/tanks/:tankId/suggested-template', requirePermission(PERMI
 });
 
 // POST /api/v1/calibration-templates/:id/assign-preview - Preview assignment of global template to tanks
-tankCalibration.post('/calibration-templates/:id/assign-preview', requirePermission(PERMISSIONS.TANK_CALIBRATION_READ) as any, async (c: AppContext) => {
+const handleGlobalTemplateAssignPreview = async (c: AppContext) => {
   const id = c.req.param('id') || '';
   if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Template ID is required' } }, 400);
 
+  if (!canAuthorizeCalibrationActivation(c)) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Only authorized calibration administrators can preview or assign global calibration templates',
+      },
+    }, 403);
+  }
+
   const db = getDb(c.env.DB);
   const pumpRepo = new PumpRepository(db);
-
-  const template = await pumpRepo.findGlobalTankCalibrationTemplateById(id);
-  if (!template) {
-    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Global calibration template not found' } }, 404);
-  }
+  const outletRepo = new OutletRepository(db);
 
   const body = await c.req.json().catch(() => ({}));
   const { tankIds } = body;
@@ -1495,77 +1502,61 @@ tankCalibration.post('/calibration-templates/:id/assign-preview', requirePermiss
     return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'tankIds array is required' } }, 400);
   }
 
-  const previews = [];
   for (const tankId of tankIds) {
     const tank = await pumpRepo.findTankById(tankId);
-    if (!tank) continue;
-
-    const charts = await pumpRepo.listCalibrationCharts(tankId);
-    const activeChart = charts.find(ch => ch.status === 'ACTIVE') || null;
-    const draftChart = charts.find(ch => ch.status === 'DRAFT') || null;
-
-    const capDiff = Math.abs(tank.capacityLitres - template.nominalCapacityLitres);
-    const isCompatible = capDiff <= 5000;
-    const nextRev = (charts.reduce((m, c) => Math.max(m, c.revisionNumber), 0)) + 1;
-
-    previews.push({
-      tankId: tank.id,
-      tankNumber: tank.tankNumber,
-      tankName: tank.name,
-      outletId: tank.outletId,
-      productCode: tank.productCode,
-      productName: tank.productName,
-      capacityLitres: tank.capacityLitres,
-      physicalDimensions: {
-        diameterMm: template.tankDiameterMm,
-        lengthMm: template.tankLengthMm,
-        maxDipMm: template.maxDipMm,
-      },
-      currentActiveChart: activeChart ? {
-        id: activeChart.id,
-        revisionNumber: activeChart.revisionNumber,
-        pointsCount: activeChart.pointsCount,
-        status: activeChart.status,
-      } : null,
-      existingDraftChart: draftChart ? {
-        id: draftChart.id,
-        revisionNumber: draftChart.revisionNumber,
-        pointsCount: draftChart.pointsCount,
-        status: draftChart.status,
-        notes: draftChart.notes,
-      } : null,
-      hasProtectedDraft: Boolean(draftChart),
-      targetRevisionNumber: draftChart ? draftChart.revisionNumber : nextRev,
-      targetStatus: 'DRAFT',
-      isCompatible,
-      capacityDifferenceLitres: capDiff,
-      recommendation: draftChart
-        ? `Existing Rev #${draftChart.revisionNumber} DRAFT is preserved (will not overwrite)`
-        : isCompatible
-          ? `Compatible standard tank capacity — will create Rev #${nextRev} DRAFT (ACTIVE chart preserved)`
-          : `Capacity variance of ${capDiff} L requires technical verification`,
-    });
+    if (!tank) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'INVALID_TANK', message: `Tank not found: ${tankId}` },
+      }, 400);
+    }
+    if (!await verifyOutletAuthority(c, tank.outletId, outletRepo)) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'FORBIDDEN', message: `No authority over outlet for tank ${tankId}` },
+      }, 403);
+    }
   }
 
-  return c.json({
-    success: true,
-    data: {
-      template,
-      totalTanksSelected: previews.length,
-      previews,
-    },
-    error: null,
-  });
-});
+  try {
+    const previewData = await pumpRepo.previewGlobalTemplateAssignment(id, tankIds);
+    return c.json({
+      success: true,
+      data: previewData,
+      error: null,
+    });
+  } catch (err: any) {
+    const status = err.code === 'NOT_FOUND' ? 404 : 400;
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: err.code || 'INCOMPATIBLE_TANK', message: err.message },
+    }, status);
+  }
+};
 
-// POST /api/v1/calibration-templates/:id/assign - Assign global template to multiple tanks (with explicit tank-wise confirmation)
-// Never automatically replaces ACTIVE tank charts or historical revisions unless activateImmediately: true is explicitly requested.
+tankCalibration.post(
+  '/calibration-templates/:id/assign-preview',
+  requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any,
+  handleGlobalTemplateAssignPreview as any
+);
+tankCalibration.post(
+  '/calibration-templates/:id/preview-assignment',
+  requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any,
+  handleGlobalTemplateAssignPreview as any
+);
+
+// POST /api/v1/calibration-templates/:id/assign - Assign global template to multiple tanks as DRAFT only
+// Enforces tank compatibility, verified dimensions, and user authorisation. Preserves ACTIVE tank charts and existing DRAFT revisions.
 tankCalibration.post('/calibration-templates/:id/assign', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, async (c: AppContext) => {
   const id = c.req.param('id') || '';
   if (!id) return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Template ID is required' } }, 400);
 
   const db = getDb(c.env.DB);
   const pumpRepo = new PumpRepository(db);
+  const outletRepo = new OutletRepository(db);
   const auditRepo = new AuditRepository(db);
   const userCtx = c.var.user!;
 
@@ -1578,18 +1569,35 @@ tankCalibration.post('/calibration-templates/:id/assign', requirePermission(PERM
   }
 
   const body = await c.req.json().catch(() => ({}));
-  const { tankIds, activateImmediately, preserveExistingDraft, notes } = body;
+  const { tankIds, notes } = body;
 
   if (!Array.isArray(tankIds) || tankIds.length === 0) {
     return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'tankIds array is required' } }, 400);
   }
 
-  const shouldActivateImmediately = activateImmediately === true;
+  for (const tankId of tankIds) {
+    const tank = await pumpRepo.findTankById(tankId);
+    if (!tank) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'INVALID_TANK', message: `Tank not found: ${tankId}` },
+      }, 400);
+    }
+    if (!await verifyOutletAuthority(c, tank.outletId, outletRepo)) {
+      return c.json({
+        success: false,
+        data: null,
+        error: { code: 'FORBIDDEN', message: `No authority over outlet for tank ${tankId}` },
+      }, 403);
+    }
+  }
 
   try {
+    // Requirement 7: Keep all assignments DRAFT only. Preserve existing ACTIVE charts and existing DRAFT revisions.
     const result = await pumpRepo.assignGlobalTemplateToTanks(id, tankIds, userCtx.user.id, {
-      activateImmediately: shouldActivateImmediately,
-      preserveExistingDraft: preserveExistingDraft !== false,
+      activateImmediately: false,
+      preserveExistingDraft: true,
       notes,
     });
 
@@ -1604,7 +1612,7 @@ tankCalibration.post('/calibration-templates/:id/assign', requirePermission(PERM
         templateCode: result.template.code,
         tanksCount: result.assignments.length,
         tankIds,
-        activateImmediately: shouldActivateImmediately,
+        activateImmediately: false,
         preservedDraftsCount: result.assignments.filter((a: any) => a.preservedExistingDraft).length,
       },
       ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
@@ -1618,11 +1626,12 @@ tankCalibration.post('/calibration-templates/:id/assign', requirePermission(PERM
       error: null,
     });
   } catch (err: any) {
+    const status = err.code === 'NOT_FOUND' ? 404 : 400;
     return c.json({
       success: false,
       data: null,
-      error: { code: 'ASSIGNMENT_FAILED', message: err.message },
-    }, 400);
+      error: { code: err.code || 'ASSIGNMENT_FAILED', message: err.message },
+    }, status);
   }
 });
 

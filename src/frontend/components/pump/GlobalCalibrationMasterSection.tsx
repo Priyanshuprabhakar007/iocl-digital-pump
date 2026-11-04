@@ -34,6 +34,10 @@ import {
   formatCalibrationDisplay,
   getPumpInfrastructureErrorMessage,
   getProductCategoryBadgeClass,
+  partitionCocoTanksByEligibility,
+  getSelectableEligibleTankIds,
+  isCocoTankSelectionDisabled,
+  getCocoTankEligibilityBadge,
 } from './pumpInfrastructureUi';
 
 export interface GlobalCalibrationMasterSectionProps {
@@ -374,19 +378,24 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
     }
   };
 
-  const handleToggleTankSelection = (tankId: string) => {
+  const {
+    eligibleTanks: verifiedEligibleTanks,
+    ineligibleOrUnverifiedTanks,
+  } = partitionCocoTanksByEligibility(eligibleTanks);
+
+  const selectableEligibleTankIds = getSelectableEligibleTankIds(eligibleTanks);
+
+  const handleToggleTankSelection = (tank: EligibleCocoTankItem) => {
+    if (isCocoTankSelectionDisabled(tank)) return;
     setAssignmentPreview(null);
     setSelectedTankIds(prev =>
-      prev.includes(tankId) ? prev.filter(id => id !== tankId) : [...prev, tankId]
+      prev.includes(tank.tankId) ? prev.filter(id => id !== tank.tankId) : [...prev, tank.tankId]
     );
   };
 
   const handleSelectAllEligibleWithoutDraft = () => {
     setAssignmentPreview(null);
-    const selectable = eligibleTanks
-      .filter(t => t.isCompatible && !t.hasProtectedDraft)
-      .map(t => t.tankId);
-    setSelectedTankIds(selectable);
+    setSelectedTankIds(selectableEligibleTankIds);
   };
 
   // Requirement 7: Preview tank-wise assignments before confirmation
@@ -1215,14 +1224,16 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                 <h3 className="text-xs font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-orange-400" />
                   <span>
-                    Eligible COCO Tanks for {activeTemplate.code} (
+                    Verified &amp; Eligible COCO Tanks for {activeTemplate.code} (
                     {activeTemplate.nominalCapacityLitres.toLocaleString()} L •{' '}
-                    {activeTemplate.tankDiameterMm}×{activeTemplate.tankLengthMm} mm)
+                    {activeTemplate.tankDiameterMm}×{activeTemplate.tankLengthMm} mm • Max Dip{' '}
+                    {activeTemplate.maxDipMm} mm)
                   </span>
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Tank assignments create a <strong className="text-amber-300 font-mono">DRAFT</strong> chart revision only.{' '}
-                  <strong className="text-emerald-300 font-mono">ACTIVE</strong> tank charts, historical revisions, and existing in-progress{' '}
+                  Requires exact <strong className="text-white font-mono">{activeTemplate.nominalCapacityLitres.toLocaleString()} L</strong> nominal capacity and verified tank-specific dimensions with calibration certification. Assignments create a{' '}
+                  <strong className="text-amber-300 font-mono">DRAFT</strong> chart revision only —{' '}
+                  <strong className="text-emerald-300 font-mono">ACTIVE</strong> tank charts, historical revisions, and existing{' '}
                   <strong className="text-cyan-300 font-mono">DRAFT</strong> revisions (including COCO 22 Tank #1 Rev #2 DRAFT) are strictly preserved.
                 </p>
               </div>
@@ -1253,26 +1264,27 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                   </button>
                 </div>
 
-                {eligibleTanks.length > 0 && (
+                {selectableEligibleTankIds.length > 0 && (
                   <button
                     type="button"
                     onClick={handleSelectAllEligibleWithoutDraft}
                     className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-mono font-semibold"
+                    data-testid="select-eligible-tanks-btn"
                   >
-                    Select Eligible Tanks (Without Active Draft)
+                    Select Eligible Tanks ({selectableEligibleTankIds.length})
                   </button>
                 )}
               </div>
             </div>
 
             <div className="overflow-x-auto bg-slate-950/70 border border-slate-800 rounded-xl">
-              <table className="w-full text-left text-xs font-mono">
+              <table className="w-full text-left text-xs font-mono" data-testid="eligible-coco-tanks-table">
                 <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] border-b border-slate-800">
                   <tr>
                     <th className="py-2.5 px-3 w-10">Select</th>
                     <th className="py-2.5 px-3">COCO Outlet</th>
                     <th className="py-2.5 px-3">Tank &amp; Grade</th>
-                    <th className="py-2.5 px-3">Capacity &amp; Physical Dimensions</th>
+                    <th className="py-2.5 px-3">Verified Capacity &amp; Physical Dimensions</th>
                     <th className="py-2.5 px-3">Current Active Chart</th>
                     <th className="py-2.5 px-3">Existing Draft Protection</th>
                   </tr>
@@ -1281,18 +1293,19 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                   {loadingEligibleTanks ? (
                     <tr>
                       <td colSpan={6} className="py-6 text-center text-slate-500">
-                        Loading eligible COCO underground tanks...
+                        Loading verified COCO underground tanks...
                       </td>
                     </tr>
-                  ) : eligibleTanks.length === 0 ? (
+                  ) : verifiedEligibleTanks.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-6 text-center text-slate-500">
-                        No matching {activeTemplate.nominalCapacityLitres.toLocaleString()} L COCO tanks found in this filter scope.
+                        No verified {activeTemplate.nominalCapacityLitres.toLocaleString()} L ({activeTemplate.tankDiameterMm}×{activeTemplate.tankLengthMm} mm) COCO tanks found in this filter scope.
                       </td>
                     </tr>
                   ) : (
-                    eligibleTanks.map(tank => {
-                      const isChecked = selectedTankIds.includes(tank.tankId);
+                    verifiedEligibleTanks.map(tank => {
+                      const isDisabled = isCocoTankSelectionDisabled(tank);
+                      const isChecked = !isDisabled && selectedTankIds.includes(tank.tankId);
                       return (
                         <tr
                           key={tank.tankId}
@@ -1304,8 +1317,9 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                             <input
                               type="checkbox"
                               checked={isChecked}
-                              onChange={() => handleToggleTankSelection(tank.tankId)}
-                              className="rounded border-slate-700 bg-slate-800 text-orange-500"
+                              disabled={isDisabled}
+                              onChange={() => handleToggleTankSelection(tank)}
+                              className="rounded border-slate-700 bg-slate-800 text-orange-500 disabled:opacity-40 disabled:cursor-not-allowed"
                             />
                           </td>
                           <td className="py-2.5 px-3">
@@ -1331,13 +1345,18 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                             </div>
                           </td>
                           <td className="py-2.5 px-3">
-                            <div className="text-white font-bold">
-                              {tank.capacityLitres.toLocaleString()} L
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-white font-bold">
+                                {tank.capacityLitres.toLocaleString()} L
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[9px] font-bold">
+                                VERIFIED
+                              </span>
                             </div>
                             <div className="text-[10px] text-slate-400">
                               {tank.physicalDimensions.diameterMm
                                 ? `${tank.physicalDimensions.diameterMm.toLocaleString()} mm Dia × ${tank.physicalDimensions.lengthMm?.toLocaleString()} mm Len • Max Dip ${tank.physicalDimensions.maxDipMm?.toLocaleString()} mm`
-                                : 'Standard Reference Geometry'}
+                                : 'Unverified dimensions'}
                             </div>
                           </td>
                           <td className="py-2.5 px-3">
@@ -1376,14 +1395,112 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
               </table>
             </div>
 
+            {/* Requirement 4: Display ineligible or unverified tanks separately with a clear reason and disabled checkboxes */}
+            {ineligibleOrUnverifiedTanks.length > 0 && (
+              <div
+                className="p-4 bg-slate-950/80 border border-amber-500/30 rounded-2xl space-y-3"
+                data-testid="ineligible-unverified-tanks-section"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-amber-300 font-mono flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      <span>
+                        Ineligible or Unverified COCO Tanks — Operational Assignment Blocked (
+                        {ineligibleOrUnverifiedTanks.length})
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Tanks below do not match {activeTemplate.code} ({activeTemplate.nominalCapacityLitres.toLocaleString()} L • {activeTemplate.tankDiameterMm}×{activeTemplate.tankLengthMm} mm) or lack verified tank-specific dimensions / certification. Their selection checkboxes are disabled.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto bg-slate-900/70 border border-slate-800 rounded-xl">
+                  <table className="w-full text-left text-xs font-mono" data-testid="ineligible-unverified-tanks-table">
+                    <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] border-b border-slate-800">
+                      <tr>
+                        <th className="py-2 px-3 w-10">Select</th>
+                        <th className="py-2 px-3">COCO Outlet</th>
+                        <th className="py-2 px-3">Tank &amp; Grade</th>
+                        <th className="py-2 px-3">Nominal Capacity &amp; Recorded Dimensions</th>
+                        <th className="py-2 px-3">Status</th>
+                        <th className="py-2 px-3">Reason Assignment Is Blocked</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {ineligibleOrUnverifiedTanks.map(tank => {
+                        const badge = getCocoTankEligibilityBadge(tank);
+                        return (
+                          <tr key={tank.tankId} className="opacity-80 bg-slate-950/40">
+                            <td className="py-2 px-3">
+                              <input
+                                type="checkbox"
+                                checked={false}
+                                disabled={true}
+                                readOnly
+                                className="rounded border-slate-700 bg-slate-900 text-slate-600 opacity-40 cursor-not-allowed"
+                              />
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="font-bold text-slate-200">
+                                {tank.outletCode} — {tank.outletName}
+                              </div>
+                              <span className="text-[10px] text-orange-400 font-bold">
+                                {tank.outletType}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-slate-200">
+                                  Tank #{tank.tankNumber} ({tank.tankName})
+                                </span>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] border ${getProductCategoryBadgeClass(
+                                    tank.productCode
+                                  )}`}
+                                >
+                                  {tank.productCode}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="text-slate-200 font-bold">
+                                {tank.capacityLitres.toLocaleString()} L
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                {tank.physicalDimensions.diameterMm && tank.physicalDimensions.lengthMm
+                                  ? `${tank.physicalDimensions.diameterMm.toLocaleString()} mm Dia × ${tank.physicalDimensions.lengthMm.toLocaleString()} mm Len • Max Dip ${tank.physicalDimensions.maxDipMm?.toLocaleString()} mm`
+                                  : 'UNVERIFIED — Missing Tank Dimensions'}
+                              </div>
+                            </td>
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badge.badgeClass}`}
+                              >
+                                {badge.label}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-[11px] text-amber-200/90">
+                              {badge.reason}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Preview Action Bar */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs font-mono text-slate-400">
-                {selectedTankIds.length} tank(s) selected for assignment preview
+                {selectedTankIds.length} verified compatible tank(s) selected for assignment preview
               </div>
               <button
                 type="button"
-                disabled={selectedTankIds.length === 0 || submitting}
+                disabled={selectedTankIds.length === 0 || submitting || !canApproveCalibrationChart}
                 onClick={handlePreviewAssignment}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-45 disabled:cursor-not-allowed text-white text-xs font-mono font-bold shadow-md shadow-cyan-600/20"
                 data-testid="preview-tank-assignment-btn"

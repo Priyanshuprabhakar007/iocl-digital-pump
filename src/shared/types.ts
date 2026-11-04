@@ -612,6 +612,8 @@ export interface GlobalTankCalibrationTemplate {
   points?: GlobalTankCalibrationPoint[];
 }
 
+export type TankTemplateEligibilityStatus = 'ELIGIBLE' | 'UNVERIFIED' | 'INELIGIBLE';
+
 export interface EligibleCocoTankItem {
   tankId: string;
   tankNumber: number;
@@ -630,7 +632,9 @@ export interface EligibleCocoTankItem {
     diameterMm: number | null;
     lengthMm: number | null;
     maxDipMm: number | null;
-    source: 'ACTIVE_CHART' | 'DRAFT_CHART' | 'STANDARD_IOCL_REFERENCE';
+    source: 'ACTIVE_CHART' | 'APPROVED_CHART' | 'DRAFT_CHART' | 'UNVERIFIED';
+    referenceDocument?: string | null;
+    sourceFileName?: string | null;
   };
   currentActiveChart: {
     id: string;
@@ -649,8 +653,12 @@ export interface EligibleCocoTankItem {
   } | null;
   hasProtectedDraft: boolean;
   isCapacityMatch: boolean;
+  isDimensionVerified: boolean;
+  isCertified: boolean;
   isDimensionMatch: boolean;
   isCompatible: boolean;
+  eligibilityStatus: TankTemplateEligibilityStatus;
+  ineligibilityReason: string | null;
   targetRevisionNumber: number;
 }
 
@@ -669,6 +677,9 @@ export interface GlobalTemplateAssignmentPreviewItem {
     diameterMm: number | null;
     lengthMm: number | null;
     maxDipMm: number | null;
+    source?: 'ACTIVE_CHART' | 'APPROVED_CHART' | 'DRAFT_CHART' | 'UNVERIFIED';
+    referenceDocument?: string | null;
+    sourceFileName?: string | null;
   };
   currentActiveChart: {
     id: string;
@@ -686,7 +697,13 @@ export interface GlobalTemplateAssignmentPreviewItem {
   hasProtectedDraft?: boolean;
   targetRevisionNumber: number;
   targetStatus?: TankCalibrationChartStatus;
+  isCapacityMatch?: boolean;
+  isDimensionVerified?: boolean;
+  isCertified?: boolean;
+  isDimensionMatch?: boolean;
   isCompatible: boolean;
+  eligibilityStatus?: TankTemplateEligibilityStatus;
+  ineligibilityReason?: string | null;
   capacityDifferenceLitres: number;
   recommendation: string;
 }
