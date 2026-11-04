@@ -540,8 +540,9 @@ tankCalibration.post('/tanks/:tankId/calibration/bulk', requirePermission(PERMIS
     }, 400);
   }
 
-  // Validate capacity conflict when allowOverCapacity is explicitly false
+  // Validate capacity conflict when allowOverCapacity is explicitly false, and +10% ceiling when true
   const tankCapacityMilliunits = Math.round(tank.capacityLitres * 1000);
+  const maxOverCapacityMilliunits = Math.round(tankCapacityMilliunits * 1.1);
   if (allowOverCapacity === false && maxPointVolMilli > tankCapacityMilliunits) {
     return c.json({
       success: false,
@@ -549,6 +550,16 @@ tankCalibration.post('/tanks/:tankId/calibration/bulk', requirePermission(PERMIS
       error: {
         code: 'CAPACITY_CONFLICT',
         message: `Chart maximum volume ${formatMilliunits(maxPointVolMilli)} L exceeds nominal tank capacity ${tank.capacityLitres.toLocaleString()} L`,
+      },
+    }, 400);
+  }
+  if (allowOverCapacity === true && maxPointVolMilli > maxOverCapacityMilliunits) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'OVER_CAPACITY_CEILING_EXCEEDED',
+        message: `Chart maximum volume ${formatMilliunits(maxPointVolMilli)} L exceeds the maximum permitted +10% over-capacity ceiling of ${formatMilliunits(maxOverCapacityMilliunits)} L (nominal ${tank.capacityLitres.toLocaleString()} L)`,
       },
     }, 400);
   }
@@ -1158,6 +1169,7 @@ tankCalibration.post('/calibration-templates', requirePermission(PERMISSIONS.TAN
           userCtx.user.id,
           {
             status: requestedStatus === 'ACTIVE' ? 'ACTIVE' : requestedStatus === 'APPROVED' ? 'APPROVED' : 'DRAFT',
+            allowOverCapacity: Boolean(body.allowOverCapacity),
             sourceFileName,
             referenceDocument,
             notes,
@@ -1174,7 +1186,13 @@ tankCalibration.post('/calibration-templates', requirePermission(PERMISSIONS.TAN
           action: 'GLOBAL_CALIBRATION_TEMPLATE_IMPORT',
           entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
           entityId: existing.id,
-          newValue: { code: existing.code, status: imported.status, pointsCount: parsedPoints.length, sourceFileName },
+          newValue: {
+            code: existing.code,
+            status: imported.status,
+            pointsCount: imported.pointsCount ?? parsedPoints.length,
+            sourceFileName,
+            allowOverCapacity: Boolean(body.allowOverCapacity),
+          },
           ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
           userAgent: c.req.header('user-agent') || 'Worker API',
           createdAt: nowIso,
@@ -1222,6 +1240,7 @@ tankCalibration.post('/calibration-templates', requirePermission(PERMISSIONS.TAN
         createdAt: nowIso,
         approvedBy: requestedStatus === 'APPROVED' || requestedStatus === 'ACTIVE' ? userCtx.user.id : null,
         approvedAt: requestedStatus === 'APPROVED' || requestedStatus === 'ACTIVE' ? nowIso : null,
+        allowOverCapacity: Boolean(body.allowOverCapacity),
       },
       parsedPoints
     );
@@ -1232,7 +1251,14 @@ tankCalibration.post('/calibration-templates', requirePermission(PERMISSIONS.TAN
       action: 'GLOBAL_CALIBRATION_TEMPLATE_CREATE',
       entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
       entityId: templateId,
-      newValue: { code, name, nominalCapacityLitres, status: created.status, pointsCount: parsedPoints.length },
+      newValue: {
+        code,
+        name,
+        nominalCapacityLitres,
+        status: created.status,
+        pointsCount: created.pointsCount ?? parsedPoints.length,
+        allowOverCapacity: Boolean(body.allowOverCapacity),
+      },
       ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
       userAgent: c.req.header('user-agent') || 'Worker API',
       createdAt: nowIso,
@@ -1316,6 +1342,7 @@ const handleGlobalTemplateImport = async (c: AppContext) => {
       userCtx.user.id,
       {
         status: targetStatus,
+        allowOverCapacity: Boolean(body.allowOverCapacity),
         sourceFileName: body.sourceFileName,
         referenceDocument: body.referenceDocument,
         notes: body.notes,
@@ -1335,7 +1362,9 @@ const handleGlobalTemplateImport = async (c: AppContext) => {
       newValue: {
         code: existing.code,
         status: updated.status,
-        pointsCount: parsedPoints.length,
+        pointsCount: updated.pointsCount ?? parsedPoints.length,
+        maxVolumeLitres: updated.maxVolumeLitres ?? null,
+        allowOverCapacity: Boolean(body.allowOverCapacity),
         sourceFileName: updated.sourceFileName,
         referenceDocument: updated.referenceDocument,
       },
@@ -1372,7 +1401,7 @@ tankCalibration.post('/calibration-templates/:id/status', requirePermission(PERM
   const userCtx = c.var.user!;
 
   const body = await c.req.json().catch(() => ({}));
-  const { status } = body;
+  const { status, allowOverCapacity, confirmOverCapacity } = body;
 
   if (!status || !['DRAFT', 'APPROVED', 'ACTIVE', 'SUPERSEDED', 'ARCHIVED'].includes(status)) {
     return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Valid status is required' } }, 400);
@@ -1387,8 +1416,18 @@ tankCalibration.post('/calibration-templates/:id/status', requirePermission(PERM
   }
 
   const nowIso = new Date().toISOString();
+  const overCapacityConfirmed = Boolean(allowOverCapacity || confirmOverCapacity);
   try {
-    const updated = await pumpRepo.updateGlobalTankCalibrationTemplateStatus(id, status, userCtx.user.id, nowIso);
+    const updated = await pumpRepo.updateGlobalTankCalibrationTemplateStatus(
+      id,
+      status,
+      userCtx.user.id,
+      nowIso,
+      {
+        allowOverCapacity: overCapacityConfirmed,
+        confirmOverCapacity: overCapacityConfirmed,
+      }
+    );
     if (!updated) {
       return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Global template not found' } }, 404);
     }
@@ -1399,7 +1438,13 @@ tankCalibration.post('/calibration-templates/:id/status', requirePermission(PERM
       action: 'GLOBAL_CALIBRATION_TEMPLATE_STATUS_UPDATE',
       entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
       entityId: updated.id,
-      newValue: { code: updated.code, status, pointsCount: updated.pointsCount },
+      newValue: {
+        code: updated.code,
+        status,
+        pointsCount: updated.pointsCount,
+        maxVolumeLitres: updated.maxVolumeLitres ?? null,
+        confirmOverCapacity: overCapacityConfirmed,
+      },
       ipAddress: c.req.header('x-forwarded-for') || '127.0.0.1',
       userAgent: c.req.header('user-agent') || 'Worker API',
       createdAt: nowIso,

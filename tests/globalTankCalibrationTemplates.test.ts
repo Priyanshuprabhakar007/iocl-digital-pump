@@ -820,5 +820,243 @@ describe('Centralised Tank Calibration Master Suite (Migration 0034)', () => {
       ).toBe(true);
     });
   });
+
+  describe('8. Scanned IOCL 20 KL Chart (21,648.3 L Max Volume, 210 Printed Readings + Inferred 0 mm / 0 L) & +10% Ceiling Regression', () => {
+    function generateScanned20klPrintedReadingsCsv(
+      maxPrintedVolumeLitres: number,
+      includeExplicitZeroPoint: boolean
+    ): string {
+      const maxDip = 2100;
+      const radius = maxDip / 2;
+      const fullArea = Math.PI * radius * radius;
+      const lines = ['dip_mm,volume_litres'];
+      const startDip = includeExplicitZeroPoint ? 0 : 10;
+
+      for (let h = startDip; h <= maxDip; h += 10) {
+        if (h === 0) {
+          lines.push('0.000,0.000');
+        } else if (h === maxDip) {
+          lines.push(`${maxDip.toFixed(3)},${maxPrintedVolumeLitres.toFixed(3)}`);
+        } else {
+          const term1 = radius * radius * Math.acos((radius - h) / radius);
+          const term2 = (radius - h) * Math.sqrt(Math.max(0, 2 * radius * h - h * h));
+          const ratio = (term1 - term2) / fullArea;
+          const vol = Math.min(maxPrintedVolumeLitres, Math.max(0, ratio * maxPrintedVolumeLitres));
+          lines.push(`${h.toFixed(3)},${vol.toFixed(3)}`);
+        }
+      }
+      return lines.join('\n');
+    }
+
+    it('8.1 validates UI preview for 210 printed readings (21,648.3 L max + inferred 0 mm / 0 L) and rejects volumes above the +10% ceiling (22,000 L)', () => {
+      const templateMeta = {
+        code: 'STANDARD_20KL',
+        nominalCapacityLitres: 20000,
+        tankDiameterMm: 2100,
+        maxDipMm: 2100,
+      };
+
+      // 210 printed readings (10 mm .. 2100 mm) with max volume 21,648.3 L
+      const csv210Printed = generateScanned20klPrintedReadingsCsv(21648.3, false);
+      const rawLineCount = csv210Printed.trim().split('\n').length - 1;
+      expect(rawLineCount).toBe(210);
+
+      // 1. Rejected when allowOverCapacity is false
+      const previewWithoutOverCap = buildGlobalTemplateImportPreview(csv210Printed, templateMeta, {
+        allowOverCapacity: false,
+      });
+      expect(previewWithoutOverCap.valid).toBe(false);
+      expect(previewWithoutOverCap.error).toContain('exceeds tank capacity of 20,000 L');
+
+      // 2. Accepted when allowOverCapacity is true: infers 0 mm / 0 L point -> 211 points total
+      const previewWithOverCap = buildGlobalTemplateImportPreview(csv210Printed, templateMeta, {
+        allowOverCapacity: true,
+      });
+      expect(previewWithOverCap.valid).toBe(true);
+      expect(previewWithOverCap.inferredZeroPoint).toBe(true);
+      expect(previewWithOverCap.startsAtZero).toBe(true);
+      expect(previewWithOverCap.reachesMaxDip).toBe(true);
+      expect(previewWithOverCap.isOverNominalCapacity).toBe(true);
+      expect(previewWithOverCap.maxOverCapacityCeilingLitres).toBe(22000);
+      expect(previewWithOverCap.diagnostics.pointsCount).toBe(211);
+      expect(previewWithOverCap.diagnostics.minDipMm).toBe(0);
+      expect(previewWithOverCap.diagnostics.maxDipMm).toBe(2100);
+      expect(previewWithOverCap.diagnostics.maxVolumeLitres).toBe(21648.3);
+      expect(previewWithOverCap.saveStatusDefault).toBe('DRAFT');
+
+      // 3. Rejected when volume exceeds the +10% ceiling (22,000.1 L > 22,000 L) even with allowOverCapacity: true
+      const csvAboveCeiling = generateScanned20klPrintedReadingsCsv(22000.1, true);
+      const previewAboveCeiling = buildGlobalTemplateImportPreview(csvAboveCeiling, templateMeta, {
+        allowOverCapacity: true,
+      });
+      expect(previewAboveCeiling.valid).toBe(false);
+      expect(previewAboveCeiling.error).toContain('+10% over-capacity ceiling of 22,000 L');
+
+      // 4. Approval helper requires explicit confirmation when maxVolumeLitres > nominalCapacityLitres
+      const draftOverCapTemplate = {
+        status: 'DRAFT',
+        pointsCount: 211,
+        nominalCapacityLitres: 20000,
+        maxVolumeLitres: 21648.3,
+        isOverNominalCapacity: true,
+      };
+      const unconfirmedCheck = canApproveGlobalTemplate(draftOverCapTemplate, true, {
+        confirmOverCapacity: false,
+      });
+      expect(unconfirmedCheck.allowed).toBe(false);
+      expect(unconfirmedCheck.requiresOverCapacityConfirmation).toBe(true);
+
+      const confirmedCheck = canApproveGlobalTemplate(draftOverCapTemplate, true, {
+        confirmOverCapacity: true,
+      });
+      expect(confirmedCheck.allowed).toBe(true);
+
+      const ceilingExceededCheck = canApproveGlobalTemplate(
+        {
+          ...draftOverCapTemplate,
+          maxVolumeLitres: 22000.1,
+        },
+        true,
+        { confirmOverCapacity: true }
+      );
+      expect(ceilingExceededCheck.allowed).toBe(false);
+      expect(ceilingExceededCheck.reason).toContain('+10% over-capacity ceiling');
+    });
+
+    it('8.2 imports STANDARD_20KL with 21,648.3 L maximum (210 printed readings + inferred 0 mm / 0 L) as DRAFT when allowOverCapacity is true, rejects > +10% ceiling, and requires explicit confirmation on approval', async () => {
+      const csv210Printed21648 = generateScanned20klPrintedReadingsCsv(21648.3, false);
+
+      // 1. Import without allowOverCapacity -> must fail with 400 CAPACITY_CONFLICT
+      const rejectNoFlagRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/import',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            csvText: csv210Printed21648,
+            status: 'DRAFT',
+            allowOverCapacity: false,
+            sourceFileName: 'IOCL_20KL_SCANNED_21648_3L.csv',
+          }),
+        },
+        { DB: localD1 }
+      );
+      expect(rejectNoFlagRes.status).toBe(400);
+      const rejectNoFlagJson = (await rejectNoFlagRes.json()) as any;
+      expect(rejectNoFlagJson.error.code).toBe('CAPACITY_CONFLICT');
+
+      // 2. Import above +10% ceiling (22,000.1 L and 25,000 L) with allowOverCapacity: true -> must fail with OVER_CAPACITY_CEILING_EXCEEDED
+      const csv22000_1 = generateScanned20klPrintedReadingsCsv(22000.1, true);
+      const rejectCeilingRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/import',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            csvText: csv22000_1,
+            status: 'DRAFT',
+            allowOverCapacity: true,
+            sourceFileName: 'IOCL_20KL_OVER_CEILING.csv',
+          }),
+        },
+        { DB: localD1 }
+      );
+      expect(rejectCeilingRes.status).toBe(400);
+      const rejectCeilingJson = (await rejectCeilingRes.json()) as any;
+      expect(rejectCeilingJson.error.code).toBe('OVER_CAPACITY_CEILING_EXCEEDED');
+
+      // 3. Import 210 printed readings (10..2100 mm, max 21,648.3 L) with allowOverCapacity: true -> succeeds as DRAFT with 211 points (0 mm / 0 L inferred)
+      const importDraftRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/import',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            csvText: csv210Printed21648,
+            status: 'DRAFT',
+            allowOverCapacity: true,
+            sourceFileName: 'IOCL_20KL_SCANNED_21648_3L.csv',
+            referenceDocument: 'IOCL-20KL-D2100-L6250-21648.3L',
+          }),
+        },
+        { DB: localD1 }
+      );
+      expect(importDraftRes.status).toBe(200);
+      const importDraftJson = (await importDraftRes.json()) as any;
+      expect(importDraftJson.success).toBe(true);
+      expect(importDraftJson.data.status).toBe('DRAFT');
+      expect(importDraftJson.data.pointsCount).toBe(211);
+      expect(importDraftJson.data.maxVolumeLitres).toBe(21648.3);
+      expect(importDraftJson.data.maxVolumeLitresStr).toBe('21648.300');
+      expect(importDraftJson.data.isOverNominalCapacity).toBe(true);
+      expect(importDraftJson.data.points[0].dipMmStr).toBe('0.000');
+      expect(importDraftJson.data.points[0].volumeLitreStr).toBe('0.000');
+      expect(importDraftJson.data.points[210].dipMmStr).toBe('2100.000');
+      expect(importDraftJson.data.points[210].volumeLitreStr).toBe('21648.300');
+
+      // 4. Separate authorised approval WITHOUT confirmOverCapacity / allowOverCapacity -> must fail with 400 OVER_CAPACITY_CONFIRMATION_REQUIRED
+      const approveUnconfirmedRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/status',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            status: 'APPROVED',
+          }),
+        },
+        { DB: localD1 }
+      );
+      expect(approveUnconfirmedRes.status).toBe(400);
+      const approveUnconfirmedJson = (await approveUnconfirmedRes.json()) as any;
+      expect(approveUnconfirmedJson.error.code).toBe('OVER_CAPACITY_CONFIRMATION_REQUIRED');
+
+      // Verify template remained DRAFT
+      const checkDraftRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${adminToken}` },
+        },
+        { DB: localD1 }
+      );
+      expect(((await checkDraftRes.json()) as any).data.status).toBe('DRAFT');
+
+      // 5. Separate authorised approval WITH confirmOverCapacity: true -> succeeds and marks template APPROVED
+      const approveConfirmedRes = await app.request(
+        '/api/v1/calibration-templates/STANDARD_20KL/status',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            status: 'APPROVED',
+            confirmOverCapacity: true,
+          }),
+        },
+        { DB: localD1 }
+      );
+      expect(approveConfirmedRes.status).toBe(200);
+      const approveConfirmedJson = (await approveConfirmedRes.json()) as any;
+      expect(approveConfirmedJson.success).toBe(true);
+      expect(approveConfirmedJson.data.status).toBe('APPROVED');
+      expect(approveConfirmedJson.data.pointsCount).toBe(211);
+      expect(approveConfirmedJson.data.maxVolumeLitres).toBe(21648.3);
+    });
+  });
 });
+
 

@@ -74,6 +74,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
   const [referenceDocument, setReferenceDocument] = useState('');
   const [importNotes, setImportNotes] = useState('');
   const [allowOverCapacity, setAllowOverCapacity] = useState(false);
+  const [confirmApproveOverCapacity, setConfirmApproveOverCapacity] = useState(false);
 
   // Eligible tanks & Assignment preview state
   const [scopeFilter, setScopeFilter] = useState<'ALL_COCO' | 'SELECTED_OUTLET'>('ALL_COCO');
@@ -194,6 +195,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
     if (selectedTemplateId) {
       setAssignmentPreview(null);
       setSelectedTankIds([]);
+      setConfirmApproveOverCapacity(false);
       loadTemplateDetailAndTanks(selectedTemplateId, scopeFilter);
     }
   }, [selectedTemplateId, scopeFilter, selectedOutletId, loadTemplateDetailAndTanks]);
@@ -203,6 +205,22 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
     templates.find(t => t.id === selectedTemplateId || t.code === selectedTemplateId) ||
     null;
 
+  const templateMaxVolumeLitres =
+    activeTemplate?.maxVolumeLitres ??
+    (activeTemplate?.points && activeTemplate.points.length > 0
+      ? activeTemplate.points[activeTemplate.points.length - 1].volumeLitres
+      : null);
+
+  const templateOverCapacityCeilingLitres = activeTemplate
+    ? Math.round(activeTemplate.nominalCapacityLitres * 1.1 * 1000) / 1000
+    : null;
+
+  const isTemplateOverNominalCapacity = Boolean(
+    activeTemplate &&
+      templateMaxVolumeLitres != null &&
+      templateMaxVolumeLitres > activeTemplate.nominalCapacityLitres
+  );
+
   const csvPreview =
     activeTemplate && csvText.trim()
       ? buildGlobalTemplateImportPreview(csvText, activeTemplate, {
@@ -210,7 +228,11 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
         })
       : null;
 
-  const approvalCheck = canApproveGlobalTemplate(activeTemplate, canApproveCalibrationChart);
+  const approvalCheck = canApproveGlobalTemplate(activeTemplate, canApproveCalibrationChart, {
+    confirmOverCapacity: confirmApproveOverCapacity,
+    maxVolumeLitres: templateMaxVolumeLitres,
+    nominalCapacityLitres: activeTemplate?.nominalCapacityLitres ?? null,
+  });
 
   const handleCsvFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -231,7 +253,10 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
   const handleLoadVerifiedSampleCsv = () => {
     if (!activeTemplate) return;
     const maxDip = activeTemplate.maxDipMm || activeTemplate.tankDiameterMm || 2100;
-    const cap = activeTemplate.nominalCapacityLitres || 20000;
+    const cap =
+      allowOverCapacity && activeTemplate.code === 'STANDARD_20KL'
+        ? 21648.3
+        : activeTemplate.nominalCapacityLitres || 20000;
     const sample = generateVerifiedCylindricalCalibrationCsv(maxDip, cap, 10);
     setShowCsvPanel(true);
     setCsvText(sample);
@@ -244,7 +269,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
     setFeedbackError(null);
   };
 
-  // Requirement 3 & 4: Import verified CSV data and save as DRAFT by default
+  // Requirement 1, 3, 4 & 5: Import verified CSV data (including allowOverCapacity) and save as DRAFT by default
   const handleSaveCsvAsDraft = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeTemplate || submitting) return;
@@ -266,7 +291,8 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
           method: 'POST',
           body: JSON.stringify({
             csvText,
-            status: 'DRAFT', // Requirement 4: Save imported templates as DRAFT by default
+            status: 'DRAFT', // Keep imported templates as DRAFT until separately approved
+            allowOverCapacity,
             sourceFileName: sourceFileName.trim() || `${activeTemplate.code.toLowerCase()}.csv`,
             referenceDocument: referenceDocument.trim() || null,
             notes: importNotes.trim() || null,
@@ -278,6 +304,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
         clearApiCache();
         setShowCsvPanel(false);
         setCsvText('');
+        setConfirmApproveOverCapacity(false);
         await Promise.all([
           loadTemplates(res.data.id),
           loadTemplateDetailAndTanks(res.data.id, scopeFilter),
@@ -294,22 +321,41 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
     }
   };
 
-  // Requirement 5: Separate authorised approval action after chart verification
+  // Requirement 4 & 5: Separate authorised approval action after chart verification (including explicit over-capacity confirmation)
   const handleUpdateTemplateStatus = async (nextStatus: 'APPROVED' | 'DRAFT') => {
     if (!activeTemplate || submitting) return;
+
+    if (nextStatus === 'APPROVED' && isTemplateOverNominalCapacity && !confirmApproveOverCapacity) {
+      showError(
+        `Chart maximum volume (${formatCalibrationDisplay(
+          templateMaxVolumeLitres ?? 0
+        )} L) exceeds nominal capacity (${activeTemplate.nominalCapacityLitres.toLocaleString()} L). Please confirm the above-nominal volume verification checkbox before approving.`
+      );
+      return;
+    }
+
     setSubmitting(true);
     setFeedbackError(null);
     try {
+      const overCapConfirmed =
+        nextStatus === 'APPROVED' && isTemplateOverNominalCapacity
+          ? confirmApproveOverCapacity
+          : false;
       const res = await apiFetch<GlobalTankCalibrationTemplate>(
         `/api/v1/calibration-templates/${encodeURIComponent(activeTemplate.id)}/status`,
         {
           method: 'POST',
-          body: JSON.stringify({ status: nextStatus }),
+          body: JSON.stringify({
+            status: nextStatus,
+            allowOverCapacity: overCapConfirmed,
+            confirmOverCapacity: overCapConfirmed,
+          }),
         }
       );
 
       if (res.success && res.data) {
         clearApiCache();
+        setConfirmApproveOverCapacity(false);
         await Promise.all([
           loadTemplates(res.data.id),
           loadTemplateDetailAndTanks(res.data.id, scopeFilter),
@@ -790,19 +836,63 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
           )}
 
           {activeTemplate.status === 'DRAFT' && activeTemplate.pointsCount >= 2 && (
-            <div className="p-3.5 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-xs font-mono text-cyan-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-cyan-300">
-                    Ready for Authorised Verification:
-                  </span>{' '}
-                  {activeTemplate.pointsCount} dip-to-volume points are saved in{' '}
-                  <strong>DRAFT</strong> status. Verify the calibration curve below and click{' '}
-                  <strong>Verify &amp; Approve Template (APPROVED)</strong> to unlock COCO tank
-                  assignment.
+            <div className="p-3.5 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-xs font-mono text-cyan-200 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-cyan-300">
+                      Ready for Authorised Verification:
+                    </span>{' '}
+                    {activeTemplate.pointsCount} dip-to-volume points are saved in{' '}
+                    <strong>DRAFT</strong> status
+                    {templateMaxVolumeLitres != null
+                      ? ` (Max Volume: ${formatCalibrationDisplay(templateMaxVolumeLitres)} L)`
+                      : ''}
+                    . Verify the calibration curve below and click{' '}
+                    <strong>Verify &amp; Approve Template (APPROVED)</strong> to unlock COCO tank
+                    assignment.
+                  </div>
                 </div>
               </div>
+
+              {isTemplateOverNominalCapacity && (
+                <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-lg text-amber-200 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-amber-300">
+                        Above-Nominal Chart Volume Verification Required:
+                      </span>{' '}
+                      Printed maximum volume{' '}
+                      <strong>{formatCalibrationDisplay(templateMaxVolumeLitres ?? 0)} L</strong>{' '}
+                      exceeds nominal capacity{' '}
+                      <strong>{activeTemplate.nominalCapacityLitres.toLocaleString()} L</strong>{' '}
+                      (permitted +10% ceiling:{' '}
+                      <strong>
+                        {(templateOverCapacityCeilingLitres ?? 0).toLocaleString()} L
+                      </strong>
+                      ).
+                    </div>
+                  </div>
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-[11px] text-amber-100 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={confirmApproveOverCapacity}
+                      onChange={e => setConfirmApproveOverCapacity(e.target.checked)}
+                      className="rounded border-amber-500/50 bg-slate-900 text-emerald-500"
+                      data-testid="confirm-approve-over-capacity-checkbox"
+                    />
+                    <span>
+                      I have verified the official IOCL strapping table and confirm the
+                      above-nominal chart maximum volume (
+                      {formatCalibrationDisplay(templateMaxVolumeLitres ?? 0)} L &le;{' '}
+                      {(templateOverCapacityCeilingLitres ?? 0).toLocaleString()} L +10% ceiling)
+                      for authorised approval.
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
           )}
 

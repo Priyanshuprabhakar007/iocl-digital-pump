@@ -594,6 +594,12 @@ export function getPumpInfrastructureErrorMessage(error: any): string {
   if (combined.includes('ASSIGNMENT_FAILED')) {
     return rawMessage || 'Global calibration template assignment failed. Verify that the template is APPROVED and has validated points.';
   }
+  if (combined.includes('OVER_CAPACITY_CEILING_EXCEEDED')) {
+    return rawMessage || 'Chart maximum volume exceeds the maximum permitted +10% over-capacity ceiling.';
+  }
+  if (combined.includes('OVER_CAPACITY_CONFIRMATION_REQUIRED')) {
+    return rawMessage || 'Explicit confirmation of above-nominal chart volume (up to the +10% ceiling) is required before approving this template.';
+  }
 
   // Strict Sanitization: Never expose raw SQLite / SQL / D1 / stack traces
   if (
@@ -836,17 +842,23 @@ export function validateCalibrationChartPoints(
       };
     }
 
-    if (
-      options?.tankCapacityLitres &&
-      options.tankCapacityLitres > 0 &&
-      !options.allowOverCapacity &&
-      volNum > options.tankCapacityLitres
-    ) {
-      return {
-        valid: false,
-        error: `Row ${i + 1}: Volume ${volNum.toLocaleString()} L exceeds tank capacity of ${options.tankCapacityLitres.toLocaleString()} L.`,
-        normalizedPoints: [],
-      };
+    if (options?.tankCapacityLitres && options.tankCapacityLitres > 0) {
+      const maxOverCapacityLitres =
+        Math.round(options.tankCapacityLitres * 1.1 * 1000) / 1000;
+      if (!options.allowOverCapacity && volNum > options.tankCapacityLitres) {
+        return {
+          valid: false,
+          error: `Row ${i + 1}: Volume ${volNum.toLocaleString()} L exceeds tank capacity of ${options.tankCapacityLitres.toLocaleString()} L.`,
+          normalizedPoints: [],
+        };
+      }
+      if (options.allowOverCapacity && volNum > maxOverCapacityLitres) {
+        return {
+          valid: false,
+          error: `Row ${i + 1}: Volume ${volNum.toLocaleString()} L exceeds the maximum permitted +10% over-capacity ceiling of ${maxOverCapacityLitres.toLocaleString()} L (nominal ${options.tankCapacityLitres.toLocaleString()} L).`,
+          normalizedPoints: [],
+        };
+      }
     }
 
     parsed.push({
@@ -1725,6 +1737,9 @@ export interface GlobalTemplateImportPreviewResult extends CalibrationImportPrev
   reachesMaxDip: boolean;
   expectedMaxDipMm: number | null;
   expectedCapacityLitres: number;
+  maxOverCapacityCeilingLitres: number;
+  isOverNominalCapacity: boolean;
+  inferredZeroPoint: boolean;
   saveStatusDefault: 'DRAFT';
 }
 
@@ -1741,6 +1756,8 @@ export function buildGlobalTemplateImportPreview(
   }
 ): GlobalTemplateImportPreviewResult {
   const expectedMaxDip = template.maxDipMm ?? template.tankDiameterMm ?? null;
+  const maxOverCapacityCeilingLitres =
+    Math.round(template.nominalCapacityLitres * 1.1 * 1000) / 1000;
   const basePreview = buildCalibrationImportPreview(rawText, {
     tankCapacityLitres: template.nominalCapacityLitres,
     allowOverCapacity: options?.allowOverCapacity,
@@ -1755,31 +1772,66 @@ export function buildGlobalTemplateImportPreview(
       reachesMaxDip: false,
       expectedMaxDipMm: expectedMaxDip,
       expectedCapacityLitres: template.nominalCapacityLitres,
+      maxOverCapacityCeilingLitres,
+      isOverNominalCapacity: false,
+      inferredZeroPoint: false,
       saveStatusDefault: 'DRAFT',
     };
   }
 
-  const minDipNum = Number(basePreview.diagnostics.minDipMm);
-  const maxDipNum = Number(basePreview.diagnostics.maxDipMm);
+  let normalizedPoints = [...basePreview.normalizedPoints];
+  let diagnostics = { ...basePreview.diagnostics };
+  let minDipNum = Number(diagnostics.minDipMm);
+  const maxDipNum = Number(diagnostics.maxDipMm);
+  const maxVolNum = Number(diagnostics.maxVolumeLitres);
+  let inferredZeroPoint = false;
+
+  // Support scanned IOCL reference charts that print 210 readings (10 mm .. 2100 mm)
+  // and omit the 0 mm / 0 L baseline row on paper: infer and prepend 0.000 mm / 0.000 L.
+  if (
+    minDipNum > 0 &&
+    minDipNum <= 20 &&
+    normalizedPoints.length >= 200
+  ) {
+    normalizedPoints = [
+      { dipMillimetres: '0.000', volumeLitres: '0.000' },
+      ...normalizedPoints,
+    ];
+    diagnostics = {
+      ...diagnostics,
+      pointsCount: normalizedPoints.length,
+      minDipMm: 0,
+      minVolumeLitres: 0,
+    };
+    minDipNum = 0;
+    inferredZeroPoint = true;
+  }
+
   const startsAtZero = Math.abs(minDipNum) < 0.001;
   const reachesMaxDip =
     expectedMaxDip !== null ? Math.abs(maxDipNum - expectedMaxDip) < 0.001 : maxDipNum > 0;
+  const isOverNominalCapacity = maxVolNum > template.nominalCapacityLitres;
 
   let rangeError: string | null = null;
   if (!startsAtZero) {
-    rangeError = `Global reference template ${template.code || ''} requires calibration points starting at 0.000 mm dip (found ${basePreview.diagnostics.minDipMm} mm).`;
+    rangeError = `Global reference template ${template.code || ''} requires calibration points starting at 0.000 mm dip (found ${diagnostics.minDipMm} mm).`;
   } else if (expectedMaxDip !== null && !reachesMaxDip) {
-    rangeError = `Global reference template ${template.code || ''} requires complete dip coverage up to Max Dip ${expectedMaxDip.toFixed(3)} mm (found max dip ${basePreview.diagnostics.maxDipMm} mm).`;
+    rangeError = `Global reference template ${template.code || ''} requires complete dip coverage up to Max Dip ${expectedMaxDip.toFixed(3)} mm (found max dip ${diagnostics.maxDipMm} mm).`;
   }
 
   return {
     ...basePreview,
+    normalizedPoints,
+    diagnostics,
     valid: basePreview.valid && !rangeError,
     error: rangeError || basePreview.error,
     startsAtZero,
     reachesMaxDip,
     expectedMaxDipMm: expectedMaxDip,
     expectedCapacityLitres: template.nominalCapacityLitres,
+    maxOverCapacityCeilingLitres,
+    isOverNominalCapacity,
+    inferredZeroPoint,
     saveStatusDefault: 'DRAFT',
   };
 }
@@ -1788,11 +1840,21 @@ export function canApproveGlobalTemplate(
   template: {
     status?: string | null;
     pointsCount?: number | null;
+    nominalCapacityLitres?: number | null;
+    maxVolumeLitres?: number | null;
+    isOverNominalCapacity?: boolean;
+    points?: Array<{ volumeLitres?: number; volumeMilliunits?: number }>;
   } | null | undefined,
-  hasApprovalPermission: boolean
+  hasApprovalPermission: boolean,
+  options?: {
+    confirmOverCapacity?: boolean;
+    maxVolumeLitres?: number | null;
+    nominalCapacityLitres?: number | null;
+  }
 ): {
   allowed: boolean;
   reason: string | null;
+  requiresOverCapacityConfirmation?: boolean;
 } {
   if (!template) {
     return { allowed: false, reason: 'No template selected.' };
@@ -1816,7 +1878,41 @@ export function canApproveGlobalTemplate(
       reason: 'Template is already APPROVED.',
     };
   }
-  return { allowed: true, reason: null };
+
+  const nominalCap =
+    options?.nominalCapacityLitres ??
+    template.nominalCapacityLitres ??
+    null;
+  let maxVol = options?.maxVolumeLitres ?? template.maxVolumeLitres ?? null;
+  if (maxVol == null && Array.isArray(template.points) && template.points.length > 0) {
+    const lastPt = template.points[template.points.length - 1];
+    maxVol =
+      typeof lastPt.volumeLitres === 'number'
+        ? lastPt.volumeLitres
+        : typeof lastPt.volumeMilliunits === 'number'
+          ? lastPt.volumeMilliunits / 1000
+          : null;
+  }
+
+  if (nominalCap != null && nominalCap > 0 && maxVol != null) {
+    const maxOverCapacityCeiling = Math.round(nominalCap * 1.1 * 1000) / 1000;
+    if (maxVol > maxOverCapacityCeiling) {
+      return {
+        allowed: false,
+        reason: `Chart maximum volume (${maxVol.toLocaleString()} L) exceeds the maximum permitted +10% over-capacity ceiling (${maxOverCapacityCeiling.toLocaleString()} L).`,
+        requiresOverCapacityConfirmation: true,
+      };
+    }
+    if (maxVol > nominalCap && !options?.confirmOverCapacity) {
+      return {
+        allowed: false,
+        reason: `Chart maximum volume (${maxVol.toLocaleString()} L) exceeds nominal capacity (${nominalCap.toLocaleString()} L). Please confirm above-nominal volume verification to approve.`,
+        requiresOverCapacityConfirmation: true,
+      };
+    }
+  }
+
+  return { allowed: true, reason: null, requiresOverCapacityConfirmation: false };
 }
 
 export function formatGlobalCalibrationAuditLogEntry(log: {

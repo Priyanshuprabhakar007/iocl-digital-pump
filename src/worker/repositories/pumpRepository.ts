@@ -4384,25 +4384,39 @@ export class PumpRepository {
     const points = await this.db.select({
       templateId: schema.globalTankCalibrationTemplatePoints.templateId,
       count: sql<number>`count(*)`,
+      maxVolumeMilliunits: sql<number>`max(${schema.globalTankCalibrationTemplatePoints.volumeMilliunits})`,
     }).from(schema.globalTankCalibrationTemplatePoints)
       .groupBy(schema.globalTankCalibrationTemplatePoints.templateId);
 
     const countMap = new Map<string, number>();
+    const maxVolMap = new Map<string, number | null>();
     for (const p of points) {
       countMap.set(p.templateId, Number(p.count || 0));
+      maxVolMap.set(
+        p.templateId,
+        p.maxVolumeMilliunits != null ? Number(p.maxVolumeMilliunits) : null
+      );
     }
 
-    return rows.map(r => ({
-      ...r,
-      pointsCount: countMap.get(r.id) || 0,
-      nominalCapacityLitresStr: r.nominalCapacityLitres.toString(),
-      maxDipMm: r.maxDipMmMilliunits != null ? r.maxDipMmMilliunits / 1000 : null,
-      tankDiameterMm: r.tankDiameterMmMilliunits != null ? r.tankDiameterMmMilliunits / 1000 : null,
-      tankLengthMm: r.tankLengthMmMilliunits != null ? r.tankLengthMmMilliunits / 1000 : null,
-      maxDipMmStr: r.maxDipMmMilliunits != null ? formatMilliunits(r.maxDipMmMilliunits) : null,
-      tankDiameterMmStr: r.tankDiameterMmMilliunits != null ? formatMilliunits(r.tankDiameterMmMilliunits) : null,
-      tankLengthMmStr: r.tankLengthMmMilliunits != null ? formatMilliunits(r.tankLengthMmMilliunits) : null,
-    }));
+    return rows.map(r => {
+      const maxVolMilli = maxVolMap.get(r.id) ?? null;
+      const nomMilli = Math.round(r.nominalCapacityLitres * 1000);
+      return {
+        ...r,
+        pointsCount: countMap.get(r.id) || 0,
+        maxVolumeMilliunits: maxVolMilli,
+        maxVolumeLitres: maxVolMilli != null ? maxVolMilli / 1000 : null,
+        maxVolumeLitresStr: maxVolMilli != null ? formatMilliunits(maxVolMilli) : null,
+        isOverNominalCapacity: maxVolMilli != null ? maxVolMilli > nomMilli : false,
+        nominalCapacityLitresStr: r.nominalCapacityLitres.toString(),
+        maxDipMm: r.maxDipMmMilliunits != null ? r.maxDipMmMilliunits / 1000 : null,
+        tankDiameterMm: r.tankDiameterMmMilliunits != null ? r.tankDiameterMmMilliunits / 1000 : null,
+        tankLengthMm: r.tankLengthMmMilliunits != null ? r.tankLengthMmMilliunits / 1000 : null,
+        maxDipMmStr: r.maxDipMmMilliunits != null ? formatMilliunits(r.maxDipMmMilliunits) : null,
+        tankDiameterMmStr: r.tankDiameterMmMilliunits != null ? formatMilliunits(r.tankDiameterMmMilliunits) : null,
+        tankLengthMmStr: r.tankLengthMmMilliunits != null ? formatMilliunits(r.tankLengthMmMilliunits) : null,
+      };
+    });
   }
 
   async findGlobalTankCalibrationTemplateById(idOrCode: string): Promise<any | null> {
@@ -4421,10 +4435,17 @@ export class PumpRepository {
     if (!row) return null;
 
     const points = await this.listGlobalTankCalibrationTemplatePoints(row.id);
+    const maxVolMilli =
+      points.length > 0 ? points[points.length - 1].volumeMilliunits : null;
+    const nomMilli = Math.round(row.nominalCapacityLitres * 1000);
 
     return {
       ...row,
       pointsCount: points.length,
+      maxVolumeMilliunits: maxVolMilli,
+      maxVolumeLitres: maxVolMilli != null ? maxVolMilli / 1000 : null,
+      maxVolumeLitresStr: maxVolMilli != null ? formatMilliunits(maxVolMilli) : null,
+      isOverNominalCapacity: maxVolMilli != null ? maxVolMilli > nomMilli : false,
       points,
       nominalCapacityLitresStr: row.nominalCapacityLitres.toString(),
       maxDipMm: row.maxDipMmMilliunits != null ? row.maxDipMmMilliunits / 1000 : null,
@@ -4510,6 +4531,21 @@ export class PumpRepository {
       }
     }
 
+    // Scanned IOCL reference charts (e.g. 210 printed readings from 10 mm to 2100 mm)
+    // omit the 0 mm / 0 L baseline row on paper; infer and prepend 0 mm / 0 L when a
+    // full-density table (>= 200 readings) starts at the first printed step (<= 20 mm).
+    if (
+      sorted.length >= 200 &&
+      sorted[0].dipMillimetresMilliunits > 0 &&
+      sorted[0].dipMillimetresMilliunits <= 20000 &&
+      sorted[0].volumeMilliunits >= 0
+    ) {
+      sorted.unshift({
+        dipMillimetresMilliunits: 0,
+        volumeMilliunits: 0,
+      });
+    }
+
     const maxPointDip = sorted[sorted.length - 1].dipMillimetresMilliunits;
     const maxPointVol = sorted[sorted.length - 1].volumeMilliunits;
 
@@ -4542,11 +4578,20 @@ export class PumpRepository {
     }
 
     const nominalCapacityMilliunits = Math.round(options.nominalCapacityLitres * 1000);
+    const maxOverCapacityMilliunits = Math.round(nominalCapacityMilliunits * 1.1);
     if (!options.allowOverCapacity && maxPointVol > nominalCapacityMilliunits) {
       const err = new Error(
         `Chart maximum volume ${formatMilliunits(maxPointVol)} L exceeds nominal template capacity ${options.nominalCapacityLitres.toLocaleString()} L`
       );
       (err as any).code = 'CAPACITY_CONFLICT';
+      throw err;
+    }
+
+    if (options.allowOverCapacity && maxPointVol > maxOverCapacityMilliunits) {
+      const err = new Error(
+        `Chart maximum volume ${formatMilliunits(maxPointVol)} L exceeds the maximum permitted +10% over-capacity ceiling of ${formatMilliunits(maxOverCapacityMilliunits)} L (nominal ${options.nominalCapacityLitres.toLocaleString()} L)`
+      );
+      (err as any).code = 'OVER_CAPACITY_CEILING_EXCEEDED';
       throw err;
     }
 
@@ -4755,7 +4800,11 @@ export class PumpRepository {
     idOrCode: string,
     status: 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'SUPERSEDED' | 'ARCHIVED',
     userId: string,
-    updatedAt: string
+    updatedAt: string,
+    options?: {
+      allowOverCapacity?: boolean;
+      confirmOverCapacity?: boolean;
+    }
   ): Promise<any | null> {
     const existing = await this.findGlobalTankCalibrationTemplateById(idOrCode);
     if (!existing) return null;
@@ -4772,10 +4821,38 @@ export class PumpRepository {
         (err as any).code = 'TEMPLATE_POINTS_NOT_VALIDATED';
         throw err;
       }
+
+      const nominalCapacityMilliunits = Math.round(existing.nominalCapacityLitres * 1000);
+      const maxOverCapacityMilliunits = Math.round(nominalCapacityMilliunits * 1.1);
+      const maxStoredVol = rawPoints.reduce(
+        (m: number, p: { volumeMilliunits: number }) => Math.max(m, p.volumeMilliunits),
+        0
+      );
+      const overCapacityConfirmed = Boolean(
+        options?.allowOverCapacity || options?.confirmOverCapacity
+      );
+
+      if (maxStoredVol > maxOverCapacityMilliunits) {
+        const err = new Error(
+          `Cannot approve global template ${existing.code}: chart maximum volume ${formatMilliunits(maxStoredVol)} L exceeds the maximum permitted +10% over-capacity ceiling of ${formatMilliunits(maxOverCapacityMilliunits)} L (nominal ${existing.nominalCapacityLitres.toLocaleString()} L)`
+        );
+        (err as any).code = 'OVER_CAPACITY_CEILING_EXCEEDED';
+        throw err;
+      }
+
+      if (maxStoredVol > nominalCapacityMilliunits && !overCapacityConfirmed) {
+        const err = new Error(
+          `Chart maximum volume ${formatMilliunits(maxStoredVol)} L exceeds nominal template capacity ${existing.nominalCapacityLitres.toLocaleString()} L. Explicit confirmation of above-nominal chart volume (up to the +10% ceiling of ${formatMilliunits(maxOverCapacityMilliunits)} L) is required to approve this template.`
+        );
+        (err as any).code = 'OVER_CAPACITY_CONFIRMATION_REQUIRED';
+        throw err;
+      }
+
       this.validateGlobalTemplatePoints(rawPoints, {
         nominalCapacityLitres: existing.nominalCapacityLitres,
         tankDiameterMmMilliunits: existing.tankDiameterMmMilliunits,
         maxDipMmMilliunits: existing.maxDipMmMilliunits,
+        allowOverCapacity: overCapacityConfirmed,
         requireCompleteRange: true,
       });
     }
