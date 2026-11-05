@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch, apiFetchBlob } from '../services/api';
 import { PERMISSIONS } from '../../shared/constants';
 import {
   CocoAttachmentInfo,
@@ -154,17 +155,19 @@ export const DocumentsPage: React.FC = () => {
       serviceActionsPending: [],
       notRecorded: [],
     });
-  const [summary, setSummary] = useState<CocoOnePagerReport['summary']>({
+  const EMPTY_SUMMARY: CocoOnePagerReport['summary'] = {
     totalCategories: 14,
     validCount: 0,
     expiringSoonCount: 0,
     expiredCount: 0,
     paymentPendingCount: 0,
     actionRequiredCount: 0,
-    notRecordedCount: 14,
+    notRecordedCount: 0,
     notApplicableCount: 0,
     discrepancyCount: 0,
-  });
+  };
+  const [summary, setSummary] = useState<CocoOnePagerReport['summary']>(EMPTY_SUMMARY);
+  const [outletLoadError, setOutletLoadError] = useState<string | null>(null);
   const [onePagerReport, setOnePagerReport] = useState<CocoOnePagerReport | null>(null);
   const [vaultDocs, setVaultDocs] = useState<VaultDocumentRecord[]>([]);
 
@@ -230,39 +233,64 @@ export const DocumentsPage: React.FC = () => {
     [outlets, selectedOutletId]
   );
 
-  // Load accessible outlets on mount
-  useEffect(() => {
+  // Load accessible outlets on mount using apiFetch
+  const loadOutlets = useCallback(async () => {
     if (!canRead) {
       setIsLoading(false);
       return;
     }
-    const loadOutlets = async () => {
-      try {
-        const res = await fetch('/api/v1/outlets', { credentials: 'include' });
-        const json = (await res.json()) as any;
-        if (json.success && Array.isArray(json.data)) {
-          const list: OutletOption[] = json.data;
-          setOutlets(list);
-          // Default to first COCO outlet (e.g. COCO IT Park / COCO 22) or first accessible outlet
-          const cocoDefault =
-            list.find((o) => /it park/i.test(o.name) || o.roCode === '373196') ||
-            list.find((o) => o.outletType === 'COCO' || /coco/i.test(o.name)) ||
-            list[0];
-          if (cocoDefault) {
-            setSelectedOutletId(cocoDefault.id);
-          } else {
-            setIsLoading(false);
-          }
+    setIsLoading(true);
+    setOutletLoadError(null);
+    setBannerError(null);
+    try {
+      const res = await apiFetch<OutletOption[]>('/api/v1/outlets');
+      if (res.success && Array.isArray(res.data)) {
+        const list: OutletOption[] = res.data;
+        setOutlets(list);
+        setOutletLoadError(null);
+        if (list.length === 0) {
+          setSelectedOutletId('');
+          setRegisterItems([]);
+          setSummary(EMPTY_SUMMARY);
+          setIsLoading(false);
+          return;
+        }
+        // Default to first COCO outlet (e.g. COCO IT Park / COCO 22) or first accessible outlet
+        const cocoDefault =
+          list.find((o) => /it park/i.test(o.name) || o.roCode === '373196') ||
+          list.find((o) => o.outletType === 'COCO' || /coco/i.test(o.name)) ||
+          list[0];
+        if (cocoDefault) {
+          setSelectedOutletId(cocoDefault.id);
         } else {
+          setSelectedOutletId('');
           setIsLoading(false);
         }
-      } catch {
-        setBannerError('Failed to load accessible retail outlets.');
+      } else {
+        const errorMsg = res.error?.message || 'Failed to load accessible retail outlets.';
+        setOutletLoadError(errorMsg);
+        setBannerError(errorMsg);
+        setOutlets([]);
+        setSelectedOutletId('');
+        setRegisterItems([]);
+        setSummary(EMPTY_SUMMARY);
         setIsLoading(false);
       }
-    };
-    loadOutlets();
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Failed to load accessible retail outlets.';
+      setOutletLoadError(errorMsg);
+      setBannerError(errorMsg);
+      setOutlets([]);
+      setSelectedOutletId('');
+      setRegisterItems([]);
+      setSummary(EMPTY_SUMMARY);
+      setIsLoading(false);
+    }
   }, [canRead]);
+
+  useEffect(() => {
+    loadOutlets();
+  }, [loadOutlets]);
 
   // Load compliance register, One-Pager preview, and outlet R2 documents whenever outlet or reportDate changes
   const fetchOutletComplianceData = async (outletId: string, dateStr: string) => {
@@ -271,33 +299,29 @@ export const DocumentsPage: React.FC = () => {
     setBannerError(null);
     try {
       const [regRes, onePagerRes, docsRes] = await Promise.all([
-        fetch(
+        apiFetch<{
+          items: CocoComplianceMergedItem[];
+          dueDatesAndActions: CocoDueDatesAndActionsSummary;
+          summary: CocoOnePagerReport['summary'];
+        }>(
           `/api/v1/documents/compliance/register?outletId=${encodeURIComponent(
             outletId
-          )}&reportDate=${encodeURIComponent(dateStr)}`,
-          { credentials: 'include' }
+          )}&reportDate=${encodeURIComponent(dateStr)}`
         ),
-        fetch(
+        apiFetch<CocoOnePagerReport>(
           `/api/v1/documents/compliance/one-pager?outletId=${encodeURIComponent(
             outletId
-          )}&reportDate=${encodeURIComponent(dateStr)}`,
-          { credentials: 'include' }
+          )}&reportDate=${encodeURIComponent(dateStr)}`
         ),
-        fetch(`/api/v1/documents?outletId=${encodeURIComponent(outletId)}`, {
-          credentials: 'include',
-        }),
+        apiFetch<VaultDocumentRecord[]>(
+          `/api/v1/documents?outletId=${encodeURIComponent(outletId)}`
+        ),
       ]);
 
-      const [regJson, onePagerJson, docsJson] = (await Promise.all([
-        regRes.json(),
-        onePagerRes.json(),
-        docsRes.json(),
-      ])) as any[];
-
-      if (regJson.success && regJson.data) {
-        setRegisterItems(regJson.data.items || []);
+      if (regRes.success && regRes.data) {
+        setRegisterItems(regRes.data.items || []);
         setDueDatesAndActions(
-          regJson.data.dueDatesAndActions || {
+          regRes.data.dueDatesAndActions || {
             expired: [],
             expiringWithin30Days: [],
             expiringWithin60Days: [],
@@ -307,22 +331,28 @@ export const DocumentsPage: React.FC = () => {
             notRecorded: [],
           }
         );
-        if (regJson.data.summary) {
-          setSummary(regJson.data.summary);
+        if (regRes.data.summary) {
+          setSummary(regRes.data.summary);
         }
       } else {
-        setBannerError(regJson.error?.message || 'Failed to load compliance register.');
+        setBannerError(regRes.error?.message || 'Failed to load compliance register.');
       }
 
-      if (onePagerJson.success && onePagerJson.data) {
-        setOnePagerReport(onePagerJson.data);
+      if (onePagerRes.success && onePagerRes.data) {
+        setOnePagerReport(onePagerRes.data);
+      } else if (!regRes.success) {
+        // regRes error already displayed in banner
+      } else if (!onePagerRes.success && onePagerRes.error?.message) {
+        setBannerError(onePagerRes.error.message);
       }
 
-      if (docsJson.success && Array.isArray(docsJson.data)) {
-        setVaultDocs(docsJson.data);
+      if (docsRes.success && Array.isArray(docsRes.data)) {
+        setVaultDocs(docsRes.data);
+      } else if (docsRes.error?.message && regRes.success) {
+        setBannerError(docsRes.error.message);
       }
-    } catch {
-      setBannerError('Network error while loading COCO compliance data.');
+    } catch (err: any) {
+      setBannerError(err?.message || 'Network error while loading COCO compliance data.');
     } finally {
       setIsLoading(false);
     }
@@ -478,23 +508,22 @@ export const DocumentsPage: React.FC = () => {
       fd.append('file', file);
       fd.append('outletId', selectedOutletId);
 
-      const res = await fetch('/api/v1/documents', {
+      const res = await apiFetch<VaultDocumentRecord>('/api/v1/documents', {
         method: 'POST',
-        credentials: 'include',
         body: fd,
       });
-      const json = (await res.json()) as any;
-      if (res.ok && json.success && json.data?.id) {
-        const uploadedDoc: VaultDocumentRecord = json.data;
+
+      if (res.success && res.data?.id) {
+        const uploadedDoc: VaultDocumentRecord = res.data;
         setVaultDocs((prev) => [uploadedDoc, ...prev]);
         setFormAttachmentIds((prev) =>
           prev.includes(uploadedDoc.id) ? prev : [...prev, uploadedDoc.id]
         );
       } else {
-        setBannerError(json.error?.message || 'Attachment upload to R2 failed.');
+        setBannerError(res.error?.message || 'Attachment upload to R2 failed.');
       }
-    } catch {
-      setBannerError('Network error while uploading attachment to R2 Vault.');
+    } catch (err: any) {
+      setBannerError(err?.message || 'Network error while uploading attachment to R2 Vault.');
     } finally {
       setModalUploadingFile(false);
       e.target.value = '';
@@ -554,25 +583,22 @@ export const DocumentsPage: React.FC = () => {
         attachmentDocumentIds: formAttachmentIds,
       };
 
-      const res = await fetch('/api/v1/documents/compliance/records', {
+      const res = await apiFetch<any>('/api/v1/documents/compliance/records', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
-      const json = (await res.json()) as any;
-      if (res.ok && json.success) {
+      if (res.success && res.data) {
         setBannerSuccess(
-          `Saved compliance record for "${json.data.categoryName}" (${selectedOutlet?.name || ''}).`
+          `Saved compliance record for "${res.data.categoryName}" (${selectedOutlet?.name || ''}).`
         );
         setIsEditorOpen(false);
         await fetchOutletComplianceData(selectedOutletId, reportDate);
       } else {
-        setBannerError(json.error?.message || 'Failed to save compliance record.');
+        setBannerError(res.error?.message || 'Failed to save compliance record.');
       }
-    } catch {
-      setBannerError('Network error while saving compliance record.');
+    } catch (err: any) {
+      setBannerError(err?.message || 'Network error while saving compliance record.');
     } finally {
       setIsSavingRecord(false);
     }
@@ -592,22 +618,21 @@ export const DocumentsPage: React.FC = () => {
       fd.append('file', vaultFile);
       fd.append('outletId', selectedOutletId);
 
-      const res = await fetch('/api/v1/documents', {
+      const res = await apiFetch<VaultDocumentRecord>('/api/v1/documents', {
         method: 'POST',
-        credentials: 'include',
         body: fd,
       });
-      const json = (await res.json()) as any;
-      if (res.ok && json.success) {
-        setBannerSuccess(`Uploaded "${json.data.name}" to Cloudflare R2 Document Vault.`);
+
+      if (res.success && res.data) {
+        setBannerSuccess(`Uploaded "${res.data.name}" to Cloudflare R2 Document Vault.`);
         setVaultFile(null);
         setIsVaultUploadOpen(false);
         await fetchOutletComplianceData(selectedOutletId, reportDate);
       } else {
-        setBannerError(json.error?.message || 'Document upload failed.');
+        setBannerError(res.error?.message || 'Document upload failed.');
       }
-    } catch {
-      setBannerError('Network error during document upload.');
+    } catch (err: any) {
+      setBannerError(err?.message || 'Network error during document upload.');
     } finally {
       setIsVaultUploading(false);
     }
@@ -624,20 +649,16 @@ export const DocumentsPage: React.FC = () => {
     setBannerError(null);
 
     try {
-      const res = await fetch(`/api/v1/documents/${encodeURIComponent(att.id)}/content`, {
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        const errJson = (await res.json().catch(() => null)) as any;
-        setBannerError(errJson?.error?.message || 'Unable to load attachment preview.');
+      const res = await apiFetchBlob(`/api/v1/documents/${encodeURIComponent(att.id)}/content`);
+      if (!res.success || !res.blob) {
+        setBannerError(res.error?.message || 'Unable to load attachment preview.');
         setPreviewAttachment(null);
         return;
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(res.blob);
       setPreviewBlobUrl(url);
-    } catch {
-      setBannerError('Network error while loading attachment from R2.');
+    } catch (err: any) {
+      setBannerError(err?.message || 'Network error while loading attachment from R2.');
       setPreviewAttachment(null);
     } finally {
       setIsPreviewLoading(false);
@@ -648,25 +669,21 @@ export const DocumentsPage: React.FC = () => {
   const handleDownloadAttachment = async (att: CocoAttachmentInfo) => {
     setBannerError(null);
     try {
-      const res = await fetch(`/api/v1/documents/${encodeURIComponent(att.id)}/download`, {
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        const errJson = (await res.json().catch(() => null)) as any;
-        setBannerError(errJson?.error?.message || 'Unable to download attachment.');
+      const res = await apiFetchBlob(`/api/v1/documents/${encodeURIComponent(att.id)}/download`);
+      if (!res.success || !res.blob) {
+        setBannerError(res.error?.message || 'Unable to download attachment.');
         return;
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(res.blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = att.name || 'document';
+      a.download = res.filename || att.name || 'document';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      setBannerError('Network error while downloading attachment.');
+    } catch (err: any) {
+      setBannerError(err?.message || 'Network error while downloading attachment.');
     }
   };
 
@@ -678,25 +695,23 @@ export const DocumentsPage: React.FC = () => {
     setBannerSuccess(null);
 
     try {
-      const res = await fetch(
+      const res = await apiFetchBlob(
         `/api/v1/documents/compliance/one-pager/pdf?outletId=${encodeURIComponent(
           selectedOutletId
-        )}&reportDate=${encodeURIComponent(reportDate)}`,
-        { credentials: 'include' }
+        )}&reportDate=${encodeURIComponent(reportDate)}`
       );
 
-      if (!res.ok) {
-        const errJson = (await res.json().catch(() => null)) as any;
-        setBannerError(errJson?.error?.message || 'Failed to generate COCO One-Pager PDF.');
+      if (!res.success || !res.blob) {
+        setBannerError(res.error?.message || 'Failed to generate COCO One-Pager PDF.');
         return;
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(res.blob);
       const safeRo = (selectedOutlet?.roCode || 'COCO').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = res.filename || `COCO_One_Pager_${safeRo}_${reportDate}.pdf`;
       const a = document.createElement('a');
       a.href = url;
-      a.download = `COCO_One_Pager_${safeRo}_${reportDate}.pdf`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -707,8 +722,8 @@ export const DocumentsPage: React.FC = () => {
           selectedOutlet?.roCode || ''
         }).`
       );
-    } catch {
-      setBannerError('Network error while generating COCO One-Pager PDF.');
+    } catch (err: any) {
+      setBannerError(err?.message || 'Network error while generating COCO One-Pager PDF.');
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -820,13 +835,22 @@ export const DocumentsPage: React.FC = () => {
                 id="coco-outlet-selector"
                 value={selectedOutletId}
                 onChange={(e) => setSelectedOutletId(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white focus:outline-none focus:border-orange-500"
+                disabled={displayedOutlets.length === 0}
+                className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white focus:outline-none focus:border-orange-500 disabled:opacity-50"
               >
-                {displayedOutlets.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name} — {o.roCode} {o.outletType ? `(${o.outletType})` : ''}
+                {displayedOutlets.length === 0 ? (
+                  <option value="">
+                    {outletLoadError
+                      ? 'Error loading outlets — see details below'
+                      : 'No accessible retail outlets found'}
                   </option>
-                ))}
+                ) : (
+                  displayedOutlets.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name} — {o.roCode} {o.outletType ? `(${o.outletType})` : ''}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           </div>
@@ -854,7 +878,8 @@ export const DocumentsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => fetchOutletComplianceData(selectedOutletId, reportDate)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+              disabled={!selectedOutletId}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               Refresh Status
@@ -872,8 +897,31 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Outlet Load Error State */}
+      {outletLoadError && (
+        <div className="p-5 bg-red-500/10 border border-red-500/25 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-red-400 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <div className="font-semibold text-white text-sm">
+                Failed to load accessible retail outlets
+              </div>
+              <div className="text-xs text-red-300 mt-0.5">{outletLoadError}</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={loadOutlets}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Feedback Banners */}
-      {bannerError && (
+      {bannerError && !outletLoadError && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between gap-3 text-red-400 text-sm">
           <div className="flex items-center gap-2.5">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1303,6 +1351,17 @@ export const DocumentsPage: React.FC = () => {
                         </tr>
                       );
                     })}
+                    {filteredRegisterItems.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-slate-500 text-xs">
+                          {outletLoadError
+                            ? 'Cannot display compliance register: accessible retail outlets failed to load.'
+                            : !selectedOutletId
+                            ? 'Please select an accessible retail outlet to view its compliance register.'
+                            : 'No compliance records match the selected filter.'}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1485,6 +1544,17 @@ export const DocumentsPage: React.FC = () => {
                       </tr>
                     );
                   })}
+                  {(onePagerReport?.rows || []).length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
+                        {outletLoadError
+                          ? 'Cannot generate preview: accessible retail outlets failed to load.'
+                          : !selectedOutletId
+                          ? 'Please select an accessible retail outlet to preview the COCO One-Pager report.'
+                          : 'No compliance rows available for preview.'}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1744,7 +1814,13 @@ export const DocumentsPage: React.FC = () => {
               </span>
             </div>
             <div className="p-4">
-              {dueDatesAndActions.notRecorded.length === 0 ? (
+              {!selectedOutletId ? (
+                <p className="text-xs text-slate-500">
+                  {outletLoadError
+                    ? 'Cannot evaluate categories: accessible retail outlets failed to load.'
+                    : 'Please select an accessible retail outlet to view missing compliance categories.'}
+                </p>
+              ) : dueDatesAndActions.notRecorded.length === 0 ? (
                 <p className="text-xs text-emerald-400">
                   All 14 standard compliance categories have been recorded for this outlet!
                 </p>
