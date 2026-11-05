@@ -4177,6 +4177,19 @@ export class PumpRepository {
     const meterReadings = await this.listReadingsForShift(shiftId);
     const receipts = await this.listFuelReceiptsByShift(shiftId);
 
+    const productMap = new Map<string, {
+      productId: string;
+      productCode: string;
+      productName: string;
+      productUnit: ProductUnit;
+      openingMilli: number | null;
+      receiptMilli: number;
+      salesMilli: number;
+      theoreticalMilli: number | null;
+      physicalMilli: number | null;
+      varianceMilli: number | null;
+    }>();
+
     const byTank = tankSnapshots.map(ts => {
       const openingReading = tankReadings.find(r => r.tankId === ts.tankId && r.readingType === 'OPENING');
       const closingReading = tankReadings.find(r => r.tankId === ts.tankId && r.readingType === 'CLOSING');
@@ -4223,6 +4236,46 @@ export class PumpRepository {
         else varianceStatus = 'BALANCED';
       }
 
+      let p = productMap.get(ts.productId);
+      if (!p) {
+        p = {
+          productId: ts.productId,
+          productCode: ts.productCode,
+          productName: ts.productName,
+          productUnit: ts.productUnit,
+          openingMilli: openingStockMilli,
+          receiptMilli,
+          salesMilli,
+          theoreticalMilli: theoreticalClosingMilli,
+          physicalMilli: physicalClosingMilli,
+          varianceMilli,
+        };
+        productMap.set(ts.productId, p);
+      } else {
+        if (openingStockMilli != null && p.openingMilli != null) {
+          p.openingMilli += openingStockMilli;
+        } else {
+          p.openingMilli = null;
+        }
+        p.receiptMilli += receiptMilli;
+        p.salesMilli += salesMilli;
+        if (theoreticalClosingMilli != null && p.theoreticalMilli != null) {
+          p.theoreticalMilli += theoreticalClosingMilli;
+        } else {
+          p.theoreticalMilli = null;
+        }
+        if (physicalClosingMilli != null && p.physicalMilli != null) {
+          p.physicalMilli += physicalClosingMilli;
+        } else {
+          p.physicalMilli = null;
+        }
+        if (varianceMilli != null && p.varianceMilli != null) {
+          p.varianceMilli += varianceMilli;
+        } else {
+          p.varianceMilli = null;
+        }
+      }
+
       return {
         tankId: ts.tankId,
         tankNumber: ts.tankNumber,
@@ -4243,61 +4296,6 @@ export class PumpRepository {
         receiptsCount: rcptCount,
       };
     });
-
-    const productMap = new Map<string, {
-      productId: string;
-      productCode: string;
-      productName: string;
-      productUnit: ProductUnit;
-      openingMilli: number | null;
-      receiptMilli: number;
-      salesMilli: number;
-      theoreticalMilli: number | null;
-      physicalMilli: number | null;
-      varianceMilli: number | null;
-    }>();
-
-    for (const item of byTank) {
-      let p = productMap.get(item.productId);
-      if (!p) {
-        p = {
-          productId: item.productId,
-          productCode: item.productCode,
-          productName: item.productName,
-          productUnit: item.productUnit,
-          openingMilli: item.openingStockStr != null ? parseMilliunits(item.openingStockStr) : null,
-          receiptMilli: parseMilliunits(item.receiptQuantityStr),
-          salesMilli: parseMilliunits(item.salesQuantityStr),
-          theoreticalMilli: item.theoreticalClosingStockStr != null ? parseMilliunits(item.theoreticalClosingStockStr) : null,
-          physicalMilli: item.physicalClosingStockStr != null ? parseMilliunits(item.physicalClosingStockStr) : null,
-          varianceMilli: item.varianceStr != null ? parseMilliunits(item.varianceStr) : null,
-        };
-        productMap.set(item.productId, p);
-      } else {
-        if (item.openingStockStr != null && p.openingMilli != null) {
-          p.openingMilli += parseMilliunits(item.openingStockStr);
-        } else {
-          p.openingMilli = null;
-        }
-        p.receiptMilli += parseMilliunits(item.receiptQuantityStr);
-        p.salesMilli += parseMilliunits(item.salesQuantityStr);
-        if (item.theoreticalClosingStockStr != null && p.theoreticalMilli != null) {
-          p.theoreticalMilli += parseMilliunits(item.theoreticalClosingStockStr);
-        } else {
-          p.theoreticalMilli = null;
-        }
-        if (item.physicalClosingStockStr != null && p.physicalMilli != null) {
-          p.physicalMilli += parseMilliunits(item.physicalClosingStockStr);
-        } else {
-          p.physicalMilli = null;
-        }
-        if (item.varianceStr != null && p.varianceMilli != null) {
-          p.varianceMilli += parseMilliunits(item.varianceStr);
-        } else {
-          p.varianceMilli = null;
-        }
-      }
-    }
 
     const byProduct = Array.from(productMap.values()).map(p => {
       let varianceStatus: VarianceStatus | null = null;

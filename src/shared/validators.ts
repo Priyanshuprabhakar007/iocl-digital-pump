@@ -496,6 +496,7 @@ export const FuelReceiptStatusUpdateSchema = z.object({
   decantationCompletedAt: z.string().optional().nullable(),
   sealVerified: z.boolean().optional(),
   sealExceptionReason: z.string().optional().nullable(),
+  cancellationReason: z.string().trim().min(3, 'Cancellation reason must be at least 3 characters').optional().nullable(),
 });
 
 import { parseMoneyToPaise } from './financialUtils';

@@ -242,7 +242,7 @@ fuelReceipts.patch('/fuel-receipts/:id/status', requirePermission(PERMISSIONS.FU
     }, 400);
   }
 
-  const { status, decantationStartedAt, decantationCompletedAt, sealVerified, sealExceptionReason } = parseResult.data;
+  const { status, decantationStartedAt, decantationCompletedAt, sealVerified, sealExceptionReason, cancellationReason } = parseResult.data;
 
   // Validation before status update: check state machine transitions
   if (receipt.status === 'COMPLETED' || receipt.status === 'CANCELLED') {
@@ -362,12 +362,19 @@ fuelReceipts.patch('/fuel-receipts/:id/status', requirePermission(PERMISSIONS.FU
     }
   }
 
+  const effectiveSealExceptionReason =
+    sealExceptionReason !== undefined
+      ? sealExceptionReason
+      : status === 'CANCELLED' && cancellationReason
+      ? `CANCELLED: ${cancellationReason}`
+      : undefined;
+
   const res = await pumpRepo.updateFuelReceiptStatusConditional(id, receipt.operationalShiftId, {
     status: status as FuelReceiptStatus,
     decantationStartedAt: decStart,
     decantationCompletedAt: decComp,
     sealVerified,
-    sealExceptionReason,
+    sealExceptionReason: effectiveSealExceptionReason,
     updatedAt: nowIso,
   }, receipt.status);
 
@@ -402,7 +409,13 @@ fuelReceipts.patch('/fuel-receipts/:id/status', requirePermission(PERMISSIONS.FU
     entityType: 'FUEL_RECEIPT',
     entityId: id,
     oldValue: { status: receipt.status },
-    newValue: { status: updated.status, decantationCompletedAt: updated.decantationCompletedAt },
+    newValue: {
+      status: updated.status,
+      decantationCompletedAt: updated.decantationCompletedAt,
+      ...(status === 'CANCELLED'
+        ? { cancellationReason: cancellationReason || sealExceptionReason || null }
+        : {}),
+    },
     ipAddress: c.req.header('cf-connecting-ip') || null,
     userAgent: c.req.header('user-agent') || null,
     createdAt: nowIso,
