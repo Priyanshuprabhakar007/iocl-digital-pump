@@ -1806,3 +1806,59 @@ export const idempotencyKeys = sqliteTable(
   ]
 );
 
+// ==========================================
+// Phase 1: COCO Documents & Compliance Management
+// ==========================================
+
+export const cocoComplianceRecords = sqliteTable(
+  'coco_compliance_records',
+  {
+    id: text('id').primaryKey(),
+    outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+    roCodeSnapshot: text('ro_code_snapshot').notNull(),
+    categoryCode: text('category_code').notNull(),
+    categoryName: text('category_name').notNull(),
+    displayOrder: integer('display_order').notNull().default(99),
+    isCustomCategory: integer('is_custom_category').notNull().default(0),
+    documentTitle: text('document_title'),
+    referenceNumber: text('reference_number'),
+    issueDate: text('issue_date'),
+    validityDueDate: text('validity_due_date'),
+    lastServiceDate: text('last_service_date'),
+    amountPaise: integer('amount_paise'),
+    frequency: text('frequency'),
+    paymentStatus: text('payment_status', {
+      enum: ['PAID', 'PENDING', 'OVERDUE', 'NOT_APPLICABLE', 'NOT_RECORDED'],
+    }).notNull().default('NOT_RECORDED'),
+    paymentDate: text('payment_date'),
+    complianceStatus: text('compliance_status', {
+      enum: ['VALID', 'EXPIRING_SOON', 'EXPIRED', 'PAYMENT_PENDING', 'ACTION_REQUIRED', 'NOT_RECORDED', 'NOT_APPLICABLE'],
+    }).notNull().default('NOT_RECORDED'),
+    statusYesNo: text('status_yes_no', {
+      enum: ['YES', 'NO', 'NA', 'NOT_RECORDED'],
+    }).notNull().default('NOT_RECORDED'),
+    remarks: text('remarks'),
+    actionRequired: text('action_required'),
+    responsiblePerson: text('responsible_person'),
+    attachmentDocumentIdsJson: text('attachment_document_ids_json').notNull().default('[]'),
+    createdBy: text('created_by').notNull().references(() => users.id),
+    updatedBy: text('updated_by').notNull().references(() => users.id),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uq_coco_compliance_outlet_category').on(table.outletId, table.categoryCode),
+    index('idx_coco_compliance_outlet_id').on(table.outletId),
+    index('idx_coco_compliance_due_date').on(table.outletId, table.validityDueDate),
+    index('idx_coco_compliance_status').on(table.outletId, table.complianceStatus),
+    check('chk_coco_comp_custom', sql`${table.isCustomCategory} IN (0, 1)`),
+    check('chk_coco_comp_amount', sql`${table.amountPaise} IS NULL OR ${table.amountPaise} >= 0`),
+    check('chk_coco_comp_payment_status', sql`${table.paymentStatus} IN ('PAID', 'PENDING', 'OVERDUE', 'NOT_APPLICABLE', 'NOT_RECORDED')`),
+    check('chk_coco_comp_status', sql`${table.complianceStatus} IN ('VALID', 'EXPIRING_SOON', 'EXPIRED', 'PAYMENT_PENDING', 'ACTION_REQUIRED', 'NOT_RECORDED', 'NOT_APPLICABLE')`),
+    check('chk_coco_comp_yes_no', sql`${table.statusYesNo} IN ('YES', 'NO', 'NA', 'NOT_RECORDED')`),
+    check('chk_coco_comp_cat_code', sql`trim(${table.categoryCode}) <> ''`),
+    check('chk_coco_comp_cat_name', sql`trim(${table.categoryName}) <> ''`),
+  ]
+);
+
+

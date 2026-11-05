@@ -1224,6 +1224,238 @@ jobs:
 
           echo "[0034] Migration $MIGRATION_0034 successfully applied, verified and recorded."
 
+      - name: Apply Migration 0035 via Safe State-Aware Stages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          MIGRATION_0035="0035_coco_compliance_records.sql"
+          echo "=================================================="
+          echo "CHECKING MIGRATION 0035: $MIGRATION_0035"
+          echo "=================================================="
+
+          # 1. PRECHECK MIGRATION STATUS IN d1_migrations
+          COUNT_0035=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '$MIGRATION_0035';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          # 2. CHECK PHYSICAL SCHEMA STATE (TABLE & INDEXES)
+          HAS_CCR_TABLE=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = 'coco_compliance_records';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          CCR_INDEX_RES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name IN ('uq_coco_compliance_outlet_category', 'idx_coco_compliance_outlet_id', 'idx_coco_compliance_due_date', 'idx_coco_compliance_status');" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "Precheck 0035: migration recorded in d1_migrations=$COUNT_0035, coco_compliance_records table=$HAS_CCR_TABLE, indexes=$CCR_INDEX_RES / 4"
+
+          # 3. STATE DETECTION & SAFETY GUARDS
+          # Already applied and verified
+          if [ "$COUNT_0035" = "1" ] && [ "$HAS_CCR_TABLE" = "1" ] && [ "$CCR_INDEX_RES" = "4" ]; then
+            echo "Already applied and schema verified: $MIGRATION_0035. Skipping re-execution."
+            exit 0
+          fi
+
+          # Partial / Inconsistent State: schema elements exist but migration not recorded in d1_migrations
+          if [ "$COUNT_0035" = "0" ] && ( [ "$HAS_CCR_TABLE" = "1" ] || [ "$CCR_INDEX_RES" -gt "0" ] ); then
+            echo "ERROR: [0035] Inconsistent or partial migration state detected! Schema elements exist (table=$HAS_CCR_TABLE, indexes=$CCR_INDEX_RES) but $MIGRATION_0035 is not recorded in d1_migrations. Aborting deployment to prevent schema corruption."
+            exit 1
+          fi
+
+          # Inconsistent State: recorded in d1_migrations but schema elements missing
+          if [ "$COUNT_0035" = "1" ] && ( [ "$HAS_CCR_TABLE" = "0" ] || [ "$CCR_INDEX_RES" -lt "4" ] ); then
+            echo "ERROR: [0035] Inconsistent migration state detected! $MIGRATION_0035 is recorded in d1_migrations but table or indexes are missing (table=$HAS_CCR_TABLE, indexes=$CCR_INDEX_RES / 4). Aborting deployment."
+            exit 1
+          fi
+
+          echo "[0035] Clean unapplied state confirmed. Safe to apply migration."
+
+          # 4. CAPTURE PRE-0035 COUNTS FOR EXISTING DATA PRESERVATION
+          PRE_0035_OUTLETS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM retail_outlets;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0035_CHARTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_charts;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0035_SHIFTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM operational_shifts;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0035_DOCS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM documents;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0035_TAXES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM municipal_tax_dues;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0035_BILLS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM utility_electricity_bills;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0035_LEASES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM nfr_leases;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0035_PAYMENTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM nfr_rent_payments;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          PRE_0035_FIN=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM shift_financial_reconciliations;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "[0035] Pre-migration counts: outlets=$PRE_0035_OUTLETS, charts=$PRE_0035_CHARTS, shifts=$PRE_0035_SHIFTS, docs=$PRE_0035_DOCS, taxes=$PRE_0035_TAXES, bills=$PRE_0035_BILLS, leases=$PRE_0035_LEASES, rent_payments=$PRE_0035_PAYMENTS, financial=$PRE_0035_FIN"
+
+          # 5. EXECUTE MIGRATION 0035
+          echo "[0035] Executing migrations/$MIGRATION_0035..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --file="migrations/$MIGRATION_0035" \
+            --yes
+
+          # 6. POST-MIGRATION SCHEMA AND INDEX VERIFICATION
+          echo "[0035] Verifying table coco_compliance_records and 4 indexes..."
+          POST_CCR_TABLE=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name = 'coco_compliance_records';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_CCR_INDEXES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name IN ('uq_coco_compliance_outlet_category', 'idx_coco_compliance_outlet_id', 'idx_coco_compliance_due_date', 'idx_coco_compliance_status');" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$POST_CCR_TABLE" -ne 1 ] || [ "$POST_CCR_INDEXES" -ne 4 ]; then
+            echo "ERROR: [0035] Schema verification failed (table=$POST_CCR_TABLE / 1, indexes=$POST_CCR_INDEXES / 4)!"
+            exit 1
+          fi
+          echo "[0035] Verified table coco_compliance_records and 4 indexes."
+
+          # 7. ROW COUNT & DATA PRESERVATION CHECK
+          POST_0035_OUTLETS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM retail_outlets;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0035_CHARTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM tank_calibration_charts;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0035_SHIFTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM operational_shifts;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0035_DOCS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM documents;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0035_TAXES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM municipal_tax_dues;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0035_BILLS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM utility_electricity_bills;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0035_LEASES=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM nfr_leases;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0035_PAYMENTS=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM nfr_rent_payments;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          POST_0035_FIN=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM shift_financial_reconciliations;" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          echo "[0035] Preservation check (Post vs Pre):"
+          echo "  retail_outlets: $POST_0035_OUTLETS vs $PRE_0035_OUTLETS"
+          echo "  tank_calibration_charts: $POST_0035_CHARTS vs $PRE_0035_CHARTS"
+          echo "  operational_shifts: $POST_0035_SHIFTS vs $PRE_0035_SHIFTS"
+          echo "  documents: $POST_0035_DOCS vs $PRE_0035_DOCS"
+          echo "  municipal_tax_dues: $POST_0035_TAXES vs $PRE_0035_TAXES"
+          echo "  utility_electricity_bills: $POST_0035_BILLS vs $PRE_0035_BILLS"
+          echo "  nfr_leases: $POST_0035_LEASES vs $PRE_0035_LEASES"
+          echo "  nfr_rent_payments: $POST_0035_PAYMENTS vs $PRE_0035_PAYMENTS"
+          echo "  shift_financial_reconciliations: $POST_0035_FIN vs $PRE_0035_FIN"
+
+          if [ "$POST_0035_OUTLETS" -lt "$PRE_0035_OUTLETS" ] || [ "$POST_0035_CHARTS" -lt "$PRE_0035_CHARTS" ] || [ "$POST_0035_SHIFTS" -lt "$PRE_0035_SHIFTS" ] || [ "$POST_0035_DOCS" -lt "$PRE_0035_DOCS" ] || [ "$POST_0035_TAXES" -lt "$PRE_0035_TAXES" ] || [ "$POST_0035_BILLS" -lt "$PRE_0035_BILLS" ] || [ "$POST_0035_LEASES" -lt "$PRE_0035_LEASES" ] || [ "$POST_0035_PAYMENTS" -lt "$PRE_0035_PAYMENTS" ] || [ "$POST_0035_FIN" -lt "$PRE_0035_FIN" ]; then
+            echo "ERROR: [0035] Existing operational, financial, or document data count decreased after migration 0035!"
+            exit 1
+          fi
+
+          # 8. FOREIGN KEY CHECK
+          echo "[0035] Running foreign key check..."
+          FK_RESULT_0035=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "PRAGMA foreign_key_check;" \
+            --json \
+            --yes)
+          FK_VIOLATIONS_0035=$(echo "$FK_RESULT_0035" | jq -r '.[0].results | length')
+          if [ "$FK_VIOLATIONS_0035" != "0" ]; then
+            echo "ERROR: [0035] Foreign key violations detected post-migration 0035:"
+            echo "$FK_RESULT_0035"
+            exit 1
+          fi
+          echo "[0035] PRAGMA foreign_key_check passed (0 violations)."
+
+          # 9. RECORD MIGRATION IN d1_migrations
+          echo "[0035] Recording migration $MIGRATION_0035 in d1_migrations..."
+          npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "INSERT OR IGNORE INTO d1_migrations (name) VALUES ('$MIGRATION_0035');" \
+            --yes
+
+          echo "[0035] Migration $MIGRATION_0035 successfully applied, verified and recorded."
 
       - name: Verify D1 Migration Completion
         env:
@@ -1255,6 +1487,11 @@ jobs:
             exit 1
           fi
 
+          if [ "$COUNT" -lt "35" ]; then
+            echo "ERROR: Expected at least 35 migrations to be recorded (found $COUNT)."
+            exit 1
+          fi
+
           MIGRATION_0033_RECORDED=$(npx wrangler d1 execute iocl-pump-manager-d1 \
             --remote \
             --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '0033_tank_calibration_chart_versioning.sql';" \
@@ -1278,6 +1515,19 @@ jobs:
             exit 1
           fi
           echo "Migration 0034 presence verified in d1_migrations."
+
+          MIGRATION_0035_RECORDED=$(npx wrangler d1 execute iocl-pump-manager-d1 \
+            --remote \
+            --command "SELECT COUNT(*) AS count FROM d1_migrations WHERE name = '0035_coco_compliance_records.sql';" \
+            --json \
+            --yes | jq -r '.[0].results[0].count // 0')
+
+          if [ "$MIGRATION_0035_RECORDED" -ne 1 ]; then
+            echo "ERROR: Migration 0035_coco_compliance_records.sql is NOT recorded in d1_migrations!"
+            exit 1
+          fi
+          echo "Migration 0035 presence verified in d1_migrations."
+
 
           # Explicit workflow assertions for tank calibration versioning table
           CALIBRATION_TABLE_CHECK=$(npx wrangler d1 execute iocl-pump-manager-d1 \
