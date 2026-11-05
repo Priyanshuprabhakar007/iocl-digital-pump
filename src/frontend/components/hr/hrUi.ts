@@ -836,11 +836,172 @@ export function isGeofencePolicyNotFound(error: any): boolean {
   return code === 'HR_GEOFENCE_POLICY_NOT_FOUND';
 }
 
+export const HR_MAX_UPLOAD_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+/**
+ * Sanitizes error messages so SQL/SQLite internals, full 12-digit Aadhaar numbers,
+ * internal R2 storage paths, or sensitive file contents are never exposed in UI or logs.
+ */
+export function sanitizeHrErrorMessage(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return 'An unexpected error occurred.';
+
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.includes('sqlite') ||
+    lower.includes('sql') ||
+    lower.includes('syntax') ||
+    lower.includes('constraint')
+  ) {
+    return 'An unexpected server error occurred.';
+  }
+
+  return trimmed
+    // Redact any 12-digit Aadhaar-like number (e.g., 1234 5678 9012 or 123456789012)
+    .replace(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, 'XXXX-XXXX-[REDACTED]')
+    // Redact internal R2 storage keys / paths (e.g., outlets/ro-1001/doc-.../file.pdf)
+    .replace(/\boutlets\/[A-Za-z0-9_-]+\/doc-[A-Za-z0-9_-]+\/[^\s"']+/gi, '[REDACTED-STORAGE-PATH]')
+    // Redact base64 data URIs
+    .replace(/data:[a-zA-Z0-9/+.-]+;base64,[A-Za-z0-9+/=]+/gi, '[REDACTED-CONTENT]');
+}
+
+/**
+ * Validates a candidate File before uploading from HrDocumentPicker.
+ * Aadhaar / Identity Proof ('document') accepts valid PDF, PNG, and JPEG.
+ * Staff Photo ('photo') accepts valid PNG and JPEG only.
+ */
+export function validateHrUploadFile(
+  file: { name?: string; type?: string; size?: number } | null | undefined,
+  mode: 'document' | 'photo' = 'document'
+): { valid: boolean; error?: string } {
+  if (!file) {
+    return { valid: false, error: 'Please select a file to upload.' };
+  }
+
+  const size = typeof file.size === 'number' ? file.size : 0;
+  if (size <= 0) {
+    return { valid: false, error: 'Uploaded file cannot be empty.' };
+  }
+
+  if (size > HR_MAX_UPLOAD_FILE_SIZE_BYTES) {
+    return { valid: false, error: 'File size exceeds the 5 MB maximum limit.' };
+  }
+
+  const mime = (file.type || '').toLowerCase().trim();
+  const name = (file.name || '').toLowerCase().trim();
+
+  if (mode === 'photo') {
+    const allowedPhotoMimes = ['image/png', 'image/jpeg', 'image/jpg'];
+    const hasPhotoExt = name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg');
+    const isAllowed =
+      allowedPhotoMimes.includes(mime) ||
+      ((mime === '' || mime === 'application/octet-stream') && hasPhotoExt);
+
+    if (!isAllowed) {
+      return { valid: false, error: 'Only PNG and JPEG photos are allowed.' };
+    }
+    return { valid: true };
+  }
+
+  const allowedDocMimes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+  const hasDocExt =
+    name.endsWith('.pdf') ||
+    name.endsWith('.png') ||
+    name.endsWith('.jpg') ||
+    name.endsWith('.jpeg');
+  const isAllowed =
+    allowedDocMimes.includes(mime) ||
+    ((mime === '' || mime === 'application/octet-stream') && hasDocExt);
+
+  if (!isAllowed) {
+    return { valid: false, error: 'Only PDF, PNG, and JPEG documents are allowed.' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Checks whether a Document Vault record matches the picker mode ('document' vs 'photo').
+ */
+export function isHrDocumentCompatibleWithMode(
+  doc: Pick<Document, 'mimeType' | 'name'> | null | undefined,
+  mode: 'document' | 'photo' = 'document'
+): boolean {
+  if (!doc) return false;
+  const mime = (doc.mimeType || '').toLowerCase().trim();
+  const name = (doc.name || '').toLowerCase().trim();
+
+  if (mode === 'photo') {
+    if (mime) {
+      return mime === 'image/png' || mime === 'image/jpeg' || mime === 'image/jpg';
+    }
+    return name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg');
+  }
+
+  if (mime) {
+    return (
+      mime === 'application/pdf' ||
+      mime === 'image/png' ||
+      mime === 'image/jpeg' ||
+      mime === 'image/jpg'
+    );
+  }
+  return (
+    name.endsWith('.pdf') ||
+    name.endsWith('.png') ||
+    name.endsWith('.jpg') ||
+    name.endsWith('.jpeg')
+  );
+}
+
+/**
+ * Resolves the specific safe backend error message first for HR document uploads,
+ * preserving clear messages for unsupported format, >5 MB, empty file, binary signature,
+ * outlet permission issues, and Cloudflare R2 errors.
+ */
+export function getHrDocumentUploadErrorMessage(error: any): string {
+  if (!error) return 'Failed to upload document to vault.';
+
+  if (typeof error === 'object') {
+    const specificMessage =
+      typeof error.message === 'string' && error.message.trim()
+        ? error.message.trim()
+        : typeof error.error?.message === 'string' && error.error.message.trim()
+        ? error.error.message.trim()
+        : '';
+
+    const rawCode =
+      typeof error.code === 'string'
+        ? error.code.trim()
+        : typeof error.error?.code === 'string'
+        ? error.error.code.trim()
+        : '';
+
+    // Display the specific safe backend error.message first when available
+    if (
+      specificMessage &&
+      specificMessage !== rawCode &&
+      specificMessage.toLowerCase() !== 'validation error'
+    ) {
+      return sanitizeHrErrorMessage(specificMessage);
+    }
+  }
+
+  return getHrErrorMessage(error);
+}
+
 /**
  * Maps HR backend error codes to human-readable error messages
  */
 export function getHrErrorMessage(error: any): string {
   if (!error) return 'An unknown error occurred.';
+
+  const rawMessage =
+    typeof error === 'object'
+      ? (typeof error.message === 'string' && error.message.trim()) ||
+        (typeof error.error?.message === 'string' && error.error.message.trim()) ||
+        ''
+      : '';
 
   const code =
     typeof error === 'string'
@@ -923,7 +1084,42 @@ export function getHrErrorMessage(error: any): string {
         return 'The selected nozzle is not active.';
       case 'HR_NOZZLE_OUTLET_MISMATCH':
         return 'Nozzle belongs to a different outlet.';
+      case 'FORBIDDEN_SCOPE':
+        return rawMessage
+          ? sanitizeHrErrorMessage(rawMessage)
+          : 'You do not have access to upload documents to this outlet.';
+      case 'MISSING_OUTLET_ID':
+        return rawMessage
+          ? sanitizeHrErrorMessage(rawMessage)
+          : 'Scoped users must specify an accessible outletId when uploading documents.';
+      case 'UNSUPPORTED_MEDIA_TYPE':
+        return rawMessage
+          ? sanitizeHrErrorMessage(rawMessage)
+          : 'Multipart form-data with a real binary file is required.';
+      case 'INVALID_MULTIPART':
+        return rawMessage
+          ? sanitizeHrErrorMessage(rawMessage)
+          : 'Request must be valid multipart/form-data.';
+      case 'R2_UNAVAILABLE':
+        return rawMessage
+          ? sanitizeHrErrorMessage(rawMessage)
+          : 'Cloudflare R2 DOCUMENTS_BUCKET binding is not configured.';
+      case 'R2_UPLOAD_FAILED':
+        return rawMessage
+          ? sanitizeHrErrorMessage(rawMessage)
+          : 'Failed to store object in Cloudflare R2.';
+      case 'DB_INSERT_FAILED':
+        return rawMessage
+          ? sanitizeHrErrorMessage(rawMessage)
+          : 'Failed to record document metadata in database.';
       case 'VALIDATION_ERROR':
+        if (
+          rawMessage &&
+          rawMessage !== 'VALIDATION_ERROR' &&
+          rawMessage.toLowerCase() !== 'validation error'
+        ) {
+          return sanitizeHrErrorMessage(rawMessage);
+        }
         return 'Please correct the highlighted validation errors.';
       case 'FORBIDDEN':
         return 'You do not have permission to perform this action.';
@@ -932,18 +1128,10 @@ export function getHrErrorMessage(error: any): string {
       case 'NETWORK_ERROR':
         return 'Network error occurred. Please check your connection.';
       default:
-        // Sanitize raw SQLite or internal error strings
-        if (
-          code.toLowerCase().includes('sqlite') ||
-          code.toLowerCase().includes('sql') ||
-          code.toLowerCase().includes('syntax') ||
-          code.toLowerCase().includes('constraint')
-        ) {
-          return 'An unexpected server error occurred.';
-        }
-        return code;
+        return sanitizeHrErrorMessage(code);
     }
   }
 
   return 'An unexpected error occurred.';
 }
+

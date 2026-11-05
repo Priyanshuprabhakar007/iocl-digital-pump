@@ -3,7 +3,13 @@ import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../services/api';
 import { PERMISSIONS } from '../../../shared/constants';
 import { Document } from '../../../shared/types';
-import { formatFileSize, formatDisplayDate, getHrErrorMessage } from './hrUi';
+import {
+  formatFileSize,
+  formatDisplayDate,
+  getHrDocumentUploadErrorMessage,
+  validateHrUploadFile,
+  isHrDocumentCompatibleWithMode,
+} from './hrUi';
 import {
   FileText,
   Upload,
@@ -12,6 +18,7 @@ import {
   Loader2,
   Lock,
   Image as ImageIcon,
+  RefreshCw,
 } from 'lucide-react';
 
 export interface HrDocumentPickerProps {
@@ -41,6 +48,7 @@ export const HrDocumentPicker: React.FC<HrDocumentPickerProps> = ({
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [lastFailedFile, setLastFailedFile] = useState<File | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -57,30 +65,25 @@ export const HrDocumentPicker: React.FC<HrDocumentPickerProps> = ({
     apiFetch<Document[]>('/api/v1/documents')
       .then(res => {
         if (isMounted && res.success && Array.isArray(res.data)) {
-          // Filter to current outlet documents
-          let outletDocs = res.data.filter(d => d.outletId === outletId);
+          const outletDocs = res.data.filter(
+            d => d.outletId === outletId && isHrDocumentCompatibleWithMode(d, mode)
+          );
 
-          // If photo mode, filter to image documents
-          if (mode === 'photo') {
-            outletDocs = outletDocs.filter(d => {
-              const mime = d.mimeType?.toLowerCase() || '';
-              const name = d.name?.toLowerCase() || '';
-              return (
-                mime === 'image/png' ||
-                mime === 'image/jpeg' ||
-                mime === 'image/jpg' ||
-                name.endsWith('.png') ||
-                name.endsWith('.jpg') ||
-                name.endsWith('.jpeg')
-              );
-            });
-          }
-
-          setVaultDocs(outletDocs);
+          setVaultDocs(prev => {
+            const merged = [...prev];
+            for (const doc of outletDocs) {
+              if (!merged.some(existing => existing.id === doc.id)) {
+                merged.push(doc);
+              }
+            }
+            return merged;
+          });
         }
       })
       .catch(() => {
-        if (isMounted) setVaultDocs([]);
+        if (isMounted) {
+          setVaultDocs(prev => prev);
+        }
       })
       .finally(() => {
         if (isMounted) setLoadingDocs(false);
@@ -91,32 +94,17 @@ export const HrDocumentPicker: React.FC<HrDocumentPickerProps> = ({
     };
   }, [outletId, canReadDocs, mode]);
 
-  // Handle direct file upload to Document Vault
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadFileToVault = async (file: File) => {
+    setLastFailedFile(file);
 
-    // Reset input immediately
-    if (fileInputRef.current) fileInputRef.current.value = '';
-
-    // Allowed types check
-    if (mode === 'photo') {
-      const allowedPhotoTypes = ['image/png', 'image/jpeg', 'image/jpg'];
-      if (!allowedPhotoTypes.includes(file.type)) {
-        setUploadError('Only PNG and JPEG photos are allowed.');
-        return;
-      }
-    } else {
-      const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
-      if (!allowedTypes.includes(file.type)) {
-        setUploadError('Only PDF, PNG, and JPEG documents are allowed.');
-        return;
-      }
+    if (!outletId || !outletId.trim()) {
+      setUploadError('Please select a valid retail outlet before uploading documents.');
+      return;
     }
 
-    // 5MB limit
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError('File size exceeds the 5MB maximum limit.');
+    const validation = validateHrUploadFile(file, mode);
+    if (!validation.valid) {
+      setUploadError(validation.error || 'Invalid file selected for upload.');
       return;
     }
 
@@ -128,29 +116,57 @@ export const HrDocumentPicker: React.FC<HrDocumentPickerProps> = ({
       formData.append('file', file);
       formData.append('outletId', outletId);
 
+      // Do not manually set Content-Type for multipart uploads; apiFetch lets browser set boundary
       const res = await apiFetch<Document>('/api/v1/documents', {
         method: 'POST',
         body: formData,
       });
 
       if (res.success && res.data?.id) {
-        setVaultDocs(prev => [res.data!, ...prev]);
-        onSelectDocument(res.data.id);
+        if (!isHrDocumentCompatibleWithMode(res.data, mode)) {
+          setUploadError(
+            mode === 'photo'
+              ? 'Only PNG and JPEG photos are allowed.'
+              : 'Only PDF, PNG, and JPEG documents are allowed.'
+          );
+          return;
+        }
+
+        const uploadedDoc = res.data;
+        setLastFailedFile(null);
+        setUploadError(null);
+        setVaultDocs(prev => [uploadedDoc, ...prev.filter(d => d.id !== uploadedDoc.id)]);
+        onSelectDocument(uploadedDoc.id);
       } else {
-        const errMsg =
-          getHrErrorMessage(res.error) ||
-          (typeof res.error === 'object' ? res.error?.message : res.error) ||
-          'Failed to upload document to vault.';
+        const errMsg = getHrDocumentUploadErrorMessage(res.error);
         setUploadError(errMsg);
       }
     } catch (err: any) {
-      const errMsg =
-        getHrErrorMessage(err) ||
-        (typeof err === 'object' ? err?.message : err) ||
-        'Error communicating with document vault.';
+      const errMsg = getHrDocumentUploadErrorMessage(err);
       setUploadError(errMsg);
     } finally {
       setUploading(false);
+    }
+  };
+
+  // Handle direct file upload to Document Vault
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input immediately so selecting the same file again triggers onChange
+    if (fileInputRef.current) fileInputRef.current.value = '';
+
+    await uploadFileToVault(file);
+  };
+
+  const handleRetryUpload = async () => {
+    if (uploading) return;
+    setUploadError(null);
+    if (lastFailedFile && validateHrUploadFile(lastFailedFile, mode).valid) {
+      await uploadFileToVault(lastFailedFile);
+    } else {
+      fileInputRef.current?.click();
     }
   };
 
@@ -188,13 +204,6 @@ export const HrDocumentPicker: React.FC<HrDocumentPickerProps> = ({
         )}
       </div>
 
-      {uploadError && (
-        <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-2 text-xs text-rose-400">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{uploadError}</span>
-        </div>
-      )}
-
       {/* Selector and Upload Controls */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {/* Document Vault Dropdown */}
@@ -225,7 +234,11 @@ export const HrDocumentPicker: React.FC<HrDocumentPickerProps> = ({
               type="file"
               ref={fileInputRef}
               onChange={handleFileUpload}
-              accept={mode === 'photo' ? '.png,.jpg,.jpeg' : '.pdf,.png,.jpg,.jpeg'}
+              accept={
+                mode === 'photo'
+                  ? '.png,.jpg,.jpeg,image/png,image/jpeg'
+                  : '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg'
+              }
               className="hidden"
             />
             <button
@@ -240,6 +253,40 @@ export const HrDocumentPicker: React.FC<HrDocumentPickerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Error Display Directly Beneath Upload Control with Retry Option */}
+      {uploadError && (
+        <div
+          role="alert"
+          className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start justify-between gap-2 text-xs text-rose-400"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{uploadError}</span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {canWriteDocs && (
+              <button
+                type="button"
+                onClick={handleRetryUpload}
+                disabled={uploading}
+                className="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-[11px] font-bold text-rose-200 flex items-center gap-1 transition disabled:opacity-50"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Retry</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setUploadError(null)}
+              className="p-1 text-rose-400/70 hover:text-rose-300 transition"
+              title="Dismiss error"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Selected Document Details Card */}
       {selectedDoc && (

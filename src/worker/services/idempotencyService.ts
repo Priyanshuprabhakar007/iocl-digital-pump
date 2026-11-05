@@ -46,6 +46,19 @@ export async function computeRequestFingerprint(c: Context<any>, routePath: stri
   const method = c.req.method.toUpperCase();
   const contentType = (c.req.header('content-type') || '').toLowerCase();
 
+  if (contentType.includes('multipart/form-data')) {
+    try {
+      const buf = await c.req.arrayBuffer();
+      const digest = await crypto.subtle.digest('SHA-256', buf);
+      const binaryHash = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      return sha256Hex(`${method}:${routePath}:multipart:${binaryHash}`);
+    } catch {
+      return sha256Hex(`${method}:${routePath}:multipart:empty`);
+    }
+  }
+
   let canonicalBody = '';
   try {
     const text = await c.req.text();
