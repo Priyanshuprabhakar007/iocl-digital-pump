@@ -187,6 +187,124 @@ export function summarizeShiftReceiptReadiness(receipts: FuelReceipt[]): ShiftRe
   };
 }
 
+export interface ReceiptDateAlignmentWarning {
+  hasWarning: boolean;
+  isOvernightShiftAllowance: boolean;
+  invoiceDateDiffers: boolean;
+  arrivalDateDiffers: boolean;
+  warningMessage: string | null;
+}
+
+function parseIsoDateOnlyUtcMs(dateStr?: string | null): number | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const clean = dateStr.trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return null;
+  const [y, m, d] = clean.split('-').map(Number);
+  const ms = Date.UTC(y, m - 1, d);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * Evaluates whether a candidate fuel receipt's invoiceDate or arrivalTime date
+ * differs from the selected operational shift's businessDate.
+ * Accounts for legitimate overnight shifts (arrival on businessDate + 1 day)
+ * and prior-day terminal dispatches (invoice on businessDate - 1 day)
+ * without rejecting them.
+ */
+export function evaluateReceiptBusinessDateAlignment(
+  businessDate?: string | null,
+  invoiceDate?: string | null,
+  arrivalTime?: string | null
+): ReceiptDateAlignmentWarning {
+  const shiftMs = parseIsoDateOnlyUtcMs(businessDate);
+  if (shiftMs === null || !businessDate) {
+    return {
+      hasWarning: false,
+      isOvernightShiftAllowance: false,
+      invoiceDateDiffers: false,
+      arrivalDateDiffers: false,
+      warningMessage: null,
+    };
+  }
+
+  const cleanShiftDate = businessDate.trim().slice(0, 10);
+  const cleanInvDate = invoiceDate ? invoiceDate.trim().slice(0, 10) : '';
+  const cleanArrDate = arrivalTime ? arrivalTime.trim().slice(0, 10) : '';
+
+  const invMs = parseIsoDateOnlyUtcMs(cleanInvDate);
+  const arrMs = parseIsoDateOnlyUtcMs(cleanArrDate);
+
+  const invoiceDateDiffers = Boolean(cleanInvDate && invMs !== null && cleanInvDate !== cleanShiftDate);
+  const arrivalDateDiffers = Boolean(cleanArrDate && arrMs !== null && cleanArrDate !== cleanShiftDate);
+
+  if (!invoiceDateDiffers && !arrivalDateDiffers) {
+    return {
+      hasWarning: false,
+      isOvernightShiftAllowance: false,
+      invoiceDateDiffers: false,
+      arrivalDateDiffers: false,
+      warningMessage: null,
+    };
+  }
+
+  const DAY_MS = 86_400_000;
+  const invDayDiff = invMs !== null ? Math.round((invMs - shiftMs) / DAY_MS) : 0;
+  const arrDayDiff = arrMs !== null ? Math.round((arrMs - shiftMs) / DAY_MS) : 0;
+
+  // Overnight shift arrival (arrival on businessDate + 1 day) or prior-day terminal invoice (businessDate - 1 day)
+  const isOvernightShiftAllowance =
+    (invDayDiff === 0 || invDayDiff === -1) &&
+    (arrDayDiff === 0 || arrDayDiff === 1) &&
+    (invMs === null || arrMs === null || invMs <= arrMs);
+
+  if (isOvernightShiftAllowance) {
+    return {
+      hasWarning: true,
+      isOvernightShiftAllowance: true,
+      invoiceDateDiffers,
+      arrivalDateDiffers,
+      warningMessage: `Date Notice: Invoice date (${cleanInvDate || '—'}) or arrival date (${
+        cleanArrDate || '—'
+      }) differs from selected shift business date (${cleanShiftDate}). Overnight shift deliveries and prior-day terminal dispatches are permitted — please confirm this receipt belongs to shift ${cleanShiftDate}.`,
+    };
+  }
+
+  return {
+    hasWarning: true,
+    isOvernightShiftAllowance: false,
+    invoiceDateDiffers,
+    arrivalDateDiffers,
+    warningMessage: `Date Mismatch Warning: Receipt invoice date (${cleanInvDate || '—'}) or arrival date (${
+      cleanArrDate || '—'
+    }) differs from selected shift business date (${cleanShiftDate}). Please verify the dates or selected shift (legitimate overnight shifts remain allowed).`,
+  };
+}
+
+/**
+ * Formats backend fuel receipt errors into safe, specific user-facing messages
+ * without exposing raw SQL or internal database details.
+ */
+export function formatFuelReceiptErrorMessage(error: any, fallback = 'Failed to create fuel receipt'): string {
+  if (!error) return fallback;
+  const rawMessage =
+    typeof error === 'string'
+      ? error.trim()
+      : typeof error.message === 'string'
+      ? error.message.trim()
+      : typeof error.error?.message === 'string'
+      ? error.error.message.trim()
+      : '';
+
+  if (!rawMessage) return fallback;
+
+  const lower = rawMessage.toLowerCase();
+  if (lower.includes('sqlite') || lower.includes('syntax error') || lower.includes('pragma')) {
+    return 'Failed to record fuel receipt due to a database error. Please verify the receipt details and try again.';
+  }
+
+  return rawMessage;
+}
+
 interface LineDipFormState {
   preSource: 'MANUAL' | 'ATG';
   preProductDipMm: string;
@@ -239,6 +357,7 @@ export const StockOperationsPage: React.FC = () => {
 
   // Fuel Receipt Creation Modal State
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptModalError, setReceiptModalError] = useState<string | null>(null);
   const [receiptForm, setReceiptForm] = useState({
     ttNumber: '',
     invoiceNumber: '',
@@ -667,6 +786,19 @@ export const StockOperationsPage: React.FC = () => {
     }
   };
 
+  const openCreateReceiptModal = () => {
+    setReceiptModalError(null);
+    setErrorMsg(null);
+    const activeShift = shifts.find(s => s.id === selectedShiftId);
+    if (!receiptForm.ttNumber && !receiptForm.invoiceNumber && activeShift?.businessDate) {
+      setReceiptForm(prev => ({
+        ...prev,
+        invoiceDate: activeShift.businessDate,
+      }));
+    }
+    setShowReceiptModal(true);
+  };
+
   const handleCreateReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedShiftId || !receiptForm.lineTankId || receiptSubmitting) return;
@@ -675,19 +807,47 @@ export const StockOperationsPage: React.FC = () => {
     if (!tank) return;
 
     setReceiptSubmitting(true);
+    setReceiptModalError(null);
     setErrorMsg(null);
     setSuccessMsg(null);
 
     try {
-      const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/fuel-receipts`, {
+      // 1. Refresh actual shift status from backend before submitting (do not rely on stale cached shift data)
+      const shiftCheckRes = await apiFetch<OperationalShift>(`/api/v1/shifts/${selectedShiftId}`);
+      if (shiftCheckRes.success && shiftCheckRes.data) {
+        const latestShift = shiftCheckRes.data;
+        setShifts(prev => prev.map(s => (s.id === latestShift.id ? latestShift : s)));
+
+        if (latestShift.status !== 'OPEN') {
+          const closedErrMsg = `Operational shift ${latestShift.businessDate} is ${latestShift.status}. Recording fuel receipts on a closed shift is prohibited.`;
+          setReceiptModalError(closedErrMsg);
+          setErrorMsg(closedErrMsg);
+          if (selectedOutletId) {
+            await loadShifts(selectedOutletId, selectedShiftId);
+          }
+          await loadShiftData(selectedShiftId);
+          return;
+        }
+      } else if (!shiftCheckRes.success && shiftCheckRes.error?.code === 'NOT_FOUND') {
+        const notFoundMsg = formatFuelReceiptErrorMessage(shiftCheckRes.error, 'Operational shift not found.');
+        setReceiptModalError(notFoundMsg);
+        setErrorMsg(notFoundMsg);
+        if (selectedOutletId) {
+          await loadShifts(selectedOutletId);
+        }
+        return;
+      }
+
+      // 2. Submit new fuel receipt to the verified OPEN shift
+      const res = await apiFetch<FuelReceipt>(`/api/v1/shifts/${selectedShiftId}/fuel-receipts`, {
         method: 'POST',
         body: JSON.stringify({
-          ttNumber: receiptForm.ttNumber,
-          invoiceNumber: receiptForm.invoiceNumber,
+          ttNumber: receiptForm.ttNumber.trim(),
+          invoiceNumber: receiptForm.invoiceNumber.trim(),
           invoiceDate: receiptForm.invoiceDate,
           arrivalAt: receiptForm.arrivalTime,
           sealVerified: receiptForm.sealVerified,
-          sealExceptionReason: receiptForm.sealVerified ? null : receiptForm.sealExceptionReason,
+          sealExceptionReason: receiptForm.sealVerified ? null : receiptForm.sealExceptionReason.trim(),
           lines: [
             {
               tankId: receiptForm.lineTankId,
@@ -702,12 +862,14 @@ export const StockOperationsPage: React.FC = () => {
       });
 
       if (res.success) {
+        setReceiptModalError(null);
         setSuccessMsg('Fuel receipt created successfully');
         setShowReceiptModal(false);
+        const activeShift = shifts.find(s => s.id === selectedShiftId);
         setReceiptForm({
           ttNumber: '',
           invoiceNumber: '',
-          invoiceDate: getLocalDateInputValue(),
+          invoiceDate: activeShift?.businessDate || getLocalDateInputValue(),
           arrivalTime: getLocalDateTimeInputValue(),
           sealVerified: true,
           sealExceptionReason: '',
@@ -718,8 +880,18 @@ export const StockOperationsPage: React.FC = () => {
           temperature: '',
         });
         await loadShiftData(selectedShiftId);
+        if (selectedOutletId) {
+          await loadShifts(selectedOutletId, selectedShiftId);
+        }
       } else {
-        setErrorMsg(res.error?.message || 'Failed to create fuel receipt');
+        // Show the actual safe backend error, refresh shift list & shift data, and do NOT clear the form or claim success
+        const safeErr = formatFuelReceiptErrorMessage(res.error, 'Failed to create fuel receipt');
+        setReceiptModalError(safeErr);
+        setErrorMsg(safeErr);
+        if (selectedOutletId) {
+          await loadShifts(selectedOutletId, selectedShiftId);
+        }
+        await loadShiftData(selectedShiftId);
       }
     } finally {
       setReceiptSubmitting(false);
@@ -753,6 +925,11 @@ export const StockOperationsPage: React.FC = () => {
 
   const currentShift = shifts.find(s => s.id === selectedShiftId);
   const shiftReceiptSummary = summarizeShiftReceiptReadiness(receipts);
+  const receiptDateWarning = evaluateReceiptBusinessDateAlignment(
+    currentShift?.businessDate,
+    receiptForm.invoiceDate,
+    receiptForm.arrivalTime
+  );
   const managingReceipt = managingReceiptId ? receipts.find(r => r.id === managingReceiptId) || null : null;
   const managingReceiptReadiness = managingReceipt
     ? evaluateReceiptCompletionReadiness(
@@ -1055,7 +1232,7 @@ export const StockOperationsPage: React.FC = () => {
             </div>
             {currentShift?.status === 'OPEN' && (
               <button
-                onClick={() => setShowReceiptModal(true)}
+                onClick={openCreateReceiptModal}
                 className="px-3.5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-orange-500/20 flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4" />
@@ -2127,11 +2304,46 @@ export const StockOperationsPage: React.FC = () => {
       {/* Fuel Receipt Creation Modal */}
       {showReceiptModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Fuel className="w-5 h-5 text-orange-500" />
-              Record Tanker Fuel Receipt
-            </h3>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Fuel className="w-5 h-5 text-orange-500" />
+                Record Tanker Fuel Receipt
+              </h3>
+              {currentShift && (
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                    currentShift.status === 'OPEN'
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}
+                >
+                  Shift {currentShift.businessDate} ({currentShift.status})
+                </span>
+              )}
+            </div>
+
+            {receiptModalError && (
+              <div
+                role="alert"
+                data-testid="receipt-modal-error"
+                className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-xs font-semibold flex items-start gap-2"
+              >
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <span>{receiptModalError}</span>
+              </div>
+            )}
+
+            {receiptDateWarning.hasWarning && receiptDateWarning.warningMessage && (
+              <div
+                role="status"
+                data-testid="receipt-date-warning"
+                className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-xs flex items-start gap-2"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <span>{receiptDateWarning.warningMessage}</span>
+              </div>
+            )}
 
             <form onSubmit={handleCreateReceipt} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
@@ -2139,7 +2351,7 @@ export const StockOperationsPage: React.FC = () => {
                   <label className="block font-bold text-slate-400 uppercase mb-1">TT Number</label>
                   <input
                     type="text"
-                    placeholder="e.g. TT-9988"
+                    placeholder="e.g. PB29AJ7443"
                     value={receiptForm.ttNumber}
                     onChange={e => setReceiptForm({ ...receiptForm, ttNumber: e.target.value })}
                     required
@@ -2150,7 +2362,7 @@ export const StockOperationsPage: React.FC = () => {
                   <label className="block font-bold text-slate-400 uppercase mb-1">Invoice Number</label>
                   <input
                     type="text"
-                    placeholder="e.g. INV-2026-001"
+                    placeholder="e.g. 19914781"
                     value={receiptForm.invoiceNumber}
                     onChange={e => setReceiptForm({ ...receiptForm, invoiceNumber: e.target.value })}
                     required
@@ -2250,11 +2462,48 @@ export const StockOperationsPage: React.FC = () => {
                 </div>
               </div>
 
+              <div className="p-2.5 bg-slate-800/60 border border-slate-700/70 rounded-lg space-y-2">
+                <label className="flex items-center gap-2 text-xs text-slate-200 font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={receiptForm.sealVerified}
+                    onChange={e =>
+                      setReceiptForm({
+                        ...receiptForm,
+                        sealVerified: e.target.checked,
+                        sealExceptionReason: e.target.checked ? '' : receiptForm.sealExceptionReason,
+                      })
+                    }
+                    className="rounded border-slate-600 text-orange-500 focus:ring-orange-500"
+                  />
+                  <span>Tanker Seal Verified Intact on Arrival</span>
+                </label>
+
+                {!receiptForm.sealVerified && (
+                  <div>
+                    <label className="block font-bold text-amber-300 uppercase mb-1 text-[10px]">
+                      Seal Exception Reason (Required when seal not verified)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Describe seal discrepancy or exception approval..."
+                      value={receiptForm.sealExceptionReason}
+                      onChange={e => setReceiptForm({ ...receiptForm, sealExceptionReason: e.target.value })}
+                      required={!receiptForm.sealVerified}
+                      className="w-full bg-slate-900 text-white rounded-lg p-2 border border-amber-500/40 focus:outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
                 <button
                   type="button"
                   disabled={receiptSubmitting}
-                  onClick={() => setShowReceiptModal(false)}
+                  onClick={() => {
+                    setReceiptModalError(null);
+                    setShowReceiptModal(false);
+                  }}
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg disabled:opacity-50"
                 >
                   Cancel

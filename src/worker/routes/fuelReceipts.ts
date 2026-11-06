@@ -7,6 +7,7 @@ import { OutletRepository } from '../repositories/outletRepository';
 import { AuditRepository } from '../repositories/auditRepository';
 import { ScopeService } from '../services/scopeService';
 import { QualityToleranceService } from '../services/qualityToleranceService';
+import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
 import { requireAuth, AppContext, EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 import {
@@ -69,7 +70,7 @@ fuelReceipts.post('/shifts/:shiftId/fuel-receipts', requirePermission(PERMISSION
     return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this shift outlet' } }, 403);
   }
 
-  if (shift.status === 'CLOSED' || shift.status === 'LOCKED') {
+  if (shift.status === 'CLOSED' || shift.status === 'LOCKED' || shift.status !== 'OPEN') {
     return c.json({
       success: false,
       data: null,
@@ -88,6 +89,22 @@ fuelReceipts.post('/shifts/:shiftId/fuel-receipts', requirePermission(PERMISSION
   }
 
   const { ttNumber, invoiceNumber, invoiceDate, arrivalAt, sealVerified, sealExceptionReason, lines } = parseResult.data;
+
+  // Validate that no duplicate tank IDs appear in the same receipt payload
+  const seenLineTankIds = new Set<string>();
+  for (const line of lines) {
+    if (seenLineTankIds.has(line.tankId)) {
+      return c.json({
+        success: false,
+        data: null,
+        error: {
+          code: 'DUPLICATE_RECEIPT_TANK_LINE',
+          message: 'A decantation line for this tank already exists on this fuel receipt.',
+        },
+      }, 409);
+    }
+    seenLineTankIds.add(line.tankId);
+  }
 
   // Validate that each receiving tank belongs to this outlet and snapshot
   const shiftTanks = await pumpRepo.listShiftTankSnapshots(shiftId);
@@ -120,6 +137,8 @@ fuelReceipts.post('/shifts/:shiftId/fuel-receipts', requirePermission(PERMISSION
 
     let qualityStatus: QualityStatus = 'NOT_EVALUATED';
     let densityVarianceMilli: number | null = null;
+    let appliedToleranceSettingId: string | null = null;
+    let appliedDensityToleranceMilliunits: number | null = null;
 
     if (densityMilli != null && invDensityMilli != null) {
       const qRes = await QualityToleranceService.evaluateDensityQuality(
@@ -131,6 +150,8 @@ fuelReceipts.post('/shifts/:shiftId/fuel-receipts', requirePermission(PERMISSION
       );
       qualityStatus = qRes.qualityStatus;
       densityVarianceMilli = qRes.densityVarianceMilliunits;
+      appliedToleranceSettingId = qRes.appliedToleranceSettingId;
+      appliedDensityToleranceMilliunits = qRes.appliedToleranceMilliunits;
     }
 
     preparedLines.push({
@@ -144,35 +165,127 @@ fuelReceipts.post('/shifts/:shiftId/fuel-receipts', requirePermission(PERMISSION
       invoiceDensityMilliunits: invDensityMilli,
       densityVarianceMilliunits: densityVarianceMilli,
       qualityStatus,
+      appliedToleranceSettingId,
+      appliedDensityToleranceMilliunits,
       createdAt: nowIso,
       updatedAt: nowIso,
     });
   }
 
-  const result = await pumpRepo.createFuelReceiptConditional(
-    {
-      id: receiptId,
-      outletId: shift.outletId,
-      operationalShiftId: shiftId,
-      ttNumber,
-      invoiceNumber,
-      invoiceDate,
-      arrivalAt,
-      sealVerified: sealVerified ?? true,
-      sealExceptionReason: sealExceptionReason || null,
-      recordedByUserId: c.var.user!.user.id,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    },
-    preparedLines
-  );
+  let result: Awaited<ReturnType<typeof pumpRepo.createFuelReceiptConditional>>;
+  try {
+    result = await pumpRepo.createFuelReceiptConditional(
+      {
+        id: receiptId,
+        outletId: shift.outletId,
+        operationalShiftId: shiftId,
+        ttNumber,
+        invoiceNumber,
+        invoiceDate,
+        arrivalAt,
+        sealVerified: sealVerified ?? true,
+        sealExceptionReason: sealExceptionReason || null,
+        recordedByUserId: c.var.user!.user.id,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      preparedLines
+    );
+  } catch (err: any) {
+    console.error(
+      '[FUEL_RECEIPT_CREATE_ROUTE_ERROR]',
+      JSON.stringify({
+        outletId: shift.outletId,
+        operationalShiftId: shiftId,
+        receiptId,
+        errorName: err instanceof Error ? err.name : 'UnknownError',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      })
+    );
+
+    const mappedDuplicate = mapDatabaseUniqueError(err);
+    if (mappedDuplicate) {
+      return c.json(
+        {
+          success: false,
+          data: null,
+          error: { code: mappedDuplicate.code, message: mappedDuplicate.message },
+        },
+        409
+      );
+    }
+
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: 'RECEIPT_CREATE_FAILED',
+          message: 'Failed to record fuel receipt due to a database error while the shift is OPEN. Please try again.',
+        },
+      },
+      500
+    );
+  }
 
   if (!result.success || !result.receipt) {
-    return c.json({
-      success: false,
-      data: null,
-      error: { code: 'SHIFT_CLOSED', message: 'Operational shift is CLOSED. Recording fuel receipts on a closed shift is prohibited.' },
-    }, 409);
+    if (result.shiftNotFound) {
+      return c.json(
+        {
+          success: false,
+          data: null,
+          error: { code: 'NOT_FOUND', message: result.errorMessage || 'Operational shift not found' },
+        },
+        404
+      );
+    }
+
+    if (result.shiftClosed) {
+      const closedStatus = result.shiftStatus || 'CLOSED';
+      return c.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'SHIFT_CLOSED',
+            message:
+              result.errorMessage ||
+              `Operational shift is ${closedStatus}. Recording fuel receipts on a closed shift is prohibited.`,
+          },
+        },
+        409
+      );
+    }
+
+    if (result.duplicate) {
+      return c.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: result.errorCode || 'DUPLICATE_FUEL_RECEIPT_INVOICE',
+            message: result.errorMessage || 'A fuel receipt with this invoice number already exists for this outlet.',
+          },
+        },
+        409
+      );
+    }
+
+    const errCode = result.errorCode || result.error || 'RECEIPT_CREATE_FAILED';
+    const statusCode = errCode === 'VALIDATION_ERROR' ? 400 : 500;
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: errCode,
+          message:
+            result.errorMessage ||
+            'Failed to record fuel receipt while the operational shift is OPEN. Please verify the receipt details and try again.',
+        },
+      },
+      statusCode
+    );
   }
 
   const created = result.receipt;

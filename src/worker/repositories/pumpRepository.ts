@@ -39,6 +39,7 @@ import {
   VarianceStatus,
 } from '../../shared/types';
 import { parseMilliunits, formatMilliunits, MILLIUNIT_SCALE } from '../../shared/precision';
+import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
 
 export const SNAPSHOT_INSERT_CHUNK_SIZE = 5;
 
@@ -3759,77 +3760,292 @@ export class PumpRepository {
       createdAt: string;
       updatedAt: string;
     }>
-  ): Promise<{ success: boolean; receipt: FuelReceipt | null; shiftClosed?: boolean; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    receipt: FuelReceipt | null;
+    shiftClosed?: boolean;
+    shiftNotFound?: boolean;
+    shiftStatus?: string;
+    duplicate?: boolean;
+    errorCode?: string;
+    errorMessage?: string;
+    error?: string;
+  }> {
     const sealVerifiedNum = receiptData.sealVerified ? 1 : 0;
+    const sealExceptionVal = receiptData.sealExceptionReason ?? null;
 
-    const [shift] = await this.db.select().from(schema.operationalShifts).where(eq(schema.operationalShifts.id, receiptData.operationalShiftId));
-    if (!shift || shift.status !== 'OPEN') {
-      return { success: false, receipt: null, shiftClosed: true, error: 'SHIFT_CLOSED' };
+    // 1. Verify shift exists and is genuinely OPEN
+    const [shift] = await this.db
+      .select()
+      .from(schema.operationalShifts)
+      .where(eq(schema.operationalShifts.id, receiptData.operationalShiftId));
+
+    if (!shift) {
+      return {
+        success: false,
+        receipt: null,
+        shiftClosed: false,
+        shiftNotFound: true,
+        error: 'NOT_FOUND',
+        errorCode: 'NOT_FOUND',
+        errorMessage: 'Operational shift not found.',
+      };
     }
 
-    const conditionalHeaderInsert = this.db.insert(schema.fuelReceipts).select(
-      this.db.select({
-        id: sql<string>`${receiptData.id}`.as('id'),
-        outletId: sql<string>`${receiptData.outletId}`.as('outletId'),
-        operationalShiftId: schema.operationalShifts.id,
-        ttNumber: sql<string>`${receiptData.ttNumber}`.as('ttNumber'),
-        invoiceNumber: sql<string>`${receiptData.invoiceNumber}`.as('invoiceNumber'),
-        invoiceDate: sql<string>`${receiptData.invoiceDate}`.as('invoiceDate'),
-        arrivalAt: sql<string>`${receiptData.arrivalAt}`.as('arrivalAt'),
-        decantationStartedAt: sql<string | null>`null`.as('decantation_started_at'),
-        decantationCompletedAt: sql<string | null>`null`.as('decantation_completed_at'),
-        sealVerified: sql<boolean>`${sealVerifiedNum === 1}`.as('seal_verified'),
-        sealExceptionReason: sql<string | null>`${receiptData.sealExceptionReason || null}`.as('seal_exception_reason'),
-        status: sql<string>`'ARRIVED'`.as('status'),
-        recordedByUserId: sql<string>`${receiptData.recordedByUserId}`.as('recorded_by_user_id'),
-        createdAt: sql<string>`${receiptData.createdAt}`.as('created_at'),
-        updatedAt: sql<string>`${receiptData.updatedAt}`.as('updated_at'),
-      })
-      .from(schema.operationalShifts)
-      .where(and(
-        eq(schema.operationalShifts.id, receiptData.operationalShiftId),
-        eq(schema.operationalShifts.status, 'OPEN')
-      ))
-    ).returning({ id: schema.fuelReceipts.id });
+    if (shift.status === 'CLOSED' || shift.status === 'LOCKED' || shift.status !== 'OPEN') {
+      return {
+        success: false,
+        receipt: null,
+        shiftClosed: true,
+        shiftStatus: shift.status,
+        error: 'SHIFT_CLOSED',
+        errorCode: 'SHIFT_CLOSED',
+        errorMessage: `Operational shift is ${shift.status}. Recording fuel receipts on a closed shift is prohibited.`,
+      };
+    }
 
+    if (!linesData || linesData.length === 0) {
+      return {
+        success: false,
+        receipt: null,
+        shiftClosed: false,
+        error: 'VALIDATION_ERROR',
+        errorCode: 'VALIDATION_ERROR',
+        errorMessage: 'At least one receiving tank line is required to record a fuel receipt.',
+      };
+    }
+
+    // 2. Validate duplicate tank lines within the same receipt
+    const seenTanks = new Set<string>();
+    for (const line of linesData) {
+      if (seenTanks.has(line.tankId)) {
+        return {
+          success: false,
+          receipt: null,
+          shiftClosed: false,
+          duplicate: true,
+          error: 'DUPLICATE_RECEIPT_TANK_LINE',
+          errorCode: 'DUPLICATE_RECEIPT_TANK_LINE',
+          errorMessage: 'A decantation line for this tank already exists on this fuel receipt.',
+        };
+      }
+      seenTanks.add(line.tankId);
+    }
+
+    // 3. Check natural business key uniqueness: (outlet_id, invoice_number) WHERE status != 'CANCELLED'
+    const [existingInvoice] = await this.db
+      .select({ id: schema.fuelReceipts.id })
+      .from(schema.fuelReceipts)
+      .where(
+        and(
+          eq(schema.fuelReceipts.outletId, receiptData.outletId),
+          eq(schema.fuelReceipts.invoiceNumber, receiptData.invoiceNumber),
+          ne(schema.fuelReceipts.status, 'CANCELLED')
+        )
+      )
+      .limit(1);
+
+    if (existingInvoice) {
+      return {
+        success: false,
+        receipt: null,
+        shiftClosed: false,
+        duplicate: true,
+        error: 'DUPLICATE_FUEL_RECEIPT_INVOICE',
+        errorCode: 'DUPLICATE_FUEL_RECEIPT_INVOICE',
+        errorMessage: 'A fuel receipt with this invoice number already exists for this outlet.',
+      };
+    }
+
+    // 4. Conditional header INSERT using D1-compatible integer (0/1) for seal_verified
+    const conditionalHeaderInsert = this.db.insert(schema.fuelReceipts).select(
+      this.db
+        .select({
+          id: sql<string>`${receiptData.id}`.as('id'),
+          outletId: sql<string>`${receiptData.outletId}`.as('outlet_id'),
+          operationalShiftId: schema.operationalShifts.id,
+          ttNumber: sql<string>`${receiptData.ttNumber}`.as('tt_number'),
+          invoiceNumber: sql<string>`${receiptData.invoiceNumber}`.as('invoice_number'),
+          invoiceDate: sql<string>`${receiptData.invoiceDate}`.as('invoice_date'),
+          arrivalAt: sql<string>`${receiptData.arrivalAt}`.as('arrival_at'),
+          decantationStartedAt: sql<string | null>`null`.as('decantation_started_at'),
+          decantationCompletedAt: sql<string | null>`null`.as('decantation_completed_at'),
+          sealVerified: sql<boolean>`${sealVerifiedNum}`.as('seal_verified'),
+          sealExceptionReason: sql<string | null>`${sealExceptionVal}`.as('seal_exception_reason'),
+          status: sql<string>`'ARRIVED'`.as('status'),
+          recordedByUserId: sql<string>`${receiptData.recordedByUserId}`.as('recorded_by_user_id'),
+          createdAt: sql<string>`${receiptData.createdAt}`.as('created_at'),
+          updatedAt: sql<string>`${receiptData.updatedAt}`.as('updated_at'),
+        })
+        .from(schema.operationalShifts)
+        .where(
+          and(
+            eq(schema.operationalShifts.id, receiptData.operationalShiftId),
+            eq(schema.operationalShifts.status, 'OPEN')
+          )
+        )
+    );
+
+    // 5. Conditional tanker-line INSERTs that only insert if the parent receipt header exists and shift is OPEN
     const lineInserts = linesData.map(line =>
-      this.db.insert(schema.fuelReceiptTankLines).values({
-        id: line.id,
-        fuelReceiptId: receiptData.id,
-        tankId: line.tankId,
-        productId: line.productId,
-        invoiceQuantityMilliunits: line.invoiceQuantityMilliunits,
-        densityMilliunits: line.densityMilliunits || null,
-        temperatureMilliunits: line.temperatureMilliunits || null,
-        invoiceDensityMilliunits: line.invoiceDensityMilliunits || null,
-        densityVarianceMilliunits: line.densityVarianceMilliunits || null,
-        qualityStatus: line.qualityStatus,
-        appliedToleranceSettingId: line.appliedToleranceSettingId || null,
-        appliedDensityToleranceMilliunits: line.appliedDensityToleranceMilliunits || null,
-        createdAt: line.createdAt,
-        updatedAt: line.updatedAt,
-      }).returning({ id: schema.fuelReceiptTankLines.id })
+      this.db.insert(schema.fuelReceiptTankLines).select(
+        this.db
+          .select({
+            id: sql<string>`${line.id}`.as('id'),
+            fuelReceiptId: schema.fuelReceipts.id,
+            tankId: sql<string>`${line.tankId}`.as('tank_id'),
+            productId: sql<string>`${line.productId}`.as('product_id'),
+            invoiceQuantityMilliunits: sql<number>`${line.invoiceQuantityMilliunits}`.as(
+              'invoice_quantity_milliunits'
+            ),
+            preDecantReadingId: sql<string | null>`null`.as('pre_decant_reading_id'),
+            postDecantReadingId: sql<string | null>`null`.as('post_decant_reading_id'),
+            measuredReceivedQuantityMilliunits: sql<number | null>`null`.as(
+              'measured_received_quantity_milliunits'
+            ),
+            receiptVarianceMilliunits: sql<number | null>`null`.as('receipt_variance_milliunits'),
+            densityMilliunits: sql<number | null>`${line.densityMilliunits ?? null}`.as('density_milliunits'),
+            temperatureMilliunits: sql<number | null>`${line.temperatureMilliunits ?? null}`.as(
+              'temperature_milliunits'
+            ),
+            invoiceDensityMilliunits: sql<number | null>`${line.invoiceDensityMilliunits ?? null}`.as(
+              'invoice_density_milliunits'
+            ),
+            densityVarianceMilliunits: sql<number | null>`${line.densityVarianceMilliunits ?? null}`.as(
+              'density_variance_milliunits'
+            ),
+            qualityStatus: sql<string>`${line.qualityStatus}`.as('quality_status'),
+            appliedToleranceSettingId: sql<string | null>`${line.appliedToleranceSettingId ?? null}`.as(
+              'applied_tolerance_setting_id'
+            ),
+            appliedDensityToleranceMilliunits: sql<number | null>`${
+              line.appliedDensityToleranceMilliunits ?? null
+            }`.as('applied_density_tolerance_milliunits'),
+            createdAt: sql<string>`${line.createdAt}`.as('created_at'),
+            updatedAt: sql<string>`${line.updatedAt}`.as('updated_at'),
+          })
+          .from(schema.fuelReceipts)
+          .innerJoin(
+            schema.operationalShifts,
+            eq(schema.fuelReceipts.operationalShiftId, schema.operationalShifts.id)
+          )
+          .where(
+            and(
+              eq(schema.fuelReceipts.id, receiptData.id),
+              eq(schema.operationalShifts.id, receiptData.operationalShiftId),
+              eq(schema.operationalShifts.status, 'OPEN')
+            )
+          )
+      )
     );
 
     try {
       await (this.db as any).batch([conditionalHeaderInsert, ...lineInserts]);
     } catch (err: any) {
-      const [currentShift] = await this.db.select().from(schema.operationalShifts).where(eq(schema.operationalShifts.id, receiptData.operationalShiftId));
-      if (!currentShift || currentShift.status !== 'OPEN') {
-        return { success: false, receipt: null, shiftClosed: true, error: 'SHIFT_CLOSED' };
+      console.error(
+        '[FUEL_RECEIPT_CREATE_DB_ERROR]',
+        JSON.stringify({
+          outletId: receiptData.outletId,
+          operationalShiftId: receiptData.operationalShiftId,
+          receiptId: receiptData.id,
+          lineCount: linesData.length,
+          errorName: err instanceof Error ? err.name : 'UnknownError',
+          errorMessage: err instanceof Error ? err.message : String(err),
+          cause: err instanceof Error && 'cause' in err ? String((err as any).cause) : undefined,
+        })
+      );
+
+      const mappedDuplicate = mapDatabaseUniqueError(err);
+      if (mappedDuplicate) {
+        return {
+          success: false,
+          receipt: null,
+          shiftClosed: false,
+          duplicate: true,
+          error: mappedDuplicate.code,
+          errorCode: mappedDuplicate.code,
+          errorMessage: mappedDuplicate.message,
+        };
       }
-      return { success: false, receipt: null, shiftClosed: false, error: 'RECEIPT_CREATE_FAILED' };
+
+      try {
+        const [currentShift] = await this.db
+          .select()
+          .from(schema.operationalShifts)
+          .where(eq(schema.operationalShifts.id, receiptData.operationalShiftId));
+        if (currentShift && (currentShift.status === 'CLOSED' || currentShift.status === 'LOCKED')) {
+          return {
+            success: false,
+            receipt: null,
+            shiftClosed: true,
+            shiftStatus: currentShift.status,
+            error: 'SHIFT_CLOSED',
+            errorCode: 'SHIFT_CLOSED',
+            errorMessage: `Operational shift is ${currentShift.status}. Recording fuel receipts on a closed shift is prohibited.`,
+          };
+        }
+      } catch {
+        // Do not misreport database failure as SHIFT_CLOSED
+      }
+
+      return {
+        success: false,
+        receipt: null,
+        shiftClosed: false,
+        error: 'RECEIPT_CREATE_FAILED',
+        errorCode: 'RECEIPT_CREATE_FAILED',
+        errorMessage: 'Failed to record fuel receipt due to a database error while the shift is OPEN. Please try again.',
+      };
     }
 
     const created = await this.findFuelReceiptById(receiptData.id);
-    if (!created) {
-      const [currentShift] = await this.db.select().from(schema.operationalShifts).where(eq(schema.operationalShifts.id, receiptData.operationalShiftId));
-      if (!currentShift || currentShift.status !== 'OPEN') {
-        return { success: false, receipt: null, shiftClosed: true, error: 'SHIFT_CLOSED' };
+    if (!created || (linesData.length > 0 && (!created.lines || created.lines.length !== linesData.length))) {
+      if (created) {
+        // Defensive cleanup so partial receipt records can never remain
+        try {
+          await this.db.delete(schema.fuelReceipts).where(eq(schema.fuelReceipts.id, receiptData.id));
+        } catch (cleanupErr) {
+          console.error(
+            '[FUEL_RECEIPT_PARTIAL_CLEANUP_ERROR]',
+            JSON.stringify({
+              receiptId: receiptData.id,
+              message: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+            })
+          );
+        }
       }
-      return { success: false, receipt: null, shiftClosed: false, error: 'RECEIPT_CREATE_FAILED' };
+
+      try {
+        const [currentShift] = await this.db
+          .select()
+          .from(schema.operationalShifts)
+          .where(eq(schema.operationalShifts.id, receiptData.operationalShiftId));
+        if (currentShift && (currentShift.status === 'CLOSED' || currentShift.status === 'LOCKED')) {
+          return {
+            success: false,
+            receipt: null,
+            shiftClosed: true,
+            shiftStatus: currentShift.status,
+            error: 'SHIFT_CLOSED',
+            errorCode: 'SHIFT_CLOSED',
+            errorMessage: `Operational shift is ${currentShift.status}. Recording fuel receipts on a closed shift is prohibited.`,
+          };
+        }
+      } catch {
+        // Do not misreport database failure as SHIFT_CLOSED
+      }
+
+      return {
+        success: false,
+        receipt: null,
+        shiftClosed: false,
+        error: 'RECEIPT_CREATE_FAILED',
+        errorCode: 'RECEIPT_CREATE_FAILED',
+        errorMessage: 'Failed to create complete fuel receipt record. No partial receipt was saved.',
+      };
     }
-    return { success: true, receipt: created };
+
+    return { success: true, receipt: created, shiftClosed: false };
   }
 
   async updateFuelReceiptStatusConditional(
