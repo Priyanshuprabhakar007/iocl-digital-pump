@@ -16,6 +16,7 @@ import {
   saveTankReadingsBatch,
 } from '../services/api';
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { DailyOperationsTestDataResetPanel } from '../components/pump/DailyOperationsTestDataResetPanel';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
 import {
   CheckCircle2,
@@ -2485,6 +2486,13 @@ export const DailyOperationsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ADMIN-ONLY CONTROLLED DAILY OPERATIONS TEST DATA RESET */}
+      <DailyOperationsTestDataResetPanel
+        outlets={outlets}
+        selectedOutletId={selectedOutletId}
+        onResetCompleted={() => loadBootstrap(selectedOutletId, businessDate, false)}
+      />
     </div>
   );
 };

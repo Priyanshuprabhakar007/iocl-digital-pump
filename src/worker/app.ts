@@ -30,6 +30,7 @@ import { uniformRoutes } from './routes/uniformRoutes';
 import { orgRoutes } from './routes/orgRoutes';
 import { dgOperationsRoutes } from './routes/dgOperationsRoutes';
 import { reportRoutes } from './routes/reportRoutes';
+import dailyOpsResetRoutes from './routes/dailyOpsResetRoutes';
 
 export const app = new Hono<{ Bindings: EnvBindings }>();
 
@@ -165,6 +166,7 @@ app.route('/api/v1', uniformRoutes);
 app.route('/api/v1/org', orgRoutes);
 app.route('/api/v1', dgOperationsRoutes);
 app.route('/api/v1', reportRoutes);
+app.route('/api/v1', dailyOpsResetRoutes);
 
 // Global Error Handler - Maps unique constraint violations to 409; generic external response for 500
 app.onError((err, c) => {

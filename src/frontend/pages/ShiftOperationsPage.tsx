@@ -31,6 +31,7 @@ import { parseMilliunits, formatMilliunits } from '../../shared/precision';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
 import { getLocalDateInputValue } from '../../shared/utils/dateUtils';
+import { DailyOperationsTestDataResetPanel } from '../components/pump/DailyOperationsTestDataResetPanel';
 
 export const ShiftOperationsPage: React.FC = () => {
   const { userCtx } = useAuth();
@@ -866,6 +867,16 @@ export const ShiftOperationsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ADMIN-ONLY CONTROLLED DAILY OPERATIONS TEST DATA RESET */}
+      <DailyOperationsTestDataResetPanel
+        outlets={outlets}
+        selectedOutletId={selectedOutletId}
+        onResetCompleted={() => {
+          loadOutletShifts();
+          loadShiftWorkspace();
+        }}
+      />
     </div>
   );
 };
