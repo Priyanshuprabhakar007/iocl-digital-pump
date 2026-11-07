@@ -34,7 +34,10 @@ import {
   ArrowRight,
 } from 'lucide-react';
 
-interface TankDraftRow {
+export const DEFAULT_NOZZLE_TESTING_QUANTITY_LITRES = '5.000';
+export const ZERO_NOZZLE_TESTING_QUANTITY_LITRES = '0.000';
+
+export interface TankDraftRow {
   openingDipMm: string;
   openingWaterDipMm: string;
   closingDipMm: string;
@@ -43,13 +46,219 @@ interface TankDraftRow {
   errorMessage: string | null;
 }
 
-interface NozzleDraftRow {
+export interface NozzleDraftRow {
   openingTotalizer: string;
   closingTotalizer: string;
   testingQuantity: string;
   varianceReason: string;
   saveStatus: 'IDLE' | 'SAVED' | 'DIRTY' | 'SAVING' | 'ERROR';
   errorMessage: string | null;
+  isTestingDefaultPrefilled: boolean;
+  testingConfirmed: boolean;
+}
+
+export interface UnconfirmedNozzleTestingItem {
+  nozzleId: string;
+  nozzleNumber: number;
+  dispenserNumber: number;
+  productCode: string;
+  testingQuantity: string;
+}
+
+interface PendingTestingConfirmationState {
+  mode: 'SINGLE' | 'BATCH';
+  shiftId: string;
+  singleNozzle?: DailyOperationsNozzleEntryRow;
+  unconfirmedNozzles: UnconfirmedNozzleTestingItem[];
+}
+
+export function createInitialNozzleDraftRow(
+  nozzle: DailyOperationsNozzleEntryRow,
+  shiftStatus: DailyOperationsShiftWorkspace['shift']['status'] = 'OPEN'
+): NozzleDraftRow {
+  if (nozzle.reading) {
+    return {
+      openingTotalizer: nozzle.reading.openingTotalizerStr || ZERO_NOZZLE_TESTING_QUANTITY_LITRES,
+      closingTotalizer: nozzle.reading.closingTotalizerStr || '',
+      testingQuantity: nozzle.reading.testingQuantityStr || ZERO_NOZZLE_TESTING_QUANTITY_LITRES,
+      varianceReason: nozzle.reading.varianceReason || '',
+      saveStatus: 'SAVED',
+      errorMessage: null,
+      isTestingDefaultPrefilled: false,
+      testingConfirmed: true,
+    };
+  }
+
+  const shouldPrefillFiveLitres = shiftStatus === 'OPEN' && !nozzle.unavailability;
+  return {
+    openingTotalizer: nozzle.suggestedOpeningTotalizer || ZERO_NOZZLE_TESTING_QUANTITY_LITRES,
+    closingTotalizer: '',
+    testingQuantity: shouldPrefillFiveLitres
+      ? DEFAULT_NOZZLE_TESTING_QUANTITY_LITRES
+      : ZERO_NOZZLE_TESTING_QUANTITY_LITRES,
+    varianceReason: '',
+    saveStatus: 'IDLE',
+    errorMessage: null,
+    isTestingDefaultPrefilled: shouldPrefillFiveLitres,
+    testingConfirmed: !shouldPrefillFiveLitres,
+  };
+}
+
+export function buildInitialNozzleDraftsMap(
+  shifts: DailyOperationsShiftWorkspace[],
+  existingDrafts?: Record<string, NozzleDraftRow>
+): Record<string, NozzleDraftRow> {
+  const nextNozzleDrafts: Record<string, NozzleDraftRow> = {};
+
+  for (const ws of shifts) {
+    const sId = ws.shift.id;
+    for (const n of ws.nozzles) {
+      const key = `${sId}:${n.nozzleId}`;
+      if (n.reading) {
+        // Never overwrite previously saved readings or actual saved testing quantities
+        nextNozzleDrafts[key] = createInitialNozzleDraftRow(n, ws.shift.status);
+      } else {
+        const existing = existingDrafts?.[key];
+        if (
+          existing &&
+          existing.saveStatus !== 'SAVED' &&
+          (existing.saveStatus === 'DIRTY' || existing.testingConfirmed)
+        ) {
+          nextNozzleDrafts[key] = existing;
+        } else {
+          nextNozzleDrafts[key] = createInitialNozzleDraftRow(n, ws.shift.status);
+        }
+      }
+    }
+  }
+
+  return nextNozzleDrafts;
+}
+
+export function updateNozzleDraftTestingQuantity(
+  draft: NozzleDraftRow,
+  newTestingQuantity: string
+): NozzleDraftRow {
+  const trimmed = newTestingQuantity.trim();
+  let isZero = false;
+  let isDefaultFiveLitres = false;
+
+  try {
+    const milli = parseMilliunits(trimmed || ZERO_NOZZLE_TESTING_QUANTITY_LITRES);
+    isZero = milli === 0;
+    isDefaultFiveLitres = milli === 5000;
+  } catch {
+    isZero = false;
+    isDefaultFiveLitres = trimmed === DEFAULT_NOZZLE_TESTING_QUANTITY_LITRES;
+  }
+
+  if (isZero) {
+    return {
+      ...draft,
+      testingQuantity: newTestingQuantity,
+      saveStatus: 'DIRTY',
+      errorMessage: null,
+      isTestingDefaultPrefilled: false,
+      testingConfirmed: true,
+    };
+  }
+
+  // If the value was prefilled as 5.000 and remains 5.000, keep prefilled state until confirmed.
+  // If the operator manually enters a custom nonzero testing quantity (e.g., 2.500 or 10.000),
+  // treat that explicit operator input as confirmed.
+  const keepPrefilledState = draft.isTestingDefaultPrefilled && isDefaultFiveLitres;
+  return {
+    ...draft,
+    testingQuantity: newTestingQuantity,
+    saveStatus: 'DIRTY',
+    errorMessage: null,
+    isTestingDefaultPrefilled: keepPrefilledState,
+    testingConfirmed: keepPrefilledState ? draft.testingConfirmed : true,
+  };
+}
+
+export function confirmNozzleDraftTesting(draft: NozzleDraftRow): NozzleDraftRow {
+  return {
+    ...draft,
+    testingConfirmed: true,
+    errorMessage: null,
+  };
+}
+
+export function requiresNozzleTestingConfirmation(
+  draft: NozzleDraftRow,
+  nozzle?: DailyOperationsNozzleEntryRow
+): boolean {
+  if (nozzle?.unavailability) return false;
+  if (nozzle?.reading && draft.saveStatus === 'SAVED') return false;
+
+  let testingMilli = 0;
+  try {
+    testingMilli = parseMilliunits(draft.testingQuantity.trim() || ZERO_NOZZLE_TESTING_QUANTITY_LITRES);
+  } catch {
+    return false;
+  }
+
+  if (testingMilli <= 0) return false;
+  return Boolean(draft.isTestingDefaultPrefilled && !draft.testingConfirmed);
+}
+
+export function evaluateNozzleSaveGuard(
+  items: Array<{ nozzle: DailyOperationsNozzleEntryRow; draft: NozzleDraftRow }>
+): {
+  canProceedImmediately: boolean;
+  unconfirmedNozzles: UnconfirmedNozzleTestingItem[];
+} {
+  const unconfirmedNozzles: UnconfirmedNozzleTestingItem[] = [];
+
+  for (const { nozzle, draft } of items) {
+    if (nozzle.unavailability) continue;
+    if (!draft.openingTotalizer.trim() || !draft.closingTotalizer.trim()) continue;
+    if (requiresNozzleTestingConfirmation(draft, nozzle)) {
+      unconfirmedNozzles.push({
+        nozzleId: nozzle.nozzleId,
+        nozzleNumber: nozzle.nozzleNumber,
+        dispenserNumber: nozzle.dispenserNumber,
+        productCode: nozzle.productCode,
+        testingQuantity: draft.testingQuantity.trim() || DEFAULT_NOZZLE_TESTING_QUANTITY_LITRES,
+      });
+    }
+  }
+
+  return {
+    canProceedImmediately: unconfirmedNozzles.length === 0,
+    unconfirmedNozzles,
+  };
+}
+
+export function computeNozzlePreviewSales(
+  openingTotalizer: string,
+  closingTotalizer: string,
+  testingQuantity: string,
+  savedReading?: NozzleMeterReading | null
+): { grossSalesStr: string; netSalesStr: string } {
+  let displayGrossStr: string = savedReading
+    ? savedReading.grossSalesQuantityStr || ZERO_NOZZLE_TESTING_QUANTITY_LITRES
+    : '—';
+  let displayNetStr: string = savedReading
+    ? savedReading.netSalesQuantityStr || ZERO_NOZZLE_TESTING_QUANTITY_LITRES
+    : '—';
+
+  if (openingTotalizer && closingTotalizer) {
+    try {
+      const op = parseMilliunits(openingTotalizer);
+      const cl = parseMilliunits(closingTotalizer);
+      const tst = parseMilliunits(testingQuantity || ZERO_NOZZLE_TESTING_QUANTITY_LITRES);
+      if (cl >= op && tst <= cl - op) {
+        displayGrossStr = formatMilliunits(cl - op);
+        displayNetStr = formatMilliunits(cl - op - tst);
+      }
+    } catch {
+      // keep existing display
+    }
+  }
+
+  return { grossSalesStr: displayGrossStr, netSalesStr: displayNetStr };
 }
 
 function getLocalTodayIso(): string {
@@ -93,13 +302,14 @@ export const DailyOperationsPage: React.FC = () => {
   // Per-row local draft maps keyed by `${shiftId}:${tankId}` and `${shiftId}:${nozzleId}`
   const [tankDrafts, setTankDrafts] = useState<Record<string, TankDraftRow>>({});
   const [nozzleDrafts, setNozzleDrafts] = useState<Record<string, NozzleDraftRow>>({});
+  const [pendingTestingConfirm, setPendingTestingConfirm] =
+    useState<PendingTestingConfirmationState | null>(null);
 
   // Refs for keyboard Enter/Tab navigation
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const hydrateDraftsFromWorkspaces = useCallback((shifts: DailyOperationsShiftWorkspace[]) => {
     const nextTankDrafts: Record<string, TankDraftRow> = {};
-    const nextNozzleDrafts: Record<string, NozzleDraftRow> = {};
 
     for (const ws of shifts) {
       const sId = ws.shift.id;
@@ -120,24 +330,10 @@ export const DailyOperationsPage: React.FC = () => {
           errorMessage: null,
         };
       }
-
-      for (const n of ws.nozzles) {
-        const key = `${sId}:${n.nozzleId}`;
-        nextNozzleDrafts[key] = {
-          openingTotalizer: n.reading
-            ? n.reading.openingTotalizerStr || '0.000'
-            : n.suggestedOpeningTotalizer || '0.000',
-          closingTotalizer: n.reading ? n.reading.closingTotalizerStr || '' : '',
-          testingQuantity: n.reading ? n.reading.testingQuantityStr || '0.000' : '0.000',
-          varianceReason: n.reading?.varianceReason || '',
-          saveStatus: n.reading ? 'SAVED' : 'IDLE',
-          errorMessage: null,
-        };
-      }
     }
 
     setTankDrafts(nextTankDrafts);
-    setNozzleDrafts(nextNozzleDrafts);
+    setNozzleDrafts((prev) => buildInitialNozzleDraftsMap(shifts, prev));
   }, []);
 
   const loadBootstrap = useCallback(
@@ -473,18 +669,22 @@ export const DailyOperationsPage: React.FC = () => {
     });
   };
 
-  const handleSaveSingleNozzleRow = async (nozzleRow: DailyOperationsNozzleEntryRow) => {
+  const handleSaveSingleNozzleRow = async (
+    nozzleRow: DailyOperationsNozzleEntryRow,
+    options?: { bypassTestingConfirm?: boolean; overrideTestingQuantity?: string }
+  ) => {
     if (!activeWorkspace || isShiftReadOnly) return;
     const shiftId = activeWorkspace.shift.id;
     const key = `${shiftId}:${nozzleRow.nozzleId}`;
-    const draft = nozzleDrafts[key];
+    const draft =
+      nozzleDrafts[key] || createInitialNozzleDraftRow(nozzleRow, activeWorkspace.shift.status);
     if (!draft) return;
 
     if (!draft.openingTotalizer.trim() || !draft.closingTotalizer.trim()) {
       setNozzleDrafts((prev) => ({
         ...prev,
         [key]: {
-          ...prev[key],
+          ...draft,
           saveStatus: 'ERROR',
           errorMessage: 'Opening and Closing totalizer are required',
         },
@@ -492,9 +692,32 @@ export const DailyOperationsPage: React.FC = () => {
       return;
     }
 
+    if (!options?.bypassTestingConfirm) {
+      const guard = evaluateNozzleSaveGuard([{ nozzle: nozzleRow, draft }]);
+      if (!guard.canProceedImmediately) {
+        setPendingTestingConfirm({
+          mode: 'SINGLE',
+          shiftId,
+          singleNozzle: nozzleRow,
+          unconfirmedNozzles: guard.unconfirmedNozzles,
+        });
+        return;
+      }
+    }
+
+    const effectiveTestingQty =
+      (options?.overrideTestingQuantity ?? draft.testingQuantity.trim()) ||
+      ZERO_NOZZLE_TESTING_QUANTITY_LITRES;
+
     setNozzleDrafts((prev) => ({
       ...prev,
-      [key]: { ...prev[key], saveStatus: 'SAVING', errorMessage: null },
+      [key]: {
+        ...draft,
+        testingQuantity: effectiveTestingQty,
+        testingConfirmed: true,
+        saveStatus: 'SAVING',
+        errorMessage: null,
+      },
     }));
 
     const res = await apiFetch<NozzleMeterReading>(`/api/v1/shifts/${shiftId}/readings`, {
@@ -503,7 +726,7 @@ export const DailyOperationsPage: React.FC = () => {
         nozzleId: nozzleRow.nozzleId,
         openingTotalizer: draft.openingTotalizer.trim(),
         closingTotalizer: draft.closingTotalizer.trim(),
-        testingQuantity: draft.testingQuantity.trim() || '0.000',
+        testingQuantity: effectiveTestingQty,
         varianceReason: draft.varianceReason.trim() || null,
       }),
     });
@@ -520,45 +743,73 @@ export const DailyOperationsPage: React.FC = () => {
       return;
     }
 
-    applySavedNozzleReadingsLocally(shiftId, [res.data]);
+    const savedReading = res.data;
+    applySavedNozzleReadingsLocally(shiftId, [savedReading]);
     setNozzleDrafts((prev) => ({
       ...prev,
-      [key]: { ...prev[key], saveStatus: 'SAVED', errorMessage: null },
+      [key]: {
+        ...prev[key],
+        testingQuantity: savedReading.testingQuantityStr || effectiveTestingQty,
+        isTestingDefaultPrefilled: false,
+        testingConfirmed: true,
+        saveStatus: 'SAVED',
+        errorMessage: null,
+      },
     }));
     await revalidateSummaryInBackground();
   };
 
-  const handleSaveAllNozzles = async () => {
+  const handleSaveAllNozzles = async (options?: {
+    bypassTestingConfirm?: boolean;
+    zeroUnconfirmedTesting?: boolean;
+  }) => {
     if (!activeWorkspace || isShiftReadOnly) return;
     const shiftId = activeWorkspace.shift.id;
-    const payload: Array<{
-      nozzleId: string;
-      openingTotalizer: string;
-      closingTotalizer: string;
-      testingQuantity: string;
-      varianceReason: string | null;
+
+    const candidateItems: Array<{
+      nozzle: DailyOperationsNozzleEntryRow;
+      draft: NozzleDraftRow;
     }> = [];
 
     for (const n of activeWorkspace.nozzles) {
       if (n.unavailability) continue;
       const key = `${shiftId}:${n.nozzleId}`;
-      const draft = nozzleDrafts[key];
+      const draft =
+        nozzleDrafts[key] || createInitialNozzleDraftRow(n, activeWorkspace.shift.status);
       if (!draft) continue;
       if (draft.openingTotalizer.trim() !== '' && draft.closingTotalizer.trim() !== '') {
-        payload.push({
-          nozzleId: n.nozzleId,
-          openingTotalizer: draft.openingTotalizer.trim(),
-          closingTotalizer: draft.closingTotalizer.trim(),
-          testingQuantity: draft.testingQuantity.trim() || '0.000',
-          varianceReason: draft.varianceReason.trim() || null,
-        });
+        candidateItems.push({ nozzle: n, draft });
       }
     }
 
-    if (payload.length === 0) {
+    if (candidateItems.length === 0) {
       setPageError('Enter opening and closing totalizers for at least one nozzle before bulk saving.');
       return;
     }
+
+    const guard = evaluateNozzleSaveGuard(candidateItems);
+    if (!options?.bypassTestingConfirm && !guard.canProceedImmediately) {
+      setPendingTestingConfirm({
+        mode: 'BATCH',
+        shiftId,
+        unconfirmedNozzles: guard.unconfirmedNozzles,
+      });
+      return;
+    }
+
+    const unconfirmedIds = new Set(guard.unconfirmedNozzles.map((u) => u.nozzleId));
+    const payload = candidateItems.map(({ nozzle, draft }) => {
+      const useZero = options?.zeroUnconfirmedTesting && unconfirmedIds.has(nozzle.nozzleId);
+      return {
+        nozzleId: nozzle.nozzleId,
+        openingTotalizer: draft.openingTotalizer.trim(),
+        closingTotalizer: draft.closingTotalizer.trim(),
+        testingQuantity: useZero
+          ? ZERO_NOZZLE_TESTING_QUANTITY_LITRES
+          : draft.testingQuantity.trim() || ZERO_NOZZLE_TESTING_QUANTITY_LITRES,
+        varianceReason: draft.varianceReason.trim() || null,
+      };
+    });
 
     setSavingAllNozzles(true);
     setPageError(null);
@@ -579,7 +830,14 @@ export const DailyOperationsPage: React.FC = () => {
       for (const r of savedReadings) {
         const k = `${shiftId}:${r.nozzleId}`;
         if (next[k]) {
-          next[k] = { ...next[k], saveStatus: 'SAVED', errorMessage: null };
+          next[k] = {
+            ...next[k],
+            testingQuantity: r.testingQuantityStr || next[k].testingQuantity,
+            isTestingDefaultPrefilled: false,
+            testingConfirmed: true,
+            saveStatus: 'SAVED',
+            errorMessage: null,
+          };
         }
       }
       return next;
@@ -587,6 +845,97 @@ export const DailyOperationsPage: React.FC = () => {
 
     setActionSuccess(`Saved ${savedReadings.length} nozzle meter reading(s) in batch.`);
     await revalidateSummaryInBackground();
+  };
+
+  const handleConfirmAllNozzleTestingInShift = () => {
+    if (!activeWorkspace || isShiftReadOnly) return;
+    const shiftId = activeWorkspace.shift.id;
+    setNozzleDrafts((prev) => {
+      const next = { ...prev };
+      for (const n of activeWorkspace.nozzles) {
+        if (n.unavailability) continue;
+        const k = `${shiftId}:${n.nozzleId}`;
+        const current =
+          next[k] || createInitialNozzleDraftRow(n, activeWorkspace.shift.status);
+        if (requiresNozzleTestingConfirmation(current, n)) {
+          next[k] = confirmNozzleDraftTesting(current);
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleConfirmPendingTestingAndSave = async () => {
+    if (!pendingTestingConfirm) return;
+    const pending = pendingTestingConfirm;
+    setPendingTestingConfirm(null);
+
+    if (pending.mode === 'SINGLE' && pending.singleNozzle) {
+      const key = `${pending.shiftId}:${pending.singleNozzle.nozzleId}`;
+      setNozzleDrafts((prev) => ({
+        ...prev,
+        [key]: prev[key] ? confirmNozzleDraftTesting(prev[key]) : prev[key],
+      }));
+      await handleSaveSingleNozzleRow(pending.singleNozzle, { bypassTestingConfirm: true });
+      return;
+    }
+
+    if (pending.mode === 'BATCH') {
+      const ids = new Set(pending.unconfirmedNozzles.map((u) => u.nozzleId));
+      setNozzleDrafts((prev) => {
+        const next = { ...prev };
+        for (const nozzleId of ids) {
+          const k = `${pending.shiftId}:${nozzleId}`;
+          if (next[k]) {
+            next[k] = confirmNozzleDraftTesting(next[k]);
+          }
+        }
+        return next;
+      });
+      await handleSaveAllNozzles({ bypassTestingConfirm: true });
+    }
+  };
+
+  const handleSavePendingWithZeroTesting = async () => {
+    if (!pendingTestingConfirm) return;
+    const pending = pendingTestingConfirm;
+    setPendingTestingConfirm(null);
+
+    if (pending.mode === 'SINGLE' && pending.singleNozzle) {
+      const key = `${pending.shiftId}:${pending.singleNozzle.nozzleId}`;
+      setNozzleDrafts((prev) => ({
+        ...prev,
+        [key]: prev[key]
+          ? updateNozzleDraftTestingQuantity(prev[key], ZERO_NOZZLE_TESTING_QUANTITY_LITRES)
+          : prev[key],
+      }));
+      await handleSaveSingleNozzleRow(pending.singleNozzle, {
+        bypassTestingConfirm: true,
+        overrideTestingQuantity: ZERO_NOZZLE_TESTING_QUANTITY_LITRES,
+      });
+      return;
+    }
+
+    if (pending.mode === 'BATCH') {
+      const ids = new Set(pending.unconfirmedNozzles.map((u) => u.nozzleId));
+      setNozzleDrafts((prev) => {
+        const next = { ...prev };
+        for (const nozzleId of ids) {
+          const k = `${pending.shiftId}:${nozzleId}`;
+          if (next[k]) {
+            next[k] = updateNozzleDraftTestingQuantity(
+              next[k],
+              ZERO_NOZZLE_TESTING_QUANTITY_LITRES
+            );
+          }
+        }
+        return next;
+      });
+      await handleSaveAllNozzles({
+        bypassTestingConfirm: true,
+        zeroUnconfirmedTesting: true,
+      });
+    }
   };
 
   const handleComputeReconciliation = async () => {
@@ -1370,17 +1719,36 @@ export const DailyOperationsPage: React.FC = () => {
                   </div>
 
                   {!isShiftReadOnly && (
-                    <button
-                      type="button"
-                      onClick={handleSaveAllNozzles}
-                      disabled={savingAllNozzles}
-                      className="h-9 px-4 rounded-lg bg-[#003366] hover:bg-[#002244] text-white text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      {savingAllNozzles
-                        ? 'Saving All Meter Readings...'
-                        : 'Save All Meter Readings'}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {activeWorkspace.nozzles.some((n) => {
+                        const k = `${activeWorkspace.shift.id}:${n.nozzleId}`;
+                        const d =
+                          nozzleDrafts[k] ||
+                          createInitialNozzleDraftRow(n, activeWorkspace.shift.status);
+                        return requiresNozzleTestingConfirmation(d, n);
+                      }) && (
+                        <button
+                          type="button"
+                          data-testid="confirm-all-testing-btn"
+                          onClick={handleConfirmAllNozzleTestingInShift}
+                          className="h-9 px-3 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold flex items-center gap-1.5"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />
+                          Confirm All 5.000 L Testing
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleSaveAllNozzles()}
+                        disabled={savingAllNozzles}
+                        className="h-9 px-4 rounded-lg bg-[#003366] hover:bg-[#002244] text-white text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        {savingAllNozzles
+                          ? 'Saving All Meter Readings...'
+                          : 'Save All Meter Readings'}
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -1404,14 +1772,13 @@ export const DailyOperationsPage: React.FC = () => {
                     <tbody className="divide-y divide-slate-200 text-sm">
                       {activeWorkspace.nozzles.map((nozzle) => {
                         const key = `${activeWorkspace.shift.id}:${nozzle.nozzleId}`;
-                        const draft = nozzleDrafts[key] || {
-                          openingTotalizer: nozzle.suggestedOpeningTotalizer || '0.000',
-                          closingTotalizer: '',
-                          testingQuantity: '0.000',
-                          varianceReason: '',
-                          saveStatus: 'IDLE',
-                          errorMessage: null,
-                        };
+                        const draft =
+                          nozzleDrafts[key] ||
+                          createInitialNozzleDraftRow(nozzle, activeWorkspace.shift.status);
+                        const needsTestingConfirmation = requiresNozzleTestingConfirmation(
+                          draft,
+                          nozzle
+                        );
 
                         // Check continuity variance between suggested previous closing and current opening
                         let hasContinuityDiff = false;
@@ -1434,26 +1801,13 @@ export const DailyOperationsPage: React.FC = () => {
                         }
 
                         // Preview gross/net while typing, authoritative reading shown when saved
-                        let displayGrossStr: string = nozzle.reading
-                          ? nozzle.reading.grossSalesQuantityStr || '0.000'
-                          : '—';
-                        let displayNetStr: string = nozzle.reading
-                          ? nozzle.reading.netSalesQuantityStr || '0.000'
-                          : '—';
-
-                        if (draft.openingTotalizer && draft.closingTotalizer) {
-                          try {
-                            const op = parseMilliunits(draft.openingTotalizer);
-                            const cl = parseMilliunits(draft.closingTotalizer);
-                            const tst = parseMilliunits(draft.testingQuantity || '0.000');
-                            if (cl >= op && tst <= cl - op) {
-                              displayGrossStr = formatMilliunits(cl - op);
-                              displayNetStr = formatMilliunits(cl - op - tst);
-                            }
-                          } catch {
-                            // keep existing display
-                          }
-                        }
+                        const { grossSalesStr: displayGrossStr, netSalesStr: displayNetStr } =
+                          computeNozzlePreviewSales(
+                            draft.openingTotalizer,
+                            draft.closingTotalizer,
+                            draft.testingQuantity,
+                            nozzle.reading
+                          );
 
                         return (
                           <tr key={nozzle.nozzleId} className="hover:bg-slate-50/80 align-top">
@@ -1576,12 +1930,7 @@ export const DailyOperationsPage: React.FC = () => {
                                 onChange={(e) =>
                                   setNozzleDrafts((prev) => ({
                                     ...prev,
-                                    [key]: {
-                                      ...draft,
-                                      testingQuantity: e.target.value,
-                                      saveStatus: 'DIRTY',
-                                      errorMessage: null,
-                                    },
+                                    [key]: updateNozzleDraftTestingQuantity(draft, e.target.value),
                                   }))
                                 }
                                 onKeyDown={(e) =>
@@ -1591,6 +1940,52 @@ export const DailyOperationsPage: React.FC = () => {
                                 }
                                 className="w-24 h-8 px-2 rounded border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 caret-slate-900 font-mono text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                               />
+                              {!isShiftReadOnly && !nozzle.unavailability && (
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  {needsTestingConfirmation ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        data-testid={`confirm-nozzle-testing-${nozzle.nozzleId}`}
+                                        onClick={() =>
+                                          setNozzleDrafts((prev) => ({
+                                            ...prev,
+                                            [key]: confirmNozzleDraftTesting(draft),
+                                          }))
+                                        }
+                                        className="px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 border border-amber-300 text-[10px] font-semibold text-amber-900"
+                                        title="Confirm physical 5.000 L testing was performed"
+                                      >
+                                        Confirm 5L Test
+                                      </button>
+                                      <button
+                                        type="button"
+                                        data-testid={`zero-nozzle-testing-${nozzle.nozzleId}`}
+                                        onClick={() =>
+                                          setNozzleDrafts((prev) => ({
+                                            ...prev,
+                                            [key]: updateNozzleDraftTestingQuantity(
+                                              draft,
+                                              ZERO_NOZZLE_TESTING_QUANTITY_LITRES
+                                            ),
+                                          }))
+                                        }
+                                        className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 text-[10px] font-mono text-slate-700"
+                                        title="Set testing quantity to 0.000 L if no physical testing was performed"
+                                      >
+                                        0.000 L
+                                      </button>
+                                    </>
+                                  ) : draft.isTestingDefaultPrefilled && draft.testingConfirmed ? (
+                                    <span
+                                      data-testid={`confirmed-nozzle-testing-${nozzle.nozzleId}`}
+                                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-700"
+                                    >
+                                      <CheckCircle2 className="w-3 h-3" /> Test Confirmed
+                                    </span>
+                                  ) : null}
+                                </div>
+                              )}
                             </td>
 
                             {/* Gross Sales */}
@@ -2012,6 +2407,80 @@ export const DailyOperationsPage: React.FC = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PHYSICAL NOZZLE TESTING CONFIRMATION MODAL */}
+      {pendingTestingConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          data-testid="nozzle-testing-confirm-modal"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-amber-100 text-amber-800 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Confirm Physical Nozzle Testing ({DEFAULT_NOZZLE_TESTING_QUANTITY_LITRES} L)
+                </h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  The default testing quantity of{' '}
+                  <strong className="font-mono">{DEFAULT_NOZZLE_TESTING_QUANTITY_LITRES} L</strong>{' '}
+                  is prefilled for the nozzle(s) below. Before saving to the shift register, please
+                  confirm that physical pump testing was actually performed and returned to tank.
+                </p>
+              </div>
+            </div>
+
+            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-200 bg-slate-50">
+              {pendingTestingConfirm.unconfirmedNozzles.map((item) => (
+                <div
+                  key={item.nozzleId}
+                  className="px-3.5 py-2 flex items-center justify-between text-xs"
+                >
+                  <span className="font-semibold text-slate-800">
+                    MPD #{item.dispenserNumber} • Nozzle #{item.nozzleNumber}{' '}
+                    <span className="text-blue-800 font-bold">({item.productCode})</span>
+                  </span>
+                  <span className="font-mono font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                    Testing: {item.testingQuantity} L
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                data-testid="cancel-testing-confirm-btn"
+                onClick={() => setPendingTestingConfirm(null)}
+                className="h-9 px-3.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold"
+              >
+                Cancel / Edit Manually
+              </button>
+              <button
+                type="button"
+                data-testid="save-zero-testing-btn"
+                onClick={handleSavePendingWithZeroTesting}
+                className="h-9 px-3.5 rounded-lg border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold font-mono"
+              >
+                No Testing (Save 0.000 L)
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-testing-and-save-btn"
+                onClick={handleConfirmPendingTestingAndSave}
+                className="h-9 px-4 rounded-lg bg-[#003366] hover:bg-[#002244] text-white text-xs font-semibold flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Confirm Physical Testing &amp; Save
+              </button>
             </div>
           </div>
         </div>
