@@ -1593,7 +1593,7 @@ describe('Controlled Reset of Pre-Go-Live Daily Operations Test Data (COCO 22 â€
     expect(restoreJson.data.totalRestoredRecords).toBe(37);
     expect(restoreJson.data.foreignKeyViolationsCount).toBe(0);
 
-    // Verify all 3 shifts and all 36 records are back in place!
+    // Verify all 3 shifts and all 37 records are back in place!
     const restoredPreview = await DailyOperationsTestDataResetService.generateDryRunPreview(db, {
       outletId: COCO22_ID,
       fromBusinessDate: TARGET_FROM,
@@ -1603,4 +1603,197 @@ describe('Controlled Reset of Pre-Go-Live Daily Operations Test Data (COCO 22 â€
     expect(restoredPreview.summaryCounts.operationalShifts).toBe(3);
     expect(restoredPreview.summaryCounts.totalAffectedRecords).toBe(37);
   });
+
+  it('6. Streamlined Admin Deletion Workflow: Check Data -> Automated Backup & Single Confirmation -> "Data Reset Successfully â€” 0 Records Remaining" & "No Data to Delete"', async () => {
+    const { cookie: adminCookie } = await loginAs('admin@iocl.in');
+    const { cookie: dealerCookie } = await loginAs('dealer.parkstreet@iocl.in');
+
+    // 1. Non-admin is blocked with HTTP 403
+    const nonAdminRes = await app.fetch(
+      new Request('http://localhost/api/v1/admin/daily-ops-reset/streamlined-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: dealerCookie,
+          Origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          outletId: COCO22_ID,
+          fromBusinessDate: TARGET_FROM,
+          toBusinessDate: TARGET_TO,
+          confirmationPhrase: 'RESET COCO TEST DATA',
+          confirmIrreversibleReset: true,
+        }),
+      }),
+      env
+    );
+    expect(nonAdminRes.status).toBe(403);
+
+    // 2. Missing phrase returns HTTP 400
+    const badPhraseRes = await app.fetch(
+      new Request('http://localhost/api/v1/admin/daily-ops-reset/streamlined-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: adminCookie,
+          Origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          outletId: COCO22_ID,
+          fromBusinessDate: TARGET_FROM,
+          toBusinessDate: TARGET_TO,
+          confirmationPhrase: 'WRONG PHRASE',
+          confirmIrreversibleReset: true,
+        }),
+      }),
+      env
+    );
+    expect(badPhraseRes.status).toBe(400);
+
+    // 3. Unconfirmed irreversible returns HTTP 400
+    const unconfirmedRes = await app.fetch(
+      new Request('http://localhost/api/v1/admin/daily-ops-reset/streamlined-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: adminCookie,
+          Origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          outletId: COCO22_ID,
+          fromBusinessDate: TARGET_FROM,
+          toBusinessDate: TARGET_TO,
+          confirmationPhrase: 'RESET COCO TEST DATA',
+          confirmIrreversibleReset: false,
+        }),
+      }),
+      env
+    );
+    expect(unconfirmedRes.status).toBe(400);
+
+    // 4. Missing UAT attestation when official blockers exist returns HTTP 409
+    const noAttestRes = await app.fetch(
+      new Request('http://localhost/api/v1/admin/daily-ops-reset/streamlined-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: adminCookie,
+          Origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          outletId: COCO22_ID,
+          fromBusinessDate: TARGET_FROM,
+          toBusinessDate: TARGET_TO,
+          confirmationPhrase: 'RESET COCO TEST DATA',
+          confirmIrreversibleReset: true,
+          attestConfirmedUatTestData: false,
+        }),
+      }),
+      env
+    );
+    expect(noAttestRes.status).toBe(409);
+    const noAttestJson: any = await noAttestRes.json();
+    expect(noAttestJson.error.code).toBe('OFFICIAL_DATA_BLOCKER_UNREVIEWED');
+
+    // 5. Successful Streamlined Reset Execution
+    const deleteRes = await app.fetch(
+      new Request('http://localhost/api/v1/admin/daily-ops-reset/streamlined-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: adminCookie,
+          Origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          outletId: COCO22_ID,
+          fromBusinessDate: TARGET_FROM,
+          toBusinessDate: TARGET_TO,
+          confirmationPhrase: 'RESET COCO TEST DATA',
+          confirmIrreversibleReset: true,
+          confirmClosedShiftReset: true,
+          attestConfirmedUatTestData: true,
+          reviewNotes: 'Authorised pre-go-live UAT test data cleanup for COCO 22',
+        }),
+      }),
+      env
+    );
+    expect(deleteRes.status).toBe(200);
+    const deleteJson: any = await deleteRes.json();
+    expect(deleteJson.success).toBe(true);
+    expect(deleteJson.data.totalDeletedRecords).toBe(37);
+    expect(deleteJson.data.remainingRecords).toBe(0);
+    expect(deleteJson.data.message).toBe('Data Reset Successfully â€” 0 Records Remaining');
+    expect(deleteJson.data.backupId).toMatch(/^rst-bkp-/);
+    expect(deleteJson.data.postResetVerification.remainingShiftsInRange).toBe(0);
+    expect(deleteJson.data.postResetVerification.orphanedRecordsCount).toBe(0);
+
+    // 6. Check Data after reset shows 0 shifts and 0 records ("No Data to Delete")
+    const afterPreviewRes = await app.fetch(
+      new Request('http://localhost/api/v1/admin/daily-ops-reset/preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: adminCookie,
+          Origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          outletId: COCO22_ID,
+          fromBusinessDate: TARGET_FROM,
+          toBusinessDate: TARGET_TO,
+        }),
+      }),
+      env
+    );
+    expect(afterPreviewRes.status).toBe(200);
+    const afterPreviewJson: any = await afterPreviewRes.json();
+    expect(afterPreviewJson.data.summaryCounts.operationalShifts).toBe(0);
+    expect(afterPreviewJson.data.summaryCounts.totalAffectedRecords).toBe(0);
+
+    // 7. Calling streamlined delete again on empty range fails with HTTP 409 NO_SHIFTS_IN_SCOPE
+    const repeatRes = await app.fetch(
+      new Request('http://localhost/api/v1/admin/daily-ops-reset/streamlined-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: adminCookie,
+          Origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          outletId: COCO22_ID,
+          fromBusinessDate: TARGET_FROM,
+          toBusinessDate: TARGET_TO,
+          confirmationPhrase: 'RESET COCO TEST DATA',
+          confirmIrreversibleReset: true,
+          attestConfirmedUatTestData: true,
+          reviewNotes: 'Repeat call on empty scope',
+        }),
+      }),
+      env
+    );
+    expect(repeatRes.status).toBe(409);
+    const repeatJson: any = await repeatRes.json();
+    expect(repeatJson.error.code).toBe('NO_SHIFTS_IN_SCOPE');
+
+    // 8. Verify the panel UI file contains all required streamlined testids and messages
+    const panelSource = fs.readFileSync(
+      './src/frontend/components/pump/DailyOperationsTestDataResetPanel.tsx',
+      'utf8'
+    );
+    expect(panelSource).toContain('check-data-btn');
+    expect(panelSource).toContain('delete-test-data-btn');
+    expect(panelSource).toContain('streamlined-delete-confirm-modal');
+    expect(panelSource).toContain('confirm-delete-test-data-btn');
+    expect(panelSource).toContain('advanced-admin-tools-toggle');
+    expect(panelSource).toContain('Data Reset Successfully â€” 0 Records Remaining');
+    expect(panelSource).toContain('No Data to Delete');
+
+    // 9. Verify DailyOperationsPage.tsx control blocks invariant (must stay 11)
+    const dailyOpsSource = fs.readFileSync('./src/frontend/pages/DailyOperationsPage.tsx', 'utf8');
+    const inputBlocks = dailyOpsSource.match(/<input\b[\s\S]*?\/>/g) || [];
+    const selectBlocks = dailyOpsSource.match(/<select\b[\s\S]*?>\s*\{/g) || [];
+    const controlBlocks = [...inputBlocks, ...selectBlocks];
+    expect(controlBlocks.length).toBe(11);
+  });
 });
+
+

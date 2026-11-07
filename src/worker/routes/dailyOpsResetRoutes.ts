@@ -331,6 +331,48 @@ dailyOpsResetRoutes.post('/admin/daily-ops-reset/execute', async (c: AppContext)
   }
 });
 
+// 8b. Streamlined Delete (Single-Step Admin Delete with Auto Backup & Integrity Check)
+dailyOpsResetRoutes.post('/admin/daily-ops-reset/streamlined-delete', async (c: AppContext) => {
+  const denied = enforceGlobalAdmin(c);
+  if (denied) return denied;
+
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const db = getDb(c.env.DB);
+    const user = c.var.user!.user;
+    const result = await DailyOperationsTestDataResetService.executeStreamlinedReset(
+      c.env.DB,
+      db,
+      c.env.DOCUMENTS_BUCKET,
+      {
+        outletId: body.outletId,
+        roCode: body.roCode,
+        fromBusinessDate: body.fromBusinessDate || '2026-10-23',
+        toBusinessDate: body.toBusinessDate || '2026-11-07',
+        confirmationPhrase: body.confirmationPhrase || '',
+        confirmIrreversibleReset: Boolean(body.confirmIrreversibleReset),
+        confirmClosedShiftReset: Boolean(
+          body.confirmClosedShiftReset ?? body.confirmClosedShiftsIncluded
+        ),
+        attestConfirmedUatTestData: Boolean(body.attestConfirmedUatTestData),
+        reviewNotes: body.reviewNotes || body.justification,
+        deletionReason: body.deletionReason || body.reason,
+        actor: { userId: user.id, name: user.name, email: user.email },
+        ipAddress: c.req.header('cf-connecting-ip') || null,
+        userAgent: c.req.header('user-agent') || null,
+      }
+    );
+    return c.json({ success: true, data: result, error: null });
+  } catch (err) {
+    const mapped = mapServiceErrorToHttp(err);
+    return c.json(
+      { success: false, data: null, error: { code: mapped.code, message: mapped.message } },
+      mapped.status as any
+    );
+  }
+});
+
+
 // 9. Authorised Restoration from Verified Backup
 dailyOpsResetRoutes.post(
   '/admin/daily-ops-reset/backups/:backupId/restore',

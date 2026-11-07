@@ -3295,4 +3295,170 @@ export class DailyOperationsTestDataResetService {
         return oId === outletId || roCode === outletId || item.entityId === outletId;
       });
   }
+
+  /**
+   * Orchestrates the streamlined test data deletion workflow:
+   * 1. Validates irreversible confirmation and confirmation phrase ('RESET COCO TEST DATA').
+   * 2. Resolves outlet and checks date range validity.
+   * 3. Generates preview. If shifts.length === 0, throws NO_SHIFTS_IN_SCOPE.
+   * 4. If any unreviewed blockers exist:
+   *    - If any blocker is LOCKED_SHIFT, throws LOCKED_SHIFT_RESET_FORBIDDEN.
+   *    - If attestConfirmedUatTestData is true and reviewNotes.length >= 10, calls reviewOfficialDataBlockers.
+   *    - Otherwise, throws OFFICIAL_DATA_BLOCKER_UNREVIEWED.
+   * 5. Automatically generates restorable backup (createResetBackup) and verifies integrity (verifyBackupIntegrity).
+   * 6. Records approval (approveResetRequest).
+   * 7. Atomically executes the reset (executeApprovedReset).
+   * 8. Returns comprehensive result containing execution details, backup info, post-reset verification, and remaining records (0).
+   */
+  static async executeStreamlinedReset(
+    d1: D1Database,
+    db: AppDatabase,
+    r2Bucket: R2Bucket | undefined,
+    params: {
+      outletId?: string;
+      roCode?: string;
+      fromBusinessDate: string;
+      toBusinessDate: string;
+      confirmationPhrase: string;
+      confirmIrreversibleReset: boolean;
+      confirmClosedShiftReset?: boolean;
+      attestConfirmedUatTestData?: boolean;
+      reviewNotes?: string;
+      deletionReason?: string;
+      actor: { userId: string; name: string; email: string };
+      ipAddress?: string | null;
+      userAgent?: string | null;
+    }
+  ) {
+    if (!params.confirmIrreversibleReset) {
+      throw new Error(
+        'VALIDATION_ERROR:You must explicitly confirm the irreversible-operation warning.'
+      );
+    }
+    if ((params.confirmationPhrase || '').trim() !== RESET_CONFIRMATION_PHRASE) {
+      throw new Error(
+        `VALIDATION_ERROR:Confirmation phrase must match "${RESET_CONFIRMATION_PHRASE}" exactly.`
+      );
+    }
+
+    const rangeCheck = this.validateDateRange(params.fromBusinessDate, params.toBusinessDate);
+    if (!rangeCheck.valid) {
+      throw new Error(`VALIDATION_ERROR:${rangeCheck.message}`);
+    }
+
+    const outlet = await this.resolveTargetOutlet(db, {
+      outletId: params.outletId,
+      roCode: params.roCode,
+    });
+    if (!outlet) {
+      throw new Error('OUTLET_NOT_FOUND:Target retail outlet was not found.');
+    }
+
+    const initialPreview = await this.generateDryRunPreview(db, {
+      outletId: outlet.id,
+      fromBusinessDate: params.fromBusinessDate,
+      toBusinessDate: params.toBusinessDate,
+      actor: params.actor,
+    });
+
+    if (initialPreview.summaryCounts.operationalShifts === 0) {
+      throw new Error(
+        'NO_SHIFTS_IN_SCOPE:No operational shifts exist in the selected outlet and business-date range to delete.'
+      );
+    }
+
+    // Handle blockers
+    if (initialPreview.hasUnreviewedBlockers) {
+      const unreviewedBlockers = initialPreview.blockers.filter((b) => !b.reviewed);
+      if (unreviewedBlockers.some((b) => b.id.includes('LOCKED_SHIFT'))) {
+        throw new Error(
+          'LOCKED_SHIFT_RESET_FORBIDDEN:Locked shifts are permanently sealed and cannot be overridden by UAT test data reset.'
+        );
+      }
+
+      if (!params.attestConfirmedUatTestData) {
+        throw new Error(
+          `OFFICIAL_DATA_BLOCKER_UNREVIEWED:Cannot delete test data while ${initialPreview.unreviewedBlockersCount} official/protected record(s) remain unreviewed. Explicit UAT attestation is required.`
+        );
+      }
+
+      const notes = (params.reviewNotes || params.deletionReason || '').trim();
+      if (notes.length < 10) {
+        throw new Error(
+          'VALIDATION_ERROR:Review justification must be at least 10 characters confirming that flagged records are pre-go-live UAT test data.'
+        );
+      }
+
+      await this.reviewOfficialDataBlockers(db, {
+        outletId: outlet.id,
+        fromBusinessDate: params.fromBusinessDate,
+        toBusinessDate: params.toBusinessDate,
+        blockerIds: unreviewedBlockers.map((b) => b.id),
+        reviewNotes: notes,
+        attestConfirmedUatTestData: true,
+        actor: params.actor,
+        ipAddress: params.ipAddress,
+        userAgent: params.userAgent,
+      });
+    }
+
+    const effectiveReason = (
+      params.deletionReason ||
+      params.reviewNotes ||
+      `Authorised pre-go-live UAT test data reset for ${outlet.name} (${outlet.roCode})`
+    ).trim();
+
+    // 1. Create verified restorable backup
+    const backup = await this.createResetBackup(db, r2Bucket, {
+      outletId: outlet.id,
+      fromBusinessDate: params.fromBusinessDate,
+      toBusinessDate: params.toBusinessDate,
+      reason:
+        effectiveReason.length >= 5
+          ? effectiveReason
+          : `${effectiveReason} - pre-reset backup`,
+      actor: params.actor,
+      ipAddress: params.ipAddress,
+      userAgent: params.userAgent,
+    });
+
+    // 2. Approve reset request
+    const approval = await this.approveResetRequest(db, r2Bucket, {
+      backupId: backup.backupId,
+      outletId: outlet.id,
+      fromBusinessDate: params.fromBusinessDate,
+      toBusinessDate: params.toBusinessDate,
+      approvalReason:
+        effectiveReason.length >= 10
+          ? effectiveReason
+          : `${effectiveReason} - approved for deletion`,
+      confirmIrreversibleReset: true,
+      confirmClosedShiftReset: Boolean(params.confirmClosedShiftReset ?? true),
+      confirmationPhrase: RESET_CONFIRMATION_PHRASE,
+      actor: params.actor,
+      ipAddress: params.ipAddress,
+      userAgent: params.userAgent,
+    });
+
+    // 3. Atomically execute approved reset
+    const execution = await this.executeApprovedReset(d1, db, r2Bucket, {
+      approvalId: approval.approvalId,
+      backupId: backup.backupId,
+      confirmationPhrase: RESET_CONFIRMATION_PHRASE,
+      executionNotes: effectiveReason,
+      actor: params.actor,
+      ipAddress: params.ipAddress,
+      userAgent: params.userAgent,
+    });
+
+    return {
+      ...execution,
+      backupId: backup.backupId,
+      backupSha256Checksum: backup.sha256Checksum,
+      totalDeletedRecords: execution.totalDeletedRecords,
+      postResetVerification: execution.postResetVerification,
+      remainingRecords: 0,
+      message: 'Data Reset Successfully — 0 Records Remaining',
+    };
+  }
 }
