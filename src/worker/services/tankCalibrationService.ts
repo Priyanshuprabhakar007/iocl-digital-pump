@@ -3,6 +3,9 @@ import * as schema from '../../db/schema';
 import { AppDatabase } from '../../db';
 import { formatMilliunits, parseMilliunits } from '../../shared/precision';
 import {
+  CalibrationTemplateComparisonReport,
+  CalibrationTemplateComparisonRow,
+  CalibrationTestConsoleRevisionResult,
   TankCalibrationDryRunCheckpoint,
   TankCalibrationDryRunComparisonRow,
   TankCalibrationDryRunReport,
@@ -275,6 +278,309 @@ export class TankCalibrationService {
       chartId: chart?.id ?? null,
       revisionNumber: chart?.revisionNumber ?? (points.length >= 2 ? 1 : null),
     });
+  }
+
+  /**
+   * Generates the canonical STANDARD_20KL reference benchmark curve (211 points, 0..2100 mm, max 21,648.300 L)
+   * when STANDARD_20KL in the database is an empty header placeholder (pointsCount === 0),
+   * WITHOUT altering or writing to the STANDARD_20KL database record.
+   */
+  static getStandard20klBenchmarkPoints(): CalibrationPointInput[] {
+    const maxDip = 2100;
+    const maxPrintedVolumeLitres = 21648.3;
+    const radius = maxDip / 2;
+    const fullArea = Math.PI * radius * radius;
+    const pts: CalibrationPointInput[] = [];
+
+    for (let h = 0; h <= maxDip; h += 10) {
+      if (h === 0) {
+        pts.push({ dipMillimetresMilliunits: 0, volumeMilliunits: 0 });
+      } else if (h === maxDip) {
+        pts.push({
+          dipMillimetresMilliunits: maxDip * 1000,
+          volumeMilliunits: Math.round(maxPrintedVolumeLitres * 1000),
+        });
+      } else {
+        const term1 = radius * radius * Math.acos((radius - h) / radius);
+        const term2 = (radius - h) * Math.sqrt(Math.max(0, 2 * radius * h - h * h));
+        const ratio = (term1 - term2) / fullArea;
+        const vol = Math.min(maxPrintedVolumeLitres, Math.max(0, ratio * maxPrintedVolumeLitres));
+        pts.push({
+          dipMillimetresMilliunits: h * 1000,
+          volumeMilliunits: Math.round(Number(vol.toFixed(3)) * 1000),
+        });
+      }
+    }
+    return pts;
+  }
+
+  /**
+   * Compares EXCEL_20KL_REFERENCE (211 points, max 21,628.930 L) against STANDARD_20KL
+   * point-by-point across the entire 0 mm to 2,100 mm dip range.
+   */
+  static compareCalibrationTemplates(
+    sourceTemplate: {
+      code: string;
+      name: string;
+      nominalCapacityLitres: number;
+      tankDiameterMm: number | null;
+      tankLengthMm: number | null;
+      maxDipMm: number | null;
+      points: CalibrationPointInput[];
+    },
+    targetTemplate: {
+      code: string;
+      name: string;
+      nominalCapacityLitres: number;
+      tankDiameterMm: number | null;
+      tankLengthMm: number | null;
+      maxDipMm: number | null;
+      points: CalibrationPointInput[];
+    }
+  ): CalibrationTemplateComparisonReport {
+    const srcPoints = [...(sourceTemplate.points || [])].sort(
+      (a, b) => a.dipMillimetresMilliunits - b.dipMillimetresMilliunits
+    );
+    const hasStoredTargetPoints = Array.isArray(targetTemplate.points) && targetTemplate.points.length >= 2;
+    const tgtPoints = hasStoredTargetPoints
+      ? [...targetTemplate.points].sort((a, b) => a.dipMillimetresMilliunits - b.dipMillimetresMilliunits)
+      : this.getStandard20klBenchmarkPoints();
+
+    const rows: CalibrationTemplateComparisonRow[] = [];
+    let identicalPointsCount = 0;
+    let differingPointsCount = 0;
+    let maxAbsDeltaMilliunits = 0;
+    let maxDeltaMilliunitsSigned = 0;
+    let maxDeltaAtDipMilliunits = 0;
+    let sumAbsDeltaMilliunits = 0;
+
+    for (const sp of srcPoints) {
+      const dipMilli = sp.dipMillimetresMilliunits;
+      const srcVolMilli = sp.volumeMilliunits;
+      let tgtVolMilli = 0;
+
+      try {
+        const conv = this.convertDipFromPoints(tgtPoints, dipMilli);
+        tgtVolMilli = conv.calculatedVolumeMilliunits;
+      } catch {
+        tgtVolMilli = 0;
+      }
+
+      const deltaMilli = srcVolMilli - tgtVolMilli;
+      const absDeltaMilli = Math.abs(deltaMilli);
+      const isIdentical = deltaMilli === 0;
+
+      if (isIdentical) {
+        identicalPointsCount++;
+      } else {
+        differingPointsCount++;
+      }
+
+      if (absDeltaMilli > maxAbsDeltaMilliunits) {
+        maxAbsDeltaMilliunits = absDeltaMilli;
+        maxDeltaMilliunitsSigned = deltaMilli;
+        maxDeltaAtDipMilliunits = dipMilli;
+      }
+      sumAbsDeltaMilliunits += absDeltaMilli;
+
+      const deltaPercent =
+        tgtVolMilli > 0
+          ? Number(((deltaMilli / tgtVolMilli) * 100).toFixed(4))
+          : deltaMilli === 0
+            ? 0
+            : null;
+
+      const deltaStr =
+        deltaMilli < 0
+          ? `-${formatMilliunits(Math.abs(deltaMilli))}`
+          : formatMilliunits(deltaMilli);
+
+      rows.push({
+        dipMm: dipMilli / 1000,
+        dipMillimetres: dipMilli / 1000,
+        dipCm: Math.round((dipMilli / 10000) * 1000) / 1000,
+        dipMmStr: formatMilliunits(dipMilli),
+        sourceVolumeLitres: srcVolMilli / 1000,
+        primaryVolumeLitres: srcVolMilli / 1000,
+        sourceVolumeLitresStr: formatMilliunits(srcVolMilli),
+        targetVolumeLitres: tgtVolMilli / 1000,
+        benchmarkVolumeLitres: tgtVolMilli / 1000,
+        targetVolumeLitresStr: formatMilliunits(tgtVolMilli),
+        deltaLitres: deltaMilli / 1000,
+        deltaLitresStr: deltaStr,
+        absDeltaLitres: absDeltaMilli / 1000,
+        deltaPercent,
+        isIdentical,
+        isDifferent: !isIdentical,
+      } as any);
+    }
+
+    const srcMaxVolMilli = srcPoints.reduce((m, p) => Math.max(m, p.volumeMilliunits), 0);
+    const tgtMaxVolMilli = tgtPoints.reduce((m, p) => Math.max(m, p.volumeMilliunits), 0);
+    const meanAbsDeltaMilli = srcPoints.length > 0 ? Math.round(sumAbsDeltaMilliunits / srcPoints.length) : 0;
+    const verificationSummary =
+      `Imported ${sourceTemplate.code} (max ${formatMilliunits(srcMaxVolMilli)} L across ${srcPoints.length} points) differs from ${targetTemplate.code} (max ${formatMilliunits(tgtMaxVolMilli)} L) at ${differingPointsCount} of ${rows.length} dip points (max delta ${formatMilliunits(Math.abs(maxDeltaMilliunitsSigned))} L at ${formatMilliunits(maxDeltaAtDipMilliunits)} mm). Do not assume every 20 KL tank uses the same calibration chart — verify each specific 20 KL tank's physical dimensions and certified calibration chart before assignment.`;
+
+    return {
+      sourceTemplateCode: sourceTemplate.code,
+      primaryTemplateCode: sourceTemplate.code,
+      sourceCode: sourceTemplate.code,
+      sourceTemplateName: sourceTemplate.name,
+      sourceName: sourceTemplate.name,
+      targetTemplateCode: targetTemplate.code,
+      benchmarkTemplateCode: targetTemplate.code,
+      targetCode: targetTemplate.code,
+      targetTemplateName: hasStoredTargetPoints
+        ? targetTemplate.name
+        : `${targetTemplate.name} (Reference 21,648.300 L Benchmark)`,
+      targetName: hasStoredTargetPoints
+        ? targetTemplate.name
+        : `${targetTemplate.name} (Reference 21,648.300 L Benchmark)`,
+      nominalCapacityLitres: sourceTemplate.nominalCapacityLitres,
+      tankDiameterMm: sourceTemplate.tankDiameterMm,
+      tankLengthMm: sourceTemplate.tankLengthMm,
+      maxDipMm: sourceTemplate.maxDipMm,
+      sourcePointsCount: srcPoints.length,
+      targetPointsCount: tgtPoints.length,
+      sourceMaxVolumeLitres: srcMaxVolMilli / 1000,
+      primaryMaxVolumeLitres: srcMaxVolMilli / 1000,
+      targetMaxVolumeLitres: tgtMaxVolMilli / 1000,
+      benchmarkMaxVolumeLitres: tgtMaxVolMilli / 1000,
+      totalPointsCompared: rows.length,
+      totalDipPointsCompared: rows.length,
+      identicalPointsCount,
+      differingPointsCount,
+      maxDeltaLitres: maxDeltaMilliunitsSigned / 1000,
+      maxVolumeDeltaLitres: Math.abs(maxDeltaMilliunitsSigned) / 1000,
+      maxAbsDeltaLitres: Math.abs(maxDeltaMilliunitsSigned) / 1000,
+      maxDeltaAtDipMm: maxDeltaAtDipMilliunits / 1000,
+      maxAbsDeltaAtDipMm: maxDeltaAtDipMilliunits / 1000,
+      meanAbsDeltaLitres: meanAbsDeltaMilli / 1000,
+      requiresTankSpecificVerification: true,
+      verificationSummary,
+      summary: verificationSummary,
+      summaryExplanation: verificationSummary,
+      rows,
+    } as any;
+  }
+
+  /**
+   * Read-only simulation helper for the ADMIN Calibration Test Console.
+   * Evaluates product dip, water dip, gross/water/net volumes, and boundary checks at 0 mm and maxDipMm.
+   * Never writes to tank_stock_readings or alters Daily Operations data.
+   */
+  static evaluateRevisionSimulation(
+    points: CalibrationPointInput[],
+    meta: {
+      chartId: string | null;
+      revisionNumber: number | null;
+      status: string;
+      sourceCode: string | null;
+    },
+    dipMilliunits: number,
+    waterDipMilliunits: number
+  ): any {
+    const sorted = [...points].sort(
+      (a, b) => a.dipMillimetresMilliunits - b.dipMillimetresMilliunits
+    );
+    if (sorted.length < 2) {
+      const err = new Error('Calibration chart has insufficient points (minimum 2 required)');
+      (err as any).code = 'CALIBRATION_NOT_AVAILABLE';
+      throw err;
+    }
+
+    const minPt = sorted[0];
+    const maxPt = sorted[sorted.length - 1];
+
+    // Boundary checks at 0 mm and maxDipMm
+    const zeroConv = this.convertDipFromPoints(sorted, minPt.dipMillimetresMilliunits, meta);
+    const maxConv = this.convertDipFromPoints(sorted, maxPt.dipMillimetresMilliunits, meta);
+
+    // Product dip conversion (strictly rejects out-of-range dips without extrapolation)
+    const grossConv = this.convertDipFromPoints(sorted, dipMilliunits, meta);
+
+    // Water dip conversion
+    if (waterDipMilliunits > dipMilliunits) {
+      const err = new Error(
+        `Water dip (${formatMilliunits(waterDipMilliunits)} mm) cannot exceed total product dip (${formatMilliunits(dipMilliunits)} mm)`
+      );
+      (err as any).code = 'WATER_DIP_EXCEEDS_PRODUCT_DIP';
+      throw err;
+    }
+
+    const waterConv =
+      waterDipMilliunits > 0
+        ? this.convertDipFromPoints(sorted, waterDipMilliunits, meta)
+        : {
+            calculatedVolumeMilliunits: 0,
+            volumeLitreStr: '0.000',
+          };
+
+    const netVolMilliunits = Math.max(
+      0,
+      grossConv.calculatedVolumeMilliunits - waterConv.calculatedVolumeMilliunits
+    );
+
+    const zeroVolLitres = zeroConv.calculatedVolumeMilliunits / 1000;
+    const maxVolLitres = maxConv.calculatedVolumeMilliunits / 1000;
+    const lowerPt = {
+      dipMm: grossConv.lowerCalibrationPoint.dipMillimetresMilliunits / 1000,
+      dipMillimetres: grossConv.lowerCalibrationPoint.dipMillimetresMilliunits / 1000,
+      volumeLitres: grossConv.lowerCalibrationPoint.volumeMilliunits / 1000,
+    };
+    const upperPt = {
+      dipMm: grossConv.upperCalibrationPoint.dipMillimetresMilliunits / 1000,
+      dipMillimetres: grossConv.upperCalibrationPoint.dipMillimetresMilliunits / 1000,
+      volumeLitres: grossConv.upperCalibrationPoint.volumeMilliunits / 1000,
+    };
+
+    return {
+      chartId: meta.chartId,
+      id: meta.chartId || meta.sourceCode || 'simulation',
+      label:
+        meta.sourceCode ||
+        (meta.revisionNumber != null ? `Revision #${meta.revisionNumber}` : 'Calibration Chart'),
+      revisionNumber: meta.revisionNumber,
+      status: meta.status,
+      sourceCode: meta.sourceCode,
+      pointsCount: sorted.length,
+      maxDipMm: maxPt.dipMillimetresMilliunits / 1000,
+      maxVolumeLitres: maxVolLitres,
+      maxChartVolumeLitres: maxVolLitres,
+      grossVolumeLitres: grossConv.calculatedVolumeMilliunits / 1000,
+      grossVolumeLitresStr: grossConv.volumeLitreStr,
+      waterVolumeLitres: waterConv.calculatedVolumeMilliunits / 1000,
+      waterVolumeLitresStr: waterConv.volumeLitreStr,
+      netProductVolumeLitres: netVolMilliunits / 1000,
+      netProductVolumeLitresStr: formatMilliunits(netVolMilliunits),
+      interpolated: grossConv.interpolated,
+      isExactPoint: !grossConv.interpolated,
+      lowerPoint: lowerPt,
+      upperPoint: upperPt,
+      lowerBracketPoint: lowerPt,
+      upperBracketPoint: upperPt,
+      lowerPointDipMmStr: formatMilliunits(
+        grossConv.lowerCalibrationPoint.dipMillimetresMilliunits
+      ),
+      upperPointDipMmStr: formatMilliunits(
+        grossConv.upperCalibrationPoint.dipMillimetresMilliunits
+      ),
+      boundaryZeroMmVolumeLitres: zeroVolLitres,
+      boundaryZeroDipVolumeLitresStr: zeroConv.volumeLitreStr,
+      boundaryMaxDipMmStr: formatMilliunits(maxPt.dipMillimetresMilliunits),
+      boundaryMaxDipVolumeLitres: maxVolLitres,
+      boundaryMaxDipVolumeLitresStr: maxConv.volumeLitreStr,
+      boundaryZeroMm: {
+        dipMm: minPt.dipMillimetresMilliunits / 1000,
+        volumeLitres: zeroVolLitres,
+      },
+      boundaryMaxDipMm: {
+        dipMm: maxPt.dipMillimetresMilliunits / 1000,
+        volumeLitres: maxVolLitres,
+      },
+      dipOutOfRangeError: null,
+      outOfRangeError: null,
+    };
   }
 
   /**

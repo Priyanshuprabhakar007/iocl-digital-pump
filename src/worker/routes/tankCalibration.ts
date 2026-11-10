@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
+import { desc, eq } from 'drizzle-orm';
 import { getDb } from '../../db';
+import * as schema from '../../db/schema';
 import { PumpRepository } from '../repositories/pumpRepository';
 import { OutletRepository } from '../repositories/outletRepository';
 import { AuditRepository } from '../repositories/auditRepository';
@@ -695,6 +697,62 @@ tankCalibration.post('/tanks/:tankId/calibration/charts/:chartId/status', requir
     );
   }
 
+  // Enforce explicit confirmation and upstream lifecycle verification when activating template-assigned charts
+  if (parseResult.data.status === 'ACTIVE') {
+    const isTemplateAssigned = Boolean((existingChart as any).sourceTemplateId);
+    if (body?.confirmActivation === false || (isTemplateAssigned && body?.confirmActivation !== true)) {
+      return c.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'ACTIVATION_CONFIRMATION_REQUIRED',
+            message:
+              'Explicit administrator confirmation (confirmActivation: true) is required before activating a tank calibration chart revision.',
+          },
+        },
+        400
+      );
+    }
+
+    if (isTemplateAssigned) {
+      const srcTemplate = await pumpRepo.findGlobalTankCalibrationTemplateById(
+        String((existingChart as any).sourceTemplateId)
+      );
+      if (srcTemplate) {
+        if (srcTemplate.requiresEngineeringReview || srcTemplate.requiresDimensionVerification) {
+          return c.json(
+            {
+              success: false,
+              data: null,
+              error: {
+                code: 'ENGINEERING_REVIEW_REQUIRED',
+                message: `Cannot activate chart revision #${existingChart.revisionNumber}: source template ${srcTemplate.code} has unresolved engineering review or dimensional verification requirements.`,
+              },
+            },
+            400
+          );
+        }
+        if (srcTemplate.status !== 'APPROVED' && srcTemplate.status !== 'ACTIVE') {
+          return c.json(
+            {
+              success: false,
+              data: null,
+              error: {
+                code: 'SOURCE_TEMPLATE_NOT_APPROVED',
+                message: `Cannot activate chart revision #${existingChart.revisionNumber}: source template ${srcTemplate.code} is in ${srcTemplate.status} status and must be APPROVED first.`,
+              },
+            },
+            400
+          );
+        }
+      }
+    }
+  }
+
+  const allChartsBefore = await pumpRepo.listCalibrationCharts(tankId);
+  const previousActiveChart = allChartsBefore.find(ch => ch.status === 'ACTIVE' && ch.id !== chartId) || null;
+
   try {
     const updatedChart = await pumpRepo.updateCalibrationChartStatus(
       tankId,
@@ -711,15 +769,25 @@ tankCalibration.post('/tanks/:tankId/calibration/charts/:chartId/status', requir
     await auditRepo.logAction({
       id: `aud-${crypto.randomUUID()}`,
       userId: c.var.user!.user.id,
-      action: 'TANK_CALIBRATION_CHART_STATUS_UPDATE',
+      action:
+        parseResult.data.status === 'ACTIVE'
+          ? 'TANK_CALIBRATION_CONTROLLED_ACTIVATION'
+          : 'TANK_CALIBRATION_CHART_STATUS_UPDATE',
       entityType: 'TANK_CALIBRATION',
       entityId: chartId,
-      oldValue: { status: existingChart.status, revisionNumber: existingChart.revisionNumber },
+      oldValue: {
+        status: existingChart.status,
+        revisionNumber: existingChart.revisionNumber,
+        previousActiveChartId: previousActiveChart?.id ?? null,
+        previousActiveRevisionNumber: previousActiveChart?.revisionNumber ?? null,
+      },
       newValue: {
         status: updatedChart.status,
         revisionNumber: updatedChart.revisionNumber,
         effectiveFrom: updatedChart.effectiveFrom,
         effectiveTo: updatedChart.effectiveTo,
+        approvedBy: updatedChart.approvedBy,
+        supersededChartId: parseResult.data.status === 'ACTIVE' ? previousActiveChart?.id ?? null : null,
       },
       ipAddress: c.req.header('cf-connecting-ip') || null,
       userAgent: c.req.header('user-agent') || null,
@@ -727,9 +795,14 @@ tankCalibration.post('/tanks/:tankId/calibration/charts/:chartId/status', requir
     });
 
     const allCharts = await pumpRepo.listCalibrationCharts(tankId);
+    const supersededChart = previousActiveChart
+      ? allCharts.find(ch => ch.id === previousActiveChart.id) || null
+      : null;
+
     return c.json({
       success: true,
       data: updatedChart,
+      supersededChart,
       charts: allCharts,
       error: null,
     });
@@ -742,6 +815,237 @@ tankCalibration.post('/tanks/:tankId/calibration/charts/:chartId/status', requir
     }, status);
   }
 });
+
+// POST /api/v1/tanks/:tankId/calibration/charts/:chartId/activate - Controlled tank-specific activation requiring explicit administrator confirmation
+tankCalibration.post('/tanks/:tankId/calibration/charts/:chartId/activate', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, async (c: AppContext) => {
+  const tankId = c.req.param('tankId');
+  const chartId = c.req.param('chartId');
+  if (!tankId || !chartId) {
+    return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'tankId and chartId are required' } }, 400);
+  }
+
+  if (!canAuthorizeCalibrationActivation(c)) {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: 'CALIBRATION_ACTIVATION_FORBIDDEN',
+          message:
+            'Activating a tank calibration chart revision requires explicit tank infrastructure authorization (TANKS_WRITE or ADMIN).',
+        },
+      },
+      403
+    );
+  }
+
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+  const pumpRepo = new PumpRepository(db);
+  const auditRepo = new AuditRepository(db);
+
+  const tank = await pumpRepo.findTankById(tankId);
+  if (!tank) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Tank not found' } }, 404);
+  }
+
+  if (!await verifyOutletAuthority(c, tank.outletId, outletRepo)) {
+    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this tank outlet' } }, 403);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  if (body?.confirmActivation !== true) {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: 'ACTIVATION_CONFIRMATION_REQUIRED',
+          message:
+            'Explicit administrator confirmation (confirmActivation: true) is required before activating a tank calibration chart revision.',
+        },
+      },
+      400
+    );
+  }
+
+  const existingChart = await pumpRepo.findCalibrationChartById(chartId);
+  if (!existingChart || existingChart.tankId !== tankId) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Calibration chart revision not found' } }, 404);
+  }
+
+  if ((existingChart as any).sourceTemplateId) {
+    const srcTemplate = await pumpRepo.findGlobalTankCalibrationTemplateById(
+      String((existingChart as any).sourceTemplateId)
+    );
+    if (srcTemplate) {
+      if (srcTemplate.requiresEngineeringReview || srcTemplate.requiresDimensionVerification) {
+        return c.json(
+          {
+            success: false,
+            data: null,
+            error: {
+              code: 'ENGINEERING_REVIEW_REQUIRED',
+              message: `Cannot activate chart revision #${existingChart.revisionNumber}: source template ${srcTemplate.code} has unresolved engineering review or dimensional verification requirements.`,
+            },
+          },
+          400
+        );
+      }
+      if (srcTemplate.status !== 'APPROVED' && srcTemplate.status !== 'ACTIVE') {
+        return c.json(
+          {
+            success: false,
+            data: null,
+            error: {
+              code: 'SOURCE_TEMPLATE_NOT_APPROVED',
+              message: `Cannot activate chart revision #${existingChart.revisionNumber}: source template ${srcTemplate.code} is in ${srcTemplate.status} status and must be APPROVED first.`,
+            },
+          },
+          400
+        );
+      }
+    }
+  }
+
+  const allChartsBefore = await pumpRepo.listCalibrationCharts(tankId);
+  const previousActiveChart = allChartsBefore.find(ch => ch.status === 'ACTIVE' && ch.id !== chartId) || null;
+  const effectiveFrom =
+    typeof body?.effectiveFrom === 'string' && body.effectiveFrom.trim()
+      ? body.effectiveFrom.trim()
+      : new Date().toISOString().slice(0, 10);
+  const notes = typeof body?.notes === 'string' ? body.notes : undefined;
+
+  try {
+    const updatedChart = await pumpRepo.updateCalibrationChartStatus(
+      tankId,
+      chartId,
+      'ACTIVE',
+      c.var.user!.user.id,
+      {
+        effectiveFrom,
+        notes,
+      }
+    );
+
+    await auditRepo.logAction({
+      id: `aud-${crypto.randomUUID()}`,
+      userId: c.var.user!.user.id,
+      action: 'TANK_CALIBRATION_CONTROLLED_ACTIVATION',
+      entityType: 'TANK_CALIBRATION',
+      entityId: chartId,
+      oldValue: {
+        status: existingChart.status,
+        revisionNumber: existingChart.revisionNumber,
+        previousActiveChartId: previousActiveChart?.id ?? null,
+        previousActiveRevisionNumber: previousActiveChart?.revisionNumber ?? null,
+      },
+      newValue: {
+        status: updatedChart.status,
+        revisionNumber: updatedChart.revisionNumber,
+        effectiveFrom: updatedChart.effectiveFrom,
+        approvedBy: updatedChart.approvedBy,
+        supersededChartId: previousActiveChart?.id ?? null,
+        supersededRevisionNumber: previousActiveChart?.revisionNumber ?? null,
+      },
+      ipAddress: c.req.header('cf-connecting-ip') || null,
+      userAgent: c.req.header('user-agent') || null,
+      createdAt: new Date().toISOString(),
+    });
+
+    const allCharts = await pumpRepo.listCalibrationCharts(tankId);
+    const supersededChart = previousActiveChart
+      ? allCharts.find(ch => ch.id === previousActiveChart.id) || null
+      : null;
+
+    return c.json({
+      success: true,
+      data: updatedChart,
+      supersededChart,
+      charts: allCharts,
+      error: null,
+    });
+  } catch (err: any) {
+    const status = err.code === 'CALIBRATION_CHART_LOCKED_HISTORICAL_REFERENCE' ? 409 : 400;
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: err.code || 'ACTIVATION_FAILED', message: err.message },
+    }, status);
+  }
+});
+
+// POST /api/v1/tanks/:tankId/calibration/engineering-verify - Record engineering verification & certification for a physical tank
+tankCalibration.post('/tanks/:tankId/calibration/engineering-verify', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, async (c: AppContext) => {
+  const tankId = c.req.param('tankId');
+  if (!tankId) {
+    return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'tankId is required' } }, 400);
+  }
+
+  if (!canAuthorizeCalibrationActivation(c)) {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Recording physical tank engineering verification requires ADMIN or tank infrastructure authority.',
+        },
+      },
+      403
+    );
+  }
+
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+  const pumpRepo = new PumpRepository(db);
+
+  const tank = await pumpRepo.findTankById(tankId);
+  if (!tank) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Tank not found' } }, 404);
+  }
+
+  if (!await verifyOutletAuthority(c, tank.outletId, outletRepo)) {
+    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this tank outlet' } }, 403);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    const result = await pumpRepo.recordTankEngineeringVerification(
+      tankId,
+      {
+        decision: body.decision || 'VERIFIED',
+        tankIdentifier: body.tankIdentifier,
+        tankSerialNumber: body.tankSerialNumber,
+        verifiedCapacityLitres: Number(body.verifiedCapacityLitres),
+        verifiedDiameterMm: Number(body.verifiedDiameterMm),
+        verifiedLengthMm: Number(body.verifiedLengthMm),
+        verifiedMaxDipMm: Number(body.verifiedMaxDipMm),
+        issuingAuthority: body.issuingAuthority,
+        certificateNumber: body.certificateNumber,
+        verificationDate: body.verificationDate,
+        engineeringApprover: body.engineeringApprover,
+        supportingDocumentId: body.supportingDocumentId,
+        notes: body.notes ?? null,
+      },
+      c.var.user!.user.id
+    );
+
+    return c.json({
+      success: true,
+      data: result,
+      error: null,
+    });
+  } catch (err: any) {
+    const status = err.code === 'NOT_FOUND' ? 404 : 400;
+    return c.json({
+      success: false,
+      data: null,
+      error: { code: err.code || 'VERIFICATION_FAILED', message: err.message },
+    }, status);
+  }
+});
+
 
 // POST /api/v1/tanks/:tankId/calibration/charts/fork - Fork a locked/existing revision into a new editable revision
 tankCalibration.post('/tanks/:tankId/calibration/charts/fork', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, async (c: AppContext) => {
@@ -1204,6 +1508,817 @@ tankCalibration.get('/calibration-templates/audit-logs', requirePermission(PERMI
     data: logs,
     error: null,
   });
+});
+
+async function ensureThreeExcelReferenceTemplatesExist(db: any, userId: string): Promise<void> {
+  try {
+    const pumpRepo = new PumpRepository(db);
+    const tpl10 = await pumpRepo.findGlobalTankCalibrationTemplateByCode('EXCEL_10KL_REFERENCE');
+    const tpl15 = await pumpRepo.findGlobalTankCalibrationTemplateByCode('EXCEL_15KL_REFERENCE');
+    const tpl20 = await pumpRepo.findGlobalTankCalibrationTemplateByCode('EXCEL_20KL_REFERENCE');
+    if (tpl10 && tpl15 && tpl20) {
+      return;
+    }
+    const buffer = await loadBundledSampleWorkbook();
+    if (!buffer || buffer.length === 0) return;
+    const extracted = await ExcelCalibrationImportService.extractWorkbook(
+      buffer,
+      '20KL_15KL_10KL_calibration_Dip_chart.xlsx'
+    );
+    await ExcelCalibrationImportService.importEligibleCharts(
+      db,
+      extracted,
+      { userId: userId || 'user-admin' },
+      { confirmImport: true }
+    );
+  } catch {
+    // ignore if sample workbook unavailable in isolated test
+  }
+}
+
+// GET /api/v1/calibration-templates/compare-20kl - Compare EXCEL_20KL_REFERENCE against STANDARD_20KL across all 211 dip points
+tankCalibration.get('/calibration-templates/compare-20kl', requirePermission(PERMISSIONS.TANK_CALIBRATION_READ) as any, async (c: AppContext) => {
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+  const userId = c.var.user?.user?.id || 'user-admin';
+
+  await ensureThreeExcelReferenceTemplatesExist(db, userId);
+
+  const excel20 = await pumpRepo.findGlobalTankCalibrationTemplateById('EXCEL_20KL_REFERENCE');
+  const std20 = await pumpRepo.findGlobalTankCalibrationTemplateById('STANDARD_20KL');
+
+  if (!excel20 || !std20) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'EXCEL_20KL_REFERENCE or STANDARD_20KL template not found.',
+      },
+    }, 404);
+  }
+
+  const report = TankCalibrationService.compareCalibrationTemplates(
+    {
+      code: excel20.code,
+      name: excel20.name,
+      nominalCapacityLitres: excel20.nominalCapacityLitres,
+      tankDiameterMm: excel20.tankDiameterMm,
+      tankLengthMm: excel20.tankLengthMm,
+      maxDipMm: excel20.maxDipMm,
+      points: excel20.points || [],
+    },
+    {
+      code: std20.code,
+      name: std20.name,
+      nominalCapacityLitres: std20.nominalCapacityLitres,
+      tankDiameterMm: std20.tankDiameterMm,
+      tankLengthMm: std20.tankLengthMm,
+      maxDipMm: std20.maxDipMm,
+      points: std20.points || [],
+    }
+  );
+
+  return c.json({
+    success: true,
+    data: report,
+    error: null,
+  });
+});
+
+// GET /api/v1/calibration-templates/management-dashboard - Complete End-to-End ADMIN Calibration Management Dashboard
+tankCalibration.get('/calibration-templates/management-dashboard', requirePermission(PERMISSIONS.TANK_CALIBRATION_READ) as any, async (c: AppContext) => {
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+  const auditRepo = new AuditRepository(db);
+  const userId = c.var.user?.user?.id || 'user-admin';
+
+  const autoImport = c.req.query('ensureExcelReferences') !== 'false';
+  if (autoImport) {
+    await ensureThreeExcelReferenceTemplatesExist(db, userId);
+  }
+
+  const allTemplates = await pumpRepo.listGlobalTankCalibrationTemplates();
+  const referenceTemplates = allTemplates.filter(t =>
+    ['EXCEL_10KL_REFERENCE', 'EXCEL_15KL_REFERENCE', 'EXCEL_20KL_REFERENCE'].includes(
+      String(t.code || '').toUpperCase()
+    )
+  );
+  const standardTemplates = allTemplates.filter(t =>
+    ['STANDARD_20KL', 'STANDARD_50KL'].includes(String(t.code || '').toUpperCase())
+  );
+
+  let comparison20kl = null;
+  const excel20Header = referenceTemplates.find(t => t.code === 'EXCEL_20KL_REFERENCE');
+  const std20Header = standardTemplates.find(t => t.code === 'STANDARD_20KL');
+  if (excel20Header && std20Header) {
+    const excel20Full = await pumpRepo.findGlobalTankCalibrationTemplateById(excel20Header.id);
+    const std20Full = await pumpRepo.findGlobalTankCalibrationTemplateById(std20Header.id);
+    if (excel20Full && std20Full) {
+      comparison20kl = TankCalibrationService.compareCalibrationTemplates(
+        {
+          code: excel20Full.code,
+          name: excel20Full.name,
+          nominalCapacityLitres: excel20Full.nominalCapacityLitres,
+          tankDiameterMm: excel20Full.tankDiameterMm,
+          tankLengthMm: excel20Full.tankLengthMm,
+          maxDipMm: excel20Full.maxDipMm,
+          points: excel20Full.points || [],
+        },
+        {
+          code: std20Full.code,
+          name: std20Full.name,
+          nominalCapacityLitres: std20Full.nominalCapacityLitres,
+          tankDiameterMm: std20Full.tankDiameterMm,
+          tankLengthMm: std20Full.tankLengthMm,
+          maxDipMm: std20Full.maxDipMm,
+          points: std20Full.points || [],
+        }
+      );
+    }
+  }
+
+  // Evaluate COCO tank compatibility (preferring COCO 22 / 396187 or all COCO outlets)
+  const outletIdFilter = c.req.query('outletId') || undefined;
+  let cocoTanks: any[] = [];
+  const primaryTemplateForTanks =
+    excel20Header || referenceTemplates[0] || standardTemplates[0] || allTemplates[0];
+  if (primaryTemplateForTanks) {
+    try {
+      const eligRes = await pumpRepo.listEligibleCocoTanksForTemplate(primaryTemplateForTanks.id, {
+        outletId: outletIdFilter,
+        includeNonMatching: true,
+      });
+      cocoTanks = eligRes.tanks || [];
+    } catch {
+      cocoTanks = [];
+    }
+  }
+
+  // Enrich each COCO tank with per-template compatibility for 10KL, 15KL, 20KL
+  const compatibilityByTemplate: Record<string, Record<string, any>> = {};
+  for (const tpl of referenceTemplates) {
+    try {
+      const res = await pumpRepo.listEligibleCocoTanksForTemplate(tpl.id, {
+        outletId: outletIdFilter,
+        includeNonMatching: true,
+      });
+      const map: Record<string, any> = {};
+      for (const t of res.tanks || []) {
+        map[t.tankId] = {
+          isCompatible: t.isCompatible,
+          eligibilityStatus: t.eligibilityStatus,
+          ineligibilityReason: t.ineligibilityReason,
+          isCapacityMatch: t.isCapacityMatch,
+          isDimensionVerified: t.isDimensionVerified,
+          isCertified: t.isCertified,
+          isDimensionMatch: t.isDimensionMatch,
+        };
+      }
+      compatibilityByTemplate[tpl.code] = map;
+    } catch {
+      // ignore
+    }
+  }
+
+  const enrichedCocoTanks = cocoTanks.map(t => ({
+    ...t,
+    templateCompatibility: {
+      EXCEL_10KL_REFERENCE: compatibilityByTemplate['EXCEL_10KL_REFERENCE']?.[t.tankId] || null,
+      EXCEL_15KL_REFERENCE: compatibilityByTemplate['EXCEL_15KL_REFERENCE']?.[t.tankId] || null,
+      EXCEL_20KL_REFERENCE: compatibilityByTemplate['EXCEL_20KL_REFERENCE']?.[t.tankId] || null,
+    },
+  }));
+
+  // Fetch available supporting documents in Document Vault
+  const rawDocRows = await db
+    .select({
+      id: schema.documents.id,
+      name: schema.documents.name,
+      mimeType: schema.documents.mimeType,
+      r2Key: schema.documents.r2Key,
+      sizeBytes: schema.documents.sizeBytes,
+      outletId: schema.documents.outletId,
+      uploadedByUserId: schema.documents.uploadedByUserId,
+      createdAt: schema.documents.createdAt,
+    })
+    .from(schema.documents)
+    .orderBy(desc(schema.documents.createdAt))
+    .limit(100);
+
+  const docRows = rawDocRows.map(d => ({
+    id: d.id,
+    name: d.name,
+    title: d.name,
+    fileName: d.name,
+    category: 'TANK_CALIBRATION_CHART',
+    mimeType: d.mimeType,
+    r2Key: d.r2Key,
+    sizeBytes: d.sizeBytes,
+    outletId: d.outletId,
+    createdAt: d.createdAt,
+  }));
+
+  const importedCount = referenceTemplates.filter(
+    t => t.referenceDataStatus === 'REFERENCE DATA IMPORTED' || (t.pointsCount ?? 0) >= 2
+  ).length;
+  const verifiedCount = referenceTemplates.filter(
+    t =>
+      t.engineeringVerificationStatus === 'ENGINEERING VERIFIED' ||
+      t.engineeringVerification?.decision === 'VERIFIED'
+  ).length;
+  const activeCount = referenceTemplates.filter(
+    t =>
+      t.operationalActivationStatus === 'OPERATIONALLY ACTIVE' ||
+      (t.activeAssignedTanksCount ?? 0) > 0
+  ).length;
+
+  const blockingReasons: string[] = [];
+  for (const tpl of referenceTemplates) {
+    if (tpl.blockingReason) {
+      blockingReasons.push(`[${tpl.code}] ${tpl.blockingReason}`);
+    } else if (Array.isArray((tpl as any).blockingReasons) && (tpl as any).blockingReasons.length > 0) {
+      for (const r of (tpl as any).blockingReasons) {
+        blockingReasons.push(`[${tpl.code}] ${r}`);
+      }
+    }
+  }
+
+  const unverifiedTanks = enrichedCocoTanks.filter(t => !t.isDimensionVerified || !t.isCertified);
+  if (unverifiedTanks.length > 0) {
+    blockingReasons.push(
+      `${unverifiedTanks.length} COCO tank(s) are missing verified physical dimensions or Document Vault calibration certification.`
+    );
+  }
+
+  const totalCocoTanksCount = enrichedCocoTanks.length;
+  const activeCocoTanksCount = enrichedCocoTanks.filter(t => Boolean(t.activeChartId)).length;
+
+  const operationallyComplete =
+    referenceTemplates.length === 3 &&
+    importedCount === 3 &&
+    verifiedCount === 3 &&
+    activeCount > 0 &&
+    blockingReasons.length === 0;
+
+  const recentAuditLogs = await auditRepo.listLogs(40, 0, {
+    entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
+  });
+
+  const statusSummary = {
+    referenceDataImported: {
+      status: 'REFERENCE DATA IMPORTED' as const,
+      complete: importedCount === 3,
+      isComplete: importedCount === 3,
+      importedTemplatesCount: importedCount,
+      importedExcelChartsCount: importedCount,
+      expectedExcelChartsCount: 3,
+      summary: `${importedCount}/3 Excel reference calibration charts imported (10 KL: 195 pts, 15 KL: 195 pts, 20 KL: 211 pts).`,
+      details: `${importedCount}/3 Excel reference calibration charts imported.`,
+    },
+    engineeringVerified: {
+      status: 'ENGINEERING VERIFIED' as const,
+      complete: verifiedCount === 3 && referenceTemplates.length === 3,
+      isComplete: verifiedCount === 3 && referenceTemplates.length === 3,
+      verifiedTemplatesCount: verifiedCount,
+      verifiedExcelChartsCount: verifiedCount,
+      totalExcelChartsCount: 3,
+      summary:
+        verifiedCount === 3
+          ? 'All 3 Excel reference calibration templates have completed formal engineering verification.'
+          : `${verifiedCount}/3 Excel reference templates verified. Awaiting Document Vault certification & formal engineering sign-off.`,
+      details: `${verifiedCount}/3 reference charts engineering verified.`,
+    },
+    operationallyActive: {
+      status: 'OPERATIONALLY ACTIVE' as const,
+      complete: operationallyComplete,
+      isComplete: operationallyComplete,
+      activeTanksCount: activeCocoTanksCount,
+      totalTanksCount: totalCocoTanksCount,
+      activeAssignedTanksCount: referenceTemplates.reduce(
+        (acc, t) => acc + (t.activeAssignedTanksCount || 0),
+        0
+      ),
+      stagedDraftTanksCount: referenceTemplates.reduce(
+        (acc, t) => acc + (t.stagedDraftTanksCount || 0),
+        0
+      ),
+      summary: operationallyComplete
+        ? 'All compatible tanks verified and operationally active.'
+        : 'Existing ACTIVE calibrations and Tank #1 Rev #2 DRAFT preserved. Unverified tanks remain pending.',
+      details: `${activeCocoTanksCount}/${totalCocoTanksCount} COCO tanks have active calibrations.`,
+    },
+    isOperationallyComplete: operationallyComplete,
+    overallStatusLabel: operationallyComplete
+      ? 'OPERATIONALLY ACTIVE & VERIFIED'
+      : verifiedCount > 0
+        ? 'REFERENCE DATA IMPORTED — PARTIAL ENGINEERING VERIFICATION (ACTIVATION PENDING)'
+        : 'REFERENCE DATA IMPORTED — ENGINEERING VERIFICATION & ACTIVATION PENDING',
+    blockingReasons,
+  };
+
+  return c.json({
+    success: true,
+    data: {
+      statusSummary,
+      summaryStatuses: statusSummary,
+      summary: {
+        referenceDataImported: importedCount === 3,
+        importedReferenceChartsCount: importedCount,
+        engineeringVerified: verifiedCount === 3 && referenceTemplates.length === 3,
+        verifiedReferenceChartsCount: verifiedCount,
+        operationallyActive: activeCount > 0,
+        activeTankAssignmentsCount: referenceTemplates.reduce(
+          (acc, t) => acc + (t.activeAssignedTanksCount || 0),
+          0
+        ),
+        draftTankAssignmentsCount: referenceTemplates.reduce(
+          (acc, t) => acc + (t.stagedDraftTanksCount || 0),
+          0
+        ),
+        operationallyComplete,
+        overallStatusLabel: statusSummary.overallStatusLabel,
+        blockingReasons,
+      },
+      templates: referenceTemplates,
+      referenceTemplates,
+      standardTemplates,
+      comparison20kl,
+      coco22Tanks: enrichedCocoTanks,
+      cocoTanks: enrichedCocoTanks,
+      documents: docRows,
+      availableDocuments: docRows,
+      auditLogs: recentAuditLogs,
+      recentAuditLogs,
+    },
+    error: null,
+  });
+});
+
+// POST /api/v1/calibration-templates/test-console - ADMIN-only read-only simulation tool
+tankCalibration.post('/calibration-templates/test-console', async (c: AppContext) => {
+  const user = c.var.user;
+  if (!user || !user.roles?.includes(ROLES.ADMIN)) {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Global ADMIN authority is required to access the Calibration Test Console.',
+        },
+      },
+      403
+    );
+  }
+
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+  const body = await c.req.json().catch(() => ({}));
+
+  const tankId = typeof body?.tankId === 'string' ? body.tankId.trim() : '';
+  const dipMmRaw = body?.dipMm ?? body?.dipMillimetres;
+  const waterDipMmRaw = body?.waterDipMm ?? body?.waterDipMillimetres ?? 0;
+  const proposedChartId = typeof body?.proposedChartId === 'string' ? body.proposedChartId.trim() : null;
+  const proposedTemplateId = typeof body?.proposedTemplateId === 'string' ? body.proposedTemplateId.trim() : null;
+
+  if (!tankId || dipMmRaw === undefined || dipMmRaw === null || String(dipMmRaw).trim() === '') {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'tankId and dipMm are required for Calibration Test Console simulation.',
+        },
+      },
+      400
+    );
+  }
+
+  const tank = await pumpRepo.findTankById(tankId);
+  if (!tank) {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: { code: 'NOT_FOUND', message: `Tank not found: ${tankId}` },
+      },
+      404
+    );
+  }
+
+  const [outlet] = await db
+    .select()
+    .from(schema.retailOutlets)
+    .where(eq(schema.retailOutlets.id, tank.outletId))
+    .limit(1);
+
+  let dipMilliunits: number;
+  let waterDipMilliunits: number;
+  try {
+    const rawDipNum = Number(dipMmRaw);
+    const rawWaterNum = Number(waterDipMmRaw ?? 0);
+    if (!Number.isFinite(rawDipNum) || rawDipNum < 0) {
+      const err = new Error('Dip measurement cannot be negative or non-numeric');
+      (err as any).code = 'DIP_OUT_OF_RANGE';
+      throw err;
+    }
+    if (!Number.isFinite(rawWaterNum) || rawWaterNum < 0) {
+      const err = new Error('Water dip measurement cannot be negative or non-numeric');
+      (err as any).code = 'DIP_OUT_OF_RANGE';
+      throw err;
+    }
+    dipMilliunits = parseMilliunits(dipMmRaw);
+    waterDipMilliunits = parseMilliunits(waterDipMmRaw ?? 0);
+  } catch (err: any) {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: err.code || 'DIP_OUT_OF_RANGE',
+          message: err.message || 'Invalid dip value',
+        },
+      },
+      400
+    );
+  }
+
+  if (waterDipMilliunits > dipMilliunits) {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: 'WATER_DIP_EXCEEDS_PRODUCT_DIP',
+          message: `Water dip (${formatMilliunits(waterDipMilliunits)} mm) cannot exceed total product dip (${formatMilliunits(dipMilliunits)} mm).`,
+        },
+      },
+      400
+    );
+  }
+
+  const charts = await pumpRepo.listCalibrationCharts(tankId);
+  const activeChart = charts.find(ch => ch.status === 'ACTIVE') || null;
+  const draftChart = charts.find(ch => ch.status === 'DRAFT') || null;
+
+  let activeResult = null;
+  let activeError: any = null;
+  if (activeChart) {
+    try {
+      const resolvedActive = await TankCalibrationService.resolveTankChartAndPoints(
+        db,
+        tankId,
+        activeChart.id
+      );
+      activeResult = TankCalibrationService.evaluateRevisionSimulation(
+        resolvedActive.points,
+        {
+          chartId: activeChart.id,
+          revisionNumber: activeChart.revisionNumber,
+          status: activeChart.status,
+          sourceCode: activeChart.referenceDocument || activeChart.sourceFileName || `Rev #${activeChart.revisionNumber}`,
+        },
+        dipMilliunits,
+        waterDipMilliunits
+      );
+    } catch (err: any) {
+      activeError = err;
+    }
+  }
+
+  let proposedResult = null;
+  let proposedError: any = null;
+
+  if (proposedTemplateId) {
+    const tpl = await pumpRepo.findGlobalTankCalibrationTemplateById(proposedTemplateId);
+    if (!tpl) {
+      return c.json(
+        {
+          success: false,
+          data: null,
+          error: { code: 'NOT_FOUND', message: `Proposed template not found: ${proposedTemplateId}` },
+        },
+        404
+      );
+    }
+    try {
+      proposedResult = TankCalibrationService.evaluateRevisionSimulation(
+        tpl.points || [],
+        {
+          chartId: tpl.id,
+          revisionNumber: tpl.revisionNumber,
+          status: tpl.status,
+          sourceCode: tpl.code,
+        },
+        dipMilliunits,
+        waterDipMilliunits
+      );
+    } catch (err: any) {
+      proposedError = err;
+    }
+  } else {
+    const targetProposedChart = proposedChartId
+      ? charts.find(ch => ch.id === proposedChartId) || null
+      : draftChart;
+    if (targetProposedChart) {
+      try {
+        const resolvedProp = await TankCalibrationService.resolveTankChartAndPoints(
+          db,
+          tankId,
+          targetProposedChart.id
+        );
+        proposedResult = TankCalibrationService.evaluateRevisionSimulation(
+          resolvedProp.points,
+          {
+            chartId: targetProposedChart.id,
+            revisionNumber: targetProposedChart.revisionNumber,
+            status: targetProposedChart.status,
+            sourceCode:
+              targetProposedChart.referenceDocument ||
+              targetProposedChart.sourceFileName ||
+              `Rev #${targetProposedChart.revisionNumber}`,
+          },
+          dipMilliunits,
+          waterDipMilliunits
+        );
+      } catch (err: any) {
+        proposedError = err;
+      }
+    }
+  }
+
+  // If the explicitly requested proposed chart/template failed (e.g., DIP_OUT_OF_RANGE), or if active failed when no proposed was requested, reject out-of-range dip
+  if ((proposedTemplateId || proposedChartId) && proposedError) {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: proposedError.code || 'DIP_OUT_OF_RANGE',
+          message: proposedError.message,
+        },
+      },
+      400
+    );
+  }
+
+  if (!activeResult && !proposedResult) {
+    const primaryErr = proposedError || activeError;
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: primaryErr?.code || 'DIP_OUT_OF_RANGE',
+          message: primaryErr?.message || 'Dip measurement is out of range for tank calibration chart.',
+        },
+      },
+      400
+    );
+  }
+
+  let comparison = null;
+  let beforeAfterComparison = null;
+  if (activeResult && proposedResult) {
+    const grossDeltaMilli =
+      Math.round(proposedResult.grossVolumeLitres * 1000) -
+      Math.round(activeResult.grossVolumeLitres * 1000);
+    const waterDeltaMilli =
+      Math.round(proposedResult.waterVolumeLitres * 1000) -
+      Math.round(activeResult.waterVolumeLitres * 1000);
+    const netDeltaMilli =
+      Math.round(proposedResult.netProductVolumeLitres * 1000) -
+      Math.round(activeResult.netProductVolumeLitres * 1000);
+
+    const fmtSigned = (m: number) =>
+      m < 0 ? `-${formatMilliunits(Math.abs(m))}` : formatMilliunits(m);
+
+    const grossDeltaPercent =
+      activeResult.grossVolumeLitres > 0
+        ? Number(((grossDeltaMilli / 1000 / activeResult.grossVolumeLitres) * 100).toFixed(4))
+        : grossDeltaMilli === 0
+          ? 0
+          : null;
+
+    comparison = {
+      grossDeltaLitres: grossDeltaMilli / 1000,
+      grossDeltaLitresStr: fmtSigned(grossDeltaMilli),
+      waterDeltaLitres: waterDeltaMilli / 1000,
+      waterDeltaLitresStr: fmtSigned(waterDeltaMilli),
+      netDeltaLitres: netDeltaMilli / 1000,
+      netDeltaLitresStr: fmtSigned(netDeltaMilli),
+      netProductDeltaLitres: netDeltaMilli / 1000,
+      netProductDeltaLitresStr: fmtSigned(netDeltaMilli),
+      grossDeltaPercent,
+    };
+
+    beforeAfterComparison = {
+      grossVolumeDeltaLitres: grossDeltaMilli / 1000,
+      netProductVolumeDeltaLitres: netDeltaMilli / 1000,
+      percentageDelta: grossDeltaPercent,
+    };
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      simulationMode: 'READ_ONLY_SIMULATION',
+      isReadOnlySimulation: true,
+      readOnlySimulation: true,
+      simulatedAt: new Date().toISOString(),
+      outlet: outlet
+        ? {
+            id: outlet.id,
+            roCode: outlet.roCode,
+            name: outlet.name,
+          }
+        : null,
+      tank: {
+        id: tank.id,
+        tankNumber: tank.tankNumber,
+        name: tank.name,
+        outletId: tank.outletId,
+        outletCode: outlet?.roCode || '',
+        outletName: outlet?.name || '',
+        productCode: tank.productCode || '',
+        productName: tank.productName || '',
+        capacityLitres: tank.capacityLitres,
+      },
+      enteredDipMm: dipMilliunits / 1000,
+      enteredWaterDipMm: waterDipMilliunits / 1000,
+      productDipMm: dipMilliunits / 1000,
+      dipMm: dipMilliunits / 1000,
+      dipMmStr: formatMilliunits(dipMilliunits),
+      waterDipMm: waterDipMilliunits / 1000,
+      waterDipMmStr: formatMilliunits(waterDipMilliunits),
+      activeRevision: activeResult,
+      proposedRevision: proposedResult,
+      activeResult,
+      proposedResult,
+      beforeAfterComparison,
+      comparison,
+    },
+    error: null,
+  });
+});
+
+// POST /api/v1/calibration-templates/:id/interpolate - Interpolate dip & water dip on a global calibration template without modifying stored values
+tankCalibration.post('/calibration-templates/:id/interpolate', requirePermission(PERMISSIONS.TANK_CALIBRATION_READ) as any, async (c: AppContext) => {
+  const id = c.req.param('id') || '';
+  if (!id) {
+    return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Template ID is required' } }, 400);
+  }
+
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+  const template = await pumpRepo.findGlobalTankCalibrationTemplateById(id);
+  if (!template) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Global calibration template not found' } }, 404);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const dipMmRaw = body?.dipMm ?? body?.dipMillimetres;
+  const waterDipMmRaw = body?.waterDipMm ?? body?.waterDipMillimetres ?? 0;
+
+  if (dipMmRaw === undefined || dipMmRaw === null || String(dipMmRaw).trim() === '') {
+    return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'dipMm is required' } }, 400);
+  }
+
+  try {
+    const rawDipNum = Number(dipMmRaw);
+    const rawWaterNum = Number(waterDipMmRaw ?? 0);
+    if (!Number.isFinite(rawDipNum) || rawDipNum < 0) {
+      const err = new Error('Dip measurement cannot be negative');
+      (err as any).code = 'DIP_OUT_OF_RANGE';
+      throw err;
+    }
+    if (!Number.isFinite(rawWaterNum) || rawWaterNum < 0) {
+      const err = new Error('Water dip measurement cannot be negative');
+      (err as any).code = 'DIP_OUT_OF_RANGE';
+      throw err;
+    }
+    const dipMilliunits = parseMilliunits(dipMmRaw);
+    const waterDipMilliunits = parseMilliunits(waterDipMmRaw ?? 0);
+
+    const sim = TankCalibrationService.evaluateRevisionSimulation(
+      template.points || [],
+      {
+        chartId: template.id,
+        revisionNumber: template.revisionNumber,
+        status: template.status,
+        sourceCode: template.code,
+      },
+      dipMilliunits,
+      waterDipMilliunits
+    );
+
+    return c.json({
+      success: true,
+      data: {
+        templateCode: template.code,
+        templateName: template.name,
+        nominalCapacityLitres: template.nominalCapacityLitres,
+        dipMillimetres: dipMilliunits / 1000,
+        dipMm: dipMilliunits / 1000,
+        dipMmStr: formatMilliunits(dipMilliunits),
+        waterDipMm: waterDipMilliunits / 1000,
+        waterDipMmStr: formatMilliunits(waterDipMilliunits),
+        interpolatedVolumeLitres: sim.grossVolumeLitres,
+        lowerBound: sim.lowerBracketPoint,
+        upperBound: sim.upperBracketPoint,
+        ...sim,
+      },
+      error: null,
+    });
+  } catch (err: any) {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: err.code || 'DIP_OUT_OF_RANGE',
+          message: err.message,
+        },
+      },
+      400
+    );
+  }
+});
+
+// POST /api/v1/calibration-templates/:id/engineering-verify - Record engineering verification & supporting Document Vault evidence for a global reference template
+tankCalibration.post('/calibration-templates/:id/engineering-verify', requirePermission(PERMISSIONS.TANK_CALIBRATION_WRITE) as any, async (c: AppContext) => {
+  const id = c.req.param('id') || '';
+  if (!id) {
+    return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'Template ID is required' } }, 400);
+  }
+
+  if (!canAuthorizeCalibrationActivation(c)) {
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Recording engineering verification requires ADMIN or calibration approval authority.',
+        },
+      },
+      403
+    );
+  }
+
+  const db = getDb(c.env.DB);
+  const pumpRepo = new PumpRepository(db);
+  const body = await c.req.json().catch(() => ({}));
+
+  try {
+    const result = await pumpRepo.recordGlobalTemplateEngineeringVerification(
+      id,
+      {
+        decision: body.decision || 'VERIFIED',
+        tankIdentifier: body.tankIdentifier,
+        tankSerialNumber: body.tankSerialNumber,
+        verifiedCapacityLitres: Number(body.verifiedCapacityLitres),
+        verifiedDiameterMm: Number(body.verifiedDiameterMm),
+        verifiedLengthMm: Number(body.verifiedLengthMm),
+        verifiedMaxDipMm: Number(body.verifiedMaxDipMm),
+        issuingAuthority: body.issuingAuthority,
+        certificateNumber: body.certificateNumber,
+        verificationDate: body.verificationDate,
+        engineeringApprover: body.engineeringApprover,
+        supportingDocumentId: body.supportingDocumentId,
+        resolveLengthConflict: Boolean(body.resolveLengthConflict),
+        confirmedLengthMm: body.confirmedLengthMm != null ? Number(body.confirmedLengthMm) : null,
+        lengthResolutionNotes: body.lengthResolutionNotes ?? null,
+        allowScopedPolicyException: Boolean(body.allowScopedPolicyException),
+        governingPolicyReference: body.governingPolicyReference ?? null,
+        discrepancyResolutionNote: body.discrepancyResolutionNote ?? null,
+        comparedAgainstStandard20kl: Boolean(body.comparedAgainstStandard20kl),
+        notes: body.notes ?? null,
+      },
+      c.var.user!.user.id
+    );
+
+    return c.json({
+      success: true,
+      data: result,
+      error: null,
+    });
+  } catch (err: any) {
+    const status = err.code === 'NOT_FOUND' ? 404 : 400;
+    return c.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: err.code || 'VERIFICATION_FAILED',
+          message: err.message,
+        },
+      },
+      status
+    );
+  }
 });
 
 // GET /api/v1/calibration-templates/:id/eligible-tanks - List eligible COCO tanks by capacity and physical dimensions

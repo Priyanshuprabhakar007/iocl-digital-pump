@@ -37,6 +37,7 @@ import {
   ShiftStockReconciliation,
   ShiftStockSummary,
   VarianceStatus,
+  CalibrationEngineeringVerificationRecord,
 } from '../../shared/types';
 import { parseMilliunits, formatMilliunits, MILLIUNIT_SCALE } from '../../shared/precision';
 import { mapDatabaseUniqueError } from '../services/duplicateErrorMapper';
@@ -4582,24 +4583,261 @@ export class PumpRepository {
   // 21. GLOBAL TANK CALIBRATION TEMPLATES
   // ==========================================
 
-  async listGlobalTankCalibrationTemplates(options?: { status?: string; nominalCapacityLitres?: number }): Promise<any[]> {
-    let query = this.db.select().from(schema.globalTankCalibrationTemplates);
+  async getEngineeringVerificationsMap(
+    targetType: 'GLOBAL_TEMPLATE' | 'TANK'
+  ): Promise<Map<string, any>> {
+    const entityType =
+      targetType === 'GLOBAL_TEMPLATE'
+        ? 'CALIBRATION_ENGINEERING_VERIFICATION'
+        : 'TANK_CALIBRATION_ENGINEERING_VERIFICATION';
+
+    const logs = await this.db
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.entityType, entityType))
+      .orderBy(desc(schema.auditLogs.createdAt));
+
+    const docs = await this.db.select().from(schema.documents);
+    const validDocMap = new Map<string, typeof schema.documents.$inferSelect>();
+    for (const d of docs) {
+      const isSpreadsheet = /\.(xlsx|xls)$/i.test(d.name || '');
+      if (!isSpreadsheet) {
+        validDocMap.set(d.id, d);
+      }
+    }
+
+    const result = new Map<string, any>();
+    for (const log of logs) {
+      if (result.has(log.entityId)) continue;
+      if (!log.newValueJson) continue;
+      try {
+        const parsed = JSON.parse(log.newValueJson);
+        if (parsed && parsed.supportingDocumentId && validDocMap.has(parsed.supportingDocumentId)) {
+          const doc = validDocMap.get(parsed.supportingDocumentId)!;
+          result.set(log.entityId, {
+            ...parsed,
+            supportingDocumentName: doc.name,
+            supportingDocumentMimeType: doc.mimeType,
+          });
+        }
+      } catch {
+        // ignore malformed json
+      }
+    }
+    return result;
+  }
+
+  private enrichTemplateWithEngineeringAndLifecycle(
+    row: typeof schema.globalTankCalibrationTemplates.$inferSelect,
+    ptsCount: number,
+    maxVolMilli: number | null,
+    engVerification: any | null,
+    assignmentStats?: { stagedDraftCount: number; activeCount: number; compatibleTanksCount?: number }
+  ): any {
+    const nomMilli = Math.round(row.nominalCapacityLitres * 1000);
+    const maxCeilingMilli = Math.round(nomMilli * 1.1);
+    const isOverCeiling = maxVolMilli != null ? maxVolMilli > maxCeilingMilli : false;
+    const isExcel10kl = row.code === 'EXCEL_10KL_REFERENCE';
+    const isExcel15kl =
+      row.code === 'EXCEL_15KL_REFERENCE' || Boolean(row.notes && row.notes.includes('3,750 mm'));
+    const isExcel20kl = row.code === 'EXCEL_20KL_REFERENCE';
+    const isExcelTemplate = isExcel10kl || isExcel15kl || isExcel20kl;
+
+    const is10klPolicyResolved = Boolean(
+      engVerification &&
+        engVerification.decision === 'VERIFIED' &&
+        engVerification.allowScopedPolicyException === true &&
+        engVerification.supportingDocumentId &&
+        engVerification.governingPolicyReference &&
+        String(engVerification.governingPolicyReference).trim().length >= 3
+    );
+
+    const is15klLengthResolved = Boolean(
+      engVerification &&
+        engVerification.decision === 'VERIFIED' &&
+        engVerification.resolveLengthConflict === true &&
+        Number(engVerification.confirmedLengthMm) === 5500 &&
+        engVerification.supportingDocumentId
+    );
+
+    const is20klVerified = Boolean(
+      engVerification &&
+        engVerification.decision === 'VERIFIED' &&
+        engVerification.supportingDocumentId &&
+        engVerification.comparedAgainstStandard20kl !== false
+    );
+
+    const isGenericVerified = Boolean(
+      engVerification &&
+        engVerification.decision === 'VERIFIED' &&
+        engVerification.supportingDocumentId
+    );
+
+    const requiresEngineeringReview = isOverCeiling && !is10klPolicyResolved;
+    const requiresDimensionVerification = isExcel15kl && !is15klLengthResolved;
+
+    const isEngineeringVerified = isExcel10kl
+      ? is10klPolicyResolved
+      : isExcel15kl
+        ? is15klLengthResolved
+        : isExcel20kl
+          ? is20klVerified
+          : isGenericVerified || row.status === 'APPROVED' || row.status === 'ACTIVE';
+
+    let reviewStatusLabel: string = row.status;
+    if (row.status === 'DRAFT') {
+      if (requiresEngineeringReview) {
+        reviewStatusLabel = 'DRAFT / ENGINEERING REVIEW REQUIRED';
+      } else if (requiresDimensionVerification) {
+        reviewStatusLabel = 'DRAFT / DIMENSION VERIFICATION REQUIRED';
+      } else if (isEngineeringVerified && isExcelTemplate) {
+        reviewStatusLabel = 'VERIFIED / PENDING ADMIN APPROVAL';
+      } else if (ptsCount >= 2) {
+        reviewStatusLabel = 'DRAFT / PENDING VERIFICATION';
+      } else {
+        reviewStatusLabel = 'DRAFT';
+      }
+    }
+
+    const referenceDataStatus: 'REFERENCE DATA IMPORTED' | 'PENDING IMPORT' =
+      ptsCount >= 2 ? 'REFERENCE DATA IMPORTED' : 'PENDING IMPORT';
+
+    let engineeringVerificationStatus:
+      | 'ENGINEERING VERIFIED'
+      | 'PENDING ENGINEERING VERIFICATION'
+      | 'BLOCKED — ENGINEERING REVIEW REQUIRED'
+      | 'BLOCKED — DIMENSION VERIFICATION REQUIRED'
+      | 'REJECTED' = 'PENDING ENGINEERING VERIFICATION';
+
+    if (engVerification?.decision === 'REJECTED') {
+      engineeringVerificationStatus = 'REJECTED';
+    } else if (isEngineeringVerified) {
+      engineeringVerificationStatus = 'ENGINEERING VERIFIED';
+    } else if (requiresEngineeringReview) {
+      engineeringVerificationStatus = 'BLOCKED — ENGINEERING REVIEW REQUIRED';
+    } else if (requiresDimensionVerification) {
+      engineeringVerificationStatus = 'BLOCKED — DIMENSION VERIFICATION REQUIRED';
+    }
+
+    const activeCount = assignmentStats?.activeCount ?? 0;
+    const stagedDraftCount = assignmentStats?.stagedDraftCount ?? 0;
+    const operationalActivationStatus:
+      | 'OPERATIONALLY ACTIVE'
+      | 'STAGED AS DRAFT'
+      | 'NOT ASSIGNED' =
+      activeCount > 0
+        ? 'OPERATIONALLY ACTIVE'
+        : stagedDraftCount > 0
+          ? 'STAGED AS DRAFT'
+          : 'NOT ASSIGNED';
+
+    let lifecycleStage:
+      | 'IMPORTED DRAFT'
+      | 'ENGINEERING REVIEW'
+      | 'VERIFIED'
+      | 'ADMIN APPROVED'
+      | 'ASSIGNED TO COMPATIBLE TANK AS DRAFT'
+      | 'TANK-SPECIFIC AUTHORISED ACTIVATION' = 'IMPORTED DRAFT';
+
+    if (activeCount > 0) {
+      lifecycleStage = 'TANK-SPECIFIC AUTHORISED ACTIVATION';
+    } else if (stagedDraftCount > 0) {
+      lifecycleStage = 'ASSIGNED TO COMPATIBLE TANK AS DRAFT';
+    } else if (row.status === 'APPROVED' || row.status === 'ACTIVE') {
+      lifecycleStage = 'ADMIN APPROVED';
+    } else if (isEngineeringVerified) {
+      lifecycleStage = 'VERIFIED';
+    } else if (requiresEngineeringReview || requiresDimensionVerification) {
+      lifecycleStage = 'ENGINEERING REVIEW';
+    } else {
+      lifecycleStage = 'IMPORTED DRAFT';
+    }
+
+    let blockingReason: string | null = null;
+    if (ptsCount < 2) {
+      blockingReason = 'Calibration dip-to-volume points have not been imported yet.';
+    } else if (requiresEngineeringReview) {
+      blockingReason = `Nominal capacity is ${row.nominalCapacityLitres.toLocaleString()} L (permitted +10% ceiling: ${(row.nominalCapacityLitres * 1.1).toLocaleString()} L), but source chart maximum volume is ${maxVolMilli != null ? formatMilliunits(maxVolMilli) : '11073.410'} L. Approval, tank assignment, and activation are blocked until formal Engineering Verification with a Document Vault calibration certificate and governing policy exception is recorded.`;
+    } else if (requiresDimensionVerification) {
+      blockingReason =
+        'Dimensional conflict between 5,500 mm main sheet length and 3,750 mm worksheet annotation is unresolved. Approval and assignment are blocked until confirmed against the physical tank calibration certificate in the Document Vault.';
+    } else if (!isEngineeringVerified) {
+      blockingReason =
+        'Pending formal Engineering Verification with a supporting calibration certificate in the Document Vault (an uploaded workbook filename or manually entered reference number is not sufficient proof of certification).';
+    } else if (row.status !== 'APPROVED' && row.status !== 'ACTIVE') {
+      blockingReason =
+        'Engineering verification is complete; awaiting Authorised Admin Approval before tank-wise DRAFT assignment.';
+    } else if (activeCount === 0 && stagedDraftCount === 0) {
+      blockingReason =
+        'Template is Admin Approved; awaiting assignment as DRAFT to a compatible tank with verified dimensions and certificate.';
+    } else if (activeCount === 0 && stagedDraftCount > 0) {
+      blockingReason =
+        'Staged on compatible tank(s) as DRAFT; awaiting Tank-Specific Authorised Activation with administrator confirmation.';
+    }
+
+    return {
+      ...row,
+      pointsCount: ptsCount,
+      maxVolumeMilliunits: maxVolMilli,
+      maxVolumeLitres: maxVolMilli != null ? maxVolMilli / 1000 : null,
+      maxVolumeLitresStr: maxVolMilli != null ? formatMilliunits(maxVolMilli) : null,
+      isOverNominalCapacity: maxVolMilli != null ? maxVolMilli > nomMilli : false,
+      isOverCapacityCeiling: isOverCeiling,
+      requiresEngineeringReview,
+      requiresDimensionVerification,
+      reviewStatusLabel,
+      lifecycleStage,
+      referenceDataStatus,
+      engineeringVerificationStatus,
+      operationalActivationStatus,
+      blockingReason,
+      engineeringVerification: engVerification,
+      compatibleTanksCount: assignmentStats?.compatibleTanksCount ?? 0,
+      stagedDraftTanksCount: stagedDraftCount,
+      activeAssignedTanksCount: activeCount,
+      nominalCapacityLitresStr: row.nominalCapacityLitres.toString(),
+      maxDipMm: row.maxDipMmMilliunits != null ? row.maxDipMmMilliunits / 1000 : null,
+      tankDiameterMm: row.tankDiameterMmMilliunits != null ? row.tankDiameterMmMilliunits / 1000 : null,
+      tankLengthMm: row.tankLengthMmMilliunits != null ? row.tankLengthMmMilliunits / 1000 : null,
+      maxDipMmStr: row.maxDipMmMilliunits != null ? formatMilliunits(row.maxDipMmMilliunits) : null,
+      tankDiameterMmStr:
+        row.tankDiameterMmMilliunits != null ? formatMilliunits(row.tankDiameterMmMilliunits) : null,
+      tankLengthMmStr:
+        row.tankLengthMmMilliunits != null ? formatMilliunits(row.tankLengthMmMilliunits) : null,
+    };
+  }
+
+  async listGlobalTankCalibrationTemplates(options?: {
+    status?: string;
+    nominalCapacityLitres?: number;
+  }): Promise<any[]> {
+    const query = this.db.select().from(schema.globalTankCalibrationTemplates);
     const conditions: any[] = [];
     if (options?.status) {
       conditions.push(eq(schema.globalTankCalibrationTemplates.status, options.status as any));
     }
     if (options?.nominalCapacityLitres) {
-      conditions.push(eq(schema.globalTankCalibrationTemplates.nominalCapacityLitres, options.nominalCapacityLitres));
+      conditions.push(
+        eq(
+          schema.globalTankCalibrationTemplates.nominalCapacityLitres,
+          options.nominalCapacityLitres
+        )
+      );
     }
-    const rows = conditions.length > 0
-      ? await query.where(and(...conditions)).orderBy(desc(schema.globalTankCalibrationTemplates.createdAt))
-      : await query.orderBy(desc(schema.globalTankCalibrationTemplates.createdAt));
+    const rows =
+      conditions.length > 0
+        ? await query
+            .where(and(...conditions))
+            .orderBy(desc(schema.globalTankCalibrationTemplates.createdAt))
+        : await query.orderBy(desc(schema.globalTankCalibrationTemplates.createdAt));
 
-    const points = await this.db.select({
-      templateId: schema.globalTankCalibrationTemplatePoints.templateId,
-      count: sql<number>`count(*)`,
-      maxVolumeMilliunits: sql<number>`max(${schema.globalTankCalibrationTemplatePoints.volumeMilliunits})`,
-    }).from(schema.globalTankCalibrationTemplatePoints)
+    const points = await this.db
+      .select({
+        templateId: schema.globalTankCalibrationTemplatePoints.templateId,
+        count: sql<number>`count(*)`,
+        maxVolumeMilliunits: sql<number>`max(${schema.globalTankCalibrationTemplatePoints.volumeMilliunits})`,
+      })
+      .from(schema.globalTankCalibrationTemplatePoints)
       .groupBy(schema.globalTankCalibrationTemplatePoints.templateId);
 
     const countMap = new Map<string, number>();
@@ -4612,43 +4850,38 @@ export class PumpRepository {
       );
     }
 
-    return rows.map(r => {
-      const maxVolMilli = maxVolMap.get(r.id) ?? null;
-      const nomMilli = Math.round(r.nominalCapacityLitres * 1000);
-      const maxCeilingMilli = Math.round(nomMilli * 1.1);
-      const ptsCount = countMap.get(r.id) || 0;
-      const isOverCeiling = maxVolMilli != null ? maxVolMilli > maxCeilingMilli : false;
-      const hasDimWarning =
-        r.code === 'EXCEL_15KL_REFERENCE' || Boolean(r.notes && r.notes.includes('3,750 mm'));
-      const reviewStatusLabel =
-        r.status === 'DRAFT'
-          ? isOverCeiling
-            ? 'DRAFT / ENGINEERING REVIEW REQUIRED'
-            : hasDimWarning
-              ? 'DRAFT / DIMENSION VERIFICATION REQUIRED'
-              : ptsCount >= 2
-                ? 'DRAFT / PENDING VERIFICATION'
-                : 'DRAFT'
-          : r.status;
-      return {
-        ...r,
-        pointsCount: ptsCount,
-        maxVolumeMilliunits: maxVolMilli,
-        maxVolumeLitres: maxVolMilli != null ? maxVolMilli / 1000 : null,
-        maxVolumeLitresStr: maxVolMilli != null ? formatMilliunits(maxVolMilli) : null,
-        isOverNominalCapacity: maxVolMilli != null ? maxVolMilli > nomMilli : false,
-        isOverCapacityCeiling: isOverCeiling,
-        requiresEngineeringReview: isOverCeiling,
-        requiresDimensionVerification: hasDimWarning,
-        reviewStatusLabel,
-        nominalCapacityLitresStr: r.nominalCapacityLitres.toString(),
-        maxDipMm: r.maxDipMmMilliunits != null ? r.maxDipMmMilliunits / 1000 : null,
-        tankDiameterMm: r.tankDiameterMmMilliunits != null ? r.tankDiameterMmMilliunits / 1000 : null,
-        tankLengthMm: r.tankLengthMmMilliunits != null ? r.tankLengthMmMilliunits / 1000 : null,
-        maxDipMmStr: r.maxDipMmMilliunits != null ? formatMilliunits(r.maxDipMmMilliunits) : null,
-        tankDiameterMmStr: r.tankDiameterMmMilliunits != null ? formatMilliunits(r.tankDiameterMmMilliunits) : null,
-        tankLengthMmStr: r.tankLengthMmMilliunits != null ? formatMilliunits(r.tankLengthMmMilliunits) : null,
+    const engVerifMap = await this.getEngineeringVerificationsMap('GLOBAL_TEMPLATE');
+    const assignedCharts = await this.db
+      .select({
+        sourceTemplateId: schema.tankCalibrationCharts.sourceTemplateId,
+        status: schema.tankCalibrationCharts.status,
+      })
+      .from(schema.tankCalibrationCharts);
+
+    const statsByTemplate = new Map<string, { stagedDraftCount: number; activeCount: number }>();
+    for (const ch of assignedCharts) {
+      if (!ch.sourceTemplateId) continue;
+      const cur = statsByTemplate.get(ch.sourceTemplateId) || {
+        stagedDraftCount: 0,
+        activeCount: 0,
       };
+      if (ch.status === 'ACTIVE') cur.activeCount += 1;
+      if (ch.status === 'DRAFT' || ch.status === 'APPROVED') cur.stagedDraftCount += 1;
+      statsByTemplate.set(ch.sourceTemplateId, cur);
+    }
+
+    return rows.map((r) => {
+      const maxVolMilli = maxVolMap.get(r.id) ?? null;
+      const ptsCount = countMap.get(r.id) || 0;
+      const engVerif = engVerifMap.get(r.id) || null;
+      const stats = statsByTemplate.get(r.id) || { stagedDraftCount: 0, activeCount: 0 };
+      return this.enrichTemplateWithEngineeringAndLifecycle(
+        r,
+        ptsCount,
+        maxVolMilli,
+        engVerif,
+        stats
+      );
     });
   }
 
@@ -4659,10 +4892,16 @@ export class PumpRepository {
       .where(eq(schema.globalTankCalibrationTemplates.id, idOrCode));
 
     if (!row) {
+      const aliasMap: Record<string, string> = {
+        'gtct-excel-10kl-ref': 'EXCEL_10KL_REFERENCE',
+        'gtct-excel-15kl-ref': 'EXCEL_15KL_REFERENCE',
+        'gtct-excel-20kl-ref': 'EXCEL_20KL_REFERENCE',
+      };
+      const mappedCode = aliasMap[idOrCode.toLowerCase()] || idOrCode.toUpperCase();
       [row] = await this.db
         .select()
         .from(schema.globalTankCalibrationTemplates)
-        .where(eq(schema.globalTankCalibrationTemplates.code, idOrCode.toUpperCase()));
+        .where(eq(schema.globalTankCalibrationTemplates.code, mappedCode));
     }
 
     if (!row) return null;
@@ -4670,41 +4909,34 @@ export class PumpRepository {
     const points = await this.listGlobalTankCalibrationTemplatePoints(row.id);
     const maxVolMilli =
       points.length > 0 ? points[points.length - 1].volumeMilliunits : null;
-    const nomMilli = Math.round(row.nominalCapacityLitres * 1000);
-    const maxCeilingMilli = Math.round(nomMilli * 1.1);
-    const isOverCeiling = maxVolMilli != null ? maxVolMilli > maxCeilingMilli : false;
-    const hasDimWarning =
-      row.code === 'EXCEL_15KL_REFERENCE' || Boolean(row.notes && row.notes.includes('3,750 mm'));
-    const reviewStatusLabel =
-      row.status === 'DRAFT'
-        ? isOverCeiling
-          ? 'DRAFT / ENGINEERING REVIEW REQUIRED'
-          : hasDimWarning
-            ? 'DRAFT / DIMENSION VERIFICATION REQUIRED'
-            : points.length >= 2
-              ? 'DRAFT / PENDING VERIFICATION'
-              : 'DRAFT'
-        : row.status;
+    const engVerifMap = await this.getEngineeringVerificationsMap('GLOBAL_TEMPLATE');
+    const engVerif = engVerifMap.get(row.id) || null;
+
+    const assignedCharts = await this.db
+      .select({
+        status: schema.tankCalibrationCharts.status,
+      })
+      .from(schema.tankCalibrationCharts)
+      .where(eq(schema.tankCalibrationCharts.sourceTemplateId, row.id));
+
+    let stagedDraftCount = 0;
+    let activeCount = 0;
+    for (const ch of assignedCharts) {
+      if (ch.status === 'ACTIVE') activeCount += 1;
+      if (ch.status === 'DRAFT' || ch.status === 'APPROVED') stagedDraftCount += 1;
+    }
+
+    const enriched = this.enrichTemplateWithEngineeringAndLifecycle(
+      row,
+      points.length,
+      maxVolMilli,
+      engVerif,
+      { stagedDraftCount, activeCount }
+    );
 
     return {
-      ...row,
-      pointsCount: points.length,
-      maxVolumeMilliunits: maxVolMilli,
-      maxVolumeLitres: maxVolMilli != null ? maxVolMilli / 1000 : null,
-      maxVolumeLitresStr: maxVolMilli != null ? formatMilliunits(maxVolMilli) : null,
-      isOverNominalCapacity: maxVolMilli != null ? maxVolMilli > nomMilli : false,
-      isOverCapacityCeiling: isOverCeiling,
-      requiresEngineeringReview: isOverCeiling,
-      requiresDimensionVerification: hasDimWarning,
-      reviewStatusLabel,
+      ...enriched,
       points,
-      nominalCapacityLitresStr: row.nominalCapacityLitres.toString(),
-      maxDipMm: row.maxDipMmMilliunits != null ? row.maxDipMmMilliunits / 1000 : null,
-      tankDiameterMm: row.tankDiameterMmMilliunits != null ? row.tankDiameterMmMilliunits / 1000 : null,
-      tankLengthMm: row.tankLengthMmMilliunits != null ? row.tankLengthMmMilliunits / 1000 : null,
-      maxDipMmStr: row.maxDipMmMilliunits != null ? formatMilliunits(row.maxDipMmMilliunits) : null,
-      tankDiameterMmStr: row.tankDiameterMmMilliunits != null ? formatMilliunits(row.tankDiameterMmMilliunits) : null,
-      tankLengthMmStr: row.tankLengthMmMilliunits != null ? formatMilliunits(row.tankLengthMmMilliunits) : null,
     };
   }
 
@@ -5093,6 +5325,8 @@ export class PumpRepository {
         throw err;
       }
 
+      const codeUpper = String(existing.code || '').toUpperCase();
+      const isExcelReference = codeUpper.startsWith('EXCEL_');
       const nominalCapacityMilliunits = Math.round(existing.nominalCapacityLitres * 1000);
       const maxOverCapacityMilliunits = Math.round(nominalCapacityMilliunits * 1.1);
       const maxStoredVol = rawPoints.reduce(
@@ -5103,11 +5337,36 @@ export class PumpRepository {
         options?.allowOverCapacity || options?.confirmOverCapacity
       );
 
-      if (maxStoredVol > maxOverCapacityMilliunits) {
+      const hasScopedPolicyException = Boolean(
+        codeUpper === 'EXCEL_10KL_REFERENCE' &&
+          existing.engineeringVerification?.decision === 'VERIFIED' &&
+          existing.engineeringVerification?.allowScopedPolicyException === true &&
+          existing.engineeringVerification?.governingPolicyReference &&
+          existing.engineeringVerification?.discrepancyResolutionNote &&
+          existing.engineeringVerification?.supportingDocumentId
+      );
+
+      if (maxStoredVol > maxOverCapacityMilliunits && !hasScopedPolicyException) {
         const err = new Error(
           `Cannot approve global template ${existing.code}: chart maximum volume ${formatMilliunits(maxStoredVol)} L exceeds the maximum permitted +10% over-capacity ceiling of ${formatMilliunits(maxOverCapacityMilliunits)} L (nominal ${existing.nominalCapacityLitres.toLocaleString()} L). Engineering review is required before this reference chart can be approved, assigned, or used in DSR calculations.`
         );
         (err as any).code = 'OVER_CAPACITY_CEILING_EXCEEDED';
+        throw err;
+      }
+
+      if (codeUpper === 'EXCEL_15KL_REFERENCE' && existing.requiresDimensionVerification) {
+        const err = new Error(
+          `Cannot approve global template ${existing.code}: dimensional conflict between 5,500 mm and 3,750 mm length references is unresolved. Complete Engineering Verification against the tank's certified calibration chart (confirming 5,500 mm length and attaching supporting certification in Document Vault) before approval.`
+        );
+        (err as any).code = 'DIMENSION_CONFLICT_UNRESOLVED';
+        throw err;
+      }
+
+      if (isExcelReference && existing.engineeringVerification?.decision !== 'VERIFIED') {
+        const err = new Error(
+          `Cannot approve global template ${existing.code}: Engineering Verification is required (with a certified calibration document in the Document Vault, verified tank dimensions, issuing authority, and engineering approver) before an imported Excel reference chart can transition to APPROVED.`
+        );
+        (err as any).code = 'ENGINEERING_VERIFICATION_REQUIRED';
         throw err;
       }
 
@@ -5124,6 +5383,7 @@ export class PumpRepository {
         tankDiameterMmMilliunits: existing.tankDiameterMmMilliunits,
         maxDipMmMilliunits: existing.maxDipMmMilliunits,
         allowOverCapacity: overCapacityConfirmed,
+        allowEngineeringReviewReference: hasScopedPolicyException,
         requireCompleteRange: true,
       });
     }
@@ -5146,6 +5406,405 @@ export class PumpRepository {
     return this.findGlobalTankCalibrationTemplateById(existing.id);
   }
 
+  private isExcelWorkbookOrPlaceholderReference(ref: string | null | undefined): boolean {
+    if (!ref) return true;
+    const trimmed = String(ref).trim();
+    if (!trimmed) return true;
+    if (/\.xlsx?$/i.test(trimmed)) return true;
+    if (/-EXCEL$/i.test(trimmed)) return true;
+    if (/^legacy-d1-preserved$/i.test(trimmed)) return true;
+    return false;
+  }
+
+  async recordGlobalTemplateEngineeringVerification(
+    templateIdOrCode: string,
+    payload: {
+      decision: 'VERIFIED' | 'REJECTED' | 'PENDING_REVIEW';
+      tankIdentifier: string;
+      tankSerialNumber: string;
+      verifiedCapacityLitres: number;
+      verifiedDiameterMm: number;
+      verifiedLengthMm: number;
+      verifiedMaxDipMm: number;
+      issuingAuthority: string;
+      certificateNumber: string;
+      verificationDate: string;
+      engineeringApprover: string;
+      supportingDocumentId: string;
+      resolveLengthConflict?: boolean;
+      confirmedLengthMm?: number | null;
+      lengthResolutionNotes?: string | null;
+      allowScopedPolicyException?: boolean;
+      governingPolicyReference?: string | null;
+      discrepancyResolutionNote?: string | null;
+      comparedAgainstStandard20kl?: boolean;
+      notes?: string | null;
+    },
+    userId: string
+  ): Promise<{
+    template: any;
+    verification: CalibrationEngineeringVerificationRecord;
+  }> {
+    const template = await this.findGlobalTankCalibrationTemplateById(templateIdOrCode);
+    if (!template) {
+      const err = new Error(`Global calibration template not found: ${templateIdOrCode}`);
+      (err as any).code = 'NOT_FOUND';
+      throw err;
+    }
+
+    const docId = String(payload.supportingDocumentId || '').trim();
+    if (!docId) {
+      const err = new Error(
+        'Supporting certification document in Document Vault (supportingDocumentId) is required. An uploaded workbook filename or manually entered reference number cannot, by itself, serve as proof of certification.'
+      );
+      (err as any).code = 'SUPPORTING_DOCUMENT_REQUIRED';
+      throw err;
+    }
+
+    const docRows = await this.db
+      .select()
+      .from(schema.documents)
+      .where(eq(schema.documents.id, docId))
+      .limit(1);
+    const doc = docRows[0];
+    if (!doc) {
+      const err = new Error(
+        `Supporting document '${docId}' was not found in the Document Vault. Upload or select an official calibration certificate in the Document Vault first.`
+      );
+      (err as any).code = 'SUPPORTING_DOCUMENT_NOT_FOUND';
+      throw err;
+    }
+
+    if (/\.xlsx?$/i.test(doc.name || '')) {
+      const err = new Error(
+        `Supporting document '${doc.name}' is an Excel workbook. An uploaded Excel workbook filename cannot serve as certification evidence; attach a certified calibration chart or Legal Metrology / Engineering certificate (PDF/image).`
+      );
+      (err as any).code = 'INVALID_CERTIFICATION_DOCUMENT';
+      throw err;
+    }
+
+    const certNumber = String(payload.certificateNumber || '').trim();
+    if (!certNumber || this.isExcelWorkbookOrPlaceholderReference(certNumber)) {
+      const err = new Error(
+        'A valid official calibration certificate/reference number is required (an Excel filename or -EXCEL placeholder is not accepted as proof of certification).'
+      );
+      (err as any).code = 'INVALID_CERTIFICATE_REFERENCE';
+      throw err;
+    }
+
+    const tankIdentifier = String(payload.tankIdentifier || '').trim();
+    const tankSerialNumber = String(payload.tankSerialNumber || '').trim();
+    const issuingAuthority = String(payload.issuingAuthority || '').trim();
+    const verificationDate = String(payload.verificationDate || '').trim();
+    const engineeringApprover = String(payload.engineeringApprover || '').trim();
+
+    if (!tankIdentifier || !tankSerialNumber || !issuingAuthority || !verificationDate || !engineeringApprover) {
+      const err = new Error(
+        'Tank identifier, serial/reference number, issuing authority, verification date, and engineering approver are all required for Engineering Verification.'
+      );
+      (err as any).code = 'MISSING_VERIFICATION_FIELDS';
+      throw err;
+    }
+
+    const verifiedCapacityLitres = Number(payload.verifiedCapacityLitres);
+    const verifiedDiameterMm = Number(payload.verifiedDiameterMm);
+    const verifiedLengthMm = Number(payload.verifiedLengthMm);
+    const verifiedMaxDipMm = Number(payload.verifiedMaxDipMm);
+
+    if (
+      !Number.isFinite(verifiedCapacityLitres) ||
+      verifiedCapacityLitres <= 0 ||
+      !Number.isFinite(verifiedDiameterMm) ||
+      verifiedDiameterMm <= 0 ||
+      !Number.isFinite(verifiedLengthMm) ||
+      verifiedLengthMm <= 0 ||
+      !Number.isFinite(verifiedMaxDipMm) ||
+      verifiedMaxDipMm <= 0
+    ) {
+      const err = new Error('Verified capacity, diameter, length, and maximum dip must all be positive numbers.');
+      (err as any).code = 'INVALID_VERIFIED_DIMENSIONS';
+      throw err;
+    }
+
+    const codeUpper = String(template.code || '').toUpperCase();
+
+    if (payload.decision === 'VERIFIED') {
+      if (verifiedCapacityLitres !== template.nominalCapacityLitres) {
+        const err = new Error(
+          `Verified nominal capacity (${verifiedCapacityLitres.toLocaleString()} L) does not match template nominal capacity (${template.nominalCapacityLitres.toLocaleString()} L). Never alter nominal capacity to force approval.`
+        );
+        (err as any).code = 'VERIFIED_CAPACITY_MISMATCH';
+        throw err;
+      }
+
+      if (
+        (template.tankDiameterMm != null && verifiedDiameterMm !== template.tankDiameterMm) ||
+        (template.tankLengthMm != null && verifiedLengthMm !== template.tankLengthMm) ||
+        (template.maxDipMm != null && verifiedMaxDipMm !== template.maxDipMm)
+      ) {
+        const err = new Error(
+          `Verified tank dimensions (${verifiedDiameterMm}×${verifiedLengthMm} mm, Max Dip ${verifiedMaxDipMm} mm) do not match template geometry (${template.tankDiameterMm}×${template.tankLengthMm} mm, Max Dip ${template.maxDipMm} mm).`
+        );
+        (err as any).code = 'VERIFIED_DIMENSION_MISMATCH';
+        throw err;
+      }
+
+      if (codeUpper === 'EXCEL_10KL_REFERENCE' && payload.allowScopedPolicyException) {
+        const govRef = String(payload.governingPolicyReference || '').trim();
+        const discNote = String(payload.discrepancyResolutionNote || '').trim();
+        if (!govRef || !discNote) {
+          const err = new Error(
+            'EXCEL_10KL_REFERENCE scoped policy exception requires both governingPolicyReference and discrepancyResolutionNote.'
+          );
+          (err as any).code = 'SCOPED_POLICY_EXCEPTION_REQUIRED';
+          throw err;
+        }
+      }
+
+      if (codeUpper === 'EXCEL_15KL_REFERENCE') {
+        const lenNote = String(payload.lengthResolutionNotes || '').trim();
+        if (
+          !payload.resolveLengthConflict ||
+          Number(payload.confirmedLengthMm) !== 5500 ||
+          verifiedLengthMm !== 5500 ||
+          !lenNote
+        ) {
+          const err = new Error(
+            'EXCEL_15KL_REFERENCE has a dimensional conflict between 5,500 mm (calibration sheet) and 3,750 mm (workbook auxiliary note). Verification as VERIFIED requires resolveLengthConflict: true, confirmedLengthMm: 5500, and lengthResolutionNotes confirming the physical tank certificate.'
+          );
+          (err as any).code = 'DIMENSION_CONFLICT_UNRESOLVED';
+          throw err;
+        }
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    const recordId = `cev-tpl-${template.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const verificationRecord: CalibrationEngineeringVerificationRecord = {
+      id: recordId,
+      targetType: 'GLOBAL_TEMPLATE',
+      targetId: template.id,
+      templateCode: template.code,
+      decision: payload.decision,
+      tankIdentifier,
+      tankSerialNumber,
+      verifiedCapacityLitres,
+      verifiedDiameterMm,
+      verifiedLengthMm,
+      verifiedMaxDipMm,
+      issuingAuthority,
+      certificateNumber: certNumber,
+      verificationDate,
+      engineeringApprover,
+      supportingDocumentId: doc.id,
+      supportingDocumentTitle: doc.name,
+      supportingDocumentFileName: doc.name,
+      supportingDocumentCategory: 'TANK_CALIBRATION_CHART',
+      resolveLengthConflict: Boolean(payload.resolveLengthConflict),
+      confirmedLengthMm: payload.confirmedLengthMm ?? verifiedLengthMm,
+      lengthResolutionNotes: payload.lengthResolutionNotes ?? null,
+      allowScopedPolicyException: Boolean(payload.allowScopedPolicyException),
+      governingPolicyReference: payload.governingPolicyReference ?? null,
+      discrepancyResolutionNote: payload.discrepancyResolutionNote ?? null,
+      comparedAgainstStandard20kl:
+        payload.comparedAgainstStandard20kl !== undefined
+          ? Boolean(payload.comparedAgainstStandard20kl)
+          : true,
+      notes: payload.notes ?? null,
+      verifiedByUserId: userId,
+      verifiedAt: nowIso,
+    };
+
+    await this.db.insert(schema.auditLogs).values({
+      id: recordId,
+      userId,
+      action: 'GLOBAL_TEMPLATE_ENGINEERING_VERIFICATION',
+      entityType: 'CALIBRATION_ENGINEERING_VERIFICATION',
+      entityId: template.id,
+      newValueJson: JSON.stringify(verificationRecord),
+      createdAt: nowIso,
+    });
+
+    await this.db.insert(schema.auditLogs).values({
+      id: `${recordId}-audit`,
+      userId,
+      action: 'GLOBAL_TEMPLATE_ENGINEERING_VERIFICATION',
+      entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
+      entityId: template.id,
+      newValueJson: JSON.stringify(verificationRecord),
+      createdAt: nowIso,
+    });
+
+    const updatedTemplate = await this.findGlobalTankCalibrationTemplateById(template.id);
+    return {
+      template: updatedTemplate,
+      verification: updatedTemplate?.engineeringVerification || verificationRecord,
+    };
+  }
+
+  async recordTankEngineeringVerification(
+    tankId: string,
+    payload: {
+      decision: 'VERIFIED' | 'REJECTED' | 'PENDING_REVIEW';
+      tankIdentifier: string;
+      tankSerialNumber: string;
+      verifiedCapacityLitres: number;
+      verifiedDiameterMm: number;
+      verifiedLengthMm: number;
+      verifiedMaxDipMm: number;
+      issuingAuthority: string;
+      certificateNumber: string;
+      verificationDate: string;
+      engineeringApprover: string;
+      supportingDocumentId: string;
+      notes?: string | null;
+    },
+    userId: string
+  ): Promise<{
+    tank: Tank;
+    verification: CalibrationEngineeringVerificationRecord;
+  }> {
+    const tank = await this.findTankById(tankId);
+    if (!tank) {
+      const err = new Error(`Tank not found: ${tankId}`);
+      (err as any).code = 'NOT_FOUND';
+      throw err;
+    }
+
+    const docId = String(payload.supportingDocumentId || '').trim();
+    if (!docId) {
+      const err = new Error(
+        'Supporting tank calibration certificate in Document Vault (supportingDocumentId) is required. An uploaded workbook filename or manually entered reference number cannot, by itself, serve as proof of certification.'
+      );
+      (err as any).code = 'SUPPORTING_DOCUMENT_REQUIRED';
+      throw err;
+    }
+
+    const docRows = await this.db
+      .select()
+      .from(schema.documents)
+      .where(eq(schema.documents.id, docId))
+      .limit(1);
+    const doc = docRows[0];
+    if (!doc) {
+      const err = new Error(
+        `Supporting document '${docId}' was not found in the Document Vault. Upload or select an official tank calibration certificate in the Document Vault first.`
+      );
+      (err as any).code = 'SUPPORTING_DOCUMENT_NOT_FOUND';
+      throw err;
+    }
+
+    if (/\.xlsx?$/i.test(doc.name || '')) {
+      const err = new Error(
+        `Supporting document '${doc.name}' is an Excel workbook. Attach an official tank calibration certificate (PDF/image) in the Document Vault.`
+      );
+      (err as any).code = 'INVALID_CERTIFICATION_DOCUMENT';
+      throw err;
+    }
+
+    const certNumber = String(payload.certificateNumber || '').trim();
+    if (!certNumber || this.isExcelWorkbookOrPlaceholderReference(certNumber)) {
+      const err = new Error(
+        'A valid official tank calibration certificate/reference number is required (an Excel filename or -EXCEL placeholder is not accepted as proof of certification).'
+      );
+      (err as any).code = 'INVALID_CERTIFICATE_REFERENCE';
+      throw err;
+    }
+
+    const tankIdentifier = String(payload.tankIdentifier || '').trim();
+    const tankSerialNumber = String(payload.tankSerialNumber || '').trim();
+    const issuingAuthority = String(payload.issuingAuthority || '').trim();
+    const verificationDate = String(payload.verificationDate || '').trim();
+    const engineeringApprover = String(payload.engineeringApprover || '').trim();
+
+    if (!tankIdentifier || !tankSerialNumber || !issuingAuthority || !verificationDate || !engineeringApprover) {
+      const err = new Error(
+        'Tank identifier, serial/reference number, issuing authority, verification date, and engineering approver are all required for Tank Engineering Verification.'
+      );
+      (err as any).code = 'MISSING_VERIFICATION_FIELDS';
+      throw err;
+    }
+
+    const verifiedCapacityLitres = Number(payload.verifiedCapacityLitres);
+    const verifiedDiameterMm = Number(payload.verifiedDiameterMm);
+    const verifiedLengthMm = Number(payload.verifiedLengthMm);
+    const verifiedMaxDipMm = Number(payload.verifiedMaxDipMm);
+
+    if (
+      !Number.isFinite(verifiedCapacityLitres) ||
+      verifiedCapacityLitres <= 0 ||
+      !Number.isFinite(verifiedDiameterMm) ||
+      verifiedDiameterMm <= 0 ||
+      !Number.isFinite(verifiedLengthMm) ||
+      verifiedLengthMm <= 0 ||
+      !Number.isFinite(verifiedMaxDipMm) ||
+      verifiedMaxDipMm <= 0
+    ) {
+      const err = new Error('Verified capacity, diameter, length, and maximum dip must all be positive numbers.');
+      (err as any).code = 'INVALID_VERIFIED_DIMENSIONS';
+      throw err;
+    }
+
+    if (payload.decision === 'VERIFIED' && verifiedCapacityLitres !== tank.capacityLitres) {
+      const err = new Error(
+        `Verified tank capacity (${verifiedCapacityLitres.toLocaleString()} L) does not match configured Tank #${tank.tankNumber} nominal capacity (${tank.capacityLitres.toLocaleString()} L).`
+      );
+      (err as any).code = 'VERIFIED_CAPACITY_MISMATCH';
+      throw err;
+    }
+
+    const nowIso = new Date().toISOString();
+    const recordId = `cev-tank-${tank.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const verificationRecord: CalibrationEngineeringVerificationRecord = {
+      id: recordId,
+      targetType: 'TANK',
+      targetId: tank.id,
+      decision: payload.decision,
+      tankIdentifier,
+      tankSerialNumber,
+      verifiedCapacityLitres,
+      verifiedDiameterMm,
+      verifiedLengthMm,
+      verifiedMaxDipMm,
+      issuingAuthority,
+      certificateNumber: certNumber,
+      verificationDate,
+      engineeringApprover,
+      supportingDocumentId: doc.id,
+      supportingDocumentTitle: doc.name,
+      supportingDocumentFileName: doc.name,
+      supportingDocumentCategory: 'TANK_CALIBRATION_CHART',
+      notes: payload.notes ?? null,
+      verifiedByUserId: userId,
+      verifiedAt: nowIso,
+    };
+
+    await this.db.insert(schema.auditLogs).values({
+      id: recordId,
+      userId,
+      action: 'TANK_CALIBRATION_ENGINEERING_VERIFICATION',
+      entityType: 'TANK_CALIBRATION_ENGINEERING_VERIFICATION',
+      entityId: tank.id,
+      newValueJson: JSON.stringify(verificationRecord),
+      createdAt: nowIso,
+    });
+
+    await this.db.insert(schema.auditLogs).values({
+      id: `${recordId}-audit`,
+      userId,
+      action: 'TANK_CALIBRATION_ENGINEERING_VERIFICATION',
+      entityType: 'GLOBAL_TANK_CALIBRATION_TEMPLATE',
+      entityId: tank.id,
+      newValueJson: JSON.stringify(verificationRecord),
+      createdAt: nowIso,
+    });
+
+    return {
+      tank,
+      verification: verificationRecord,
+    };
+  }
+
   async suggestGlobalTemplateForTank(tankId: string): Promise<{
     tank: Tank;
     suggestedTemplate: any | null;
@@ -5156,7 +5815,8 @@ export class PumpRepository {
     if (!tank) throw new Error(`Tank not found: ${tankId}`);
 
     const charts = await this.listCalibrationCharts(tankId);
-    const physicalDimensions = this.resolveTankPhysicalDimensions(charts);
+    const tankVerifMap = await this.getEngineeringVerificationsMap('TANK');
+    const physicalDimensions = this.resolveTankPhysicalDimensions(charts, tankVerifMap.get(tankId) || null);
 
     if (!physicalDimensions.isDimensionVerified || !physicalDimensions.isCertified) {
       return {
@@ -5208,16 +5868,48 @@ export class PumpRepository {
     };
   }
 
-  private resolveTankPhysicalDimensions(charts: any[]): {
+  private resolveTankPhysicalDimensions(
+    charts: any[],
+    tankVerification?: CalibrationEngineeringVerificationRecord | null
+  ): {
     diameterMm: number | null;
     lengthMm: number | null;
     maxDipMm: number | null;
-    source: 'ACTIVE_CHART' | 'APPROVED_CHART' | 'DRAFT_CHART' | 'UNVERIFIED';
+    source: 'ENGINEERING_VERIFIED' | 'ACTIVE_CHART' | 'APPROVED_CHART' | 'DRAFT_CHART' | 'UNVERIFIED';
     isDimensionVerified: boolean;
     isCertified: boolean;
     referenceDocument: string | null;
     sourceFileName: string | null;
+    supportingDocumentId?: string | null;
+    certificateNumber?: string | null;
+    issuingAuthority?: string | null;
+    engineeringApprover?: string | null;
   } {
+    if (
+      tankVerification &&
+      tankVerification.decision === 'VERIFIED' &&
+      tankVerification.verifiedDiameterMm > 0 &&
+      tankVerification.verifiedLengthMm > 0 &&
+      tankVerification.verifiedMaxDipMm > 0 &&
+      tankVerification.supportingDocumentId &&
+      !this.isExcelWorkbookOrPlaceholderReference(tankVerification.certificateNumber)
+    ) {
+      return {
+        diameterMm: tankVerification.verifiedDiameterMm,
+        lengthMm: tankVerification.verifiedLengthMm,
+        maxDipMm: tankVerification.verifiedMaxDipMm,
+        source: 'ENGINEERING_VERIFIED',
+        isDimensionVerified: true,
+        isCertified: true,
+        referenceDocument: tankVerification.certificateNumber,
+        sourceFileName: tankVerification.supportingDocumentFileName ?? null,
+        supportingDocumentId: tankVerification.supportingDocumentId,
+        certificateNumber: tankVerification.certificateNumber,
+        issuingAuthority: tankVerification.issuingAuthority,
+        engineeringApprover: tankVerification.engineeringApprover,
+      };
+    }
+
     const activeChart = charts.find(ch => ch.status === 'ACTIVE') || null;
     const approvedChart = charts.find(ch => ch.status === 'APPROVED') || null;
     const draftChart = charts.find(ch => ch.status === 'DRAFT') || null;
@@ -5236,16 +5928,23 @@ export class PumpRepository {
         continue;
       }
 
+      const refDoc = chart.referenceDocument ? String(chart.referenceDocument).trim() : '';
+      const srcFile = chart.sourceFileName ? String(chart.sourceFileName).trim() : '';
       const isLegacyBackfillWithoutRef =
-        chart.sourceFileName === 'legacy-d1-preserved' &&
-        (!chart.referenceDocument || String(chart.referenceDocument).trim().length === 0);
+        srcFile === 'legacy-d1-preserved' && refDoc.length === 0;
+
+      // An uploaded workbook filename (.xlsx/.xls) or -EXCEL placeholder must NOT by itself be treated as proof of certification
+      const hasValidReferenceDoc =
+        refDoc.length > 0 && !this.isExcelWorkbookOrPlaceholderReference(refDoc);
+      const hasValidSourceFile =
+        srcFile.length > 0 && !this.isExcelWorkbookOrPlaceholderReference(srcFile);
 
       const hasCertification =
         !isLegacyBackfillWithoutRef &&
         Boolean(
-          (chart.referenceDocument && String(chart.referenceDocument).trim().length > 0) ||
-            (chart.sourceFileName && String(chart.sourceFileName).trim().length > 0) ||
-            (chart.approvedBy && String(chart.approvedBy).trim().length > 0)
+          hasValidReferenceDoc ||
+            hasValidSourceFile ||
+            (chart.approvedBy && String(chart.approvedBy).trim().length > 0 && !this.isExcelWorkbookOrPlaceholderReference(refDoc || srcFile))
         );
 
       const diameterMm = Math.round(chart.tankDiameterMmMilliunits / 1000);
@@ -5312,17 +6011,24 @@ export class PumpRepository {
       tankLengthMm: number | null;
       maxDipMm: number | null;
       requiresEngineeringReview?: boolean;
+      requiresDimensionVerification?: boolean;
       isOverCapacityCeiling?: boolean;
       maxVolumeLitresStr?: string | null;
-    }
+      engineeringVerification?: CalibrationEngineeringVerificationRecord | null;
+    },
+    tankVerification?: CalibrationEngineeringVerificationRecord | null
   ): {
     physicalDimensions: {
       diameterMm: number | null;
       lengthMm: number | null;
       maxDipMm: number | null;
-      source: 'ACTIVE_CHART' | 'APPROVED_CHART' | 'DRAFT_CHART' | 'UNVERIFIED';
+      source: 'ENGINEERING_VERIFIED' | 'ACTIVE_CHART' | 'APPROVED_CHART' | 'DRAFT_CHART' | 'UNVERIFIED';
       referenceDocument: string | null;
       sourceFileName: string | null;
+      supportingDocumentId?: string | null;
+      certificateNumber?: string | null;
+      issuingAuthority?: string | null;
+      engineeringApprover?: string | null;
     };
     isCapacityMatch: boolean;
     isDimensionVerified: boolean;
@@ -5332,8 +6038,9 @@ export class PumpRepository {
     eligibilityStatus: 'ELIGIBLE' | 'UNVERIFIED' | 'INELIGIBLE';
     ineligibilityReason: string | null;
     capacityDifferenceLitres: number;
+    tankEngineeringVerification: CalibrationEngineeringVerificationRecord | null;
   } {
-    const resolvedDims = this.resolveTankPhysicalDimensions(charts);
+    const resolvedDims = this.resolveTankPhysicalDimensions(charts, tankVerification);
     const { isDimensionVerified, isCertified, ...physicalDimensions } = resolvedDims;
     const isVerified = isDimensionVerified && isCertified;
 
@@ -5360,10 +6067,22 @@ export class PumpRepository {
     );
 
     const isCoco = outletType === 'COCO';
-    const isReviewBlocked = Boolean(
-      template.requiresEngineeringReview || template.isOverCapacityCeiling
+    const hasScopedPolicyException = Boolean(
+      String(template.code || '').toUpperCase() === 'EXCEL_10KL_REFERENCE' &&
+        template.engineeringVerification?.decision === 'VERIFIED' &&
+        template.engineeringVerification?.allowScopedPolicyException === true
     );
-    const isCompatible = isCoco && isCapacityMatch && isVerified && isDimensionMatch && !isReviewBlocked;
+    const isReviewBlocked = Boolean(
+      template.requiresEngineeringReview || (template.isOverCapacityCeiling && !hasScopedPolicyException)
+    );
+    const isDimensionConflictBlocked = Boolean(template.requiresDimensionVerification);
+    const isCompatible =
+      isCoco &&
+      isCapacityMatch &&
+      isVerified &&
+      isDimensionMatch &&
+      !isReviewBlocked &&
+      !isDimensionConflictBlocked;
 
     let eligibilityStatus: 'ELIGIBLE' | 'UNVERIFIED' | 'INELIGIBLE' = 'ELIGIBLE';
     let ineligibilityReason: string | null = null;
@@ -5372,6 +6091,9 @@ export class PumpRepository {
       if (isReviewBlocked) {
         eligibilityStatus = 'INELIGIBLE';
         ineligibilityReason = `ENGINEERING REVIEW REQUIRED: Reference template ${template.code} exceeds the +10% operational capacity ceiling (${template.maxVolumeLitresStr || 'above limit'} L vs ${(template.nominalCapacityLitres * 1.1).toLocaleString()} L ceiling) and cannot be assigned, activated, or used in DSR calculations until verified by an authorised engineer.`;
+      } else if (isDimensionConflictBlocked) {
+        eligibilityStatus = 'INELIGIBLE';
+        ineligibilityReason = `DIMENSION VERIFICATION REQUIRED: Reference template ${template.code} has an unresolved length conflict (5,500 mm vs 3,750 mm note) and cannot be assigned until engineering verification confirms the physical tank certificate.`;
       } else if (!isCoco) {
         eligibilityStatus = 'INELIGIBLE';
         ineligibilityReason = `Outlet type is ${outletType}. Only COCO retail outlet tanks are eligible for Global Calibration Master assignment.`;
@@ -5407,6 +6129,7 @@ export class PumpRepository {
       eligibilityStatus,
       ineligibilityReason,
       capacityDifferenceLitres,
+      tankEngineeringVerification: tankVerification ?? null,
     };
   }
 
@@ -5446,6 +6169,7 @@ export class PumpRepository {
       .where(conditions.length === 1 ? conditions[0] : and(...conditions))
       .orderBy(asc(schema.retailOutlets.roCode), asc(schema.tanks.tankNumber));
 
+    const tankVerifMap = await this.getEngineeringVerificationsMap('TANK');
     const allEvaluated: any[] = [];
 
     for (const r of rows) {
@@ -5457,7 +6181,8 @@ export class PumpRepository {
         r.tank,
         r.outletType,
         charts,
-        template
+        template,
+        tankVerifMap.get(r.tank.id) || null
       );
 
       if (options?.onlyCompatible && !evalResult.isCompatible) {
@@ -5481,6 +6206,7 @@ export class PumpRepository {
         safeFillCapacityLitres: r.tank.safeFillCapacityLitres,
         status: r.tank.status,
         physicalDimensions: evalResult.physicalDimensions,
+        tankEngineeringVerification: evalResult.tankEngineeringVerification,
         currentActiveChart: activeChart
           ? {
               id: activeChart.id,
@@ -5498,6 +6224,7 @@ export class PumpRepository {
               status: draftChart.status,
               notes: draftChart.notes ?? null,
               sourceFileName: draftChart.sourceFileName ?? null,
+              sourceTemplateId: (draftChart as any).sourceTemplateId ?? null,
             }
           : null,
         hasProtectedDraft: Boolean(draftChart),
@@ -5543,11 +6270,25 @@ export class PumpRepository {
       throw err;
     }
 
-    if (template.requiresEngineeringReview || template.isOverCapacityCeiling) {
+    const hasScopedPolicyException = Boolean(
+      String(template.code || '').toUpperCase() === 'EXCEL_10KL_REFERENCE' &&
+        template.engineeringVerification?.decision === 'VERIFIED' &&
+        template.engineeringVerification?.allowScopedPolicyException === true
+    );
+
+    if (template.requiresEngineeringReview || (template.isOverCapacityCeiling && !hasScopedPolicyException)) {
       const err = new Error(
         `Global reference template ${template.code} requires engineering review (chart maximum volume ${template.maxVolumeLitresStr} L exceeds the +10% operational capacity ceiling) and cannot be assigned, activated, or used in DSR calculations.`
       );
       (err as any).code = 'ENGINEERING_REVIEW_REQUIRED';
+      throw err;
+    }
+
+    if (template.requiresDimensionVerification) {
+      const err = new Error(
+        `Global reference template ${template.code} has an unresolved dimensional conflict (5,500 mm vs 3,750 mm length note) and cannot be assigned until engineering verification confirms the physical tank certificate.`
+      );
+      (err as any).code = 'DIMENSION_CONFLICT_UNRESOLVED';
       throw err;
     }
 
@@ -5557,6 +6298,7 @@ export class PumpRepository {
       throw err;
     }
 
+    const tankVerifMap = await this.getEngineeringVerificationsMap('TANK');
     const previews: any[] = [];
 
     for (const tankId of tankIds) {
@@ -5587,7 +6329,8 @@ export class PumpRepository {
         tank,
         outletType,
         charts,
-        template
+        template,
+        tankVerifMap.get(tankId) || null
       );
 
       // Requirement 6: Reject incompatible or unverified tank IDs even if submitted directly through the API
@@ -5685,11 +6428,36 @@ export class PumpRepository {
       throw err;
     }
 
-    if (template.requiresEngineeringReview || template.isOverCapacityCeiling) {
+    const hasScopedPolicyException = Boolean(
+      String(template.code || '').toUpperCase() === 'EXCEL_10KL_REFERENCE' &&
+        template.engineeringVerification?.decision === 'VERIFIED' &&
+        template.engineeringVerification?.allowScopedPolicyException === true
+    );
+
+    if (template.requiresEngineeringReview || (template.isOverCapacityCeiling && !hasScopedPolicyException)) {
       const err = new Error(
         `Global reference template ${template.code} requires engineering review (chart maximum volume ${template.maxVolumeLitresStr} L exceeds the +10% operational capacity ceiling) and cannot be assigned, activated, or used in DSR calculations.`
       );
       (err as any).code = 'ENGINEERING_REVIEW_REQUIRED';
+      throw err;
+    }
+
+    if (template.requiresDimensionVerification) {
+      const err = new Error(
+        `Global reference template ${template.code} has an unresolved dimensional conflict (5,500 mm vs 3,750 mm length note) and cannot be assigned until engineering verification confirms the physical tank certificate.`
+      );
+      (err as any).code = 'DIMENSION_CONFLICT_UNRESOLVED';
+      throw err;
+    }
+
+    if (
+      String(template.code || '').toUpperCase().startsWith('EXCEL_') &&
+      template.engineeringVerification?.decision !== 'VERIFIED'
+    ) {
+      const err = new Error(
+        `Global reference template ${template.code} has not completed Engineering Verification and cannot be assigned to operational tanks.`
+      );
+      (err as any).code = 'ENGINEERING_VERIFICATION_REQUIRED';
       throw err;
     }
 
@@ -5708,11 +6476,14 @@ export class PumpRepository {
       throw err;
     }
 
+    const tankVerifMap = await this.getEngineeringVerificationsMap('TANK');
+
     // First pass: validate compatibility & verified dimensions for EVERY requested tank before modifying any data
     const validatedTankContexts: Array<{
       tank: Tank;
       charts: any[];
       existingDraft: any | null;
+      evalResult: any;
     }> = [];
 
     for (const tankId of tankIds) {
@@ -5735,7 +6506,8 @@ export class PumpRepository {
         tank,
         outletType,
         charts,
-        template
+        template,
+        tankVerifMap.get(tankId) || null
       );
 
       // Requirement 6: Reject incompatible or unverified tank IDs even if submitted directly through the API
@@ -5751,7 +6523,7 @@ export class PumpRepository {
       }
 
       const existingDraft = charts.find(c => c.status === 'DRAFT') || null;
-      validatedTankContexts.push({ tank, charts, existingDraft });
+      validatedTankContexts.push({ tank, charts, existingDraft, evalResult });
     }
 
     const nowIso = new Date().toISOString();
@@ -5769,7 +6541,7 @@ export class PumpRepository {
       preservedExistingDraft?: boolean;
     }> = [];
 
-    for (const { tank, charts, existingDraft } of validatedTankContexts) {
+    for (const { tank, charts, existingDraft, evalResult } of validatedTankContexts) {
       const tankId = tank.id;
 
       // Always preserve existing DRAFT revisions (especially COCO 22 Tank #1 Revision #2 DRAFT)
@@ -5806,7 +6578,9 @@ export class PumpRepository {
           maxDipMmMilliunits: template.maxDipMmMilliunits,
           chartCapacityMilliunits: template.nominalCapacityLitres * 1000,
           sourceFileName: template.sourceFileName || `global-template-${template.code}`,
-          referenceDocument: `ASSIGNED-${template.code}-REV${nextRev}`,
+          referenceDocument:
+            evalResult.physicalDimensions?.referenceDocument ||
+            `ASSIGNED-${template.code}-REV${nextRev}`,
           notes: options?.notes || `Assigned as DRAFT from global calibration template ${template.code}`,
           effectiveFrom: effectiveFrom,
           approvedBy: null,
@@ -5847,9 +6621,11 @@ export class PumpRepository {
       });
     }
 
+    const refreshedTemplate = await this.findGlobalTankCalibrationTemplateById(template.id);
     return {
-      template,
+      template: refreshedTemplate || template,
       assignments,
     };
   }
 }
+

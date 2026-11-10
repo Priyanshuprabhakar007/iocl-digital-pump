@@ -5,6 +5,9 @@ import {
   EligibleCocoTankItem,
   GlobalTemplateAssignmentPreviewResponse,
   AuditLog,
+  CalibrationManagementDashboardResponse,
+  CalibrationTestConsoleSimulationResponse,
+  CalibrationTemplateComparisonReport,
 } from '../../../shared/types';
 import {
   CheckCircle2,
@@ -29,6 +32,10 @@ import {
   FileX,
   X,
   Download,
+  Calculator,
+  Scale,
+  FileText,
+  Play,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -68,6 +75,10 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
     useState<GlobalTankCalibrationTemplate | null>(null);
   const [eligibleTanks, setEligibleTanks] = useState<EligibleCocoTankItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [dashboardData, setDashboardData] =
+    useState<CalibrationManagementDashboardResponse | null>(null);
+  const [comparison20kl, setComparison20kl] =
+    useState<CalibrationTemplateComparisonReport | null>(null);
 
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -116,6 +127,76 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
   const [showConfirmImportModal, setShowConfirmImportModal] = useState(false);
   const [expandedPreviewSheet, setExpandedPreviewSheet] = useState<string | null>(null);
 
+  // 1. Live Dip Interpolation Calculator state
+  const [interpDipMm, setInterpDipMm] = useState<string>('955');
+  const [interpLoading, setInterpLoading] = useState(false);
+  const [interpResult, setInterpResult] = useState<{
+    dipMillimetres: number;
+    interpolatedVolumeLitres: number;
+    lowerBound: { dipMillimetres: number; volumeLitres: number };
+    upperBound: { dipMillimetres: number; volumeLitres: number };
+  } | null>(null);
+  const [interpError, setInterpError] = useState<string | null>(null);
+
+  // 2. Engineering Verification Form state
+  const [showEngVerifyPanel, setShowEngVerifyPanel] = useState(false);
+  const [engTankIdentifier, setEngTankIdentifier] = useState('');
+  const [engTankSerialNumber, setEngTankSerialNumber] = useState('');
+  const [engVerifiedCapacity, setEngVerifiedCapacity] = useState('');
+  const [engVerifiedDiameterMm, setEngVerifiedDiameterMm] = useState('');
+  const [engVerifiedLengthMm, setEngVerifiedLengthMm] = useState('');
+  const [engVerifiedMaxDipMm, setEngVerifiedMaxDipMm] = useState('');
+  const [engIssuingAuthority, setEngIssuingAuthority] = useState('Weights & Measures / Legal Metrology & IOCL Engineering');
+  const [engCertificateNumber, setEngCertificateNumber] = useState('');
+  const [engVerificationDate, setEngVerificationDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [engApproverName, setEngApproverName] = useState('');
+  const [engDecision, setEngDecision] = useState<'VERIFIED' | 'PENDING_REVIEW' | 'REJECTED'>('VERIFIED');
+  const [engSupportingDocId, setEngSupportingDocId] = useState('');
+  const [engNotes, setEngNotes] = useState('');
+  const [engAllowScopedException, setEngAllowScopedException] = useState(false);
+  const [engGoverningPolicyRef, setEngGoverningPolicyRef] = useState('');
+  const [engDiscrepancyNote, setEngDiscrepancyNote] = useState('');
+  const [engResolveLengthConflict, setEngResolveLengthConflict] = useState(false);
+  const [engConfirmedLengthMm, setEngConfirmedLengthMm] = useState('5500');
+  const [engLengthResolutionNotes, setEngLengthResolutionNotes] = useState('');
+
+  // Quick Document Vault Certificate Registration state
+  const [showQuickDocForm, setShowQuickDocForm] = useState(false);
+  const [quickDocTitle, setQuickDocTitle] = useState('');
+  const [quickDocRefNo, setQuickDocRefNo] = useState('');
+  const [quickDocAuthority, setQuickDocAuthority] = useState('Legal Metrology / IOCL Engineering');
+  const [creatingQuickDoc, setCreatingQuickDoc] = useState(false);
+
+  // 20KL Comparison toggle
+  const [showComparison20kl, setShowComparison20kl] = useState(false);
+
+  // 3. Tank-Specific Engineering Verification Modal state
+  const [verifyingTank, setVerifyingTank] = useState<EligibleCocoTankItem | null>(null);
+  const [tankVerifySerial, setTankVerifySerial] = useState('');
+  const [tankVerifyDiameter, setTankVerifyDiameter] = useState('');
+  const [tankVerifyLength, setTankVerifyLength] = useState('');
+  const [tankVerifyMaxDip, setTankVerifyMaxDip] = useState('');
+  const [tankVerifyCertNo, setTankVerifyCertNo] = useState('');
+  const [tankVerifyAuthority, setTankVerifyAuthority] = useState('Legal Metrology / IOCL Engineering');
+  const [tankVerifyDocId, setTankVerifyDocId] = useState('');
+  const [tankVerifyApprover, setTankVerifyApprover] = useState('');
+  const [tankVerifyNotes, setTankVerifyNotes] = useState('');
+
+  // 4. Controlled Tank Chart Activation Modal state
+  const [activatingTank, setActivatingTank] = useState<EligibleCocoTankItem | null>(null);
+  const [activationEffectiveFrom, setActivationEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  const [activationNotes, setActivationNotes] = useState('');
+  const [confirmControlledActivation, setConfirmControlledActivation] = useState(false);
+
+  // 5. ADMIN Calibration Test Console state
+  const [showTestConsole, setShowTestConsole] = useState(false);
+  const [simTankId, setSimTankId] = useState<string>('tank-1');
+  const [simProposedTemplateId, setSimProposedTemplateId] = useState<string>('gtct-excel-20kl-ref');
+  const [simDipMm, setSimDipMm] = useState<string>('1050');
+  const [simWaterDipMm, setSimWaterDipMm] = useState<string>('25');
+  const [simRunning, setSimRunning] = useState(false);
+  const [simResult, setSimResult] = useState<CalibrationTestConsoleSimulationResponse | null>(null);
+
   const showSuccess = (msg: string) => {
     setFeedbackError(null);
     setFeedbackSuccess(msg);
@@ -125,6 +206,29 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
     setFeedbackSuccess(null);
     setFeedbackError(msg);
   };
+
+  const loadManagementDashboard = useCallback(async () => {
+    try {
+      const outletQuery = selectedOutletId
+        ? `?outletId=${encodeURIComponent(selectedOutletId)}`
+        : '';
+      const res = await apiFetch<CalibrationManagementDashboardResponse>(
+        `/api/v1/calibration-templates/management-dashboard${outletQuery}`,
+        { cache: 'no-store' }
+      );
+      if (res.success && res.data) {
+        setDashboardData(res.data);
+        if (res.data.comparison20kl) {
+          setComparison20kl(res.data.comparison20kl);
+        }
+        if (res.data.documents && res.data.documents.length > 0 && !engSupportingDocId) {
+          setEngSupportingDocId(res.data.documents[0].id);
+        }
+      }
+    } catch {
+      // Non-fatal fallback
+    }
+  }, [selectedOutletId, engSupportingDocId]);
 
   const loadTemplates = useCallback(async (preferredId?: string) => {
     setLoadingTemplates(true);
@@ -175,10 +279,34 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
         ]);
 
         if (detailRes.success && detailRes.data) {
-          setSelectedTemplateDetail(detailRes.data);
-          setReferenceDocument(detailRes.data.referenceDocument || '');
-          setSourceFileName(detailRes.data.sourceFileName || '');
-          setImportNotes(detailRes.data.notes || '');
+          const tpl = detailRes.data;
+          setSelectedTemplateDetail(tpl);
+          setReferenceDocument(tpl.referenceDocument || '');
+          setSourceFileName(tpl.sourceFileName || '');
+          setImportNotes(tpl.notes || '');
+
+          const ev = tpl.engineeringVerification;
+          setEngTankIdentifier(ev?.tankIdentifier || `${tpl.code}_TANK_REF`);
+          setEngTankSerialNumber(ev?.tankSerialNumber || '');
+          setEngVerifiedCapacity(String(ev?.verifiedCapacityLitres || tpl.nominalCapacityLitres || ''));
+          setEngVerifiedDiameterMm(String(ev?.verifiedDiameterMm || tpl.tankDiameterMm || ''));
+          setEngVerifiedLengthMm(String(ev?.verifiedLengthMm || tpl.tankLengthMm || ''));
+          setEngVerifiedMaxDipMm(String(ev?.verifiedMaxDipMm || tpl.maxDipMm || ''));
+          setEngIssuingAuthority(ev?.issuingAuthority || 'Weights & Measures / Legal Metrology & IOCL Engineering');
+          setEngCertificateNumber(ev?.certificateNumber || '');
+          setEngVerificationDate(ev?.verificationDate || new Date().toISOString().slice(0, 10));
+          setEngApproverName(ev?.engineeringApprover || userCtx?.user?.name || 'Chief Engineering Officer');
+          setEngDecision(ev?.decision || 'VERIFIED');
+          if (ev?.supportingDocumentId) {
+            setEngSupportingDocId(ev.supportingDocumentId);
+          }
+          setEngNotes(ev?.notes || '');
+          setEngAllowScopedException(Boolean(ev?.allowScopedPolicyException));
+          setEngGoverningPolicyRef(ev?.governingPolicyReference || '');
+          setEngDiscrepancyNote(ev?.discrepancyResolutionNote || '');
+          setEngResolveLengthConflict(Boolean(ev?.resolveLengthConflict));
+          setEngConfirmedLengthMm(String(ev?.confirmedLengthMm || tpl.tankLengthMm || 5500));
+          setEngLengthResolutionNotes(ev?.lengthResolutionNotes || '');
         }
 
         if (tanksRes.success && tanksRes.data && Array.isArray(tanksRes.data.tanks)) {
@@ -191,7 +319,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
         setLoadingEligibleTanks(false);
       }
     },
-    [selectedOutletId]
+    [selectedOutletId, userCtx?.user?.name]
   );
 
   const loadAuditTrail = useCallback(async () => {
@@ -210,6 +338,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
   }, []);
 
   useEffect(() => {
+    loadManagementDashboard();
     loadTemplates();
     loadAuditTrail();
   }, []);
@@ -219,6 +348,8 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
       setAssignmentPreview(null);
       setSelectedTankIds([]);
       setConfirmApproveOverCapacity(false);
+      setInterpResult(null);
+      setInterpError(null);
       loadTemplateDetailAndTanks(selectedTemplateId, scopeFilter);
     }
   }, [selectedTemplateId, scopeFilter, selectedOutletId, loadTemplateDetailAndTanks]);
@@ -255,6 +386,9 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
     confirmOverCapacity: confirmApproveOverCapacity,
     maxVolumeLitres: templateMaxVolumeLitres,
     nominalCapacityLitres: activeTemplate?.nominalCapacityLitres ?? null,
+    allowScopedPolicyException: Boolean(
+      activeTemplate?.engineeringVerification?.allowScopedPolicyException
+    ),
   });
 
   const handleCsvFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -628,7 +762,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
             skipped.length > 0 ? `. Skipped: ${skipped.length} charts.` : '.'
           }`
         );
-        await Promise.all([loadTemplates(), loadAuditTrail()]);
+        await Promise.all([loadManagementDashboard(), loadTemplates(), loadAuditTrail()]);
       } else {
         showError(res.error?.message || 'Import failed.');
       }
@@ -639,7 +773,289 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
     }
   };
 
+  // 1. Live Dip-to-Volume Interpolation Handler
+  const handleInterpolateTemplate = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeTemplate || interpLoading) return;
+    setInterpLoading(true);
+    setInterpError(null);
+    try {
+      const res = await apiFetch<any>(
+        `/api/v1/calibration-templates/${encodeURIComponent(activeTemplate.id)}/interpolate`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ dipMillimetres: Number(interpDipMm) }),
+        }
+      );
+      if (res.success && res.data) {
+        setInterpResult(res.data);
+      } else {
+        setInterpResult(null);
+        setInterpError(res.error?.message || 'Dip interpolation failed.');
+      }
+    } catch (err: any) {
+      setInterpResult(null);
+      setInterpError(err.message || 'Failed to interpolate dip volume.');
+    } finally {
+      setInterpLoading(false);
+    }
+  };
+
+  // Quick Supporting Certificate Registration in Document Vault
+  const handleCreateQuickVaultDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickDocTitle.trim() || !quickDocRefNo.trim() || creatingQuickDoc) return;
+    setCreatingQuickDoc(true);
+    try {
+      const res = await apiFetch<any>('/api/v1/documents', {
+        method: 'POST',
+        body: JSON.stringify({
+          outletId: selectedOutletId || 'outlet-1',
+          category: 'TANK_CALIBRATION_CHART',
+          title: quickDocTitle.trim(),
+          referenceNumber: quickDocRefNo.trim(),
+          issuingAuthority: quickDocAuthority.trim() || 'Legal Metrology / IOCL Engineering',
+          issueDate: new Date().toISOString().slice(0, 10),
+          status: 'VALID',
+          notes: 'Supporting tank calibration certificate registered for Engineering Verification',
+        }),
+      });
+      if (res.success && res.data) {
+        clearApiCache();
+        setEngSupportingDocId(res.data.id);
+        setTankVerifyDocId(res.data.id);
+        setShowQuickDocForm(false);
+        setQuickDocTitle('');
+        setQuickDocRefNo('');
+        await loadManagementDashboard();
+        showSuccess(
+          `Registered supporting calibration certificate '${res.data.title}' (${res.data.referenceNumber}) in Document Vault.`
+        );
+      } else {
+        showError(res.error?.message || 'Failed to register supporting document in Document Vault.');
+      }
+    } finally {
+      setCreatingQuickDoc(false);
+    }
+  };
+
+  // 2. Submit Template Engineering Verification
+  const handleSubmitEngineeringVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeTemplate || submitting) return;
+    setSubmitting(true);
+    setFeedbackError(null);
+    try {
+      const res = await apiFetch<any>(
+        `/api/v1/calibration-templates/${encodeURIComponent(activeTemplate.id)}/engineering-verify`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            tankIdentifier: engTankIdentifier.trim(),
+            tankSerialNumber: engTankSerialNumber.trim(),
+            verifiedCapacityLitres: Number(engVerifiedCapacity),
+            verifiedDiameterMm: Number(engVerifiedDiameterMm),
+            verifiedLengthMm: Number(engVerifiedLengthMm),
+            verifiedMaxDipMm: Number(engVerifiedMaxDipMm),
+            issuingAuthority: engIssuingAuthority.trim(),
+            certificateNumber: engCertificateNumber.trim(),
+            verificationDate: engVerificationDate,
+            engineeringApprover: engApproverName.trim(),
+            decision: engDecision,
+            supportingDocumentId: engSupportingDocId.trim(),
+            notes: engNotes.trim() || undefined,
+            allowScopedPolicyException: engAllowScopedException,
+            governingPolicyReference: engGoverningPolicyRef.trim() || undefined,
+            discrepancyResolutionNote: engDiscrepancyNote.trim() || undefined,
+            resolveLengthConflict: engResolveLengthConflict,
+            confirmedLengthMm: engConfirmedLengthMm ? Number(engConfirmedLengthMm) : undefined,
+            lengthResolutionNotes: engLengthResolutionNotes.trim() || undefined,
+          }),
+        }
+      );
+
+      if (res.success && res.data) {
+        clearApiCache();
+        setShowEngVerifyPanel(false);
+        await Promise.all([
+          loadManagementDashboard(),
+          loadTemplates(activeTemplate.id),
+          loadTemplateDetailAndTanks(activeTemplate.id, scopeFilter),
+          loadAuditTrail(),
+        ]);
+        showSuccess(
+          `Engineering verification recorded for ${activeTemplate.code} with decision '${engDecision}' (Certificate: ${engCertificateNumber}).`
+        );
+      } else {
+        showError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 3. Open & Submit Tank-Specific Engineering Verification
+  const handleOpenTankVerifyModal = (tank: EligibleCocoTankItem) => {
+    setVerifyingTank(tank);
+    setTankVerifySerial(`SN-${tank.outletCode || 'COCO22'}-T${tank.tankNumber}`);
+    setTankVerifyDiameter(String(tank.physicalDimensions.diameterMm || activeTemplate?.tankDiameterMm || 2100));
+    setTankVerifyLength(String(tank.physicalDimensions.lengthMm || activeTemplate?.tankLengthMm || 6250));
+    setTankVerifyMaxDip(String(tank.physicalDimensions.maxDipMm || activeTemplate?.maxDipMm || 2100));
+    setTankVerifyCertNo(tank.physicalDimensions.calibrationCertNo || '');
+    setTankVerifyAuthority('Weights & Measures / Legal Metrology & IOCL Engineering');
+    setTankVerifyDocId(engSupportingDocId || dashboardData?.documents?.[0]?.id || '');
+    setTankVerifyApprover(userCtx?.user?.name || 'Chief Engineering Officer');
+    setTankVerifyNotes(`Verified physical tank dimensions and calibration certificate for ${tank.tankName}`);
+  };
+
+  const handleSubmitTankEngineeringVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifyingTank || submitting) return;
+    setSubmitting(true);
+    setFeedbackError(null);
+    try {
+      const res = await apiFetch<any>(
+        `/api/v1/tanks/${encodeURIComponent(verifyingTank.tankId)}/calibration/engineering-verify`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            tankIdentifier: `${verifyingTank.outletCode}-TANK-${verifyingTank.tankNumber}`,
+            tankSerialNumber: tankVerifySerial.trim(),
+            verifiedCapacityLitres: verifyingTank.capacityLitres,
+            verifiedDiameterMm: Number(tankVerifyDiameter),
+            verifiedLengthMm: Number(tankVerifyLength),
+            verifiedMaxDipMm: Number(tankVerifyMaxDip),
+            issuingAuthority: tankVerifyAuthority.trim(),
+            certificateNumber: tankVerifyCertNo.trim(),
+            verificationDate: new Date().toISOString().slice(0, 10),
+            engineeringApprover: tankVerifyApprover.trim(),
+            decision: 'VERIFIED',
+            supportingDocumentId: tankVerifyDocId.trim(),
+            notes: tankVerifyNotes.trim() || undefined,
+          }),
+        }
+      );
+
+      if (res.success) {
+        clearApiCache();
+        const verifiedName = verifyingTank.tankName;
+        setVerifyingTank(null);
+        await Promise.all([
+          loadManagementDashboard(),
+          activeTemplate
+            ? loadTemplateDetailAndTanks(activeTemplate.id, scopeFilter)
+            : Promise.resolve(),
+          loadAuditTrail(),
+        ]);
+        showSuccess(
+          `Tank-specific engineering dimensions and calibration certificate verified for ${verifiedName}.`
+        );
+      } else {
+        showError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 4. Controlled Tank Chart Activation Handler
+  const handleOpenActivateTankModal = (tank: EligibleCocoTankItem) => {
+    setActivatingTank(tank);
+    setActivationEffectiveFrom(new Date().toISOString().slice(0, 10));
+    setActivationNotes(
+      `Controlled activation of Rev #${tank.existingDraftChart?.revisionNumber} following engineering verification & compatibility audit.`
+    );
+    setConfirmControlledActivation(false);
+  };
+
+  const handleConfirmTankChartActivation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activatingTank || !activatingTank.existingDraftChart || submitting) return;
+    if (!confirmControlledActivation) {
+      showError('Please confirm the administrator controlled activation checkbox.');
+      return;
+    }
+    setSubmitting(true);
+    setFeedbackError(null);
+    try {
+      const res = await apiFetch<any>(
+        `/api/v1/tanks/${encodeURIComponent(activatingTank.tankId)}/calibration/charts/${encodeURIComponent(
+          activatingTank.existingDraftChart.chartId || activatingTank.existingDraftChart.id
+        )}/activate`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            confirmActivation: true,
+            effectiveFrom: activationEffectiveFrom,
+            notes: activationNotes.trim() || undefined,
+          }),
+        }
+      );
+
+      if (res.success) {
+        clearApiCache();
+        const activatedTankName = activatingTank.tankName;
+        const revNum = activatingTank.existingDraftChart.revisionNumber;
+        setActivatingTank(null);
+        setConfirmControlledActivation(false);
+        await Promise.all([
+          loadManagementDashboard(),
+          activeTemplate
+            ? loadTemplateDetailAndTanks(activeTemplate.id, scopeFilter)
+            : Promise.resolve(),
+          loadAuditTrail(),
+        ]);
+        if (onCalibrationAssigned) {
+          onCalibrationAssigned();
+        }
+        showSuccess(
+          `Controlled activation succeeded for ${activatedTankName} Revision #${revNum} (ACTIVE). Previous active revision preserved as SUPERSEDED; historical DSR and stock readings remain untouched.`
+        );
+      } else {
+        showError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 5. ADMIN Calibration Test Console Simulation Handler
+  const handleRunTestConsoleSimulation = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!simTankId || simRunning) return;
+    setSimRunning(true);
+    setFeedbackError(null);
+    try {
+      const res = await apiFetch<CalibrationTestConsoleSimulationResponse>(
+        '/api/v1/calibration-templates/test-console',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            outletId: selectedOutletId || 'outlet-1',
+            tankId: simTankId,
+            dipMillimetres: Number(simDipMm),
+            waterDipMillimetres: Number(simWaterDipMm || 0),
+            proposedTemplateId: simProposedTemplateId || null,
+          }),
+        }
+      );
+      if (res.success && res.data) {
+        setSimResult(res.data);
+      } else {
+        showError(getPumpInfrastructureErrorMessage(res.error));
+      }
+    } finally {
+      setSimRunning(false);
+    }
+  };
+
   const templatePoints = activeTemplate?.points || [];
+  const excelReferenceTemplates = templates.filter(t =>
+    ['EXCEL_10KL_REFERENCE', 'EXCEL_15KL_REFERENCE', 'EXCEL_20KL_REFERENCE'].includes(t.code)
+  );
+  const statusSummary = dashboardData?.statusSummary;
+  const availableDocuments = dashboardData?.documents || [];
+  const coco22Tanks = dashboardData?.coco22Tanks || eligibleTanks;
 
   return (
     <div className="space-y-6" data-testid="global-calibration-master-section">
@@ -650,16 +1066,14 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
             <div className="flex flex-wrap items-center gap-2.5">
               <Layers className="w-5 h-5 text-orange-500" />
               <h2 className="text-lg font-black text-white tracking-tight">
-                IOCL Global Calibration Masters
+                IOCL Global Calibration Masters &amp; End-to-End Tank Calibration
               </h2>
               <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-bold bg-orange-500/15 text-orange-300 border border-orange-500/30">
-                STANDARD_20KL &amp; STANDARD_50KL
+                10 KL • 15 KL • 20 KL • 50 KL
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Centralised horizontal cylindrical underground tank calibration templates. Imported CSV charts are saved as{' '}
-              <strong className="text-amber-300 font-mono">DRAFT</strong> by default, require separate authorised approval after verification, and never automatically replace{' '}
-              <strong className="text-emerald-300 font-mono">ACTIVE</strong> tank charts or historical revisions.
+              End-to-end ADMIN calibration lifecycle: <strong className="text-slate-200 font-mono">IMPORTED DRAFT → ENGINEERING REVIEW → VERIFIED → ADMIN APPROVED → ASSIGNED TO COMPATIBLE TANK AS DRAFT → TANK-SPECIFIC AUTHORISED ACTIVATION</strong>. Active charts and historical DSR readings are never overwritten.
             </p>
           </div>
 
@@ -667,6 +1081,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
             <button
               type="button"
               onClick={() => {
+                loadManagementDashboard();
                 loadTemplates(selectedTemplateId);
                 loadTemplateDetailAndTanks(selectedTemplateId, scopeFilter);
                 loadAuditTrail();
@@ -680,6 +1095,27 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
               />
               <span>Refresh Masters</span>
             </button>
+
+            {isGlobalAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTestConsole(prev => !prev);
+                  if (!showTestConsole && !simResult) {
+                    setTimeout(() => handleRunTestConsoleSimulation(), 50);
+                  }
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-semibold transition-colors ${
+                  showTestConsole
+                    ? 'bg-cyan-600 text-white border-cyan-500 shadow-md shadow-cyan-600/20'
+                    : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border-cyan-500/30'
+                }`}
+                data-testid="toggle-calibration-test-console-btn"
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                <span>{showTestConsole ? 'Hide Calibration Test Console' : 'Calibration Test Console'}</span>
+              </button>
+            )}
 
             {isGlobalAdmin && (
               <button
@@ -716,6 +1152,516 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
           </div>
         </div>
       </div>
+
+      {/* Section 6: Final Dashboard Status Indicators (3 Separate Statuses) */}
+      <div
+        className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4"
+        data-testid="calibration-final-dashboard-status"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200 font-mono flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-orange-400" />
+              <span>End-to-End Calibration Governance &amp; Operational Readiness Status</span>
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Separately tracks Reference Data Import, Engineering Verification, and Tank-Specific Operational Activation.
+            </p>
+          </div>
+
+          <span
+            className={`px-3 py-1 rounded-lg text-xs font-mono font-bold border ${
+              statusSummary?.isOperationallyComplete
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+            }`}
+            data-testid="overall-calibration-readiness-badge"
+          >
+            {statusSummary?.isOperationallyComplete
+              ? 'OPERATIONALLY COMPLETE'
+              : 'PENDING ENGINEERING VERIFICATION & CONTROLLED ACTIVATION'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono">
+          {/* Pillar 1: REFERENCE DATA IMPORTED */}
+          <div
+            className={`p-4 rounded-xl border ${
+              statusSummary?.referenceDataImported.complete
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-amber-500/10 border-amber-500/30'
+            }`}
+            data-testid="status-card-reference-data-imported"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-200">
+                1. REFERENCE DATA IMPORTED
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                  statusSummary?.referenceDataImported.complete
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}
+              >
+                {statusSummary?.referenceDataImported.complete ? 'IMPORTED (3/3)' : 'INCOMPLETE'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300">
+              {statusSummary?.referenceDataImported.summary ||
+                '3/3 Excel reference calibration charts imported (10 KL: 195 pts, 15 KL: 195 pts, 20 KL: 211 pts).'}
+            </p>
+          </div>
+
+          {/* Pillar 2: ENGINEERING VERIFIED */}
+          <div
+            className={`p-4 rounded-xl border ${
+              statusSummary?.engineeringVerified.complete
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-amber-500/10 border-amber-500/30'
+            }`}
+            data-testid="status-card-engineering-verified"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-200">
+                2. ENGINEERING VERIFIED
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                  statusSummary?.engineeringVerified.complete
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}
+              >
+                {statusSummary?.engineeringVerified.complete
+                  ? 'VERIFIED (3/3)'
+                  : `PENDING (${statusSummary?.engineeringVerified.verifiedTemplatesCount ?? 0}/3)`}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300">
+              {statusSummary?.engineeringVerified.summary ||
+                'Awaiting Document Vault certification & formal engineering sign-off before operational approval.'}
+            </p>
+          </div>
+
+          {/* Pillar 3: OPERATIONALLY ACTIVE */}
+          <div
+            className={`p-4 rounded-xl border ${
+              statusSummary?.operationallyActive.complete
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-cyan-500/10 border-cyan-500/30'
+            }`}
+            data-testid="status-card-operationally-active"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-200">
+                3. OPERATIONALLY ACTIVE
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                  statusSummary?.operationallyActive.complete
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                }`}
+              >
+                {statusSummary?.operationallyActive.complete
+                  ? 'ALL TANKS ACTIVE'
+                  : `${statusSummary?.operationallyActive.activeTanksCount ?? 1}/${
+                      statusSummary?.operationallyActive.totalTanksCount ?? 3
+                    } TANKS ACTIVE`}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300">
+              {statusSummary?.operationallyActive.summary ||
+                'COCO 22 Tank #1 Rev #1 ACTIVE & Rev #2 DRAFT preserved. Unverified tanks remain pending.'}
+            </p>
+          </div>
+        </div>
+
+        {statusSummary && statusSummary.blockingReasons.length > 0 && (
+          <div
+            className="p-3.5 bg-slate-950/80 border border-amber-500/30 rounded-xl text-xs font-mono space-y-1.5"
+            data-testid="calibration-blocking-reasons-banner"
+          >
+            <div className="text-amber-300 font-bold flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                Why Calibration Is Not Marked &ldquo;Operationally Complete&rdquo; ({statusSummary.blockingReasons.length} Active Gate{statusSummary.blockingReasons.length > 1 ? 's' : ''}):
+              </span>
+            </div>
+            <ul className="list-disc list-inside text-slate-300 space-y-1 pl-1 text-[11px]">
+              {statusSummary.blockingReasons.map((reason, idx) => (
+                <li key={idx}>{reason}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* Section 1: Unified Three Excel Reference Templates Verification Table */}
+      {excelReferenceTemplates.length > 0 && (
+        <div
+          className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3"
+          data-testid="reference-templates-overview-section"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <span>
+                  1. Imported Reference Calibration Charts — Master Verification Summary (10 KL • 15 KL • 20 KL)
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Retains all three imported workbook curves (<code className="text-emerald-300">20KL_15KL_10KL_calibration_Dip_chart.xlsx</code>) without duplicating or altering recorded calibration values.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto bg-slate-950/70 border border-slate-800 rounded-xl">
+            <table
+              className="w-full text-left text-xs font-mono"
+              data-testid="reference-templates-overview-table"
+            >
+              <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] border-b border-slate-800">
+                <tr>
+                  <th className="py-2.5 px-3">Template Code</th>
+                  <th className="py-2.5 px-3">Nominal Capacity</th>
+                  <th className="py-2.5 px-3">Diameter × Length</th>
+                  <th className="py-2.5 px-3">Max Dip</th>
+                  <th className="py-2.5 px-3">Max Chart Volume</th>
+                  <th className="py-2.5 px-3">Points</th>
+                  <th className="py-2.5 px-3">Source Workbook</th>
+                  <th className="py-2.5 px-3">Engineering Status</th>
+                  <th className="py-2.5 px-3">Lifecycle Stage</th>
+                  <th className="py-2.5 px-3">Compatible Tanks</th>
+                  <th className="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {excelReferenceTemplates.map(tpl => {
+                  const badge = getGlobalTemplateStatusBadge(tpl.status, tpl.pointsCount, tpl);
+                  const evStatus = tpl.engineeringVerification?.decision || 'PENDING_REVIEW';
+                  return (
+                    <tr
+                      key={tpl.id}
+                      className={`hover:bg-slate-800/40 ${
+                        activeTemplate?.id === tpl.id ? 'bg-orange-500/10' : ''
+                      }`}
+                    >
+                      <td className="py-2.5 px-3 font-bold text-white">{tpl.code}</td>
+                      <td className="py-2.5 px-3 text-slate-200">
+                        {tpl.nominalCapacityLitres.toLocaleString()} L
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-300">
+                        {tpl.tankDiameterMm?.toLocaleString()} × {tpl.tankLengthMm?.toLocaleString()} mm
+                      </td>
+                      <td className="py-2.5 px-3 text-orange-400 font-bold">
+                        {tpl.maxDipMm?.toLocaleString()} mm
+                      </td>
+                      <td className="py-2.5 px-3 text-white font-bold">
+                        {tpl.maxVolumeLitres != null
+                          ? `${formatCalibrationDisplay(tpl.maxVolumeLitres)} L`
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-emerald-400 font-bold">
+                        {tpl.pointsCount} pts
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-400 text-[11px]">
+                        {tpl.sourceFileName || '20KL_15KL_10KL_calibration_Dip_chart.xlsx'}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            evStatus === 'VERIFIED'
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                              : evStatus === 'REJECTED'
+                                ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                          }`}
+                        >
+                          {evStatus}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badge.badgeClass}`}
+                        >
+                          {tpl.lifecycleStage || badge.label}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-300">
+                        {tpl.compatibleTanksCount ?? 0} verified
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTemplateId(tpl.id)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-orange-300 border border-orange-500/30 text-[11px] font-bold"
+                        >
+                          {activeTemplate?.id === tpl.id ? 'Selected' : 'Inspect'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Section 5: ADMIN Calibration Test Console (Read-Only Simulation) */}
+      {showTestConsole && isGlobalAdmin && (
+        <div
+          className="bg-slate-900 border border-cyan-500/40 rounded-2xl p-6 space-y-5 shadow-2xl"
+          data-testid="calibration-test-console"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Calculator className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-base font-bold text-white font-mono">
+                  ADMIN Calibration Test Console — Read-Only Dip &amp; Water-Dip Simulation
+                </h3>
+                <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-mono font-bold">
+                  READ_ONLY_SIMULATION • ZERO DSR WRITES
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Simulates dip-to-volume interpolation, water-dip subtraction, before/after revision comparison, and boundary checks at <code className="text-cyan-300">0 mm</code> and <code className="text-cyan-300">maxDipMm</code> without writing to Daily Operations or tank stock history.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowTestConsole(false)}
+              className="text-slate-400 hover:text-white p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <form
+            onSubmit={handleRunTestConsoleSimulation}
+            className="grid grid-cols-1 sm:grid-cols-5 gap-3 text-xs font-mono items-end"
+          >
+            <div>
+              <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                Target Tank ({selectedOutletName || 'COCO 22'})
+              </label>
+              <select
+                value={simTankId}
+                onChange={e => setSimTankId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                data-testid="test-console-tank-select"
+              >
+                {coco22Tanks.map(t => (
+                  <option key={t.tankId} value={t.tankId}>
+                    Tank #{t.tankNumber} — {t.tankName} ({t.capacityLitres.toLocaleString()} L)
+                  </option>
+                ))}
+                {coco22Tanks.length === 0 && (
+                  <>
+                    <option value="tank-1">Tank #1 — MS Tank 1 (20,000 L)</option>
+                    <option value="tank-2">Tank #2 — HSD Tank 1 (20,000 L)</option>
+                    <option value="tank-3">Tank #3 — HSD Tank 2 (20,000 L)</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                Proposed Reference Template
+              </label>
+              <select
+                value={simProposedTemplateId}
+                onChange={e => setSimProposedTemplateId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                data-testid="test-console-template-select"
+              >
+                <option value="">Use Tank Existing Draft Only</option>
+                {templates.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.code} ({t.pointsCount} pts)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                Entered Product Dip (mm)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={simDipMm}
+                onChange={e => setSimDipMm(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                data-testid="test-console-dip-input"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                Entered Water Dip (mm)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={simWaterDipMm}
+                onChange={e => setSimWaterDipMm(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                data-testid="test-console-water-dip-input"
+              />
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={simRunning}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-md shadow-cyan-600/20"
+                data-testid="run-test-console-btn"
+              >
+                <Play className="w-3.5 h-3.5" />
+                <span>{simRunning ? 'Simulating...' : 'Run Simulation'}</span>
+              </button>
+            </div>
+          </form>
+
+          {simResult && (
+            <div className="space-y-4 font-mono text-xs" data-testid="test-console-results">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Active Revision Result */}
+                <div className="p-4 bg-slate-950/80 border border-emerald-500/30 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <span className="font-bold text-emerald-300 uppercase">
+                      ACTIVE CHART: {simResult.activeRevision ? simResult.activeRevision.label : 'None'}
+                    </span>
+                    {simResult.activeRevision && (
+                      <span className="text-[10px] text-slate-400">
+                        Max Dip: {simResult.activeRevision.maxDipMm} mm • {simResult.activeRevision.pointsCount} pts
+                      </span>
+                    )}
+                  </div>
+                  {simResult.activeRevision ? (
+                    simResult.activeRevision.dipOutOfRangeError ? (
+                      <div className="p-2.5 bg-rose-500/15 border border-rose-500/40 rounded-lg text-rose-300 text-[11px]">
+                        ❌ {simResult.activeRevision.dipOutOfRangeError}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2 text-[11px]">
+                        <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                          <span className="text-slate-500 block text-[10px]">GROSS VOLUME</span>
+                          <span className="text-white font-bold">
+                            {formatCalibrationDisplay(simResult.activeRevision.grossVolumeLitres ?? 0)} L
+                          </span>
+                        </div>
+                        <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                          <span className="text-slate-500 block text-[10px]">WATER VOLUME</span>
+                          <span className="text-amber-300 font-bold">
+                            -{formatCalibrationDisplay(simResult.activeRevision.waterVolumeLitres ?? 0)} L
+                          </span>
+                        </div>
+                        <div className="p-2 bg-slate-900 rounded-lg border border-emerald-500/30">
+                          <span className="text-slate-400 block text-[10px]">NET PRODUCT VOL</span>
+                          <span className="text-emerald-400 font-bold">
+                            {formatCalibrationDisplay(simResult.activeRevision.netProductVolumeLitres ?? 0)} L
+                          </span>
+                        </div>
+                        <div className="col-span-3 text-[10px] text-slate-400 pt-1">
+                          Boundary Tests: 0 mm = {formatCalibrationDisplay(simResult.activeRevision.boundaryZeroMmVolumeLitres)} L • Max ({simResult.activeRevision.maxDipMm} mm) = {formatCalibrationDisplay(simResult.activeRevision.boundaryMaxDipVolumeLitres)} L
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    <div className="text-slate-500">No active revision on this tank.</div>
+                  )}
+                </div>
+
+                {/* Proposed / Draft Revision Result */}
+                <div className="p-4 bg-slate-950/80 border border-cyan-500/30 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <span className="font-bold text-cyan-300 uppercase">
+                      PROPOSED / DRAFT: {simResult.proposedRevision ? simResult.proposedRevision.label : 'None'}
+                    </span>
+                    {simResult.proposedRevision && (
+                      <span className="text-[10px] text-slate-400">
+                        Max Dip: {simResult.proposedRevision.maxDipMm} mm • {simResult.proposedRevision.pointsCount} pts
+                      </span>
+                    )}
+                  </div>
+                  {simResult.proposedRevision ? (
+                    simResult.proposedRevision.dipOutOfRangeError ? (
+                      <div className="p-2.5 bg-rose-500/15 border border-rose-500/40 rounded-lg text-rose-300 text-[11px]">
+                        ❌ {simResult.proposedRevision.dipOutOfRangeError}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2 text-[11px]">
+                        <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                          <span className="text-slate-500 block text-[10px]">GROSS VOLUME</span>
+                          <span className="text-white font-bold">
+                            {formatCalibrationDisplay(simResult.proposedRevision.grossVolumeLitres ?? 0)} L
+                          </span>
+                        </div>
+                        <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                          <span className="text-slate-500 block text-[10px]">WATER VOLUME</span>
+                          <span className="text-amber-300 font-bold">
+                            -{formatCalibrationDisplay(simResult.proposedRevision.waterVolumeLitres ?? 0)} L
+                          </span>
+                        </div>
+                        <div className="p-2 bg-slate-900 rounded-lg border border-cyan-500/30">
+                          <span className="text-slate-400 block text-[10px]">NET PRODUCT VOL</span>
+                          <span className="text-cyan-300 font-bold">
+                            {formatCalibrationDisplay(simResult.proposedRevision.netProductVolumeLitres ?? 0)} L
+                          </span>
+                        </div>
+                        <div className="col-span-3 text-[10px] text-slate-400 pt-1">
+                          Boundary Tests: 0 mm = {formatCalibrationDisplay(simResult.proposedRevision.boundaryZeroMmVolumeLitres)} L • Max ({simResult.proposedRevision.maxDipMm} mm) = {formatCalibrationDisplay(simResult.proposedRevision.boundaryMaxDipVolumeLitres)} L
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    <div className="text-slate-500">No proposed/draft revision selected.</div>
+                  )}
+                </div>
+              </div>
+
+              {simResult.beforeAfterComparison &&
+                simResult.beforeAfterComparison.grossVolumeDeltaLitres != null && (
+                  <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                    <span className="text-slate-300 font-bold">
+                      Before / After Revision Comparison at {simResult.enteredDipMm} mm Dip:
+                    </span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-cyan-300">
+                        Gross Delta:{' '}
+                        <strong>
+                          {simResult.beforeAfterComparison.grossVolumeDeltaLitres >= 0 ? '+' : ''}
+                          {formatCalibrationDisplay(simResult.beforeAfterComparison.grossVolumeDeltaLitres)} L
+                        </strong>{' '}
+                        ({simResult.beforeAfterComparison.percentageDelta ?? 0}%)
+                      </span>
+                      <span className="text-emerald-300">
+                        Net Product Delta:{' '}
+                        <strong>
+                          {(simResult.beforeAfterComparison.netProductVolumeDeltaLitres ?? 0) >= 0
+                            ? '+'
+                            : ''}
+                          {formatCalibrationDisplay(
+                            simResult.beforeAfterComparison.netProductVolumeDeltaLitres ?? 0
+                          )}{' '}
+                          L
+                        </strong>
+                      </span>
+                    </div>
+                  </div>
+                )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Contextual Success / Error Banners */}
       {feedbackSuccess && (
@@ -1285,8 +2231,55 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
               </div>
             </div>
 
-            {/* Action Buttons: CSV Import & Separate Authorised Approval */}
+            {/* Action Buttons: Engineering Verification, 20KL Comparison, CSV Import & Separate Authorised Approval */}
             <div className="flex flex-wrap items-center gap-2.5">
+              {canApproveCalibrationChart && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEngVerifyPanel(prev => !prev);
+                    setFeedbackError(null);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-mono font-bold transition-colors ${
+                    showEngVerifyPanel
+                      ? 'bg-cyan-600 text-white border-cyan-500 shadow-md shadow-cyan-600/20'
+                      : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border-cyan-500/30'
+                  }`}
+                  data-testid="toggle-engineering-verification-btn"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>
+                    {showEngVerifyPanel
+                      ? 'Hide Engineering Verification'
+                      : activeTemplate.engineeringVerification?.decision === 'VERIFIED'
+                        ? 'Update Engineering Verification (VERIFIED)'
+                        : 'Engineering Verification & Cert'}
+                  </span>
+                </button>
+              )}
+
+              {(activeTemplate.code === 'EXCEL_20KL_REFERENCE' ||
+                activeTemplate.code === 'STANDARD_20KL') &&
+                comparison20kl && (
+                  <button
+                    type="button"
+                    onClick={() => setShowComparison20kl(prev => !prev)}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-mono font-bold transition-colors ${
+                      showComparison20kl
+                        ? 'bg-indigo-600 text-white border-indigo-500'
+                        : 'bg-slate-800 hover:bg-slate-700 text-indigo-300 border-indigo-500/30'
+                    }`}
+                    data-testid="toggle-compare-20kl-btn"
+                  >
+                    <Scale className="w-3.5 h-3.5" />
+                    <span>
+                      {showComparison20kl
+                        ? 'Hide 20KL Comparison'
+                        : 'Compare EXCEL_20KL vs STANDARD_20KL'}
+                    </span>
+                  </button>
+                )}
+
               {canWriteTankCalibration && (
                 <button
                   type="button"
@@ -1330,6 +2323,472 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
               )}
             </div>
           </div>
+
+          {/* Section 2: Engineering Verification Workflow Panel */}
+          {showEngVerifyPanel && canApproveCalibrationChart && (
+            <div
+              className="p-5 bg-slate-950/90 border border-cyan-500/40 rounded-2xl space-y-4 font-mono text-xs"
+              data-testid="engineering-verification-panel"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-cyan-300 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-cyan-400" />
+                    <span>
+                      2. Engineering Verification &amp; Supporting Certification — {activeTemplate.code}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Requires actual supporting evidence in the Document Vault (<code className="text-cyan-300">schema.documents</code>). An uploaded Excel workbook filename or manually typed reference number alone is rejected as proof of certification.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickDocForm(prev => !prev)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold"
+                  data-testid="toggle-register-vault-doc-btn"
+                >
+                  {showQuickDocForm ? 'Hide Vault Registration' : '+ Register Certificate in Document Vault'}
+                </button>
+              </div>
+
+              {showQuickDocForm && (
+                <form
+                  onSubmit={handleCreateQuickVaultDocument}
+                  className="p-3.5 bg-slate-900 border border-emerald-500/30 rounded-xl grid grid-cols-1 sm:grid-cols-4 gap-3 items-end"
+                  data-testid="quick-vault-doc-form"
+                >
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Certificate Title
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={quickDocTitle}
+                      onChange={e => setQuickDocTitle(e.target.value)}
+                      placeholder={`e.g. Certified Dip Chart ${activeTemplate.code}`}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Official Certificate / Ref No.
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={quickDocRefNo}
+                      onChange={e => setQuickDocRefNo(e.target.value)}
+                      placeholder="e.g. LM/IOCL/PB/2026/9941"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Issuing Authority
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={quickDocAuthority}
+                      onChange={e => setQuickDocAuthority(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                    />
+                  </div>
+                  <div>
+                    <button
+                      type="submit"
+                      disabled={creatingQuickDoc}
+                      className="w-full px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                    >
+                      {creatingQuickDoc ? 'Saving...' : 'Save to Document Vault'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              <form onSubmit={handleSubmitEngineeringVerification} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Tank Identification
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={engTankIdentifier}
+                      onChange={e => setEngTankIdentifier(e.target.value)}
+                      placeholder="e.g. COCO22-TANK-REF"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                      data-testid="eng-tank-identifier-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Tank Serial / Reference No.
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={engTankSerialNumber}
+                      onChange={e => setEngTankSerialNumber(e.target.value)}
+                      placeholder="e.g. IS10987-UGT-2026-01"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                      data-testid="eng-tank-serial-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Certificate / Strapping No.
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={engCertificateNumber}
+                      onChange={e => setEngCertificateNumber(e.target.value)}
+                      placeholder="e.g. W&M/IOCL/CERT-2026-101"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                      data-testid="eng-certificate-number-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Supporting Document (Document Vault)
+                    </label>
+                    <select
+                      required
+                      value={engSupportingDocId}
+                      onChange={e => setEngSupportingDocId(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                      data-testid="eng-supporting-doc-select"
+                    >
+                      <option value="">-- Select Document Vault Record --</option>
+                      {availableDocuments.map(doc => (
+                        <option key={doc.id} value={doc.id}>
+                          {doc.title} ({doc.referenceNumber || doc.category})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Verified Nominal Capacity (L)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={engVerifiedCapacity}
+                      onChange={e => setEngVerifiedCapacity(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Verified Diameter (mm)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={engVerifiedDiameterMm}
+                      onChange={e => setEngVerifiedDiameterMm(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Verified Length (mm)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={engVerifiedLengthMm}
+                      onChange={e => setEngVerifiedLengthMm(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Verified Max Dip (mm)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={engVerifiedMaxDipMm}
+                      onChange={e => setEngVerifiedMaxDipMm(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Issuing Authority
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={engIssuingAuthority}
+                      onChange={e => setEngIssuingAuthority(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Verification Date
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={engVerificationDate}
+                      onChange={e => setEngVerificationDate(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Engineering Approver
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={engApproverName}
+                      onChange={e => setEngApproverName(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                      Verification Decision
+                    </label>
+                    <select
+                      value={engDecision}
+                      onChange={e =>
+                        setEngDecision(e.target.value as 'VERIFIED' | 'PENDING_REVIEW' | 'REJECTED')
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                      data-testid="eng-decision-select"
+                    >
+                      <option value="VERIFIED">VERIFIED</option>
+                      <option value="PENDING_REVIEW">PENDING_REVIEW</option>
+                      <option value="REJECTED">REJECTED</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Specific Outstanding Issue 1: 10 KL Scoped Policy Exception */}
+                {activeTemplate.code === 'EXCEL_10KL_REFERENCE' && (
+                  <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl space-y-2.5">
+                    <div className="font-bold text-rose-300">
+                      10 KL Capacity Discrepancy Governance (Nominal: 10,000 L • Chart Max: 11,073.41 L • +10% Ceiling: 11,000 L)
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      The global +10% ceiling is never disabled globally, nor is nominal capacity altered. To approve <code>EXCEL_10KL_REFERENCE</code>, an authorised engineer must either keep it restricted or record a narrowly scoped policy exception backed by governing IOCL/Legal Metrology policy and a Document Vault certificate.
+                    </p>
+                    <label className="inline-flex items-center gap-2 text-rose-200 font-semibold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={engAllowScopedException}
+                        onChange={e => setEngAllowScopedException(e.target.checked)}
+                        className="rounded border-rose-500 bg-slate-900 text-rose-500"
+                        data-testid="eng-10kl-scoped-exception-checkbox"
+                      />
+                      <span>
+                        Grant Narrowly Scoped Policy Exception for EXCEL_10KL_REFERENCE (+73.41 L dish-end crown volume above +10% ceiling)
+                      </span>
+                    </label>
+                    {engAllowScopedException && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="block text-[10px] text-rose-300 uppercase mb-1">
+                            Governing Calibration Policy Reference
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={engGoverningPolicyRef}
+                            onChange={e => setEngGoverningPolicyRef(e.target.value)}
+                            placeholder="e.g. IOCL-ENG-POL-UGT-DISH-END-2026"
+                            className="w-full bg-slate-900 border border-rose-500/40 rounded-lg px-3 py-1.5 text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-rose-300 uppercase mb-1">
+                            Engineering Discrepancy Resolution Note
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={engDiscrepancyNote}
+                            onChange={e => setEngDiscrepancyNote(e.target.value)}
+                            placeholder="e.g. Physical hydro-strapping verified 11,073.41 L total dished-end volume"
+                            className="w-full bg-slate-900 border border-rose-500/40 rounded-lg px-3 py-1.5 text-white"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Specific Outstanding Issue 2: 15 KL Dimensional Conflict Resolution */}
+                {activeTemplate.code === 'EXCEL_15KL_REFERENCE' && (
+                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2.5">
+                    <div className="font-bold text-amber-300">
+                      15 KL Dimensional Conflict Resolution (5,500 mm vs 3,750 mm Workbook Header Reference)
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      The 15 KL sheet in the source workbook contains a conflicting <code>3,750 mm</code> header annotation alongside the physical <code>5,500 mm</code> 15 KL shell length. Operational approval is blocked until the <code>5,500 mm</code> shell length is formally confirmed against the calibration certificate.
+                    </p>
+                    <label className="inline-flex items-center gap-2 text-amber-200 font-semibold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={engResolveLengthConflict}
+                        onChange={e => setEngResolveLengthConflict(e.target.checked)}
+                        className="rounded border-amber-500 bg-slate-900 text-amber-500"
+                        data-testid="eng-15kl-resolve-conflict-checkbox"
+                      />
+                      <span>
+                        Confirm Physical 15 KL Shell Length Is 5,500 mm (Resolving 3,750 mm Copy-Paste Header Conflict)
+                      </span>
+                    </label>
+                    {engResolveLengthConflict && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="block text-[10px] text-amber-300 uppercase mb-1">
+                            Confirmed Physical Shell Length (mm)
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            value={engConfirmedLengthMm}
+                            onChange={e => setEngConfirmedLengthMm(e.target.value)}
+                            className="w-full bg-slate-900 border border-amber-500/40 rounded-lg px-3 py-1.5 text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-amber-300 uppercase mb-1">
+                            Length Conflict Resolution Notes
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={engLengthResolutionNotes}
+                            onChange={e => setEngLengthResolutionNotes(e.target.value)}
+                            placeholder="e.g. Verified 1,940x5,500 mm physical tank drawing & W&M certificate"
+                            className="w-full bg-slate-900 border border-amber-500/40 rounded-lg px-3 py-1.5 text-white"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                  <input
+                    type="text"
+                    value={engNotes}
+                    onChange={e => setEngNotes(e.target.value)}
+                    placeholder="Additional engineering inspection remarks..."
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowEngVerifyPanel(false)}
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-md shadow-cyan-600/20"
+                      data-testid="submit-engineering-verification-btn"
+                    >
+                      {submitting ? 'Recording...' : 'Record Engineering Verification'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Section 2c: 20 KL Comparison Panel (EXCEL_20KL_REFERENCE vs STANDARD_20KL) */}
+          {showComparison20kl && comparison20kl && (
+            <div
+              className="p-4 bg-slate-950/90 border border-indigo-500/40 rounded-2xl space-y-3 font-mono text-xs"
+              data-testid="compare-20kl-panel"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-indigo-300 flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-indigo-400" />
+                    <span>
+                      20 KL Calibration Comparison — {comparison20kl.primaryTemplateCode} vs{' '}
+                      {comparison20kl.benchmarkTemplateCode}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{comparison20kl.summary}</p>
+                </div>
+                <span className="px-2.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-bold">
+                  {comparison20kl.differingPointsCount}/{comparison20kl.totalDipPointsCompared} POINTS DIFFER • MAX Δ {formatCalibrationDisplay(comparison20kl.maxVolumeDeltaLitres)} L
+                </span>
+              </div>
+
+              <div className="max-h-56 overflow-y-auto border border-slate-800 rounded-xl">
+                <table className="w-full text-left text-[11px]">
+                  <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] sticky top-0">
+                    <tr>
+                      <th className="py-1.5 px-3">Dip (mm)</th>
+                      <th className="py-1.5 px-3">EXCEL_20KL_REFERENCE (L)</th>
+                      <th className="py-1.5 px-3">STANDARD_20KL (L)</th>
+                      <th className="py-1.5 px-3">Delta (L)</th>
+                      <th className="py-1.5 px-3">Delta (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {comparison20kl.rows.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-900/60">
+                        <td className="py-1 px-3 text-orange-400 font-bold">
+                          {formatCalibrationDisplay(row.dipMillimetres)}
+                        </td>
+                        <td className="py-1 px-3 text-white">
+                          {row.primaryVolumeLitres != null
+                            ? formatCalibrationDisplay(row.primaryVolumeLitres)
+                            : '—'}
+                        </td>
+                        <td className="py-1 px-3 text-slate-300">
+                          {row.benchmarkVolumeLitres != null
+                            ? formatCalibrationDisplay(row.benchmarkVolumeLitres)
+                            : '—'}
+                        </td>
+                        <td
+                          className={`py-1 px-3 font-bold ${
+                            (row.deltaLitres ?? 0) < 0
+                              ? 'text-amber-300'
+                              : (row.deltaLitres ?? 0) > 0
+                                ? 'text-cyan-300'
+                                : 'text-slate-500'
+                          }`}
+                        >
+                          {row.deltaLitres != null
+                            ? `${row.deltaLitres > 0 ? '+' : ''}${formatCalibrationDisplay(row.deltaLitres)}`
+                            : '—'}
+                        </td>
+                        <td className="py-1 px-3 text-slate-400">
+                          {row.deltaPercent != null ? `${row.deltaPercent}%` : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Requirement 2 & 5 Notice when template has 0 points or is awaiting approval */}
           {activeTemplate.status === 'DRAFT' && activeTemplate.pointsCount < 2 && (
@@ -1378,7 +2837,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                   templateOverCapacityCeilingLitres != null &&
                   templateMaxVolumeLitres > templateOverCapacityCeilingLitres)) ? (
                 <div
-                  className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-lg text-rose-200 space-y-1.5"
+                  className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-lg text-rose-200 space-y-2"
                   data-testid="engineering-review-required-banner"
                 >
                   <div className="flex items-start gap-2">
@@ -1399,6 +2858,23 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                       use are strictly blocked until verified by an authorised engineer.
                     </div>
                   </div>
+                  {Boolean(
+                    activeTemplate.engineeringVerification?.decision === 'VERIFIED' &&
+                      activeTemplate.engineeringVerification?.allowScopedPolicyException
+                  ) && (
+                    <label className="inline-flex items-center gap-2 cursor-pointer text-[11px] text-emerald-200 font-semibold pt-1">
+                      <input
+                        type="checkbox"
+                        checked={confirmApproveOverCapacity}
+                        onChange={e => setConfirmApproveOverCapacity(e.target.checked)}
+                        className="rounded border-emerald-500/50 bg-slate-900 text-emerald-500"
+                        data-testid="confirm-approve-over-capacity-checkbox"
+                      />
+                      <span>
+                        Scoped Engineering Policy Exception ({activeTemplate.engineeringVerification?.governingPolicyReference}) verified in Document Vault. Confirm authorised approval of {activeTemplate.code}.
+                      </span>
+                    </label>
+                  )}
                 </div>
               ) : (
                 isTemplateOverNominalCapacity && (
@@ -1690,9 +3166,9 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
             </form>
           )}
 
-          {/* Stored Template Points Preview Table */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          {/* Stored Template Points Preview Table + Live Linear Interpolation Calculator */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
                 Stored Dip-to-Volume Calibration Table ({templatePoints.length} points)
               </h3>
@@ -1711,6 +3187,60 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                 </span>
               )}
             </div>
+
+            {templatePoints.length >= 2 && (
+              <form
+                onSubmit={handleInterpolateTemplate}
+                className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono"
+                data-testid="template-interpolation-calculator"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Calculator className="w-4 h-4 text-orange-400" />
+                  <span className="text-slate-300 font-bold">
+                    Precise Dip Interpolation ({activeTemplate.code}):
+                  </span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={interpDipMm}
+                    onChange={e => setInterpDipMm(e.target.value)}
+                    placeholder="Enter dip in mm"
+                    className="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white"
+                    data-testid="template-interpolate-dip-input"
+                  />
+                  <span className="text-slate-400">mm</span>
+                  <button
+                    type="submit"
+                    disabled={interpLoading}
+                    className="px-3 py-1 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 font-bold"
+                    data-testid="template-interpolate-btn"
+                  >
+                    {interpLoading ? 'Calculating...' : 'Interpolate Volume'}
+                  </button>
+                </div>
+
+                {interpError && (
+                  <span className="text-rose-400 text-[11px] font-semibold">
+                    ❌ {interpError}
+                  </span>
+                )}
+
+                {interpResult && (
+                  <div className="text-[11px] text-emerald-300" data-testid="template-interpolate-result">
+                    <strong>{formatCalibrationDisplay(interpResult.dipMillimetres)} mm</strong> ={' '}
+                    <strong className="text-white text-xs">
+                      {formatCalibrationDisplay(interpResult.interpolatedVolumeLitres)} L
+                    </strong>{' '}
+                    <span className="text-slate-400">
+                      (Bracket: {interpResult.lowerBound.dipMillimetres} mm [
+                      {formatCalibrationDisplay(interpResult.lowerBound.volumeLitres)} L] →{' '}
+                      {interpResult.upperBound.dipMillimetres} mm [
+                      {formatCalibrationDisplay(interpResult.upperBound.volumeLitres)} L])
+                    </span>
+                  </div>
+                )}
+              </form>
+            )}
 
             <div className="overflow-x-auto bg-slate-950/70 border border-slate-800 rounded-xl max-h-56">
               <table className="w-full text-left text-xs font-mono">
@@ -1823,7 +3353,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                     <th className="py-2.5 px-3">Tank &amp; Grade</th>
                     <th className="py-2.5 px-3">Verified Capacity &amp; Physical Dimensions</th>
                     <th className="py-2.5 px-3">Current Active Chart</th>
-                    <th className="py-2.5 px-3">Existing Draft Protection</th>
+                    <th className="py-2.5 px-3">Existing Draft &amp; Controlled Activation</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
@@ -1911,12 +3441,24 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                           </td>
                           <td className="py-2.5 px-3">
                             {tank.existingDraftChart ? (
-                              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[11px]">
-                                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                                <span>
-                                  Rev #{tank.existingDraftChart.revisionNumber} DRAFT Protected (
-                                  {tank.existingDraftChart.pointsCount} pts)
-                                </span>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[11px]">
+                                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>
+                                    Rev #{tank.existingDraftChart.revisionNumber} DRAFT Protected (
+                                    {tank.existingDraftChart.pointsCount} pts)
+                                  </span>
+                                </div>
+                                {canApproveCalibrationChart && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenActivateTankModal(tank)}
+                                    className="px-2 py-0.5 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold"
+                                    data-testid={`controlled-activate-tank-btn-${tank.tankId}`}
+                                  >
+                                    Controlled Activate →
+                                  </button>
+                                )}
                               </div>
                             ) : (
                               <span className="text-slate-400 text-[11px]">
@@ -1963,6 +3505,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                         <th className="py-2 px-3">Nominal Capacity &amp; Recorded Dimensions</th>
                         <th className="py-2 px-3">Status</th>
                         <th className="py-2 px-3">Reason Assignment Is Blocked</th>
+                        <th className="py-2 px-3 text-right">Engineering Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60">
@@ -2020,6 +3563,18 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                             </td>
                             <td className="py-2 px-3 text-[11px] text-amber-200/90">
                               {badge.reason}
+                            </td>
+                            <td className="py-2 px-3 text-right whitespace-nowrap">
+                              {canApproveCalibrationChart && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenTankVerifyModal(tank)}
+                                  className="px-2.5 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold"
+                                  data-testid={`verify-tank-dimensions-btn-${tank.tankId}`}
+                                >
+                                  Verify Tank Cert
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -2413,6 +3968,272 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                 {importingExcel ? 'Importing...' : 'Confirm Import All Three Calibration References'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Tank-Specific Engineering Dimension & Certificate Verification Modal */}
+      {verifyingTank && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          data-testid="tank-engineering-verify-modal"
+        >
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl font-mono text-xs">
+            <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-white font-bold">
+                <FileText className="w-5 h-5 text-cyan-400" />
+                <span>
+                  Verify Tank Dimensions &amp; Certificate — {verifyingTank.outletCode} Tank #{verifyingTank.tankNumber} ({verifyingTank.tankName})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVerifyingTank(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitTankEngineeringVerification} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                    Tank Serial Number
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={tankVerifySerial}
+                    onChange={e => setTankVerifySerial(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                    Tank Calibration Certificate No.
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={tankVerifyCertNo}
+                    onChange={e => setTankVerifyCertNo(e.target.value)}
+                    placeholder="e.g. LM/COCO22/T2/2026"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                    data-testid="tank-verify-cert-input"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                    Verified Diameter (mm)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={tankVerifyDiameter}
+                    onChange={e => setTankVerifyDiameter(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                    Verified Length (mm)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={tankVerifyLength}
+                    onChange={e => setTankVerifyLength(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                    Verified Max Dip (mm)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={tankVerifyMaxDip}
+                    onChange={e => setTankVerifyMaxDip(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                  Supporting Document in Document Vault
+                </label>
+                <select
+                  required
+                  value={tankVerifyDocId}
+                  onChange={e => setTankVerifyDocId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                  data-testid="tank-verify-doc-select"
+                >
+                  <option value="">-- Select Supporting Document --</option>
+                  {availableDocuments.map(doc => (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.title} ({doc.referenceNumber || doc.category})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                    Issuing Authority
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={tankVerifyAuthority}
+                    onChange={e => setTankVerifyAuthority(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                    Engineering Approver
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={tankVerifyApprover}
+                    onChange={e => setTankVerifyApprover(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setVerifyingTank(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold"
+                  data-testid="submit-tank-verify-btn"
+                >
+                  {submitting ? 'Verifying...' : 'Confirm Tank Engineering Verification'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 4: Controlled Tank Chart Activation Modal */}
+      {activatingTank && activatingTank.existingDraftChart && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          data-testid="controlled-tank-activation-modal"
+        >
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl font-mono text-xs">
+            <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-white font-bold">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <span>
+                  Controlled Tank Calibration Activation — Tank #{activatingTank.tankNumber} ({activatingTank.tankName})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActivatingTank(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmTankChartActivation} className="space-y-3">
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5 text-slate-300">
+                <div>
+                  Target Revision:{' '}
+                  <strong className="text-amber-300">
+                    Revision #{activatingTank.existingDraftChart.revisionNumber} (DRAFT •{' '}
+                    {activatingTank.existingDraftChart.pointsCount} points)
+                  </strong>
+                </div>
+                <div>
+                  Current Active Revision:{' '}
+                  <strong className="text-emerald-300">
+                    {activatingTank.currentActiveChart
+                      ? `Revision #${activatingTank.currentActiveChart.revisionNumber} (Will be preserved as SUPERSEDED)`
+                      : 'None'}
+                  </strong>
+                </div>
+                <div className="text-[11px] text-slate-400 pt-1">
+                  Historical DSR calculations and past tank stock readings will never be recalculated. New dip conversions from the effective date onward will use Revision #{activatingTank.existingDraftChart.revisionNumber}.
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                  Effective From Date
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={activationEffectiveFrom}
+                  onChange={e => setActivationEffectiveFrom(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">
+                  Activation Audit Notes
+                </label>
+                <input
+                  type="text"
+                  value={activationNotes}
+                  onChange={e => setActivationNotes(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                />
+              </div>
+
+              <label className="inline-flex items-start gap-2 cursor-pointer text-emerald-200 font-semibold p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                <input
+                  type="checkbox"
+                  checked={confirmControlledActivation}
+                  onChange={e => setConfirmControlledActivation(e.target.checked)}
+                  className="mt-0.5 rounded border-emerald-500 bg-slate-900 text-emerald-500"
+                  data-testid="confirm-controlled-activation-checkbox"
+                />
+                <span>
+                  I confirm controlled activation of Revision #{activatingTank.existingDraftChart.revisionNumber} as ACTIVE for Tank #{activatingTank.tankNumber} ({activatingTank.tankName}).
+                </span>
+              </label>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setActivatingTank(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || !confirmControlledActivation}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-45 text-white font-bold"
+                  data-testid="confirm-controlled-activation-submit-btn"
+                >
+                  {submitting ? 'Activating...' : 'Authorise & Activate Chart Revision'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

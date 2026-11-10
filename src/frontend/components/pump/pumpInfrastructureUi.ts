@@ -1666,6 +1666,7 @@ export function getGlobalTemplateStatusBadge(
     nominalCapacityLitres?: number | null;
     requiresEngineeringReview?: boolean;
     requiresDimensionVerification?: boolean;
+    engineeringVerified?: boolean;
     reviewStatusLabel?: string | null;
   } | null
 ): GlobalTemplateStatusBadgeInfo {
@@ -1688,6 +1689,18 @@ export function getGlobalTemplateStatusBadge(
   if (st === 'DRAFT') {
     if (templateMeta) {
       const codeUpper = (templateMeta.code || '').toUpperCase();
+      if (templateMeta.engineeringVerified === true) {
+        const capKl = templateMeta.nominalCapacityLitres
+          ? Math.round(templateMeta.nominalCapacityLitres / 1000)
+          : '';
+        return {
+          label: 'ENGINEERING VERIFIED',
+          badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+          readinessLabel: `${capKl ? `${capKl} KL — ` : ''}ENGINEERING VERIFIED (READY FOR APPROVAL) — ${count} points`,
+          isApproved: false,
+          hasValidatedPoints,
+        };
+      }
       if (templateMeta.requiresEngineeringReview || codeUpper === 'EXCEL_10KL_REFERENCE') {
         return {
           label: 'DRAFT / ENGINEERING REVIEW REQUIRED',
@@ -1895,11 +1908,19 @@ export function buildGlobalTemplateImportPreview(
 
 export function canApproveGlobalTemplate(
   template: {
+    code?: string | null;
     status?: string | null;
     pointsCount?: number | null;
     nominalCapacityLitres?: number | null;
     maxVolumeLitres?: number | null;
     isOverNominalCapacity?: boolean;
+    requiresEngineeringReview?: boolean;
+    requiresDimensionVerification?: boolean;
+    engineeringVerified?: boolean;
+    engineeringVerification?: {
+      decision?: string;
+      allowScopedPolicyException?: boolean;
+    } | null;
     points?: Array<{ volumeLitres?: number; volumeMilliunits?: number }>;
   } | null | undefined,
   hasApprovalPermission: boolean,
@@ -1936,6 +1957,25 @@ export function canApproveGlobalTemplate(
     };
   }
 
+  const codeUpper = String(template.code || '').toUpperCase();
+  const isExcelRef = codeUpper.startsWith('EXCEL_');
+
+  if (template.requiresDimensionVerification) {
+    return {
+      allowed: false,
+      reason:
+        'Unresolved dimensional conflict between 5,500 mm and 3,750 mm length references. Complete Engineering Verification against the certified calibration chart first.',
+    };
+  }
+
+  if (isExcelRef && template.engineeringVerified === false) {
+    return {
+      allowed: false,
+      reason:
+        'Complete Engineering Verification (with a certified calibration document in the Document Vault) before approving this imported Excel reference template.',
+    };
+  }
+
   const nominalCap =
     options?.nominalCapacityLitres ??
     template.nominalCapacityLitres ??
@@ -1951,9 +1991,15 @@ export function canApproveGlobalTemplate(
           : null;
   }
 
+  const hasScopedPolicyException = Boolean(
+    codeUpper === 'EXCEL_10KL_REFERENCE' &&
+      template.engineeringVerification?.decision === 'VERIFIED' &&
+      template.engineeringVerification?.allowScopedPolicyException === true
+  );
+
   if (nominalCap != null && nominalCap > 0 && maxVol != null) {
     const maxOverCapacityCeiling = Math.round(nominalCap * 1.1 * 1000) / 1000;
-    if (maxVol > maxOverCapacityCeiling) {
+    if (maxVol > maxOverCapacityCeiling && !hasScopedPolicyException) {
       return {
         allowed: false,
         reason: `Chart maximum volume (${maxVol.toLocaleString()} L) exceeds the maximum permitted +10% over-capacity ceiling (${maxOverCapacityCeiling.toLocaleString()} L).`,
@@ -1992,11 +2038,28 @@ export function formatGlobalCalibrationAuditLogEntry(log: {
   }
 
   const act = (log.action || '').toUpperCase();
+  if (act.includes('ENGINEERING_VERIFICATION')) {
+    return {
+      actionBadge: `ENGINEERING ${parsed.decision || 'VERIFIED'}`,
+      actionBadgeClass:
+        parsed.decision === 'VERIFIED'
+          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+          : 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+      summary: `Engineering verification (${parsed.decision || 'VERIFIED'}) for ${parsed.templateCode || parsed.tankIdentifier || 'calibration chart'} • Cert #${parsed.certificateNumber || '—'} by ${parsed.engineeringApprover || 'Engineer'} (${parsed.issuingAuthority || 'Issuing Authority'})`,
+    };
+  }
+  if (act.includes('CONTROLLED_ACTIVATION')) {
+    return {
+      actionBadge: 'CONTROLLED ACTIVATION',
+      actionBadgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+      summary: `Activated Tank Calibration Rev #${parsed.revisionNumber || 1} effective ${parsed.effectiveFrom || 'immediately'}${parsed.supersededRevisionNumber ? ` (Superseded Rev #${parsed.supersededRevisionNumber})` : ''}`,
+    };
+  }
   if (act.includes('IMPORT')) {
     return {
-      actionBadge: 'CSV IMPORT',
+      actionBadge: act.includes('EXCEL') ? 'EXCEL IMPORT' : 'CSV IMPORT',
       actionBadgeClass: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
-      summary: `Imported ${parsed.pointsCount ?? 0} verified points into ${parsed.code || 'template'} as ${parsed.status || 'DRAFT'}${parsed.sourceFileName ? ` (${parsed.sourceFileName})` : ''}`,
+      summary: `Imported ${parsed.pointsCount ?? 0} verified points into ${parsed.code || 'template'} as ${parsed.status || 'DRAFT'}${parsed.sourceFileName || parsed.workbookName ? ` (${parsed.sourceFileName || parsed.workbookName})` : ''}`,
     };
   }
   if (act.includes('STATUS_UPDATE')) {

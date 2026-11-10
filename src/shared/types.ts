@@ -578,6 +578,45 @@ export interface GlobalTankCalibrationPoint {
   createdBy: string;
 }
 
+export type CalibrationLifecycleStage =
+  | 'IMPORTED DRAFT'
+  | 'ENGINEERING REVIEW'
+  | 'VERIFIED'
+  | 'ADMIN APPROVED'
+  | 'ASSIGNED TO COMPATIBLE TANK AS DRAFT'
+  | 'TANK-SPECIFIC AUTHORISED ACTIVATION';
+
+export interface CalibrationEngineeringVerificationRecord {
+  id: string;
+  targetType: 'GLOBAL_TEMPLATE' | 'TANK';
+  targetId: string;
+  targetCodeOrName: string;
+  supportingDocumentId: string;
+  supportingDocumentName: string;
+  supportingDocumentMimeType: string;
+  tankIdentifier: string;
+  tankSerialNumber: string;
+  verifiedCapacityLitres: number;
+  verifiedDiameterMm: number;
+  verifiedLengthMm: number;
+  verifiedMaxDipMm: number;
+  issuingAuthority: string;
+  certificateNumber: string;
+  verificationDate: string;
+  engineeringApprover: string;
+  decision: 'VERIFIED' | 'REJECTED' | 'PENDING_REVIEW';
+  allowScopedPolicyException?: boolean;
+  governingPolicyReference?: string | null;
+  discrepancyResolutionNote?: string | null;
+  resolveLengthConflict?: boolean;
+  confirmedLengthMm?: number | null;
+  lengthResolutionNotes?: string | null;
+  comparedAgainstStandard20kl?: boolean;
+  notes?: string | null;
+  verifiedByUserId: string;
+  verifiedAt: string;
+}
+
 export interface GlobalTankCalibrationTemplate {
   id: string;
   code: string;
@@ -613,7 +652,211 @@ export interface GlobalTankCalibrationTemplate {
   requiresEngineeringReview?: boolean;
   requiresDimensionVerification?: boolean;
   reviewStatusLabel?: string;
+  lifecycleStage?: CalibrationLifecycleStage;
+  referenceDataStatus?: 'REFERENCE DATA IMPORTED' | 'PENDING IMPORT';
+  engineeringVerificationStatus?:
+    | 'ENGINEERING VERIFIED'
+    | 'PENDING ENGINEERING VERIFICATION'
+    | 'BLOCKED — ENGINEERING REVIEW REQUIRED'
+    | 'BLOCKED — DIMENSION VERIFICATION REQUIRED'
+    | 'REJECTED';
+  operationalActivationStatus?:
+    | 'OPERATIONALLY ACTIVE'
+    | 'STAGED AS DRAFT'
+    | 'NOT ASSIGNED';
+  blockingReason?: string | null;
+  engineeringVerification?: CalibrationEngineeringVerificationRecord | null;
+  compatibleTanksCount?: number;
+  stagedDraftTanksCount?: number;
+  activeAssignedTanksCount?: number;
   points?: GlobalTankCalibrationPoint[];
+}
+
+export interface CalibrationTemplateComparisonRow {
+  dipMm: number;
+  dipMillimetres: number;
+  dipCm: number;
+  sourceVolumeLitres: number;
+  primaryVolumeLitres: number;
+  targetVolumeLitres: number;
+  benchmarkVolumeLitres: number;
+  deltaLitres: number;
+  absDeltaLitres: number;
+  deltaPercent: number | null;
+  isDifferent: boolean;
+  isIdentical?: boolean;
+}
+
+export interface CalibrationTemplateComparisonReport {
+  sourceCode: string;
+  primaryTemplateCode: string;
+  sourceName: string;
+  sourcePointsCount: number;
+  sourceMaxVolumeLitres: number;
+  primaryMaxVolumeLitres: number;
+  targetCode: string;
+  benchmarkTemplateCode: string;
+  targetName: string;
+  targetPointsCount: number;
+  targetMaxVolumeLitres: number;
+  benchmarkMaxVolumeLitres: number;
+  targetBaselineSource?: 'STORED_TEMPLATE_POINTS' | 'STANDARD_20KL_CYLINDRICAL_BASELINE';
+  totalPointsCompared: number;
+  totalDipPointsCompared: number;
+  differingPointsCount: number;
+  identicalPointsCount: number;
+  maxAbsDeltaLitres: number;
+  maxVolumeDeltaLitres: number;
+  maxAbsDeltaAtDipMm: number;
+  meanAbsDeltaLitres: number;
+  terminalDeltaLitres?: number;
+  requiresTankSpecificVerification: boolean;
+  summary: string;
+  summaryExplanation: string;
+  verificationSummary?: string;
+  rows: CalibrationTemplateComparisonRow[];
+}
+
+export interface CalibrationTestConsoleRevisionResult {
+  sourceType?: 'TANK_CHART' | 'GLOBAL_TEMPLATE';
+  chartId?: string | null;
+  id: string;
+  label: string;
+  revisionNumber: number | null;
+  status: string;
+  sourceCode?: string | null;
+  nominalCapacityLitres?: number;
+  tankDiameterMm?: number | null;
+  tankLengthMm?: number | null;
+  maxDipMm: number;
+  maxVolumeLitres?: number;
+  maxChartVolumeLitres: number;
+  pointsCount: number;
+  productDipMm?: number;
+  waterDipMm?: number;
+  grossVolumeLitres: number | null;
+  grossVolumeLitresStr: string | null;
+  waterVolumeLitres: number | null;
+  waterVolumeLitresStr: string | null;
+  netProductVolumeLitres: number | null;
+  netProductVolumeLitresStr: string | null;
+  isExactPoint: boolean;
+  interpolated?: boolean;
+  lowerPoint: { dipMm: number; dipMillimetres?: number; volumeLitres: number } | null;
+  upperPoint: { dipMm: number; dipMillimetres?: number; volumeLitres: number } | null;
+  lowerBracketPoint?: { dipMm: number; dipMillimetres: number; volumeLitres: number } | null;
+  upperBracketPoint?: { dipMm: number; dipMillimetres: number; volumeLitres: number } | null;
+  boundaryZeroMmVolumeLitres: number;
+  boundaryMaxDipVolumeLitres: number;
+  boundaryZeroMm: { dipMm: number; volumeLitres: number };
+  boundaryMaxDipMm: { dipMm: number; volumeLitres: number };
+  dipOutOfRangeError: string | null;
+  outOfRangeError: string | null;
+}
+
+export interface CalibrationTestConsoleSimulationResponse {
+  simulationMode?: string;
+  isReadOnlySimulation: true;
+  readOnlySimulation?: boolean;
+  simulatedAt: string;
+  outlet: { id: string; roCode: string; name: string } | null;
+  tank: {
+    id: string;
+    tankNumber: number;
+    name: string;
+    productCode: string;
+    capacityLitres: number;
+  } | null;
+  enteredDipMm?: number;
+  enteredWaterDipMm?: number;
+  productDipMm: number;
+  waterDipMm: number;
+  activeRevision: CalibrationTestConsoleRevisionResult | null;
+  proposedRevision: CalibrationTestConsoleRevisionResult | null;
+  beforeAfterComparison?: {
+    grossVolumeDeltaLitres: number | null;
+    netProductVolumeDeltaLitres: number | null;
+    percentageDelta: number | null;
+  } | null;
+  comparison: {
+    grossDeltaLitres: number | null;
+    grossDeltaLitresStr: string | null;
+    waterDeltaLitres: number | null;
+    waterDeltaLitresStr: string | null;
+    netProductDeltaLitres: number | null;
+    netProductDeltaLitresStr: string | null;
+    grossDeltaPercent: string | number | null;
+    maxDipDeltaMm?: number | null;
+    maxChartVolumeDeltaLitres?: number | null;
+  } | null;
+}
+
+export interface CalibrationDashboardStatusSummary {
+  referenceDataImported: {
+    status: 'REFERENCE DATA IMPORTED' | 'PENDING IMPORT';
+    complete: boolean;
+    isComplete: boolean;
+    importedTemplatesCount?: number;
+    importedExcelChartsCount: number;
+    expectedExcelChartsCount: number;
+    summary: string;
+    details: string;
+  };
+  engineeringVerified: {
+    status:
+      | 'ENGINEERING VERIFIED'
+      | 'PENDING ENGINEERING VERIFICATION'
+      | 'BLOCKED — DISCREPANCY UNRESOLVED';
+    complete: boolean;
+    isComplete: boolean;
+    verifiedTemplatesCount?: number;
+    verifiedExcelChartsCount: number;
+    totalExcelChartsCount: number;
+    summary: string;
+    details: string;
+  };
+  operationallyActive: {
+    status:
+      | 'OPERATIONALLY ACTIVE'
+      | 'STAGED AS DRAFT'
+      | 'PENDING TANK VERIFICATION & ACTIVATION';
+    complete: boolean;
+    isComplete: boolean;
+    activeTanksCount?: number;
+    totalTanksCount?: number;
+    activeAssignedTanksCount: number;
+    stagedDraftTanksCount: number;
+    summary: string;
+    details: string;
+  };
+  overallStatusLabel: string;
+  isOperationallyComplete: boolean;
+  blockingReasons: string[];
+}
+
+export interface CalibrationVaultDocumentItem {
+  id: string;
+  name: string;
+  title?: string;
+  fileName?: string;
+  referenceNumber?: string;
+  category?: string;
+  mimeType: string;
+  sizeBytes: number;
+  outletId: string | null;
+  createdAt: string;
+}
+
+export interface CalibrationManagementDashboardResponse {
+  statusSummary: CalibrationDashboardStatusSummary;
+  summaryStatuses: CalibrationDashboardStatusSummary;
+  templates: GlobalTankCalibrationTemplate[];
+  comparison20kl: CalibrationTemplateComparisonReport;
+  coco22Tanks: EligibleCocoTankItem[];
+  cocoTanks?: EligibleCocoTankItem[];
+  documents: CalibrationVaultDocumentItem[];
+  availableDocuments: CalibrationVaultDocumentItem[];
+  auditLogs?: AuditLog[];
 }
 
 export type TankTemplateEligibilityStatus = 'ELIGIBLE' | 'UNVERIFIED' | 'INELIGIBLE';
@@ -639,6 +882,7 @@ export interface EligibleCocoTankItem {
     source: 'ACTIVE_CHART' | 'APPROVED_CHART' | 'DRAFT_CHART' | 'UNVERIFIED';
     referenceDocument?: string | null;
     sourceFileName?: string | null;
+    calibrationCertNo?: string | null;
   };
   currentActiveChart: {
     id: string;
@@ -649,6 +893,7 @@ export interface EligibleCocoTankItem {
   } | null;
   existingDraftChart: {
     id: string;
+    chartId?: string;
     revisionNumber: number;
     pointsCount: number;
     status: TankCalibrationChartStatus;
