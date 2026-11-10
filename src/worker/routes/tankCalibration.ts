@@ -5,6 +5,7 @@ import { OutletRepository } from '../repositories/outletRepository';
 import { AuditRepository } from '../repositories/auditRepository';
 import { ScopeService } from '../services/scopeService';
 import { TankCalibrationService } from '../services/tankCalibrationService';
+import { ExcelCalibrationImportService } from '../services/excelCalibrationImportService';
 import { requireAuth, AppContext, EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 import {
@@ -944,6 +945,224 @@ tankCalibration.post('/tanks/:tankId/convert-dip', requirePermission(PERMISSIONS
 // ==========================================
 // GLOBAL TANK CALIBRATION TEMPLATE ROUTES
 // ==========================================
+
+async function loadBundledSampleWorkbook(): Promise<Uint8Array | null> {
+  try {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const candidatePaths = [
+      path.resolve(process.cwd(), 'public/20KL_15KL_10KL_calibration_Dip_chart.xlsx'),
+      path.resolve(process.cwd(), 'tests/fixtures/20KL_15KL_10KL_calibration_Dip_chart.xlsx'),
+    ];
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        return new Uint8Array(fs.readFileSync(p));
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+// POST /api/v1/calibration-templates/excel-preview - ADMIN-only extraction & validation of Excel calibration workbook
+tankCalibration.post('/calibration-templates/excel-preview', async (c: AppContext) => {
+  const user = c.var.user;
+  if (!user || !user.roles?.includes(ROLES.ADMIN)) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Global ADMIN authority is required to access Excel Calibration Import.'
+      }
+    }, 403);
+  }
+
+  let buffer: Uint8Array | null = null;
+  let fileName = '20KL_15KL_10KL_calibration_Dip_chart.xlsx';
+
+  const contentType = c.req.header('content-type') || '';
+  if (contentType.includes('multipart/form-data')) {
+    const formData = await c.req.parseBody();
+    const file = formData['file'];
+    const loadDefault = formData['loadDefault'] === 'true';
+
+    if (file && typeof file === 'object' && 'arrayBuffer' in file) {
+      const ab = await (file as any).arrayBuffer();
+      buffer = new Uint8Array(ab);
+      if ('name' in file && (file as any).name) {
+        fileName = (file as any).name;
+      }
+    } else if (loadDefault) {
+      buffer = await loadBundledSampleWorkbook();
+    }
+  } else {
+    const body = await c.req.json().catch(() => ({}));
+    if (body.fileBase64) {
+      const binaryString = atob(body.fileBase64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      buffer = bytes;
+      if (body.fileName) fileName = body.fileName;
+    } else if (body.loadDefault) {
+      buffer = await loadBundledSampleWorkbook();
+    }
+  }
+
+  if (!buffer || buffer.length === 0) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'No Excel file provided. Upload a valid workbook or click Load Sample Workbook.'
+      }
+    }, 400);
+  }
+
+  try {
+    const result = await ExcelCalibrationImportService.extractWorkbook(buffer, fileName);
+    return c.json({
+      success: true,
+      data: result,
+      error: null
+    });
+  } catch (err: any) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: err.code || 'EXCEL_EXTRACTION_ERROR',
+        message: err.message || 'Failed to extract calibration data from workbook.'
+      }
+    }, 400);
+  }
+});
+
+// POST /api/v1/calibration-templates/excel-import - ADMIN-only import of eligible charts as DRAFT
+tankCalibration.post('/calibration-templates/excel-import', async (c: AppContext) => {
+  const user = c.var.user;
+  if (!user || !user.roles?.includes(ROLES.ADMIN)) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Global ADMIN authority is required to access Excel Calibration Import.'
+      }
+    }, 403);
+  }
+
+  let confirmImport = false;
+  let targetCodes: string[] | undefined;
+  let buffer: Uint8Array | null = null;
+  let fileName = '20KL_15KL_10KL_calibration_Dip_chart.xlsx';
+
+  const contentType = c.req.header('content-type') || '';
+  if (contentType.includes('multipart/form-data')) {
+    const formData = await c.req.parseBody();
+    confirmImport = formData['confirmImport'] === 'true';
+    if (formData['targetCodes']) {
+      try {
+        targetCodes = JSON.parse(String(formData['targetCodes']));
+      } catch {
+        targetCodes = [String(formData['targetCodes'])];
+      }
+    }
+    const file = formData['file'];
+    const loadDefault = formData['loadDefault'] === 'true';
+    if (file && typeof file === 'object' && 'arrayBuffer' in file) {
+      const ab = await (file as any).arrayBuffer();
+      buffer = new Uint8Array(ab);
+      if ('name' in file && (file as any).name) fileName = (file as any).name;
+    } else if (loadDefault) {
+      buffer = await loadBundledSampleWorkbook();
+    }
+  } else {
+    const body = await c.req.json().catch(() => ({}));
+    confirmImport = Boolean(body.confirmImport);
+    targetCodes = Array.isArray(body.targetCodes) ? body.targetCodes : undefined;
+    if (body.fileBase64) {
+      const binaryString = atob(body.fileBase64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      buffer = bytes;
+      if (body.fileName) fileName = body.fileName;
+    } else if (body.loadDefault) {
+      buffer = await loadBundledSampleWorkbook();
+    }
+  }
+
+  // Explicit confirmation check
+  if (!confirmImport) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'CONFIRMATION_REQUIRED',
+        message: 'Explicit administrator confirmation (confirmImport: true) is required before importing calibration templates.'
+      }
+    }, 400);
+  }
+
+  if (!buffer || buffer.length === 0) {
+    buffer = await loadBundledSampleWorkbook();
+  }
+
+  if (!buffer || buffer.length === 0) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'No Excel file provided for import.'
+      }
+    }, 400);
+  }
+
+  try {
+    const extracted = await ExcelCalibrationImportService.extractWorkbook(buffer, fileName);
+    const db = getDb(c.env.DB);
+    const ipAddress = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip') || '127.0.0.1';
+    const userAgent = c.req.header('user-agent') || 'Excel Importer UI';
+
+    const result = await ExcelCalibrationImportService.importEligibleCharts(
+      db,
+      extracted,
+      { userId: user.user.id },
+      { confirmImport: true, targetCodes, ipAddress, userAgent }
+    );
+
+    return c.json({
+      success: true,
+      data: {
+        workbookName: extracted.workbookName,
+        workbookSha256: extracted.workbookSha256,
+        importedTemplates: result.importedTemplates,
+        skippedCharts: result.skippedCharts,
+        eligibleChartsCount: extracted.eligibleChartsCount,
+        blockedChartsCount: extracted.blockedChartsCount,
+      },
+      error: null
+    });
+  } catch (err: any) {
+    return c.json({
+      success: false,
+      data: null,
+      error: {
+        code: err.code || 'EXCEL_IMPORT_ERROR',
+        message: err.message || 'Failed to import eligible charts from workbook.'
+      }
+    }, 400);
+  }
+});
 
 // GET /api/v1/calibration-templates - List global calibration templates
 tankCalibration.get('/calibration-templates', requirePermission(PERMISSIONS.TANK_CALIBRATION_READ) as any, async (c: AppContext) => {

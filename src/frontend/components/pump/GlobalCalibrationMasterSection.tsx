@@ -23,7 +23,14 @@ import {
   Sliders,
   Building2,
   Sparkles,
+  ChevronDown,
+  ChevronUp,
+  FileCheck,
+  FileX,
+  X,
+  Download,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import {
   getGlobalTemplateStatusBadge,
   formatGlobalTemplateDimensions,
@@ -96,6 +103,18 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
   const [customLengthMm, setCustomLengthMm] = useState('6800');
   const [customMaxDipMm, setCustomMaxDipMm] = useState('2400');
   const [customNotes, setCustomNotes] = useState('');
+
+  // Global ADMIN auth & Excel Importer state
+  const { userCtx } = useAuth();
+  const isGlobalAdmin = Boolean(userCtx?.roles?.includes('ADMIN'));
+
+  const [showExcelPanel, setShowExcelPanel] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [extractingExcel, setExtractingExcel] = useState(false);
+  const [excelPreviewResult, setExcelPreviewResult] = useState<any | null>(null);
+  const [importingExcel, setImportingExcel] = useState(false);
+  const [showConfirmImportModal, setShowConfirmImportModal] = useState(false);
+  const [expandedPreviewSheet, setExpandedPreviewSheet] = useState<string | null>(null);
 
   const showSuccess = (msg: string) => {
     setFeedbackError(null);
@@ -515,6 +534,107 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
     }
   };
 
+  const handleLoadSampleWorkbook = async () => {
+    setExtractingExcel(true);
+    setFeedbackError(null);
+    try {
+      const res = await apiFetch<any>('/api/v1/calibration-templates/excel-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loadDefault: true }),
+      });
+      if (res.success && res.data) {
+        setExcelPreviewResult(res.data);
+        showSuccess(
+          `Extracted ${res.data.identifiedChartsCount} calibration charts from default IOCL reference workbook '${res.data.workbookName}'.`
+        );
+      } else {
+        showError(res.error?.message || 'Failed to extract sample workbook.');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Error communicating with server.');
+    } finally {
+      setExtractingExcel(false);
+    }
+  };
+
+  const handleExtractUploadedFile = async (fileToExtract?: File) => {
+    const targetFile = fileToExtract || excelFile;
+    if (!targetFile) {
+      showError('Please choose an Excel (.xlsx) file first.');
+      return;
+    }
+    setExtractingExcel(true);
+    setFeedbackError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', targetFile);
+      const res = await apiFetch<any>('/api/v1/calibration-templates/excel-preview', {
+        method: 'POST',
+        body: formData,
+      });
+      if (res.success && res.data) {
+        setExcelPreviewResult(res.data);
+        showSuccess(
+          `Extracted ${res.data.identifiedChartsCount} calibration charts from '${res.data.workbookName}'.`
+        );
+      } else {
+        showError(res.error?.message || 'Failed to extract calibration data from workbook.');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Error processing Excel file.');
+    } finally {
+      setExtractingExcel(false);
+    }
+  };
+
+  const handleConfirmImportAllEligible = async () => {
+    if (!excelPreviewResult) return;
+    setImportingExcel(true);
+    setFeedbackError(null);
+    try {
+      let res;
+      if (excelFile) {
+        const formData = new FormData();
+        formData.append('file', excelFile);
+        formData.append('confirmImport', 'true');
+        res = await apiFetch<any>('/api/v1/calibration-templates/excel-import', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        res = await apiFetch<any>('/api/v1/calibration-templates/excel-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            confirmImport: true,
+            loadDefault: true,
+            workbookName: excelPreviewResult.workbookName,
+            workbookSha256: excelPreviewResult.workbookSha256,
+          }),
+        });
+      }
+
+      if (res.success && res.data) {
+        setShowConfirmImportModal(false);
+        clearApiCache();
+        const imported = res.data.importedTemplates || [];
+        const skipped = res.data.skippedCharts || [];
+        const names = imported.map((t: any) => `${t.code} (${t.status})`).join(', ');
+        showSuccess(
+          `Excel import completed successfully! Created/Updated as DRAFT: ${names || 'None'}. Blocked/Skipped: ${skipped.length} charts.`
+        );
+        await Promise.all([loadTemplates(), loadAuditTrail()]);
+      } else {
+        showError(res.error?.message || 'Import failed.');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Error importing charts from workbook.');
+    } finally {
+      setImportingExcel(false);
+    }
+  };
+
   const templatePoints = activeTemplate?.points || [];
 
   return (
@@ -556,6 +676,25 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
               />
               <span>Refresh Masters</span>
             </button>
+
+            {isGlobalAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExcelPanel(prev => !prev);
+                  setFeedbackError(null);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-semibold transition-colors ${
+                  showExcelPanel
+                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/20'
+                    : 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border-emerald-500/30'
+                }`}
+                data-testid="toggle-excel-import-panel-btn"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>{showExcelPanel ? 'Hide Excel Importer' : 'Import Excel Calibration Workbook'}</span>
+              </button>
+            )}
 
             {canWriteTankCalibration && (
               <button
@@ -610,6 +749,340 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {/* ADMIN-ONLY EXCEL CALIBRATION IMPORT WORKFLOW */}
+      {showExcelPanel && isGlobalAdmin && (
+        <div
+          className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-6 shadow-2xl space-y-6 ring-1 ring-emerald-500/20"
+          data-testid="excel-calibration-import-panel"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-base font-bold text-white tracking-wide">
+                  Direct Excel Calibration Import
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  ADMIN ONLY
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  DRAFT IMPORT ONLY
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Reads multi-sheet IOCL dip-to-volume calibration workbooks (<code className="text-emerald-300">20KL_15KL_10KL_calibration_Dip_chart.xlsx</code>). Converts dip cm to mm, prepends derived synthetic 0 mm = 0 L zero point, validates monotonicity, and saves eligible charts strictly in <strong className="text-amber-300">DRAFT</strong> status. Active outlet charts, historical shifts, and approved templates are never overwritten.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowExcelPanel(false)}
+              className="self-start sm:self-center p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              title="Close panel"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Controls: Upload & Load Sample */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+            <div className="space-y-2">
+              <label className="block text-xs font-mono font-semibold text-slate-300 uppercase">
+                Choose Excel File (.xlsx / .xls)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      setExcelFile(f);
+                      handleExtractUploadedFile(f);
+                    }
+                  }}
+                  className="block w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-emerald-300 hover:file:bg-slate-700 cursor-pointer"
+                  data-testid="excel-file-input"
+                />
+              </div>
+              {excelFile && (
+                <div className="text-[11px] text-slate-400 font-mono">
+                  Selected: <span className="text-white">{excelFile.name}</span> ({(excelFile.size / 1024).toFixed(1)} KB)
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2 flex flex-col justify-end">
+              <span className="text-xs font-mono font-semibold text-slate-300 uppercase">
+                Or Load Pre-Configured Sample Workbook
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={extractingExcel || importingExcel}
+                  onClick={handleLoadSampleWorkbook}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-xs font-mono font-bold transition-all shadow-sm"
+                  data-testid="load-sample-workbook-btn"
+                >
+                  <FileSpreadsheet className={`w-4 h-4 ${extractingExcel ? 'animate-spin text-orange-400' : 'text-emerald-400'}`} />
+                  <span>Load Sample Workbook (20KL_15KL_10KL)</span>
+                </button>
+
+                {excelFile && (
+                  <button
+                    type="button"
+                    disabled={extractingExcel || importingExcel}
+                    onClick={() => handleExtractUploadedFile()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold transition-colors"
+                    data-testid="preview-excel-charts-btn"
+                  >
+                    <span>Re-preview File</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {extractingExcel && (
+            <div className="flex items-center justify-center p-8 bg-slate-950/40 rounded-xl border border-slate-800">
+              <div className="flex items-center gap-3 text-slate-300 font-mono text-xs">
+                <RefreshCw className="w-5 h-5 animate-spin text-emerald-400" />
+                <span>Extracting sheets, converting cm to mm, validating points and checking capacity limits...</span>
+              </div>
+            </div>
+          )}
+
+          {/* Extracted Charts Preview Grid */}
+          {excelPreviewResult && !extractingExcel && (
+            <div className="space-y-4" data-testid="excel-calibration-preview">
+              {/* Summary Bar */}
+              <div
+                className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono"
+                data-testid="excel-preview-summary"
+              >
+                <div className="space-y-1">
+                  <div className="text-white font-bold flex items-center gap-2">
+                    <FileCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Workbook: {excelPreviewResult.workbookName}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    SHA-256: <code className="text-slate-300">{excelPreviewResult.workbookSha256.slice(0, 24)}...</code>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-300">
+                    Total Sheets: <strong>{excelPreviewResult.totalSheets}</strong>
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold">
+                    Eligible for DRAFT: <strong>{excelPreviewResult.eligibleChartsCount}</strong>
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 font-bold">
+                    Blocked (Engineering Review): <strong>{excelPreviewResult.blockedChartsCount}</strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* Chart Cards */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {excelPreviewResult.charts.map((chart: any) => {
+                  const isEligible = chart.eligibleForDraftImport;
+                  const hasWarning = chart.warnings && chart.warnings.length > 0;
+                  const isExpanded = expandedPreviewSheet === chart.sheetName;
+
+                  return (
+                    <div
+                      key={chart.sheetName}
+                      className={`rounded-2xl p-4 border flex flex-col justify-between space-y-4 ${
+                        isEligible
+                          ? 'bg-slate-950/70 border-emerald-500/30 ring-1 ring-emerald-500/10'
+                          : 'bg-slate-950/70 border-rose-500/40 ring-1 ring-rose-500/10'
+                      }`}
+                      data-testid={`excel-chart-card-${chart.templateCode}`}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-slate-800 text-orange-400 border border-slate-700">
+                                {chart.templateCode}
+                              </span>
+                              <span className="text-[11px] font-mono text-slate-400">
+                                Sheet: {chart.sheetName}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-bold text-white mt-1">
+                              {chart.templateName}
+                            </h4>
+                          </div>
+
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+                              isEligible
+                                ? hasWarning
+                                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                  : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                            }`}
+                          >
+                            {isEligible ? (hasWarning ? 'Eligible (Warning)' : 'Eligible DRAFT') : 'Blocked / Review'}
+                          </span>
+                        </div>
+
+                        {/* Physical Specs & Points Count */}
+                        <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                          <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                            <span className="text-slate-500 block text-[9px] uppercase">Nominal Capacity</span>
+                            <span className="text-white font-bold">{chart.nominalCapacityLitres.toLocaleString()} L</span>
+                          </div>
+                          <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                            <span className="text-slate-500 block text-[9px] uppercase">Validated Points</span>
+                            <span className="text-emerald-400 font-bold">{chart.actualPointCount} pts</span>
+                          </div>
+                          <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                            <span className="text-slate-500 block text-[9px] uppercase">Dimensions</span>
+                            <span className="text-slate-300">{chart.tankDiameterMm} × {chart.tankLengthMm} mm</span>
+                          </div>
+                          <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
+                            <span className="text-slate-500 block text-[9px] uppercase">Max Dip</span>
+                            <span className="text-orange-400 font-bold">{chart.maxDipMm} mm</span>
+                          </div>
+                        </div>
+
+                        {/* Volume & Synthetic Zero Badges */}
+                        <div className="space-y-1.5 text-[11px] font-mono">
+                          <div className="flex items-center justify-between p-2 bg-slate-900 rounded-lg border border-slate-800">
+                            <span className="text-slate-400">Printed Max Volume:</span>
+                            <span className={`font-bold ${isEligible ? 'text-white' : 'text-rose-400 font-black'}`}>
+                              {chart.maxVolumeLitres.toLocaleString()} L
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            {chart.hasSyntheticZero && (
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                                0 mm = 0 L derived
+                              </span>
+                            )}
+                            {chart.isMonotonic && (
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                Monotonic Validated
+                              </span>
+                            )}
+                            {chart.startsAtZero && (
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
+                                Starts at 0 mm
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Warning or Blocked Notice */}
+                        {chart.warnings && chart.warnings.length > 0 && (
+                          <div
+                            className={`p-2.5 rounded-lg text-[11px] font-mono space-y-1 ${
+                              isEligible
+                                ? 'bg-amber-500/10 border border-amber-500/30 text-amber-200'
+                                : 'bg-rose-500/10 border border-rose-500/30 text-rose-200'
+                            }`}
+                          >
+                            <div className="flex items-start gap-1.5">
+                              {isEligible ? (
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                              ) : (
+                                <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                              )}
+                              <div>
+                                <span className="font-bold block">
+                                  {isEligible ? 'Engineering Warning:' : 'Blocked Reason:'}
+                                </span>
+                                {chart.warnings.map((w: string, idx: number) => (
+                                  <p key={idx} className="mt-0.5">{w}</p>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Expand Points View Button */}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedPreviewSheet(isExpanded ? null : chart.sheetName)}
+                          className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-mono transition-colors"
+                          data-testid={`toggle-preview-points-${chart.templateCode}`}
+                        >
+                          {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          <span>{isExpanded ? 'Hide Readings' : `View Readings (${chart.points?.length || 0})`}</span>
+                        </button>
+
+                        {isExpanded && chart.points && (
+                          <div className="mt-2 p-2 bg-slate-900 border border-slate-800 rounded-lg max-h-48 overflow-y-auto font-mono text-[10px]">
+                            <table className="w-full text-left">
+                              <thead>
+                                <tr className="border-b border-slate-800 text-slate-500">
+                                  <th className="py-1">Dip (cm)</th>
+                                  <th className="py-1">Dip (mm)</th>
+                                  <th className="py-1 text-right">Volume (L)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {chart.points.slice(0, 30).map((pt: any, pidx: number) => (
+                                  <tr key={pidx} className="border-b border-slate-800/40 text-slate-300">
+                                    <td className="py-0.5">{pt.dipCm != null ? pt.dipCm : (pt.dipMm / 10).toFixed(1)}</td>
+                                    <td className="py-0.5 font-bold">{pt.dipMm} mm {pt.isSyntheticZero ? '(synth)' : ''}</td>
+                                    <td className="py-0.5 text-right text-emerald-400">{pt.volumeLitres.toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {chart.points.length > 30 && (
+                              <div className="text-center text-slate-500 py-1">
+                                ... and {chart.points.length - 30} more points up to {chart.maxDipMm} mm
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Action: Import All Eligible as DRAFT */}
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-800">
+                <div className="text-xs text-slate-400 font-mono">
+                  {excelPreviewResult.eligibleChartsCount > 0 ? (
+                    <span>
+                      Ready to import <strong>{excelPreviewResult.eligibleChartsCount}</strong> eligible charts (EXCEL_20KL_REFERENCE and EXCEL_15KL_REFERENCE). All imported templates start strictly in <strong className="text-amber-300">DRAFT</strong> status.
+                    </span>
+                  ) : (
+                    <span className="text-rose-400">
+                      No eligible charts detected for automatic import.
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={excelPreviewResult.eligibleChartsCount === 0 || importingExcel}
+                  onClick={() => setShowConfirmImportModal(true)}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-mono font-bold shadow-lg shadow-emerald-600/20 transition-all"
+                  data-testid="import-all-eligible-charts-btn"
+                >
+                  <FileCheck className="w-4 h-4" />
+                  <span>
+                    {importingExcel
+                      ? 'Importing Charts...'
+                      : `Import All Eligible Charts as DRAFT (${excelPreviewResult.eligibleChartsCount})`}
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1791,6 +2264,84 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Excel Import */}
+      {showConfirmImportModal && excelPreviewResult && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          data-testid="excel-import-confirm-modal"
+        >
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-white font-bold">
+                <FileCheck className="w-5 h-5 text-emerald-400" />
+                <span>Confirm Excel Calibration Import as DRAFT</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConfirmImportModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs font-mono text-slate-300">
+              <p>
+                You are about to import verified calibration charts from <strong className="text-white">{excelPreviewResult.workbookName}</strong> into the IOCL Digital Outlet Manager:
+              </p>
+
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                <div className="text-emerald-400 font-bold flex items-center gap-1.5">
+                  <Check className="w-4 h-4" />
+                  <span>Eligible Charts to be created/updated as DRAFT:</span>
+                </div>
+                <ul className="list-disc list-inside pl-2 space-y-1 text-slate-200">
+                  <li>
+                    <strong>EXCEL_20KL_REFERENCE</strong>: 211 validated points (0 to 2,100 mm, 21,628.93 L max volume)
+                  </li>
+                  <li>
+                    <strong>EXCEL_15KL_REFERENCE</strong>: 195 validated points (0 to 1,940 mm, 16,246.13 L max volume; 3,750 mm note flagged)
+                  </li>
+                </ul>
+
+                <div className="pt-2 border-t border-slate-800 text-rose-400 font-bold flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-rose-400" />
+                  <span>Blocked Chart (Will NOT be imported):</span>
+                </div>
+                <p className="text-[11px] text-slate-400 pl-5">
+                  <strong>EXCEL_10KL_REFERENCE</strong> is blocked because its 11,073.41 L max volume exceeds the +10% engineering capacity ceiling (11,000 L).
+                </p>
+              </div>
+
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-200 text-[11px]">
+                <ShieldCheck className="w-4 h-4 inline-block mr-1 text-emerald-400" />
+                <strong>Strict Preservation:</strong> Standard templates (<code>STANDARD_20KL</code>, <code>STANDARD_50KL</code>) and all tank-specific active charts and historical shifts remain completely untouched and protected.
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowConfirmImportModal(false)}
+                disabled={importingExcel}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmImportAllEligible}
+                disabled={importingExcel}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs shadow-md shadow-emerald-600/20"
+                data-testid="confirm-excel-import-btn"
+              >
+                {importingExcel ? 'Importing...' : 'Confirm Import as DRAFT'}
+              </button>
+            </div>
           </div>
         </div>
       )}
