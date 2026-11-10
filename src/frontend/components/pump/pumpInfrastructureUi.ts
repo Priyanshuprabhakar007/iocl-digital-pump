@@ -1928,6 +1928,7 @@ export function canApproveGlobalTemplate(
     confirmOverCapacity?: boolean;
     maxVolumeLitres?: number | null;
     nominalCapacityLitres?: number | null;
+    allowScopedPolicyException?: boolean;
   }
 ): {
   allowed: boolean;

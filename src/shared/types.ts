@@ -590,10 +590,14 @@ export interface CalibrationEngineeringVerificationRecord {
   id: string;
   targetType: 'GLOBAL_TEMPLATE' | 'TANK';
   targetId: string;
-  targetCodeOrName: string;
+  targetCodeOrName?: string;
+  templateCode?: string;
   supportingDocumentId: string;
   supportingDocumentName: string;
-  supportingDocumentMimeType: string;
+  supportingDocumentTitle?: string;
+  supportingDocumentFileName?: string;
+  supportingDocumentCategory?: string;
+  supportingDocumentMimeType?: string;
   tankIdentifier: string;
   tankSerialNumber: string;
   verifiedCapacityLitres: number;
