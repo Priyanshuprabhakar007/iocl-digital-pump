@@ -620,9 +620,13 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
         clearApiCache();
         const imported = res.data.importedTemplates || [];
         const skipped = res.data.skippedCharts || [];
-        const names = imported.map((t: any) => `${t.code} (${t.status})`).join(', ');
+        const names = imported
+          .map((t: any) => `${t.code} (${t.action === 'UNCHANGED' ? 'Retained Unchanged' : t.status})`)
+          .join(', ');
         showSuccess(
-          `Excel import completed successfully! Created/Updated as DRAFT: ${names || 'None'}. Blocked/Skipped: ${skipped.length} charts.`
+          `Excel calibration reference import completed! Processed: ${names || 'None'}${
+            skipped.length > 0 ? `. Skipped: ${skipped.length} charts.` : '.'
+          }`
         );
         await Promise.all([loadTemplates(), loadAuditTrail()]);
       } else {
@@ -877,11 +881,15 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                     Total Sheets: <strong>{excelPreviewResult.totalSheets}</strong>
                   </span>
                   <span className="px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold">
-                    Eligible for DRAFT: <strong>{excelPreviewResult.eligibleChartsCount}</strong>
+                    Calibration References (DRAFT): <strong>{excelPreviewResult.eligibleChartsCount}</strong>
                   </span>
-                  <span className="px-2.5 py-1 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 font-bold">
-                    Blocked (Engineering Review): <strong>{excelPreviewResult.blockedChartsCount}</strong>
-                  </span>
+                  {Array.isArray(excelPreviewResult.skippedNonCalibrationSheets) &&
+                    excelPreviewResult.skippedNonCalibrationSheets.length > 0 && (
+                      <span className="px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-400">
+                        Non-Calibration Tabs Skipped:{' '}
+                        <strong>{excelPreviewResult.skippedNonCalibrationSheets.length}</strong>
+                      </span>
+                    )}
                 </div>
               </div>
 
@@ -889,16 +897,31 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {excelPreviewResult.charts.map((chart: any) => {
                   const isEligible = chart.eligibleForDraftImport;
+                  const requiresEngReview = Boolean(chart.requiresEngineeringReview);
+                  const requiresDimVerif = Boolean(chart.requiresDimensionVerification);
                   const hasWarning = chart.warnings && chart.warnings.length > 0;
                   const isExpanded = expandedPreviewSheet === chart.sheetName;
+                  const badgeLabel =
+                    chart.reviewStatusLabel ||
+                    (requiresEngReview
+                      ? 'DRAFT / ENGINEERING REVIEW REQUIRED'
+                      : requiresDimVerif
+                        ? 'DRAFT / DIMENSION VERIFICATION REQUIRED'
+                        : isEligible
+                          ? 'DRAFT / PENDING VERIFICATION'
+                          : 'Blocked / Review');
 
                   return (
                     <div
                       key={chart.sheetName}
                       className={`rounded-2xl p-4 border flex flex-col justify-between space-y-4 ${
-                        isEligible
-                          ? 'bg-slate-950/70 border-emerald-500/30 ring-1 ring-emerald-500/10'
-                          : 'bg-slate-950/70 border-rose-500/40 ring-1 ring-rose-500/10'
+                        requiresEngReview
+                          ? 'bg-slate-950/70 border-rose-500/40 ring-1 ring-rose-500/10'
+                          : requiresDimVerif
+                            ? 'bg-slate-950/70 border-amber-500/40 ring-1 ring-amber-500/10'
+                            : isEligible
+                              ? 'bg-slate-950/70 border-emerald-500/30 ring-1 ring-emerald-500/10'
+                              : 'bg-slate-950/70 border-rose-500/40 ring-1 ring-rose-500/10'
                       }`}
                       data-testid={`excel-chart-card-${chart.templateCode}`}
                     >
@@ -920,14 +943,16 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
 
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
-                              isEligible
-                                ? hasWarning
+                              requiresEngReview
+                                ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                : requiresDimVerif || hasWarning
                                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                                  : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                                : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                  : isEligible
+                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
                             }`}
                           >
-                            {isEligible ? (hasWarning ? 'Eligible (Warning)' : 'Eligible DRAFT') : 'Blocked / Review'}
+                            {badgeLabel}
                           </span>
                         </div>
 
@@ -1052,12 +1077,12 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                 })}
               </div>
 
-              {/* Action: Import All Eligible as DRAFT */}
+              {/* Action: Import All Three Calibration References as DRAFT */}
               <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-800">
                 <div className="text-xs text-slate-400 font-mono">
                   {excelPreviewResult.eligibleChartsCount > 0 ? (
                     <span>
-                      Ready to import <strong>{excelPreviewResult.eligibleChartsCount}</strong> eligible charts (EXCEL_20KL_REFERENCE and EXCEL_15KL_REFERENCE). All imported templates start strictly in <strong className="text-amber-300">DRAFT</strong> status.
+                      Ready to import/retain all <strong>{excelPreviewResult.eligibleChartsCount}</strong> calibration reference charts (<strong>EXCEL_10KL_REFERENCE</strong>, <strong>EXCEL_15KL_REFERENCE</strong>, and <strong>EXCEL_20KL_REFERENCE</strong>) as <strong className="text-amber-300">DRAFT</strong>. Already-imported 15 KL and 20 KL DRAFT readings are retained without duplication.
                     </span>
                   ) : (
                     <span className="text-rose-400">
@@ -1076,8 +1101,8 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                   <FileCheck className="w-4 h-4" />
                   <span>
                     {importingExcel
-                      ? 'Importing Charts...'
-                      : `Import All Eligible Charts as DRAFT (${excelPreviewResult.eligibleChartsCount})`}
+                      ? 'Importing Calibration References...'
+                      : 'Import All Three Calibration References'}
                   </span>
                 </button>
               </div>
@@ -1086,12 +1111,12 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
         </div>
       )}
 
-      {/* Requirement 2: Display STANDARD_20KL and STANDARD_50KL template cards */}
+      {/* Requirement 2: Display Global Calibration Master template cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {templates.map(tpl => {
           const isSelected =
             tpl.id === selectedTemplateId || tpl.code === selectedTemplateId;
-          const statusInfo = getGlobalTemplateStatusBadge(tpl.status, tpl.pointsCount);
+          const statusInfo = getGlobalTemplateStatusBadge(tpl.status, tpl.pointsCount, tpl);
           const dims = formatGlobalTemplateDimensions(tpl);
 
           return (
@@ -1193,11 +1218,18 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                   className={`px-2.5 py-0.5 rounded-md text-xs font-mono font-bold border ${
                     getGlobalTemplateStatusBadge(
                       activeTemplate.status,
-                      activeTemplate.pointsCount
+                      activeTemplate.pointsCount,
+                      activeTemplate
                     ).badgeClass
                   }`}
                 >
-                  {activeTemplate.status}
+                  {
+                    getGlobalTemplateStatusBadge(
+                      activeTemplate.status,
+                      activeTemplate.pointsCount,
+                      activeTemplate
+                    ).label
+                  }
                 </span>
                 <span className="px-2 py-0.5 rounded-md text-xs font-mono bg-slate-800 text-slate-300 border border-slate-700">
                   Revision #{activeTemplate.revisionNumber}
@@ -1324,56 +1356,88 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                   <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold text-cyan-300">
-                      Ready for Authorised Verification:
+                      {activeTemplate.requiresEngineeringReview
+                        ? 'Stored as DRAFT / ENGINEERING REVIEW REQUIRED:'
+                        : 'Ready for Authorised Verification:'}
                     </span>{' '}
                     {activeTemplate.pointsCount} dip-to-volume points are saved in{' '}
                     <strong>DRAFT</strong> status
                     {templateMaxVolumeLitres != null
                       ? ` (Max Volume: ${formatCalibrationDisplay(templateMaxVolumeLitres)} L)`
                       : ''}
-                    . Verify the calibration curve below and click{' '}
-                    <strong>Verify &amp; Approve Template (APPROVED)</strong> to unlock COCO tank
-                    assignment.
+                    .{' '}
+                    {activeTemplate.requiresEngineeringReview
+                      ? 'All 195 original/derived readings are preserved intact for engineering inspection.'
+                      : 'Verify the calibration curve below and click Verify & Approve Template (APPROVED) to unlock COCO tank assignment.'}
                   </div>
                 </div>
               </div>
 
-              {isTemplateOverNominalCapacity && (
-                <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-lg text-amber-200 space-y-2">
+              {(activeTemplate.requiresEngineeringReview ||
+                (templateMaxVolumeLitres != null &&
+                  templateOverCapacityCeilingLitres != null &&
+                  templateMaxVolumeLitres > templateOverCapacityCeilingLitres)) ? (
+                <div
+                  className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-lg text-rose-200 space-y-1.5"
+                  data-testid="engineering-review-required-banner"
+                >
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-bold text-amber-300">
-                        Above-Nominal Chart Volume Verification Required:
+                      <span className="font-bold text-rose-300">
+                        10 KL — DRAFT / ENGINEERING REVIEW REQUIRED — {activeTemplate.pointsCount} points:
                       </span>{' '}
-                      Printed maximum volume{' '}
+                      Printed maximum chart volume{' '}
                       <strong>{formatCalibrationDisplay(templateMaxVolumeLitres ?? 0)} L</strong>{' '}
-                      exceeds nominal capacity{' '}
-                      <strong>{activeTemplate.nominalCapacityLitres.toLocaleString()} L</strong>{' '}
-                      (permitted +10% ceiling:{' '}
+                      exceeds the normal +10% operational capacity ceiling (
                       <strong>
                         {(templateOverCapacityCeilingLitres ?? 0).toLocaleString()} L
-                      </strong>
-                      ).
+                      </strong>{' '}
+                      for nominal{' '}
+                      <strong>{activeTemplate.nominalCapacityLitres.toLocaleString()} L</strong>).
+                      Operational approval, tank assignment, chart activation, and DSR calculation
+                      use are strictly blocked until verified by an authorised engineer.
                     </div>
                   </div>
-                  <label className="inline-flex items-center gap-2 cursor-pointer text-[11px] text-amber-100 font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={confirmApproveOverCapacity}
-                      onChange={e => setConfirmApproveOverCapacity(e.target.checked)}
-                      className="rounded border-amber-500/50 bg-slate-900 text-emerald-500"
-                      data-testid="confirm-approve-over-capacity-checkbox"
-                    />
-                    <span>
-                      I have verified the official IOCL strapping table and confirm the
-                      above-nominal chart maximum volume (
-                      {formatCalibrationDisplay(templateMaxVolumeLitres ?? 0)} L &le;{' '}
-                      {(templateOverCapacityCeilingLitres ?? 0).toLocaleString()} L +10% ceiling)
-                      for authorised approval.
-                    </span>
-                  </label>
                 </div>
+              ) : (
+                isTemplateOverNominalCapacity && (
+                  <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-lg text-amber-200 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-amber-300">
+                          Above-Nominal Chart Volume Verification Required:
+                        </span>{' '}
+                        Printed maximum volume{' '}
+                        <strong>{formatCalibrationDisplay(templateMaxVolumeLitres ?? 0)} L</strong>{' '}
+                        exceeds nominal capacity{' '}
+                        <strong>{activeTemplate.nominalCapacityLitres.toLocaleString()} L</strong>{' '}
+                        (permitted +10% ceiling:{' '}
+                        <strong>
+                          {(templateOverCapacityCeilingLitres ?? 0).toLocaleString()} L
+                        </strong>
+                        ).
+                      </div>
+                    </div>
+                    <label className="inline-flex items-center gap-2 cursor-pointer text-[11px] text-amber-100 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={confirmApproveOverCapacity}
+                        onChange={e => setConfirmApproveOverCapacity(e.target.checked)}
+                        className="rounded border-amber-500/50 bg-slate-900 text-emerald-500"
+                        data-testid="confirm-approve-over-capacity-checkbox"
+                      />
+                      <span>
+                        I have verified the official IOCL strapping table and confirm the
+                        above-nominal chart maximum volume (
+                        {formatCalibrationDisplay(templateMaxVolumeLitres ?? 0)} L &le;{' '}
+                        {(templateOverCapacityCeilingLitres ?? 0).toLocaleString()} L +10% ceiling)
+                        for authorised approval.
+                      </span>
+                    </label>
+                  </div>
+                )
               )}
             </div>
           )}
@@ -2297,29 +2361,36 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
                 <div className="text-emerald-400 font-bold flex items-center gap-1.5">
                   <Check className="w-4 h-4" />
-                  <span>Eligible Charts to be created/updated as DRAFT:</span>
+                  <span>Three Calibration Reference Charts (Saved/Retained as DRAFT):</span>
                 </div>
-                <ul className="list-disc list-inside pl-2 space-y-1 text-slate-200">
+                <ul className="list-disc list-inside pl-2 space-y-1.5 text-slate-200">
                   <li>
-                    <strong>EXCEL_20KL_REFERENCE</strong>: 211 validated points (0 to 2,100 mm, 21,628.93 L max volume)
+                    <strong>EXCEL_10KL_REFERENCE</strong> (10,000 L • 1,940×3,750 mm):{' '}
+                    <span className="text-rose-300 font-bold">
+                      10 KL — DRAFT / ENGINEERING REVIEW REQUIRED — 195 points
+                    </span>{' '}
+                    (0 to 1,940 mm, 11,073.41 L max volume; locked from approval/assignment until engineering review)
                   </li>
                   <li>
-                    <strong>EXCEL_15KL_REFERENCE</strong>: 195 validated points (0 to 1,940 mm, 16,246.13 L max volume; 3,750 mm note flagged)
+                    <strong>EXCEL_15KL_REFERENCE</strong> (15,000 L • 1,940×5,500 mm):{' '}
+                    <span className="text-amber-300 font-bold">
+                      15 KL — DRAFT / DIMENSION VERIFICATION REQUIRED — 195 points
+                    </span>{' '}
+                    (0 to 1,940 mm, 16,246.13 L max volume; retained without duplicating points if already imported)
+                  </li>
+                  <li>
+                    <strong>EXCEL_20KL_REFERENCE</strong> (20,000 L • 2,100×6,250 mm):{' '}
+                    <span className="text-cyan-300 font-bold">
+                      20 KL — DRAFT / PENDING VERIFICATION — 211 points
+                    </span>{' '}
+                    (0 to 2,100 mm, 21,628.93 L max volume; retained without duplicating points if already imported)
                   </li>
                 </ul>
-
-                <div className="pt-2 border-t border-slate-800 text-rose-400 font-bold flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 text-rose-400" />
-                  <span>Blocked Chart (Will NOT be imported):</span>
-                </div>
-                <p className="text-[11px] text-slate-400 pl-5">
-                  <strong>EXCEL_10KL_REFERENCE</strong> is blocked because its 11,073.41 L max volume exceeds the +10% engineering capacity ceiling (11,000 L).
-                </p>
               </div>
 
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-200 text-[11px]">
                 <ShieldCheck className="w-4 h-4 inline-block mr-1 text-emerald-400" />
-                <strong>Strict Preservation:</strong> Standard templates (<code>STANDARD_20KL</code>, <code>STANDARD_50KL</code>) and all tank-specific active charts and historical shifts remain completely untouched and protected.
+                <strong>Strict Preservation:</strong> Already-imported 15 KL and 20 KL DRAFT readings are retained without duplication. Standard templates (<code>STANDARD_20KL</code>, <code>STANDARD_50KL</code>), active tank revisions, historical readings, and financial records remain completely untouched.
               </div>
             </div>
 
@@ -2339,7 +2410,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs shadow-md shadow-emerald-600/20"
                 data-testid="confirm-excel-import-btn"
               >
-                {importingExcel ? 'Importing...' : 'Confirm Import as DRAFT'}
+                {importingExcel ? 'Importing...' : 'Confirm Import All Three Calibration References'}
               </button>
             </div>
           </div>

@@ -4615,13 +4615,32 @@ export class PumpRepository {
     return rows.map(r => {
       const maxVolMilli = maxVolMap.get(r.id) ?? null;
       const nomMilli = Math.round(r.nominalCapacityLitres * 1000);
+      const maxCeilingMilli = Math.round(nomMilli * 1.1);
+      const ptsCount = countMap.get(r.id) || 0;
+      const isOverCeiling = maxVolMilli != null ? maxVolMilli > maxCeilingMilli : false;
+      const hasDimWarning =
+        r.code === 'EXCEL_15KL_REFERENCE' || Boolean(r.notes && r.notes.includes('3,750 mm'));
+      const reviewStatusLabel =
+        r.status === 'DRAFT'
+          ? isOverCeiling
+            ? 'DRAFT / ENGINEERING REVIEW REQUIRED'
+            : hasDimWarning
+              ? 'DRAFT / DIMENSION VERIFICATION REQUIRED'
+              : ptsCount >= 2
+                ? 'DRAFT / PENDING VERIFICATION'
+                : 'DRAFT'
+          : r.status;
       return {
         ...r,
-        pointsCount: countMap.get(r.id) || 0,
+        pointsCount: ptsCount,
         maxVolumeMilliunits: maxVolMilli,
         maxVolumeLitres: maxVolMilli != null ? maxVolMilli / 1000 : null,
         maxVolumeLitresStr: maxVolMilli != null ? formatMilliunits(maxVolMilli) : null,
         isOverNominalCapacity: maxVolMilli != null ? maxVolMilli > nomMilli : false,
+        isOverCapacityCeiling: isOverCeiling,
+        requiresEngineeringReview: isOverCeiling,
+        requiresDimensionVerification: hasDimWarning,
+        reviewStatusLabel,
         nominalCapacityLitresStr: r.nominalCapacityLitres.toString(),
         maxDipMm: r.maxDipMmMilliunits != null ? r.maxDipMmMilliunits / 1000 : null,
         tankDiameterMm: r.tankDiameterMmMilliunits != null ? r.tankDiameterMmMilliunits / 1000 : null,
@@ -4652,6 +4671,20 @@ export class PumpRepository {
     const maxVolMilli =
       points.length > 0 ? points[points.length - 1].volumeMilliunits : null;
     const nomMilli = Math.round(row.nominalCapacityLitres * 1000);
+    const maxCeilingMilli = Math.round(nomMilli * 1.1);
+    const isOverCeiling = maxVolMilli != null ? maxVolMilli > maxCeilingMilli : false;
+    const hasDimWarning =
+      row.code === 'EXCEL_15KL_REFERENCE' || Boolean(row.notes && row.notes.includes('3,750 mm'));
+    const reviewStatusLabel =
+      row.status === 'DRAFT'
+        ? isOverCeiling
+          ? 'DRAFT / ENGINEERING REVIEW REQUIRED'
+          : hasDimWarning
+            ? 'DRAFT / DIMENSION VERIFICATION REQUIRED'
+            : points.length >= 2
+              ? 'DRAFT / PENDING VERIFICATION'
+              : 'DRAFT'
+        : row.status;
 
     return {
       ...row,
@@ -4660,6 +4693,10 @@ export class PumpRepository {
       maxVolumeLitres: maxVolMilli != null ? maxVolMilli / 1000 : null,
       maxVolumeLitresStr: maxVolMilli != null ? formatMilliunits(maxVolMilli) : null,
       isOverNominalCapacity: maxVolMilli != null ? maxVolMilli > nomMilli : false,
+      isOverCapacityCeiling: isOverCeiling,
+      requiresEngineeringReview: isOverCeiling,
+      requiresDimensionVerification: hasDimWarning,
+      reviewStatusLabel,
       points,
       nominalCapacityLitresStr: row.nominalCapacityLitres.toString(),
       maxDipMm: row.maxDipMmMilliunits != null ? row.maxDipMmMilliunits / 1000 : null,
@@ -4704,6 +4741,7 @@ export class PumpRepository {
       tankDiameterMmMilliunits?: number | null;
       maxDipMmMilliunits?: number | null;
       allowOverCapacity?: boolean;
+      allowEngineeringReviewReference?: boolean;
       requireCompleteRange?: boolean;
     }
   ): Array<{ dipMillimetresMilliunits: number; volumeMilliunits: number }> {
@@ -4793,7 +4831,7 @@ export class PumpRepository {
 
     const nominalCapacityMilliunits = Math.round(options.nominalCapacityLitres * 1000);
     const maxOverCapacityMilliunits = Math.round(nominalCapacityMilliunits * 1.1);
-    if (!options.allowOverCapacity && maxPointVol > nominalCapacityMilliunits) {
+    if (!options.allowOverCapacity && !options.allowEngineeringReviewReference && maxPointVol > nominalCapacityMilliunits) {
       const err = new Error(
         `Chart maximum volume ${formatMilliunits(maxPointVol)} L exceeds nominal template capacity ${options.nominalCapacityLitres.toLocaleString()} L`
       );
@@ -4801,7 +4839,7 @@ export class PumpRepository {
       throw err;
     }
 
-    if (options.allowOverCapacity && maxPointVol > maxOverCapacityMilliunits) {
+    if (!options.allowEngineeringReviewReference && options.allowOverCapacity && maxPointVol > maxOverCapacityMilliunits) {
       const err = new Error(
         `Chart maximum volume ${formatMilliunits(maxPointVol)} L exceeds the maximum permitted +10% over-capacity ceiling of ${formatMilliunits(maxOverCapacityMilliunits)} L (nominal ${options.nominalCapacityLitres.toLocaleString()} L)`
       );
@@ -4846,10 +4884,13 @@ export class PumpRepository {
     approvedBy?: string | null;
     approvedAt?: string | null;
     allowOverCapacity?: boolean;
+    allowEngineeringReviewReference?: boolean;
   }, points: Array<{ dipMillimetresMilliunits: number; volumeMilliunits: number }>): Promise<any> {
     const codeUpper = data.code.toUpperCase();
     const requestedStatus = data.status || 'DRAFT';
     const requiresApprovalValidation = requestedStatus === 'APPROVED' || requestedStatus === 'ACTIVE';
+    const isStandardReferenceTemplate =
+      codeUpper === 'STANDARD_20KL' || codeUpper === 'STANDARD_50KL';
 
     if (requiresApprovalValidation && (!points || points.length < 2)) {
       const err = new Error(
@@ -4859,13 +4900,20 @@ export class PumpRepository {
       throw err;
     }
 
+    // Narrowly scoped engineering-review reference storage: strictly permitted ONLY on non-standard DRAFT templates
+    const allowEngineeringReviewReference =
+      Boolean(data.allowEngineeringReviewReference) &&
+      !requiresApprovalValidation &&
+      !isStandardReferenceTemplate;
+
     const validatedPoints = points && points.length > 0
       ? this.validateGlobalTemplatePoints(points, {
           nominalCapacityLitres: data.nominalCapacityLitres,
           tankDiameterMmMilliunits: data.tankDiameterMmMilliunits,
           maxDipMmMilliunits: data.maxDipMmMilliunits,
           allowOverCapacity: data.allowOverCapacity,
-          requireCompleteRange: requiresApprovalValidation,
+          allowEngineeringReviewReference,
+          requireCompleteRange: requiresApprovalValidation || allowEngineeringReviewReference,
         })
       : [];
 
@@ -4920,6 +4968,7 @@ export class PumpRepository {
       status?: 'DRAFT' | 'APPROVED' | 'ACTIVE';
       approveImmediately?: boolean;
       allowOverCapacity?: boolean;
+      allowEngineeringReviewReference?: boolean;
       tankDiameterMmMilliunits?: number | null;
       tankLengthMmMilliunits?: number | null;
       maxDipMmMilliunits?: number | null;
@@ -4959,12 +5008,20 @@ export class PumpRepository {
     const isStandardReferenceTemplate =
       existing.code === 'STANDARD_20KL' || existing.code === 'STANDARD_50KL';
 
+    // Narrowly scoped engineering-review reference storage: strictly permitted ONLY on non-standard DRAFT templates
+    const allowEngineeringReviewReference =
+      Boolean(options?.allowEngineeringReviewReference) &&
+      !requiresApprovalValidation &&
+      !isStandardReferenceTemplate;
+
     const validatedPoints = this.validateGlobalTemplatePoints(points, {
       nominalCapacityLitres: existing.nominalCapacityLitres,
       tankDiameterMmMilliunits: effectiveDiameter,
       maxDipMmMilliunits: effectiveMaxDip,
       allowOverCapacity: options?.allowOverCapacity,
-      requireCompleteRange: requiresApprovalValidation || isStandardReferenceTemplate,
+      allowEngineeringReviewReference,
+      requireCompleteRange:
+        requiresApprovalValidation || isStandardReferenceTemplate || allowEngineeringReviewReference,
     });
 
     const nowIso = new Date().toISOString();
@@ -5048,7 +5105,7 @@ export class PumpRepository {
 
       if (maxStoredVol > maxOverCapacityMilliunits) {
         const err = new Error(
-          `Cannot approve global template ${existing.code}: chart maximum volume ${formatMilliunits(maxStoredVol)} L exceeds the maximum permitted +10% over-capacity ceiling of ${formatMilliunits(maxOverCapacityMilliunits)} L (nominal ${existing.nominalCapacityLitres.toLocaleString()} L)`
+          `Cannot approve global template ${existing.code}: chart maximum volume ${formatMilliunits(maxStoredVol)} L exceeds the maximum permitted +10% over-capacity ceiling of ${formatMilliunits(maxOverCapacityMilliunits)} L (nominal ${existing.nominalCapacityLitres.toLocaleString()} L). Engineering review is required before this reference chart can be approved, assigned, or used in DSR calculations.`
         );
         (err as any).code = 'OVER_CAPACITY_CEILING_EXCEEDED';
         throw err;
@@ -5254,6 +5311,9 @@ export class PumpRepository {
       tankDiameterMm: number | null;
       tankLengthMm: number | null;
       maxDipMm: number | null;
+      requiresEngineeringReview?: boolean;
+      isOverCapacityCeiling?: boolean;
+      maxVolumeLitresStr?: string | null;
     }
   ): {
     physicalDimensions: {
@@ -5300,13 +5360,19 @@ export class PumpRepository {
     );
 
     const isCoco = outletType === 'COCO';
-    const isCompatible = isCoco && isCapacityMatch && isVerified && isDimensionMatch;
+    const isReviewBlocked = Boolean(
+      template.requiresEngineeringReview || template.isOverCapacityCeiling
+    );
+    const isCompatible = isCoco && isCapacityMatch && isVerified && isDimensionMatch && !isReviewBlocked;
 
     let eligibilityStatus: 'ELIGIBLE' | 'UNVERIFIED' | 'INELIGIBLE' = 'ELIGIBLE';
     let ineligibilityReason: string | null = null;
 
     if (!isCompatible) {
-      if (!isCoco) {
+      if (isReviewBlocked) {
+        eligibilityStatus = 'INELIGIBLE';
+        ineligibilityReason = `ENGINEERING REVIEW REQUIRED: Reference template ${template.code} exceeds the +10% operational capacity ceiling (${template.maxVolumeLitresStr || 'above limit'} L vs ${(template.nominalCapacityLitres * 1.1).toLocaleString()} L ceiling) and cannot be assigned, activated, or used in DSR calculations until verified by an authorised engineer.`;
+      } else if (!isCoco) {
         eligibilityStatus = 'INELIGIBLE';
         ineligibilityReason = `Outlet type is ${outletType}. Only COCO retail outlet tanks are eligible for Global Calibration Master assignment.`;
       } else if (!isCapacityMatch) {
@@ -5477,6 +5543,14 @@ export class PumpRepository {
       throw err;
     }
 
+    if (template.requiresEngineeringReview || template.isOverCapacityCeiling) {
+      const err = new Error(
+        `Global reference template ${template.code} requires engineering review (chart maximum volume ${template.maxVolumeLitresStr} L exceeds the +10% operational capacity ceiling) and cannot be assigned, activated, or used in DSR calculations.`
+      );
+      (err as any).code = 'ENGINEERING_REVIEW_REQUIRED';
+      throw err;
+    }
+
     if (!Array.isArray(tankIds) || tankIds.length === 0) {
       const err = new Error('tankIds array is required');
       (err as any).code = 'BAD_REQUEST';
@@ -5608,6 +5682,14 @@ export class PumpRepository {
     if (!template) {
       const err = new Error(`Global calibration template not found: ${templateIdOrCode}`);
       (err as any).code = 'NOT_FOUND';
+      throw err;
+    }
+
+    if (template.requiresEngineeringReview || template.isOverCapacityCeiling) {
+      const err = new Error(
+        `Global reference template ${template.code} requires engineering review (chart maximum volume ${template.maxVolumeLitresStr} L exceeds the +10% operational capacity ceiling) and cannot be assigned, activated, or used in DSR calculations.`
+      );
+      (err as any).code = 'ENGINEERING_REVIEW_REQUIRED';
       throw err;
     }
 

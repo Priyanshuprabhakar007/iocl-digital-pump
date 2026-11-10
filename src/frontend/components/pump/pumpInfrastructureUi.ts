@@ -595,6 +595,12 @@ export function getPumpInfrastructureErrorMessage(error: any): string {
   if (combined.includes('ASSIGNMENT_FAILED')) {
     return rawMessage || 'Global calibration template assignment failed. Verify that the template is APPROVED and has validated points.';
   }
+  if (combined.includes('ENGINEERING_REVIEW_REQUIRED')) {
+    return (
+      rawMessage ||
+      'This reference chart exceeds the +10% over-capacity ceiling and is locked pending engineering review. Approval, tank assignment, activation, and DSR calculation use are prohibited until verified.'
+    );
+  }
   if (combined.includes('OVER_CAPACITY_CEILING_EXCEEDED')) {
     return rawMessage || 'Chart maximum volume exceeds the maximum permitted +10% over-capacity ceiling.';
   }
@@ -1654,7 +1660,14 @@ export interface GlobalTemplateStatusBadgeInfo {
 
 export function getGlobalTemplateStatusBadge(
   status?: string | null,
-  pointsCount?: number | null
+  pointsCount?: number | null,
+  templateMeta?: {
+    code?: string | null;
+    nominalCapacityLitres?: number | null;
+    requiresEngineeringReview?: boolean;
+    requiresDimensionVerification?: boolean;
+    reviewStatusLabel?: string | null;
+  } | null
 ): GlobalTemplateStatusBadgeInfo {
   const st = (status || 'DRAFT').toUpperCase();
   const count = Math.max(0, Number(pointsCount) || 0);
@@ -1673,6 +1686,37 @@ export function getGlobalTemplateStatusBadge(
   }
 
   if (st === 'DRAFT') {
+    if (templateMeta) {
+      const codeUpper = (templateMeta.code || '').toUpperCase();
+      if (templateMeta.requiresEngineeringReview || codeUpper === 'EXCEL_10KL_REFERENCE') {
+        return {
+          label: 'DRAFT / ENGINEERING REVIEW REQUIRED',
+          badgeClass: 'bg-rose-500/15 text-rose-300 border-rose-500/40',
+          readinessLabel: `10 KL — DRAFT / ENGINEERING REVIEW REQUIRED — ${count} points`,
+          isApproved: false,
+          hasValidatedPoints,
+        };
+      }
+      if (templateMeta.requiresDimensionVerification || codeUpper === 'EXCEL_15KL_REFERENCE') {
+        return {
+          label: 'DRAFT / DIMENSION VERIFICATION REQUIRED',
+          badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+          readinessLabel: `15 KL — DRAFT / DIMENSION VERIFICATION REQUIRED — ${count} points`,
+          isApproved: false,
+          hasValidatedPoints,
+        };
+      }
+      if (codeUpper === 'EXCEL_20KL_REFERENCE') {
+        return {
+          label: 'DRAFT / PENDING VERIFICATION',
+          badgeClass: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+          readinessLabel: `20 KL — DRAFT / PENDING VERIFICATION — ${count} points`,
+          isApproved: false,
+          hasValidatedPoints,
+        };
+      }
+    }
+
     return {
       label: 'DRAFT',
       badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/30',

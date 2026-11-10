@@ -609,6 +609,10 @@ export interface GlobalTankCalibrationTemplate {
   maxVolumeLitres?: number | null;
   maxVolumeLitresStr?: string | null;
   isOverNominalCapacity?: boolean;
+  isOverCapacityCeiling?: boolean;
+  requiresEngineeringReview?: boolean;
+  requiresDimensionVerification?: boolean;
+  reviewStatusLabel?: string;
   points?: GlobalTankCalibrationPoint[];
 }
 
