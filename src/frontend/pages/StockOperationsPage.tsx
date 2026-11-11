@@ -1058,20 +1058,26 @@ export const StockOperationsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Operations Navigation Tabs */}
-      <div className="flex border-b border-[#E2E8F0] overflow-x-auto scrollbar-none">
+      {/* Operational stages are navigation, not required gates. Show their purpose at a glance. */}
+      <section aria-label="Stock operations sections" className="space-y-3">
+        <div>
+          <h2 className="text-base font-bold text-[#17365D]">Stock workflow</h2>
+          <p className="text-xs text-[#64748B]">Select any section to view existing readings and receipt records.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          { id: 'OPENING', label: '1. Opening Stock', icon: Droplets },
+          { id: 'OPENING', label: 'Opening Stock', icon: Droplets, hint: 'Initial tank readings' },
           {
             id: 'RECEIPTS',
             label:
               shiftReceiptSummary.pendingReceipts.length > 0
                 ? `2. Fuel Receipts (${shiftReceiptSummary.pendingReceipts.length} Pending)`
-                : '2. Fuel Receipts',
+                : 'Fuel Receipts',
             icon: Fuel,
+            hint: 'Tankers & decantation',
           },
-          { id: 'CLOSING', label: '3. Closing Stock', icon: Droplets },
-          { id: 'RECONCILIATION', label: '4. Reconciliation', icon: Calculator },
+          { id: 'CLOSING', label: 'Closing Stock', icon: Droplets, hint: 'Final tank readings' },
+          { id: 'RECONCILIATION', label: 'Reconciliation', icon: Calculator, hint: 'Stock comparison' },
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1079,18 +1085,26 @@ export const StockOperationsPage: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-3 text-xs md:text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
+              type="button"
+              aria-current={isActive ? 'step' : undefined}
+              className={`flex min-h-24 flex-col items-start justify-between gap-3 rounded-2xl border px-4 py-4 text-left transition-all ${
                 isActive
-                  ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
-                  : 'border-transparent text-[#64748B] hover:text-[#334155] hover:border-[#D7E0EA]'
+                  ? 'border-[#F47721] bg-orange-50 shadow-sm ring-1 ring-orange-200'
+                  : 'border-[#DCE6F1] bg-white hover:border-[#9CB1C9] hover:shadow-sm'
               }`}
             >
-              <Icon className="w-4 h-4" />
-              {tab.label}
+              <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${isActive ? 'bg-[#F47721] text-white' : 'bg-[#F1F5F9] text-[#17365D]'}`}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <span>
+                <span className="block text-sm font-bold text-[#17365D]">{tab.label}</span>
+                <span className="mt-1 block text-xs text-[#64748B]">{tab.hint}</span>
+              </span>
             </button>
           );
         })}
-      </div>
+        </div>
+      </section>
 
       {/* Tab Content: OPENING & CLOSING STOCK */}
       {(activeTab === 'OPENING' || activeTab === 'CLOSING') && (
