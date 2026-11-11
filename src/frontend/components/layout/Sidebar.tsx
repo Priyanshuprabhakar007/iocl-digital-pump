@@ -24,6 +24,7 @@ import {
   Store,
   FileText,
   ChevronDown,
+  Search,
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { hasPermission, userCtx } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [navSearch, setNavSearch] = useState('');
   const navigationGroups = [
     { id: 'overview', label: 'Overview', ids: ['dashboard'] },
     { id: 'operations', label: 'Daily Operations', ids: ['daily-ops', 'stock-ops', 'cng-ops', 'lube-ops'] },
@@ -194,6 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const filteredNav = navItems.filter(item => item.perm === null || hasPermission(item.perm as PermissionCode));
+  const searchedNav = filteredNav.filter(item => item.label.toLowerCase().includes(navSearch.trim().toLowerCase()));
 
   const content = (
     <div className={`flex h-full min-h-0 ${collapsed ? 'w-64 lg:w-[72px]' : 'w-64'} flex-col overflow-hidden border-r border-[#E2E8F0] bg-white p-3 text-[#17365D] transition-[width] duration-200`}>
@@ -220,33 +223,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Scope Context Card */}
-      {userCtx && (
-        <div className={`mb-3 shrink-0 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 ${collapsed ? "lg:hidden" : ""}`}>
-          <div className="text-[10px] font-semibold tracking-wider text-[#64748B] uppercase">
-            Active User Context
+      {/* Small, optional context instead of a large always-visible identity card. */}
+      {userCtx && !collapsed && (
+        <details className="mb-3 hidden shrink-0 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] lg:block">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-[#17365D] focus-visible:outline-2 focus-visible:outline-[#17365D]">
+            <span className="truncate">Scope: {userCtx.primaryScope}</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#64748B]" />
+          </summary>
+          <div className="border-t border-[#E2E8F0] px-3 py-2 text-xs text-[#64748B]">
+            <div className="truncate font-semibold text-[#17365D]">{userCtx.user.name}</div>
+            <div className="mt-0.5 truncate">Employee: {userCtx.user.empCode}</div>
           </div>
-          <div className="text-sm font-bold text-[#17365D] mt-0.5 truncate">
-            {userCtx.user.name}
-          </div>
-          <div className="text-[11px] text-[#B8530D] mt-0.5 truncate">
-            Emp Code: {userCtx.user.empCode}
-          </div>
-          <div className="mt-2 pt-2 border-t border-[#E2E8F0] flex items-center justify-between text-[11px]">
-            <span className="text-[#64748B]">Scope:</span>
-            <span className="font-bold text-[#17365D] px-1.5 py-0.5 rounded bg-[#E9EFF6]">
-              {userCtx.primaryScope}
-            </span>
-          </div>
-        </div>
+        </details>
       )}
+
+      {/* Find a task without scrolling a long ERP menu. */}
+      <div className={`mb-3 shrink-0 ${collapsed ? 'lg:hidden' : ''}`}>
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+          <span className="sr-only">Find a page</span>
+          <input
+            type="search"
+            aria-label="Find a page"
+            value={navSearch}
+            onChange={event => setNavSearch(event.target.value)}
+            placeholder="Find a page…"
+            className="h-10 w-full rounded-xl border border-[#D7E0EA] bg-[#F8FAFC] pl-9 pr-3 text-xs font-medium text-[#17365D] placeholder:text-[#94A3B8] focus:border-[#17365D] focus:outline-none focus:ring-2 focus:ring-[#17365D]/10"
+          />
+        </label>
+      </div>
 
       {/* Nav Menu */}
       <nav aria-label="Main navigation" className="min-h-0 flex-1 space-y-1 overflow-y-scroll overscroll-contain pr-1 [scrollbar-width:thin] [scrollbar-color:#A8B5C6_#FFFFFF]">
+        {navSearch.trim() && searchedNav.length === 0 && (
+          <p className="rounded-lg bg-[#F8FAFC] px-3 py-4 text-xs text-[#64748B]" role="status">
+            No accessible pages match “{navSearch}”.
+          </p>
+        )}
         {navigationGroups.map(group => {
-          const available = filteredNav.filter(item => group.ids.includes(item.id));
+          const available = searchedNav.filter(item => group.ids.includes(item.id));
           if (!available.length) return null;
-          const open = expandedGroups.includes(group.id) || (collapsed && available.some(item => item.id === activeTab));
+          const open = Boolean(navSearch.trim()) || expandedGroups.includes(group.id) || (collapsed && available.some(item => item.id === activeTab));
           return (
             <div key={group.id} className="mb-2">
               <button type="button"
@@ -262,7 +279,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 return (
                   <button type="button" key={item.id} title={collapsed ? item.label : undefined}
                     aria-current={isActive ? 'page' : undefined}
-                    onClick={() => { setActiveTab(item.id); onCloseMobile(); }}
+                    onClick={() => { setActiveTab(item.id); setNavSearch(''); onCloseMobile(); }}
                     className={`my-0.5 flex w-full min-h-10 items-center gap-3 rounded-lg border-l-[3px] px-2.5 py-2.5 text-left text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[#17365D] ${isActive
                       ? 'border-l-[#F47721] bg-[#FFF0E5] text-[#17365D]'
                       : 'border-l-transparent text-[#526477] hover:bg-[#F5F7FA] hover:text-[#17365D]'}`}>
