@@ -116,7 +116,7 @@ describe('Admin close empty shift', () => {
     const body = { reason: 'Administrative close of unused empty shift', confirm: true };
     const noAuth = await closeEmpty('', id, body);
     expect(noAuth.status).toBe(401);
-    const dealer = await login('dealer@iocl.in');
+    const dealer = await login('dealer.parkstreet@iocl.in');
     expect((await closeEmpty(dealer, id, body)).status).toBe(403);
   });
 });
