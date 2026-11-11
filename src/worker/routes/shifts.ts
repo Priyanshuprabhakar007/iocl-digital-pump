@@ -264,6 +264,9 @@ shifts.post('/shifts/:shiftId/close-empty', async (c: AppContext) => {
   }
 
   const shiftId = c.req.param('shiftId');
+  if (!shiftId) {
+    return c.json({ success: false, data: null, error: { code: 'BAD_REQUEST', message: 'shiftId is required' } }, 400);
+  }
   const body = await c.req.json().catch(() => ({}));
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
   if (reason.length < 10 || reason.length > 500 || body.confirm !== true) {
