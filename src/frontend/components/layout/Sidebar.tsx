@@ -221,8 +221,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Scope Context Card */}
-      {userCtx && !collapsed && (
-        <div className="mb-3 shrink-0 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+      {userCtx && (
+        <div className={`mb-3 shrink-0 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 ${collapsed ? "lg:hidden" : ""}`}>
           <div className="text-[10px] font-semibold tracking-wider text-[#64748B] uppercase">
             Active User Context
           </div>
@@ -249,15 +249,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const open = expandedGroups.includes(group.id) || (collapsed && available.some(item => item.id === activeTab));
           return (
             <div key={group.id} className="mb-2">
-              {!collapsed && (
-                <button type="button"
+              <button type="button"
                   aria-expanded={open}
                   onClick={() => setExpandedGroups(previous => previous.includes(group.id) ? previous.filter(id => id !== group.id) : [...previous, group.id])}
-                  className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-[#64748B] hover:bg-[#F5F7FA] focus-visible:outline-2 focus-visible:outline-[#17365D]">
+                  className={`flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-[#64748B] hover:bg-[#F5F7FA] focus-visible:outline-2 focus-visible:outline-[#17365D] ${collapsed ? "lg:hidden" : ""}`}>
                   {group.label}
                   <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
                 </button>
-              )}
               {(collapsed || open) && available.map(item => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -269,7 +267,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       ? 'border-l-[#F47721] bg-[#FFF0E5] text-[#17365D]'
                       : 'border-l-transparent text-[#526477] hover:bg-[#F5F7FA] hover:text-[#17365D]'}`}>
                     <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#D86514]' : 'text-[#64748B]'}`} />
-                    {!collapsed && <span className="min-w-0 truncate">{item.label}</span>}
+                    <span className={`min-w-0 truncate ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
                   </button>
                 );
               })}
@@ -280,12 +278,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer Info */}
       <div className="shrink-0 border-t border-[#E2E8F0] pt-3 text-[10px] text-[#64748B]">
-        {!collapsed && (
-          <>
+        <div className={collapsed ? 'lg:hidden' : ''}>
             <div>IOCL Digital Outlet Manager v1.0</div>
             <div>Cloudflare Worker + D1 Engine</div>
-          </>
-        )}
+          </div>
         <button type="button" onClick={() => setCollapsed(previous => !previous)}
           className="hidden lg:flex mt-1 w-full items-center justify-center gap-2 rounded-lg p-2 text-[#526477] hover:bg-[#F1F5F9] focus-visible:outline-2 focus-visible:outline-[#17365D]"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
