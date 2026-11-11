@@ -1,3 +1,4 @@
+import './operationsModern.css';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Users,
@@ -544,11 +545,11 @@ export const WorkforceOperationsPage: React.FC = () => {
   if (!canReadHr) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-4 shadow-xl">
+        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-700 mb-4 shadow-sm">
           <ShieldAlert className="w-8 h-8" />
         </div>
-        <h2 className="text-xl font-bold text-white mb-2">Access Restricted</h2>
-        <p className="text-xs text-slate-400 max-w-md mb-6 leading-relaxed">
+        <h2 className="text-xl font-bold text-[#17365D] mb-2">Access Restricted</h2>
+        <p className="text-xs text-[#64748B] max-w-md mb-6 leading-relaxed">
           You do not have the required permissions (<code>hr.read</code>) to access the Workforce & Shift Roster management workspace.
         </p>
       </div>
@@ -556,23 +557,23 @@ export const WorkforceOperationsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8 space-y-6">
+    <div className="operations-modern min-h-screen bg-[#F8FAFC] text-[#17365D] p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Workspace Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#E2E8F0] pb-6">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-orange-500/20 shrink-0">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-[#17365D] font-black text-xl shadow-lg shadow-orange-500/20 shrink-0">
             <Users className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-black text-[#17365D] tracking-tight">
                 Workforce & Shift Roster
               </h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/10 text-[#B8530D] border border-orange-500/20">
                 Phase 5C-2A
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-[#64748B] mt-0.5">
               Staff enrollment, manpower, shift roster, attendance, geofencing, nozzle assignments, uniform inventory & staff issue lifecycle
             </p>
           </div>
@@ -581,12 +582,12 @@ export const WorkforceOperationsPage: React.FC = () => {
         {/* Outlet Selector & Refresh Button */}
         <div className="flex items-center gap-3">
           <div className="relative min-w-[220px] sm:min-w-[280px]">
-            <Building2 className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+            <Building2 className="w-4 h-4 text-[#64748B] absolute left-3 top-3" />
             <select
               value={selectedOutletId}
               onChange={e => handleOutletChange(e.target.value)}
               disabled={isLoadingOutlets || outlets.length === 0}
-              className="w-full pl-9 pr-8 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 disabled:opacity-50 appearance-none shadow-sm cursor-pointer"
+              className="w-full pl-9 pr-8 py-2.5 rounded-xl bg-white border border-[#E2E8F0] text-xs font-semibold text-[#17365D] focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 disabled:opacity-50 appearance-none shadow-sm cursor-pointer"
             >
               {outlets.map(o => (
                 <option key={o.id} value={o.id}>
@@ -615,10 +616,10 @@ export const WorkforceOperationsPage: React.FC = () => {
               }
             }}
             disabled={isRefreshingAll || !selectedOutletId}
-            className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition disabled:opacity-50 shadow-sm"
+            className="p-2.5 rounded-xl bg-white hover:bg-[#F1F5F9] border border-[#E2E8F0] text-[#475569] hover:text-[#17365D] transition disabled:opacity-50 shadow-sm"
             title="Refresh Workspace Data"
           >
-            <RefreshCw className={`w-4 h-4 ${isRefreshingAll ? 'animate-spin text-orange-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isRefreshingAll ? 'animate-spin text-[#B8530D]' : ''}`} />
           </button>
         </div>
       </div>
@@ -628,8 +629,8 @@ export const WorkforceOperationsPage: React.FC = () => {
         <div
           className={`p-3.5 rounded-2xl border flex items-center gap-2.5 text-xs font-medium transition shadow-lg ${
             feedback.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-              : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700'
+              : 'bg-rose-500/10 border-rose-500/20 text-rose-700'
           }`}
         >
           {feedback.type === 'success' ? (
@@ -645,13 +646,13 @@ export const WorkforceOperationsPage: React.FC = () => {
       <HrManpowerSummaryPanel summary={summary} isLoading={isLoadingCore} />
 
       {/* Internal Navigation Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-slate-800 pb-2 overflow-x-auto">
+      <div className="flex items-center gap-1.5 border-b border-[#E2E8F0] pb-2 overflow-x-auto">
         <button
           onClick={() => handleTabChange('staff')}
           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
             activeTab === 'staff'
               ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-              : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+              : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
           }`}
         >
           <Users className="w-4 h-4" />
@@ -659,7 +660,7 @@ export const WorkforceOperationsPage: React.FC = () => {
           {staffList.length > 0 && (
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'staff' ? 'bg-orange-600 text-white' : 'bg-slate-800 text-slate-400'
+                activeTab === 'staff' ? 'bg-orange-600 text-[#17365D]' : 'bg-[#F1F5F9] text-[#64748B]'
               }`}
             >
               {staffList.length}
@@ -672,7 +673,7 @@ export const WorkforceOperationsPage: React.FC = () => {
           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
             activeTab === 'designations'
               ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-              : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+              : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
           }`}
         >
           <Tag className="w-4 h-4" />
@@ -681,8 +682,8 @@ export const WorkforceOperationsPage: React.FC = () => {
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                 activeTab === 'designations'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-slate-800 text-slate-400'
+                  ? 'bg-orange-600 text-[#17365D]'
+                  : 'bg-[#F1F5F9] text-[#64748B]'
               }`}
             >
               {designationList.length}
@@ -695,7 +696,7 @@ export const WorkforceOperationsPage: React.FC = () => {
           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
             activeTab === 'manpower'
               ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-              : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+              : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
           }`}
         >
           <Layers className="w-4 h-4" />
@@ -707,7 +708,7 @@ export const WorkforceOperationsPage: React.FC = () => {
           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
             activeTab === 'roster'
               ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-              : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+              : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
           }`}
         >
           <Calendar className="w-4 h-4" />
@@ -715,7 +716,7 @@ export const WorkforceOperationsPage: React.FC = () => {
           {rosterList.length > 0 && (
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'roster' ? 'bg-orange-600 text-white' : 'bg-slate-800 text-slate-400'
+                activeTab === 'roster' ? 'bg-orange-600 text-[#17365D]' : 'bg-[#F1F5F9] text-[#64748B]'
               }`}
             >
               {rosterList.length}
@@ -730,7 +731,7 @@ export const WorkforceOperationsPage: React.FC = () => {
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
                 activeTab === 'attendance'
                   ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+                  : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
               }`}
             >
               <ClipboardCheck className="w-4 h-4" />
@@ -742,7 +743,7 @@ export const WorkforceOperationsPage: React.FC = () => {
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
                 activeTab === 'geofence'
                   ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+                  : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
               }`}
             >
               <MapPin className="w-4 h-4" />
@@ -754,7 +755,7 @@ export const WorkforceOperationsPage: React.FC = () => {
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
                 activeTab === 'nozzle-assignment'
                   ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+                  : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
               }`}
             >
               <Fuel className="w-4 h-4" />
@@ -769,7 +770,7 @@ export const WorkforceOperationsPage: React.FC = () => {
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
               activeTab === 'uniforms'
                 ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-800'
+                : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
             }`}
           >
             <Shirt className="w-4 h-4" />
