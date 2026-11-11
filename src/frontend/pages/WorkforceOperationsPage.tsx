@@ -660,7 +660,7 @@ export const WorkforceOperationsPage: React.FC = () => {
           {staffList.length > 0 && (
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'staff' ? 'bg-orange-600 text-[#17365D]' : 'bg-[#F1F5F9] text-[#64748B]'
+                activeTab === 'staff' ? 'bg-orange-600 text-white' : 'bg-[#F1F5F9] text-[#64748B]'
               }`}
             >
               {staffList.length}
@@ -682,7 +682,7 @@ export const WorkforceOperationsPage: React.FC = () => {
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                 activeTab === 'designations'
-                  ? 'bg-orange-600 text-[#17365D]'
+                  ? 'bg-orange-600 text-white'
                   : 'bg-[#F1F5F9] text-[#64748B]'
               }`}
             >
@@ -716,7 +716,7 @@ export const WorkforceOperationsPage: React.FC = () => {
           {rosterList.length > 0 && (
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'roster' ? 'bg-orange-600 text-[#17365D]' : 'bg-[#F1F5F9] text-[#64748B]'
+                activeTab === 'roster' ? 'bg-orange-600 text-white' : 'bg-[#F1F5F9] text-[#64748B]'
               }`}
             >
               {rosterList.length}
