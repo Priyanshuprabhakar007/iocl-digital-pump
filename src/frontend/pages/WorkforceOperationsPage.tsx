@@ -561,7 +561,7 @@ export const WorkforceOperationsPage: React.FC = () => {
       {/* Workspace Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#E2E8F0] pb-6">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-[#17365D] font-black text-xl shadow-lg shadow-orange-500/20 shrink-0">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-orange-500/20 shrink-0">
             <Users className="w-6 h-6" />
           </div>
           <div>
