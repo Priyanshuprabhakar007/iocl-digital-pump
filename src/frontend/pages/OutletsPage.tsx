@@ -453,13 +453,14 @@ export const OutletsPage: React.FC = () => {
   }, [visibilityFilteredOutlets, searchQuery, showHidden]);
 
   return (
-    <div className="admin-modern space-y-6 pb-10">
+    <div className="admin-modern space-y-5 pb-10 max-w-[1500px] mx-auto">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0]">
-        <div>
-          <div className="flex items-center gap-2">
+      <div className="option4-hero flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-7">
+        <div className="option4-hero-content max-w-2xl">
+          <span className="option4-eyebrow">Infrastructure & Assets / Retail Outlets</span>
+          <div className="mt-3 flex items-center gap-2">
             <Building2 className="w-6 h-6 text-orange-500" />
-            <h1 className="text-xl font-extrabold text-[#17365D]">Retail Outlet Directory</h1>
+            <h1 className="text-2xl font-extrabold text-[#17365D] sm:text-3xl">Retail <span className="text-[#FF7139]">Outlets</span></h1>
           </div>
           <p className="text-xs text-[#64748B] mt-1">
             IOCL Retail Petrol Pump Outlets • Filtered strictly by backend scope:{' '}
@@ -493,15 +494,15 @@ export const OutletsPage: React.FC = () => {
 
       {/* Directory overview: view-only counts from the existing scoped outlet data. */}
       <section aria-label="Outlet directory overview" className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <div className="rounded-2xl border border-[#DDE6F0] bg-white px-5 py-4">
+        <div className="option4-stat px-5 py-5" data-tone="orange">
           <p className="text-xs font-medium text-[#64748B]">Accessible outlets</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-[#17365D]">{visibilityFilteredOutlets.length}</p>
         </div>
-        <div className="rounded-2xl border border-[#DDE6F0] bg-white px-5 py-4">
+        <div className="option4-stat px-5 py-5" data-tone="blue">
           <p className="text-xs font-medium text-[#64748B]">Matching current search</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-[#17365D]">{displayedOutlets.length}</p>
         </div>
-        <div className="col-span-2 rounded-2xl border border-[#DDE6F0] bg-white px-5 py-4 lg:col-span-1">
+        <div className="option4-stat col-span-2 px-5 py-5 lg:col-span-1" data-tone="purple">
           <p className="text-xs font-medium text-[#64748B]">Archived outlets</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-[#17365D]">{archivedCount}</p>
         </div>
@@ -509,7 +510,7 @@ export const OutletsPage: React.FC = () => {
 
       {/* Scope Banner & Show Hidden Controls */}
           <>
-            <div className="p-3.5 rounded-xl bg-white border border-[#E2E8F0] text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="option4-panel p-3.5 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-[#475569]">
                 <Filter className="w-4 h-4 text-[#B8530D]" />
                 <span>
@@ -541,7 +542,7 @@ export const OutletsPage: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div className="rounded-2xl border border-[#DDE6F0] bg-white p-4">
+            <div className="option4-panel p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className="text-sm font-bold text-[#17365D]">Browse retail outlets</h2>
@@ -549,9 +550,9 @@ export const OutletsPage: React.FC = () => {
                 </div>
                 <div className="inline-flex rounded-lg border border-[#D7E0EA] bg-[#F8FAFC] p-1" role="group" aria-label="Directory layout">
                   <button type="button" aria-pressed={directoryLayout === 'GRID'} onClick={() => setDirectoryLayout('GRID')}
-                    className={`rounded-md px-4 py-2 text-xs font-bold transition-colors ${directoryLayout === 'GRID' ? 'bg-[#17365D] text-white shadow-sm' : 'text-[#526477] hover:bg-white'}`}>Cards</button>
+                    className={`rounded-md px-4 py-2 text-xs font-bold transition-colors ${directoryLayout === 'GRID' ? 'bg-[#2354C6] text-white shadow-sm' : 'text-[#526477] hover:bg-white'}`}>Cards</button>
                   <button type="button" aria-pressed={directoryLayout === 'LIST'} onClick={() => setDirectoryLayout('LIST')}
-                    className={`rounded-md px-4 py-2 text-xs font-bold transition-colors ${directoryLayout === 'LIST' ? 'bg-[#17365D] text-white shadow-sm' : 'text-[#526477] hover:bg-white'}`}>List</button>
+                    className={`rounded-md px-4 py-2 text-xs font-bold transition-colors ${directoryLayout === 'LIST' ? 'bg-[#2354C6] text-white shadow-sm' : 'text-[#526477] hover:bg-white'}`}>List</button>
                 </div>
               </div>
               <SectionSearchBar
