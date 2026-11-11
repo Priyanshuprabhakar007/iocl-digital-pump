@@ -952,10 +952,12 @@ export const StockOperationsPage: React.FC = () => {
   }
 
   return (
-    <div className="operations-modern p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="operations-modern space-y-5 pb-10 max-w-[1500px] mx-auto">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+      <div className="option4-hero p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <img className="option4-station-art" src="/option4-fuel-station.svg" alt="" aria-hidden="true" />
+        <div className="option4-hero-content max-w-2xl">
+          <span className="option4-eyebrow">Daily operations / Stock & Decantation</span>
           <h1 className="text-xl md:text-2xl font-black text-[#17365D] tracking-tight flex items-center gap-2">
             <Droplets className="w-6 h-6 text-orange-500" />
             Stock & Decantation Operations
@@ -975,7 +977,7 @@ export const StockOperationsPage: React.FC = () => {
       </div>
 
       {/* Selectors Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-white p-4 rounded-xl border border-[#E2E8F0]">
+      <div className="option4-panel grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4 sm:p-5">
         <div>
           <label className="block text-[11px] font-bold text-[#64748B] uppercase tracking-wider mb-1">
             Retail Outlet
@@ -1059,9 +1061,9 @@ export const StockOperationsPage: React.FC = () => {
       )}
 
       {/* Operational stages are navigation, not required gates. Show their purpose at a glance. */}
-      <section aria-label="Stock operations sections" className="space-y-3">
+      <section aria-label="Stock operations sections" className="option4-panel space-y-4 p-4 sm:p-5">
         <div>
-          <h2 className="text-base font-bold text-[#17365D]">Stock workflow</h2>
+          <h2 className="text-lg font-bold text-[#17365D]">Stock workflow</h2>
           <p className="text-xs text-[#64748B]">Select any section to view existing readings and receipt records.</p>
         </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -1087,7 +1089,8 @@ export const StockOperationsPage: React.FC = () => {
               onClick={() => setActiveTab(tab.id as any)}
               type="button"
               aria-current={isActive ? 'step' : undefined}
-              className={`flex min-h-24 flex-col items-start justify-between gap-3 rounded-2xl border px-4 py-4 text-left transition-all ${
+              data-active={isActive}
+              className={`option4-stock-stage flex min-h-28 flex-col items-start justify-between gap-3 rounded-2xl border px-4 py-4 text-left transition-all ${
                 isActive
                   ? 'border-[#F47721] bg-orange-50 shadow-sm ring-1 ring-orange-200'
                   : 'border-[#DCE6F1] bg-white hover:border-[#9CB1C9] hover:shadow-sm'
@@ -1103,6 +1106,27 @@ export const StockOperationsPage: React.FC = () => {
             </button>
           );
         })}
+        </div>
+      </section>
+
+      {/* Read-only record counts from the currently selected operational shift. */}
+      <section aria-label="Shift stock snapshot" className="option4-panel p-4 sm:p-5">
+        <div className="mb-3">
+          <h2 className="text-base font-bold text-[#17365D]">Shift stock overview</h2>
+          <p className="text-xs text-[#64748B]">Current records for the selected shift — no sample data</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { label: 'Tanks', value: tankSnapshots.length, tone: 'blue' },
+            { label: 'Dip readings', value: tankReadings.length, tone: 'orange' },
+            { label: 'Fuel receipts', value: receipts.length, tone: 'green' },
+            { label: 'Pending receipts', value: shiftReceiptSummary.pendingReceipts.length, tone: 'purple' },
+          ].map(stat => (
+            <div key={stat.label} className="option4-stat p-4" data-tone={stat.tone}>
+              <p className="text-xs font-semibold text-[#53698F]">{stat.label}</p>
+              <p className="mt-2 text-2xl font-extrabold tabular-nums text-[#17365D]">{stat.value}</p>
+            </div>
+          ))}
         </div>
       </section>
 

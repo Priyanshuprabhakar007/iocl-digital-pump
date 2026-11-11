@@ -11,8 +11,8 @@ describe('IndianOil vibrant theme and UX preservation', () => {
   it('uses warm canvas, deep navy sidebar and vibrant active task states', () => {
     expect(shell).toContain('iocl-vibrant');
     expect(shell).toContain("import './vibrantTheme.css'");
-    expect(sidebar).toContain('bg-gradient-to-b from-[#112B49]');
-    expect(sidebar).toContain('from-[#F47721] to-[#E56315]');
+    expect(sidebar).toContain('bg-gradient-to-b from-[#1646B1]');
+    expect(sidebar).toContain('bg-[#FFF1E6] text-[#14285D]');
     expect(header).toContain('border-b-2 border-[#F47721]');
     expect(css).toContain('background: #f7f5f1');
   });

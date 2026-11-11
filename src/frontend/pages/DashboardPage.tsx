@@ -75,26 +75,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   ].filter(task => hasPermission(task.permission as PermissionCode));
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-8 pb-10 text-[#172B4D]">
-      <header className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#0F2A49] via-[#17365D] to-[#285E83] px-6 py-7 text-white shadow-[0_18px_35px_rgba(23,54,93,0.18)] sm:px-8 sm:py-9">
-        <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border border-white/15 pointer-events-none" />
-        <div className="absolute -right-6 top-3 h-44 w-44 rounded-full bg-[#F47721]/15 blur-2xl pointer-events-none" />
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-5">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-orange-200">Your workday, simplified</p>
-            <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Welcome, {userCtx.user.name}</h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-200">
-              Choose what you need to do. Your access and existing records stay the same.
-            </p>
-          </div>
-          <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-3">
-            <p className="text-[11px] uppercase tracking-wider text-slate-200">Working scope</p>
-            <p className="mt-1 text-base font-bold text-white">{userCtx.primaryScope}</p>
+    <div className="option4-dashboard mx-auto max-w-[1500px] space-y-5 pb-10 text-[#172B4D]">
+      <header className="option4-hero p-6 sm:p-8 lg:p-9">
+        <img className="option4-station-art" src="/option4-fuel-station.svg" alt="" aria-hidden="true" />
+        <div className="relative z-10 max-w-3xl">
+          <span className="option4-eyebrow">IOCL • Operations workspace</span>
+          <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-[#12265C] sm:text-4xl">
+            What would you like to do <span className="text-[#FF7139]">today?</span>
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-[#53698F] sm:text-base">
+            Welcome, {userCtx.user.name}. Manage outlet operations, stock, finance and reports from one place.
+          </p>
+          <div className="mt-5 inline-flex items-center gap-2 rounded-xl border border-[#D6E2FF] bg-white/90 px-3 py-2 text-xs font-semibold text-[#2354C6] shadow-sm">
+            <MapPin className="h-4 w-4" /> Active scope: {userCtx.primaryScope}
           </div>
         </div>
       </header>
 
-      <section aria-label="Quick actions">
+      <section aria-label="Quick actions" className="option4-panel p-5 sm:p-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="text-xl font-bold text-[#17365D]">What would you like to do?</h2>
@@ -103,8 +101,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           <span className="text-xs font-medium text-[#64748B]">Only permitted workspaces appear</span>
         </div>
         {tasks.length ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {tasks.map(task => {
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {tasks.filter(task => ['daily-ops', 'stock-ops', 'outlets', 'reports'].includes(task.id)).map(task => {
               const Icon = task.icon;
               return (
                 <button
@@ -112,7 +110,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   type="button"
                   onClick={() => onNavigate?.(task.id)}
                   disabled={!onNavigate}
-                  className={`group flex min-h-[138px] flex-col items-start rounded-2xl border p-5 text-left transition-all focus-visible:outline-2 focus-visible:outline-[#F47721] disabled:cursor-not-allowed ${
+                  data-tone={task.id === 'daily-ops' || task.id === 'stock-ops' ? 'orange' : task.id === 'financials' ? 'green' : task.id === 'reports' ? 'purple' : 'blue'}
+                  className={`option4-action group flex min-h-[108px] flex-col items-start p-4 text-left transition-all focus-visible:outline-2 focus-visible:outline-[#2354C6] disabled:cursor-not-allowed ${
                     task.featured
                       ? 'border-orange-200 bg-gradient-to-br from-white to-[#FFF6ED] hover:-translate-y-0.5 hover:border-[#F47721] hover:shadow-[0_14px_28px_rgba(244,119,33,0.15)]'
                       : 'border-[#D5E1EC] bg-gradient-to-br from-white to-[#F0F6FC] hover:border-[#4A85AE] hover:shadow-[0_12px_26px_rgba(23,54,93,0.10)]'
@@ -135,24 +134,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         )}
       </section>
 
-      <section aria-label="At a glance" className="space-y-4">
+      <section aria-label="At a glance" className="option4-panel space-y-4 p-5 sm:p-6">
         <div>
-          <h2 className="text-xl font-bold text-[#17365D]">At a glance</h2>
+          <h2 className="text-xl font-bold text-[#17365D]">Operational overview</h2>
           <p className="mt-1 text-sm text-[#64748B]">A quick view of the records available to your role.</p>
         </div>
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {[
-            { label: 'Accessible Outlets', value: loading ? '…' : stats.outletsCount, icon: Building2 },
-            { label: 'Scoped Users', value: loading ? '…' : stats.usersCount, icon: Users },
-            { label: 'Permissions', value: userCtx.isGlobalAdmin ? 'ALL' : userCtx.permissions.length, icon: ShieldCheck },
-            { label: 'Audit Records', value: loading ? '…' : stats.auditLogsCount, icon: Activity },
+            { label: 'Accessible Outlets', value: loading ? '…' : stats.outletsCount, icon: Building2, tone: 'orange' },
+            { label: 'Scoped Users', value: loading ? '…' : stats.usersCount, icon: Users, tone: 'blue' },
+            { label: 'Permissions', value: userCtx.isGlobalAdmin ? 'ALL' : userCtx.permissions.length, icon: ShieldCheck, tone: 'purple' },
+            { label: 'Audit Records', value: loading ? '…' : stats.auditLogsCount, icon: Activity, tone: 'green' },
           ].map(metric => {
             const Icon = metric.icon;
             return (
-              <div key={metric.label} className="rounded-2xl border border-[#D7E3EE] bg-gradient-to-b from-white to-[#F2F7FB] p-4 sm:p-5 shadow-[0_5px_16px_rgba(17,43,73,0.06)]">
+              <div key={metric.label} data-tone={metric.tone} className="option4-stat p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-[#64748B]">{metric.label}</p>
-                  <Icon className="h-4 w-4 text-[#D86514]" />
+                  <p className="text-xs font-semibold text-[#53698F]">{metric.label}</p>
+                  <Icon className="h-6 w-6 text-[#2354C6]" />
                 </div>
                 <p className="mt-3 text-2xl font-bold tabular-nums text-[#17365D] sm:text-3xl">{metric.value}</p>
               </div>
@@ -161,7 +160,32 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         </div>
       </section>
 
-      <details className="group rounded-2xl border border-[#E2E8F0] bg-white">
+      <section aria-label="Work areas" className="option4-panel p-5 sm:p-6">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-[#17365D]">Work areas</h2>
+          <p className="mt-1 text-sm text-[#64748B]">Explore the tools available to your role.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {tasks.filter(task => ['daily-ops','stock-ops','financials','reports','pump-infra'].includes(task.id)).map((task, index) => {
+            const Icon = task.icon;
+            const tone = ['blue','orange','green','purple','blue'][index % 5];
+            return (
+              <button key={task.id} type="button" data-tone={tone}
+                onClick={() => onNavigate?.(task.id)} disabled={!onNavigate}
+                className="option4-action group flex min-h-[168px] flex-col items-start p-5 text-left transition-all focus-visible:outline-2 focus-visible:outline-[#2354C6] disabled:cursor-not-allowed">
+                <Icon className="h-7 w-7 text-[#2354C6]" />
+                <span className="mt-4 block text-base font-bold text-[#17365D]">{task.label}</span>
+                <span className="mt-1 flex-1 text-xs leading-relaxed text-[#64748B]">{task.description}</span>
+                <span className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-[#2354C6]">
+                  Open workspace <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <details className="option4-panel group">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-5 focus-visible:outline-2 focus-visible:outline-[#17365D]">
           <span className="flex items-center gap-3">
             <span className="rounded-xl bg-[#F1F5F9] p-2.5 text-[#17365D]"><ShieldCheck className="h-5 w-5" /></span>

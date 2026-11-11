@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 870 270" role="img" aria-label="Illustration of a fuel station">
+<defs><linearGradient id="sky" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#b8dcff"/><stop offset="1" stop-color="#f6faff"/></linearGradient><linearGradient id="cap" x1="0" x2="1"><stop stop-color="#ff872e"/><stop offset=".6" stop-color="#ff5c21"/><stop offset="1" stop-color="#ff9838"/></linearGradient><linearGradient id="glass" x1="0" x2="1"><stop stop-color="#6ca8e7"/><stop offset="1" stop-color="#174b90"/></linearGradient></defs>
+<path fill="url(#sky)" d="M0 0h870v270H0z"/>
+<path fill="#f9fbff" opacity=".75" d="M50 72c32-25 58 18 89-3 27-20 70 4 73 21H42zM500 34c27-17 50 10 72-7 35-25 67 1 80 18H480z"/>
+<path d="M0 222q150-45 300-18t310-12 260 12v66H0z" fill="#9ed6ae"/><path d="M0 240q190-25 320-15t300-8 250 10v43H0z" fill="#d7e4e9"/>
+<g opacity=".8"><path d="M42 223v-57m16 57v-84m32 84v-70m625 69v-67m34 67v-95m35 95v-60" stroke="#557c61" stroke-width="9" stroke-linecap="round"/><circle cx="50" cy="155" r="30" fill="#64b780"/><circle cx="80" cy="148" r="29" fill="#4ba66d"/><circle cx="738" cy="136" r="38" fill="#55b779"/><circle cx="781" cy="155" r="30" fill="#78c58a"/></g>
+<path d="M260 95l520-43 64 42-520 42z" fill="#174a92"/><path d="M270 104l526-43 47 32-520 45z" fill="url(#cap)"/><path d="M323 138l519-43-1 20-520 43z" fill="#ed571f"/><path d="M320 156l524-42-1 17-519 41z" fill="#ffffff"/><path d="M337 173l489-41-1 10-489 41z" fill="#9bbcd6" opacity=".6"/>
+<path d="M369 165h21v88h-21zm320-26h21v114h-21z" fill="#f4f9ff" stroke="#a5bbd4" stroke-width="3"/><path d="M368 179h24v8h-24zm320-26h24v8h-24z" fill="#ff7f28"/>
+<g><path d="M465 171h44v76h-44zM576 162h44v85h-44z" fill="#eef4ff" stroke="#2668bb" stroke-width="4"/><path d="M471 177h32v23h-32zm111-9h32v24h-32z" fill="url(#glass)"/><path d="M471 206h32v15h-32zm111-8h32v15h-32z" fill="#ff7933"/><path d="M511 187q29-9 19 38m92-36q35-9 26 36" fill="none" stroke="#18376b" stroke-width="4"/><circle cx="485" cy="231" r="5" fill="#123a78"/><circle cx="599" cy="230" r="5" fill="#123a78"/></g>
+<path d="M0 257q190-35 435-20t435-8v41H0z" fill="#eef0f6" opacity=".9"/>
+<text x="570" y="105" font-family="Arial,sans-serif" font-size="23" font-weight="bold" fill="#fff" transform="rotate(-4 570 105)">IndianOil</text>
+</svg>

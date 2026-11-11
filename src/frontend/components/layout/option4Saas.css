@@ -1,0 +1,183 @@
+/* Option 4 — Vibrant Modern SaaS, visual presentation only.
+   Existing handlers, API data, permission gates and calculations are untouched. */
+.enterprise-shell.iocl-vibrant {
+  --iocl-canvas: #f2f5ff;
+  --iocl-navy: #162b6b;
+  --iocl-orange: #ff7139;
+  --iocl-text: #162455;
+  --iocl-muted: #586b90;
+  --iocl-border: #dce5fb;
+  background: #f2f5ff;
+}
+.enterprise-shell.iocl-vibrant main {
+  background:
+    radial-gradient(ellipse 55% 30% at 93% 0%, rgba(132,161,255,.14), transparent 80%),
+    radial-gradient(ellipse 48% 32% at 7% 8%, rgba(255,113,57,.07), transparent 80%),
+    #f4f7ff;
+}
+.enterprise-shell.iocl-vibrant aside > div {
+  background: linear-gradient(175deg, #1646b1 0%, #0c307c 57%, #092767 100%);
+  border-color: #1743a5;
+}
+.enterprise-shell.iocl-vibrant aside nav button[aria-current="page"] {
+  background: #fff2e9;
+  color: #10275f;
+  border-left-color: #ff7139;
+  box-shadow: 0 5px 15px rgba(0,16,69,.16);
+}
+.enterprise-shell.iocl-vibrant aside nav button[aria-current="page"] svg {
+  color: #ff7139;
+}
+.enterprise-shell.iocl-vibrant .option4-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(114deg, #fff 12%, #f1f3ff 55%, #dbeaff 100%);
+  border: 1px solid #dfe7fc;
+  border-radius: 24px;
+  box-shadow: 0 10px 28px rgba(30,64,146,.09);
+}
+.enterprise-shell.iocl-vibrant .option4-hero::before {
+  content: "";
+  position: absolute;
+  width: 45%;
+  height: 170%;
+  right: -13%;
+  top: -47%;
+  border-radius: 50%;
+  background: linear-gradient(155deg,rgba(46,140,255,.17),rgba(255,113,57,.2));
+  transform: rotate(-17deg);
+  pointer-events: none;
+  z-index: -1;
+}
+.enterprise-shell.iocl-vibrant .option4-hero::after {
+  content: "";
+  position: absolute;
+  width: 44%;
+  height: 28px;
+  right: -10%;
+  bottom: 29%;
+  border-radius: 100%;
+  background: linear-gradient(90deg, transparent,rgba(255,113,57,.62),rgba(255,139,56,.9));
+  transform: rotate(-22deg);
+  pointer-events: none;
+  z-index: -1;
+}
+.enterprise-shell.iocl-vibrant .option4-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #fff0e6;
+  border: 1px solid #ffd9c4;
+  color: #db4c16;
+  padding: 6px 12px;
+  letter-spacing: .045em;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.enterprise-shell.iocl-vibrant .option4-panel {
+  border: 1px solid #dfe7fc;
+  background: #fff;
+  border-radius: 22px;
+  box-shadow: 0 6px 22px rgba(25,57,130,.07);
+}
+.enterprise-shell.iocl-vibrant .option4-action {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #dfebfb;
+  border-radius: 16px;
+  background: linear-gradient(136deg,#fff, #edf6ff);
+  box-shadow: 0 4px 14px rgba(34,84,158,.06);
+}
+.enterprise-shell.iocl-vibrant .option4-action[data-tone="orange"] { border-color: #ffddc5; background: linear-gradient(135deg,#fff,#fff1e5); }
+.enterprise-shell.iocl-vibrant .option4-action[data-tone="purple"] { border-color: #e6dcff; background: linear-gradient(135deg,#fff,#f1eaff); }
+.enterprise-shell.iocl-vibrant .option4-action[data-tone="green"] { border-color: #bdeee0; background: linear-gradient(135deg,#fff,#e5fcf5); }
+.enterprise-shell.iocl-vibrant .option4-action[data-tone="blue"] { border-color: #cee4ff; background: linear-gradient(135deg,#fff,#e6f3ff); }
+.enterprise-shell.iocl-vibrant .option4-action:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(27,76,168,.12); }
+.enterprise-shell.iocl-vibrant .option4-stat {
+  border-radius: 17px;
+  border: 1px solid #dce8fb;
+  background: linear-gradient(130deg,#fff,#eaf5ff);
+  box-shadow: 0 4px 14px rgba(24,61,130,.06);
+}
+.enterprise-shell.iocl-vibrant .option4-stat[data-tone="orange"] { border-color:#ffdec8; background:linear-gradient(130deg,#fff,#fff0e2); }
+.enterprise-shell.iocl-vibrant .option4-stat[data-tone="purple"] { border-color:#e6d9ff; background:linear-gradient(130deg,#fff,#f0e9ff); }
+.enterprise-shell.iocl-vibrant .option4-stat[data-tone="green"] { border-color:#c9eedf; background:linear-gradient(130deg,#fff,#e5faf1); }
+.enterprise-shell.iocl-vibrant .option4-stat[data-tone="blue"] { border-color:#cbdffc; background:linear-gradient(130deg,#fff,#e8f4ff); }
+.enterprise-shell.iocl-vibrant main .daily-ops-modern,
+.enterprise-shell.iocl-vibrant main .admin-modern,
+.enterprise-shell.iocl-vibrant main .operations-modern { background: transparent; color: #162455; }
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-surface,[class~="bg-white"][class~="rounded-xl"],[class~="bg-white"][class~="rounded-2xl"]) {
+  border-color: #dce5fb;
+  box-shadow: 0 5px 20px rgba(25,57,130,.065);
+}
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.admin-modern,.operations-modern) input:focus-visible,
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.admin-modern,.operations-modern) select:focus-visible,
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.admin-modern,.operations-modern) button:focus-visible {
+  outline: 2px solid #2354c6;
+  outline-offset: 2px;
+}
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.admin-modern,.operations-modern) table thead,
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.admin-modern,.operations-modern) table thead th { background: #e9efff; color: #172b6e; }
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.admin-modern,.operations-modern) table tbody tr:hover { background: #f1f6ff; }
+.enterprise-shell.iocl-vibrant main .option4-progress {
+  border: 1px solid #dce5fb;
+  background: linear-gradient(114deg,#f3f8ff,#faf6ff);
+  border-radius: 20px;
+}
+.enterprise-shell.iocl-vibrant main .option4-step {
+  border-top-width: 0;
+  border-radius: 14px;
+  min-height: 118px;
+  box-shadow: 0 4px 12px rgba(35,84,198,.07);
+}
+.enterprise-shell.iocl-vibrant main .option4-step[data-tone="orange"] { background: #fff2e9; border-color:#ffd8bd; }
+.enterprise-shell.iocl-vibrant main .option4-step[data-tone="blue"] { background: #ebf5ff; border-color:#cde5ff; }
+.enterprise-shell.iocl-vibrant main .option4-step[data-tone="purple"] { background: #f3edff; border-color:#e0d2ff; }
+.enterprise-shell.iocl-vibrant main .option4-step[data-tone="green"] { background: #e8faf2; border-color:#c6efdf; }
+.enterprise-shell.iocl-vibrant main .outlet-directory-card { border-color: #dce5fb; }
+.enterprise-shell.iocl-vibrant main .outlet-directory-card:hover { box-shadow: 0 12px 28px rgba(25,57,130,.13); border-color: #a8c2fa; }
+.enterprise-shell.iocl-vibrant main .outlet-directory-card:nth-child(4n+1) { border-top: 4px solid #ff7139; }
+.enterprise-shell.iocl-vibrant main .outlet-directory-card:nth-child(4n+2) { border-top: 4px solid #3d89f6; }
+.enterprise-shell.iocl-vibrant main .outlet-directory-card:nth-child(4n+3) { border-top: 4px solid #844ef4; }
+.enterprise-shell.iocl-vibrant main .outlet-directory-card:nth-child(4n+4) { border-top: 4px solid #15b981; }
+@media (prefers-reduced-motion: reduce) {
+  .enterprise-shell.iocl-vibrant .option4-action:hover { transform:none; }
+}
+
+.enterprise-shell.iocl-vibrant .option4-station-art {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: min(39%, 450px);
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: .88;
+  pointer-events: none;
+  border-radius: 0 24px 24px 0;
+  z-index: -1;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 40%);
+  mask-image: linear-gradient(90deg, transparent, #000 40%);
+}
+.enterprise-shell.iocl-vibrant .option4-hero-content { position:relative; z-index:2; }
+.enterprise-shell.iocl-vibrant .option4-stock-stage[data-active="true"] {
+  border-color: #ff7139;
+  background: linear-gradient(135deg,#fff4ea,#fff);
+  box-shadow: 0 7px 20px rgba(255,113,57,.17);
+}
+.enterprise-shell.iocl-vibrant .option4-stock-stage[data-active="false"] {
+  background: linear-gradient(135deg,white,#eef5ff);
+}
+@media (max-width: 767px) {
+  .enterprise-shell.iocl-vibrant .option4-station-art { width: 50%; opacity: .24; }
+  .enterprise-shell.iocl-vibrant .option4-hero { border-radius: 18px; }
+}
+
+.enterprise-shell.iocl-vibrant .outlet-directory-card:nth-child(4n+1) .option4-outlet-icon { background: #fff1e7; color: #ff7139; }
+.enterprise-shell.iocl-vibrant .outlet-directory-card:nth-child(4n+2) .option4-outlet-icon { background: #e8f2ff; color: #236bd8; }
+.enterprise-shell.iocl-vibrant .outlet-directory-card:nth-child(4n+3) .option4-outlet-icon { background: #f1eaff; color: #8047e5; }
+.enterprise-shell.iocl-vibrant .outlet-directory-card:nth-child(4n+4) .option4-outlet-icon { background: #e4faef; color: #009d68; }
+.enterprise-shell.iocl-vibrant main :is(.option4-action,.option4-panel,.option4-stat) { min-width: 0; }
+.enterprise-shell.iocl-vibrant header .option4-hero-content { max-width: min(100%, 690px); }

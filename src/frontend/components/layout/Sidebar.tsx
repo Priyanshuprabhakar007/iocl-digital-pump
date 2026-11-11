@@ -199,7 +199,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const searchedNav = filteredNav.filter(item => item.label.toLowerCase().includes(navSearch.trim().toLowerCase()));
 
   const content = (
-    <div className={`flex h-full min-h-0 ${collapsed ? 'w-64 lg:w-[72px]' : 'w-64'} flex-col overflow-hidden border-r border-[#142842] bg-gradient-to-b from-[#112B49] via-[#142F51] to-[#0A1D35] p-3 text-white shadow-[8px_0_22px_rgba(11,30,52,0.09)] transition-[width] duration-200`}>
+    <div className={`flex h-full min-h-0 ${collapsed ? 'w-64 lg:w-[72px]' : 'w-64'} flex-col overflow-hidden border-r border-[#153F9B] bg-gradient-to-b from-[#1646B1] via-[#103991] to-[#092767] p-3 text-white shadow-[8px_0_22px_rgba(11,30,52,0.09)] transition-[width] duration-200`}>
       {/* Mobile Close Button & Brand */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/15 pb-3 lg:hidden">
         <div className="flex items-center gap-2.5">
@@ -281,9 +281,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     aria-current={isActive ? 'page' : undefined}
                     onClick={() => { setActiveTab(item.id); setNavSearch(''); onCloseMobile(); }}
                     className={`my-0.5 flex w-full min-h-10 items-center gap-3 rounded-lg border-l-[3px] px-2.5 py-2.5 text-left text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[#F47721] ${isActive
-                      ? 'border-l-[#F47721] bg-gradient-to-r from-[#F47721] to-[#E56315] text-white shadow-[0_4px_12px_rgba(244,119,33,0.23)]'
+                      ? 'border-l-[#FF7139] bg-[#FFF1E6] text-[#14285D] shadow-[0_4px_14px_rgba(7,26,81,0.18)]'
                       : 'border-l-transparent text-slate-200 hover:bg-white/10 hover:text-white'}`}>
-                    <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-[#AFC7DD]'}`} />
+                    <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#FF7139]' : 'text-[#BBD4FF]'}`} />
                     <span className={`min-w-0 truncate ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
                   </button>
                 );

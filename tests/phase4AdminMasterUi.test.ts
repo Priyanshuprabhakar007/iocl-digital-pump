@@ -15,7 +15,8 @@ describe('Phase 4 — Admin and Master Data enterprise-light presentation', () =
     for (const name of names) {
       const source = read(name);
       expect(source).toContain("import './adminModern.css'");
-      expect(source).toContain('admin-modern space-y-6 pb-10');
+      expect(source).toContain('admin-modern');
+      expect(source).toContain('pb-10');
       expect(source).toContain('apiFetch');
     }
     const css = fs.readFileSync('src/frontend/pages/adminModern.css', 'utf8');
