@@ -1,3 +1,4 @@
+import './adminModern.css';
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/api';
@@ -438,11 +439,11 @@ export const OrganizationMastersPage: React.FC = () => {
   // Permission Guard
   if (!canRead) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center max-w-lg mx-auto mt-12">
-        <ShieldAlert className="w-12 h-12 text-red-400 mx-auto mb-4" />
-        <h3 className="text-base font-bold text-white mb-2">Access Denied</h3>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          You do not have permission (<span className="font-mono text-orange-400">org.masters.read</span>)
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-12 text-center max-w-lg mx-auto mt-12">
+        <ShieldAlert className="w-12 h-12 text-red-700 mx-auto mb-4" />
+        <h3 className="text-base font-bold text-[#17365D] mb-2">Access Denied</h3>
+        <p className="text-xs text-[#64748B] leading-relaxed">
+          You do not have permission (<span className="font-mono text-[#B8530D]">org.masters.read</span>)
           to access Organization Management records. Please contact your system administrator.
         </p>
       </div>
@@ -450,24 +451,24 @@ export const OrganizationMastersPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="admin-modern space-y-6 pb-10">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0]">
         <div>
           <div className="flex items-center gap-2.5">
             <Layers className="w-6 h-6 text-orange-500" />
-            <h1 className="text-xl font-extrabold text-white tracking-tight">
+            <h1 className="text-xl font-extrabold text-[#17365D] tracking-tight">
               Organization Management
             </h1>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[#64748B] mt-1">
             Departments, IOCL officers, hierarchy postings and outlet service providers
           </p>
         </div>
 
         {/* Global Scope Notice if scoped user */}
         {!userCtx?.isGlobalScope && (
-          <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[11px] text-slate-400 self-start sm:self-auto flex items-center gap-1.5">
+          <div className="px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-[11px] text-[#64748B] self-start sm:self-auto flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-blue-400" />
             <span>Scoped Authority Mode</span>
           </div>
@@ -479,8 +480,8 @@ export const OrganizationMastersPage: React.FC = () => {
         <div
           className={`flex items-center justify-between gap-3 p-3 rounded-xl border text-xs transition-all ${
             feedbackMsg.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-              : 'bg-red-500/10 border-red-500/20 text-red-400'
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700'
+              : 'bg-red-500/10 border-red-500/20 text-red-700'
           }`}
         >
           <div className="flex items-center gap-2">
@@ -493,7 +494,7 @@ export const OrganizationMastersPage: React.FC = () => {
           </div>
           <button
             onClick={() => setFeedback(null)}
-            className="text-[11px] hover:underline font-medium text-slate-400 hover:text-white"
+            className="text-[11px] hover:underline font-medium text-[#64748B] hover:text-[#17365D]"
           >
             Dismiss
           </button>
@@ -502,18 +503,18 @@ export const OrganizationMastersPage: React.FC = () => {
 
       {/* Tabs navigation - Only show when not in detail drilldown */}
       {!selectedOfficer && !selectedProvider && (
-        <div className="flex items-center gap-1 border-b border-slate-800 pb-px overflow-x-auto">
+        <div className="flex items-center gap-1 border-b border-[#E2E8F0] pb-px overflow-x-auto">
           <button
             onClick={() => setActiveTab('departments')}
             className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap border-b-2 ${
               activeTab === 'departments'
-                ? 'border-orange-500 text-orange-400 bg-slate-900/60'
-                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
+                ? 'border-orange-500 text-[#B8530D] bg-white/60'
+                : 'border-transparent text-[#64748B] hover:text-[#334155] hover:bg-white/30'
             }`}
           >
             <Building2 className="w-4 h-4" />
             <span>Departments</span>
-            <span className="font-mono text-[10px] px-1.5 py-0.2 bg-slate-800 rounded-md text-slate-300">
+            <span className="font-mono text-[10px] px-1.5 py-0.2 bg-[#F1F5F9] rounded-md text-[#475569]">
               {departments.length}
             </span>
           </button>
@@ -522,13 +523,13 @@ export const OrganizationMastersPage: React.FC = () => {
             onClick={() => setActiveTab('officers')}
             className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap border-b-2 ${
               activeTab === 'officers'
-                ? 'border-orange-500 text-orange-400 bg-slate-900/60'
-                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
+                ? 'border-orange-500 text-[#B8530D] bg-white/60'
+                : 'border-transparent text-[#64748B] hover:text-[#334155] hover:bg-white/30'
             }`}
           >
             <Users className="w-4 h-4" />
             <span>Officers</span>
-            <span className="font-mono text-[10px] px-1.5 py-0.2 bg-slate-800 rounded-md text-slate-300">
+            <span className="font-mono text-[10px] px-1.5 py-0.2 bg-[#F1F5F9] rounded-md text-[#475569]">
               {officers.length}
             </span>
           </button>
@@ -537,13 +538,13 @@ export const OrganizationMastersPage: React.FC = () => {
             onClick={() => setActiveTab('service-providers')}
             className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap border-b-2 ${
               activeTab === 'service-providers'
-                ? 'border-orange-500 text-orange-400 bg-slate-900/60'
-                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
+                ? 'border-orange-500 text-[#B8530D] bg-white/60'
+                : 'border-transparent text-[#64748B] hover:text-[#334155] hover:bg-white/30'
             }`}
           >
             <Briefcase className="w-4 h-4" />
             <span>Service Providers</span>
-            <span className="font-mono text-[10px] px-1.5 py-0.2 bg-slate-800 rounded-md text-slate-300">
+            <span className="font-mono text-[10px] px-1.5 py-0.2 bg-[#F1F5F9] rounded-md text-[#475569]">
               {serviceProviders.length}
             </span>
           </button>
@@ -552,8 +553,8 @@ export const OrganizationMastersPage: React.FC = () => {
             onClick={() => setActiveTab('outlet-assignments')}
             className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap border-b-2 ${
               activeTab === 'outlet-assignments'
-                ? 'border-orange-500 text-orange-400 bg-slate-900/60'
-                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
+                ? 'border-orange-500 text-[#B8530D] bg-white/60'
+                : 'border-transparent text-[#64748B] hover:text-[#334155] hover:bg-white/30'
             }`}
           >
             <Store className="w-4 h-4" />

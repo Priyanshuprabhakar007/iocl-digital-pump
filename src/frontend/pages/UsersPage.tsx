@@ -1,3 +1,4 @@
+import './adminModern.css';
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -83,16 +84,16 @@ export const UsersPage = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="admin-modern space-y-6 pb-10">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0]">
         <div>
           <div className="flex items-center gap-2">
             <Users className="w-6 h-6 text-blue-400" />
-            <h1 className="text-xl font-extrabold text-white">Scoped User Directory</h1>
+            <h1 className="text-xl font-extrabold text-[#17365D]">Scoped User Directory</h1>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Enterprise IOCL Personnel • Scoped by: <span className="font-mono text-orange-400 font-bold">{userCtx?.primaryScope}</span>
+          <p className="text-xs text-[#64748B] mt-1">
+            Enterprise IOCL Personnel • Scoped by: <span className="font-mono text-[#B8530D] font-bold">{userCtx?.primaryScope}</span>
           </p>
         </div>
         {hasPermission(PERMISSIONS.USERS_CREATE) && (
@@ -101,7 +102,7 @@ export const UsersPage = () => {
               setErrorMsg(null);
               setModalOpen(true);
             }}
-            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-xs font-bold rounded-lg shadow-lg shadow-orange-500/20 flex items-center gap-2 self-start sm:self-auto"
+            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-[#17365D] text-xs font-bold rounded-lg shadow-lg shadow-orange-500/20 flex items-center gap-2 self-start sm:self-auto"
           >
             <UserPlus className="w-4 h-4" />
             <span>Provision New User</span>
@@ -120,21 +121,21 @@ export const UsersPage = () => {
 
       {/* Table */}
       {loading ? (
-        <div className="py-12 text-center text-xs text-slate-400 font-mono animate-pulse">
+        <div className="py-12 text-center text-xs text-[#64748B] font-mono animate-pulse">
           Loading user directory...
         </div>
       ) : filteredUsers.length === 0 ? (
-        <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl p-8 bg-slate-900/50 space-y-2">
-          <p className="text-sm font-semibold text-slate-300">No matching users within your authorized scope.</p>
+        <div className="py-12 text-center border border-dashed border-[#E2E8F0] rounded-2xl p-8 bg-white/50 space-y-2">
+          <p className="text-sm font-semibold text-[#475569]">No matching users within your authorized scope.</p>
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="text-xs text-slate-400 px-4 py-2 bg-slate-800/40 border-b border-slate-800 font-mono flex items-center justify-between">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden shadow-sm">
+          <div className="text-xs text-[#64748B] px-4 py-2 bg-[#F1F5F9]/40 border-b border-[#E2E8F0] font-mono flex items-center justify-between">
             <span>Showing {filteredUsers.length} of {users.length} users within your authorized scope</span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-800/80 text-slate-400 font-mono uppercase text-[10px] tracking-wider border-b border-slate-700/80">
+          <div className="admin-table-scroll overflow-x-auto" role="region" aria-label="Scrollable administration table" tabIndex={0}>
+            <table className="admin-data-table w-full text-left text-xs">
+              <thead className="bg-[#F1F5F9]/80 text-[#64748B] font-mono uppercase text-[10px] tracking-wider border-b border-[#D7E0EA]/80">
                 <tr>
                   <th className="p-4">Employee</th>
                   <th className="p-4">Roles</th>
@@ -143,32 +144,32 @@ export const UsersPage = () => {
                   <th className="p-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-200">
+              <tbody className="divide-y divide-slate-800 text-[#334155]">
                 {filteredUsers.map((u) => {
                   const userScope = u.scopes?.[0]?.scopeLevel || 'UNASSIGNED';
                   return (
-                    <tr key={u.id} className="hover:bg-slate-800/40 transition-colors">
+                    <tr key={u.id} className="hover:bg-[#F1F5F9]/40 transition-colors">
                       <td className="p-4">
-                        <div className="font-bold text-white">{u.name}</div>
-                        <div className="text-[11px] text-slate-400 font-mono">
+                        <div className="font-bold text-[#17365D]">{u.name}</div>
+                        <div className="text-[11px] text-[#64748B] font-mono">
                           {u.empCode} • {u.email}
                         </div>
                       </td>
                       <td className="p-4">
                         <div className="flex flex-wrap gap-1">
                           {u.roles?.map((r: string) => (
-                            <span key={r} className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/30">
+                            <span key={r} className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-500/10 text-blue-800 border border-blue-500/30">
                               {r}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td className="p-4 font-mono font-bold text-orange-400">
+                      <td className="p-4 font-mono font-bold text-[#B8530D]">
                         {userScope}
                       </td>
                       <td className="p-4">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 w-max ${
-                          u.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                          u.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/30' : 'bg-red-500/10 text-red-700 border border-red-500/30'
                         }`}>
                           {u.status === 'ACTIVE' ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                           <span>{u.status}</span>
@@ -178,7 +179,7 @@ export const UsersPage = () => {
                         {hasPermission(PERMISSIONS.USERS_UPDATE) && (
                           <button
                             onClick={() => handleToggleStatus(u.id, u.status)}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded border border-slate-700 text-[11px] font-mono"
+                            className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#475569] hover:text-[#17365D] rounded border border-[#D7E0EA] text-[11px] font-mono"
                           >
                             Toggle Status
                           </button>
@@ -195,11 +196,11 @@ export const UsersPage = () => {
 
       {/* Provision User Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-white">Provision IOCL User</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <h2 className="text-lg font-bold text-[#17365D]">Provision IOCL User</h2>
             {errorMsg && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-800 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
@@ -207,69 +208,69 @@ export const UsersPage = () => {
             <form onSubmit={handleCreateUser} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Emp Code</label>
+                  <label className="block text-[#475569] font-semibold mb-1">Emp Code</label>
                   <input
                     type="text"
                     required
                     placeholder="IOCL-FO-002"
                     value={form.empCode}
                     onChange={e => setForm({ ...form, empCode: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Full Name</label>
+                  <label className="block text-[#475569] font-semibold mb-1">Full Name</label>
                   <input
                     type="text"
                     required
                     placeholder="Sanjay Kumar"
                     value={form.name}
                     onChange={e => setForm({ ...form, name: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Official Email</label>
+                <label className="block text-[#475569] font-semibold mb-1">Official Email</label>
                 <input
                   type="email"
                   required
                   placeholder="sanjay@iocl.in"
                   value={form.email}
                   onChange={e => setForm({ ...form, email: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                  className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Phone Number</label>
+                  <label className="block text-[#475569] font-semibold mb-1">Phone Number</label>
                   <input
                     type="text"
                     required
                     placeholder="9830098300"
                     value={form.phone}
                     onChange={e => setForm({ ...form, phone: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Password</label>
+                  <label className="block text-[#475569] font-semibold mb-1">Password</label>
                   <input
                     type="password"
                     required
                     placeholder="••••••••••••"
                     value={form.password}
                     onChange={e => setForm({ ...form, password: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Assign System Role</label>
+                <label className="block text-[#475569] font-semibold mb-1">Assign System Role</label>
                 <select
                   value={form.roleCodes[0]}
                   onChange={e => setForm({ ...form, roleCodes: [e.target.value as RoleCode] })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                  className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                 >
                   <option value={ROLES.ADMIN}>ADMIN (Global)</option>
                   <option value={ROLES.STATE_OFFICE}>STATE_OFFICE</option>
@@ -284,7 +285,7 @@ export const UsersPage = () => {
                   type="button"
                   disabled={creatingUser}
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-[#F1F5F9] text-[#475569] rounded-lg font-semibold hover:bg-[#E8EEF5] disabled:opacity-50"
                 >
                   Cancel
                 </button>

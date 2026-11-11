@@ -1,3 +1,4 @@
+import './adminModern.css';
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -451,24 +452,24 @@ export const OutletsPage: React.FC = () => {
   }, [visibilityFilteredOutlets, searchQuery, showHidden]);
 
   return (
-    <div className="space-y-6">
+    <div className="admin-modern space-y-6 pb-10">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0]">
         <div>
           <div className="flex items-center gap-2">
             <Building2 className="w-6 h-6 text-orange-500" />
-            <h1 className="text-xl font-extrabold text-white">Retail Outlet Directory</h1>
+            <h1 className="text-xl font-extrabold text-[#17365D]">Retail Outlet Directory</h1>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[#64748B] mt-1">
             IOCL Retail Petrol Pump Outlets • Filtered strictly by backend scope:{' '}
-            <span className="font-mono text-orange-400 font-bold">{userCtx?.primaryScope}</span>
+            <span className="font-mono text-[#B8530D] font-bold">{userCtx?.primaryScope}</span>
           </p>
         </div>
 
         {hasPermission(PERMISSIONS.OUTLETS_CREATE) && (
           <button
             onClick={openCreateModal}
-            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-xs font-bold rounded-lg shadow-lg shadow-orange-500/20 flex items-center gap-2 self-start sm:self-auto"
+            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-[#17365D] text-xs font-bold rounded-lg shadow-lg shadow-orange-500/20 flex items-center gap-2 self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
             <span>Register New Outlet</span>
@@ -478,12 +479,12 @@ export const OutletsPage: React.FC = () => {
 
       {/* Success Banner */}
       {successMsg && (
-        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between">
+        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
             <span>{successMsg}</span>
           </div>
-          <button onClick={() => setSuccessMsg(null)} className="text-slate-400 hover:text-white text-xs">
+          <button onClick={() => setSuccessMsg(null)} className="text-[#64748B] hover:text-[#17365D] text-xs">
             Dismiss
           </button>
         </div>
@@ -491,32 +492,32 @@ export const OutletsPage: React.FC = () => {
 
       {/* Scope Banner & Show Hidden Controls */}
           <>
-            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-slate-300">
-                <Filter className="w-4 h-4 text-orange-400" />
+            <div className="p-3.5 rounded-xl bg-white border border-[#E2E8F0] text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-[#475569]">
+                <Filter className="w-4 h-4 text-[#B8530D]" />
                 <span>
                   Active Scope Constraint:{' '}
-                  <strong className="text-white font-mono">{userCtx?.primaryScope}</strong>
+                  <strong className="text-[#17365D] font-mono">{userCtx?.primaryScope}</strong>
                 </span>
               </div>
 
               <div className="flex items-center gap-4">
                 {canManageArchive && (
-                  <label className="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white select-none">
+                  <label className="flex items-center gap-2 cursor-pointer text-[#475569] hover:text-[#17365D] select-none">
                     <input
                       type="checkbox"
                       checked={showHidden}
                       onChange={(e) => setShowHidden(e.target.checked)}
-                      className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-orange-500 focus:ring-orange-500 focus:ring-offset-slate-900"
+                      className="w-4 h-4 rounded bg-[#F1F5F9] border-[#D7E0EA] text-orange-500 focus:ring-orange-500 focus:ring-offset-slate-900"
                     />
                     <span className="flex items-center gap-1.5 font-medium">
-                      {showHidden ? <Eye className="w-3.5 h-3.5 text-orange-400" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
+                      {showHidden ? <Eye className="w-3.5 h-3.5 text-[#B8530D]" /> : <EyeOff className="w-3.5 h-3.5 text-[#64748B]" />}
                       <span>Show Archived Outlets ({archivedCount})</span>
                     </span>
                   </label>
                 )}
 
-                <span className="text-[11px] font-mono text-slate-400 border-l border-slate-800 pl-4">
+                <span className="text-[11px] font-mono text-[#64748B] border-l border-[#E2E8F0] pl-4">
                   {searchQuery.trim()
                     ? `Showing ${displayedOutlets.length} of ${visibilityFilteredOutlets.length} accessible records`
                     : `Showing ${displayedOutlets.length} accessible record(s)`}
@@ -533,14 +534,14 @@ export const OutletsPage: React.FC = () => {
 
             {/* Outlet Cards / Table */}
             {loading ? (
-              <div className="py-12 text-center text-xs text-slate-400 font-mono animate-pulse">
+              <div className="py-12 text-center text-xs text-[#64748B] font-mono animate-pulse">
                 Loading scoped retail outlets...
               </div>
             ) : displayedOutlets.length === 0 ? (
-              <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl p-8 bg-slate-900/50 space-y-3">
+              <div className="py-12 text-center border border-dashed border-[#E2E8F0] rounded-2xl p-8 bg-white/50 space-y-3">
                 <Building2 className="w-10 h-10 text-slate-600 mx-auto" />
-                <p className="text-sm font-semibold text-slate-300">{searchQuery.trim() ? 'No matching retail outlets within your authorized scope.' : 'No Retail Outlets Accessible'}</p>
-                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                <p className="text-sm font-semibold text-[#475569]">{searchQuery.trim() ? 'No matching retail outlets within your authorized scope.' : 'No Retail Outlets Accessible'}</p>
+                <p className="text-xs text-[#64748B] max-w-md mx-auto">
                   {showHidden
                     ? `No retail outlets match your assigned organizational scope (${userCtx?.primaryScope}).`
                     : `No active visible retail outlets match your assigned organizational scope (${userCtx?.primaryScope}). Turn on "Show Hidden Outlets" to view hidden outlets.`}
@@ -551,30 +552,30 @@ export const OutletsPage: React.FC = () => {
                 {displayedOutlets.map((ro) => (
                   <div
                     key={ro.id}
-                    className={`bg-slate-900 border rounded-2xl p-5 space-y-4 shadow-lg transition-all ${
+                    className={`bg-white border rounded-2xl p-5 space-y-4 shadow-lg transition-all ${
                       ro.directoryHidden
-                        ? 'border-rose-900/40 bg-slate-900/90'
-                        : 'border-slate-800 hover:border-slate-700'
+                        ? 'border-rose-900/40 bg-white/90'
+                        : 'border-[#E2E8F0] hover:border-[#D7E0EA]'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-extrabold text-sm text-white">{ro.name}</span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-orange-500/10 text-orange-400 border border-orange-500/30">
+                          <span className="font-extrabold text-sm text-[#17365D]">{ro.name}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-orange-500/10 text-[#B8530D] border border-orange-500/30">
                             {ro.outletType}
                           </span>
                           {isOutletArchived(ro) && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-400 border border-rose-500/40">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-700 border border-rose-500/40">
                               ARCHIVED
                             </span>
                           )}
                         </div>
-                        <div className="text-xs font-mono text-slate-400 mt-1">
-                          RO Code: <span className="text-white font-bold">{ro.roCode}</span>
+                        <div className="text-xs font-mono text-[#64748B] mt-1">
+                          RO Code: <span className="text-[#17365D] font-bold">{ro.roCode}</span>
                         </div>
                         {isOutletArchived(ro) && (ro.archivedAt || ro.directoryHiddenAt) && (
-                          <div className="text-[11px] font-mono text-rose-300/80 mt-1">
+                          <div className="text-[11px] font-mono text-rose-800/80 mt-1">
                             Archived At: {new Date((ro.archivedAt || ro.directoryHiddenAt)!).toLocaleString()}
                             {(ro.archivedBy || ro.directoryHiddenBy) ? ` • By: ${ro.archivedBy || ro.directoryHiddenBy}` : ''}
                           </div>
@@ -584,8 +585,8 @@ export const OutletsPage: React.FC = () => {
                       <span
                         className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
                           ro.status === 'ACTIVE'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                            : 'bg-slate-800 text-slate-400'
+                            ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/30'
+                            : 'bg-[#F1F5F9] text-[#64748B]'
                         }`}
                       >
                         {ro.status}
@@ -593,38 +594,38 @@ export const OutletsPage: React.FC = () => {
                     </div>
 
                     {/* Hierarchy Info */}
-                    <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/50 text-[11px] font-mono space-y-1 text-slate-300">
+                    <div className="p-3 rounded-xl bg-[#F1F5F9]/60 border border-[#D7E0EA]/50 text-[11px] font-mono space-y-1 text-[#475569]">
                       <div className="flex justify-between">
-                        <span className="text-slate-400">State Office:</span>
-                        <span className="text-slate-200 font-semibold">{ro.stateName || ro.stateId}</span>
+                        <span className="text-[#64748B]">State Office:</span>
+                        <span className="text-[#334155] font-semibold">{ro.stateName || ro.stateId}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Division Office:</span>
-                        <span className="text-slate-200 font-semibold">
+                        <span className="text-[#64748B]">Division Office:</span>
+                        <span className="text-[#334155] font-semibold">
                           {ro.divisionName || ro.divisionId}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Sales Area:</span>
-                        <span className="text-slate-200 font-semibold">
+                        <span className="text-[#64748B]">Sales Area:</span>
+                        <span className="text-[#334155] font-semibold">
                           {ro.salesAreaName || ro.salesAreaId}
                         </span>
                       </div>
                     </div>
 
                     {/* Address */}
-                    <div className="text-xs text-slate-400 flex items-start gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+                    <div className="text-xs text-[#64748B] flex items-start gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-[#64748B] shrink-0 mt-0.5" />
                       <span>
                         {ro.address}, {ro.city}, {ro.district} - {ro.pincode}
                       </span>
                     </div>
 
                     {/* User Assignments & Actions */}
-                    <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-                      <div className="text-xs font-mono text-slate-400">
+                    <div className="pt-3 border-t border-[#E2E8F0] flex items-center justify-between">
+                      <div className="text-xs font-mono text-[#64748B]">
                         Assigned Personnel:{' '}
-                        <span className="text-white font-bold">{ro.assignedUsersCount || 0}</span>
+                        <span className="text-[#17365D] font-bold">{ro.assignedUsersCount || 0}</span>
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -634,9 +635,9 @@ export const OutletsPage: React.FC = () => {
                               <>
                                 <button
                                   onClick={() => openEditModal(ro)}
-                                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                  className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] hover:text-[#17365D] border border-[#D7E0EA] rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                                 >
-                                  <Pencil className="w-3.5 h-3.5 text-orange-400" />
+                                  <Pencil className="w-3.5 h-3.5 text-[#B8530D]" />
                                   <span>Edit Outlet</span>
                                 </button>
 
@@ -646,9 +647,9 @@ export const OutletsPage: React.FC = () => {
                                     setErrorMsg(null);
                                     setAssignModalOpen(true);
                                   }}
-                                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                  className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] hover:text-[#17365D] border border-[#D7E0EA] rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                                 >
-                                  <UserPlus className="w-3.5 h-3.5 text-orange-400" />
+                                  <UserPlus className="w-3.5 h-3.5 text-[#B8530D]" />
                                   <span>Assign Personnel</span>
                                 </button>
                               </>
@@ -657,19 +658,19 @@ export const OutletsPage: React.FC = () => {
                             {isOutletArchived(ro) ? (
                               <button
                                 onClick={() => handleRestoreOutlet(ro)}
-                                className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 hover:text-emerald-200 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                                 title="Restore Retail Outlet"
                               >
-                                <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                                <RefreshCw className="w-3.5 h-3.5 text-emerald-700" />
                                 <span>Restore Outlet</span>
                               </button>
                             ) : (
                               <button
                                 onClick={() => openHideConfirm(ro)}
-                                className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-800 hover:text-rose-200 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                                 title="Archive Retail Outlet"
                               >
-                                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                                <Trash2 className="w-3.5 h-3.5 text-rose-700" />
                                 <span>Delete</span>
                               </button>
                             )}
@@ -685,12 +686,12 @@ export const OutletsPage: React.FC = () => {
 
       {/* Register New Outlet Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-white">Register Retail Outlet</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-bold text-[#17365D]">Register Retail Outlet</h2>
 
             {errorMsg && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-800 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
@@ -699,23 +700,23 @@ export const OutletsPage: React.FC = () => {
             <form onSubmit={handleCreateOutlet} className="space-y-3.5 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">RO Code</label>
+                  <label className="block text-[#475569] font-semibold mb-1">RO Code</label>
                   <input
                     type="text"
                     required
                     placeholder="RO-110025"
                     value={form.roCode}
                     onChange={(e) => setForm({ ...form, roCode: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Outlet Type</label>
+                  <label className="block text-[#475569] font-semibold mb-1">Outlet Type</label>
                   <select
                     value={form.outletType}
                     onChange={(e) => setForm({ ...form, outletType: e.target.value as any })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                   >
                     <option value="COCO">COCO (Company Owned)</option>
                     <option value="CODO">CODO (Company Owned Dealer Operated)</option>
@@ -725,41 +726,41 @@ export const OutletsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Outlet Name</label>
+                <label className="block text-[#475569] font-semibold mb-1">Outlet Name</label>
                 <input
                   type="text"
                   required
                   placeholder="New Town Fuel Station"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                  className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                 />
               </div>
 
               {/* Cascading Organizational Hierarchy Selection */}
-              <div className="space-y-3 p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+              <div className="space-y-3 p-3.5 bg-slate-950/60 border border-[#E2E8F0] rounded-xl">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-orange-400">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#B8530D]">
                     Organizational Hierarchy Allocation
                   </span>
                   {(loadingStates || loadingDivisions || loadingSalesAreas) && (
-                    <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-                      <Loader2 className="w-3 h-3 animate-spin text-orange-400" />
+                    <span className="flex items-center gap-1.5 text-[10px] text-[#64748B] font-mono">
+                      <Loader2 className="w-3 h-3 animate-spin text-[#B8530D]" />
                       Loading hierarchy...
                     </span>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    State Office <span className="text-orange-400">*</span>
+                  <label className="block text-[#475569] font-semibold mb-1">
+                    State Office <span className="text-[#B8530D]">*</span>
                   </label>
                   <select
                     required
                     value={form.stateId}
                     onChange={(e) => handleStateChange(e.target.value)}
                     disabled={loadingStates}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="">
                       {loadingStates ? 'Loading state offices...' : '-- Select State Office --'}
@@ -774,15 +775,15 @@ export const OutletsPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">
-                      Division Office <span className="text-orange-400">*</span>
+                    <label className="block text-[#475569] font-semibold mb-1">
+                      Division Office <span className="text-[#B8530D]">*</span>
                     </label>
                     <select
                       required
                       value={form.divisionId}
                       onChange={(e) => handleDivisionChange(e.target.value)}
                       disabled={!form.stateId || loadingDivisions}
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <option value="">
                         {loadingDivisions
@@ -800,8 +801,8 @@ export const OutletsPage: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">
-                      Sales Area <span className="text-orange-400">*</span>
+                    <label className="block text-[#475569] font-semibold mb-1">
+                      Sales Area <span className="text-[#B8530D]">*</span>
                     </label>
                     <select
                       required
@@ -810,7 +811,7 @@ export const OutletsPage: React.FC = () => {
                         setForm((prev) => ({ ...prev, salesAreaId: e.target.value }))
                       }
                       disabled={!form.divisionId || loadingSalesAreas}
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <option value="">
                         {loadingSalesAreas
@@ -830,42 +831,42 @@ export const OutletsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Address</label>
+                <label className="block text-[#475569] font-semibold mb-1">Address</label>
                 <input
                   type="text"
                   required
                   placeholder="Plot 12, Action Area I"
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                  className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">City</label>
+                  <label className="block text-[#475569] font-semibold mb-1">City</label>
                   <input
                     type="text"
                     required
                     placeholder="Kolkata"
                     value={form.city}
                     onChange={(e) => setForm({ ...form, city: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">District</label>
+                  <label className="block text-[#475569] font-semibold mb-1">District</label>
                   <input
                     type="text"
                     required
                     placeholder="Kolkata"
                     value={form.district}
                     onChange={(e) => setForm({ ...form, district: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Pincode</label>
+                  <label className="block text-[#475569] font-semibold mb-1">Pincode</label>
                   <input
                     type="text"
                     required
@@ -873,7 +874,7 @@ export const OutletsPage: React.FC = () => {
                     placeholder="700001"
                     value={form.pincode}
                     onChange={(e) => setForm({ ...form, pincode: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                   />
                 </div>
               </div>
@@ -886,7 +887,7 @@ export const OutletsPage: React.FC = () => {
                     setModalOpen(false);
                     setErrorMsg(null);
                   }}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 bg-[#F1F5F9] text-[#475569] rounded-lg font-semibold hover:bg-[#E8EEF5] transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -905,22 +906,22 @@ export const OutletsPage: React.FC = () => {
 
       {/* Edit Retail Outlet Modal */}
       {editModalOpen && editingOutlet && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div>
-                <h2 className="text-lg font-bold text-white">Edit Retail Outlet</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <h2 className="text-lg font-bold text-[#17365D]">Edit Retail Outlet</h2>
+                <p className="text-xs text-[#64748B] mt-0.5">
                   Update outlet master details & organizational hierarchy allocation.
                 </p>
               </div>
-              <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-orange-500/10 text-orange-400 border border-orange-500/30">
+              <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-orange-500/10 text-[#B8530D] border border-orange-500/30">
                 {editForm.roCode}
               </span>
             </div>
 
             {errorMsg && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-800 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
@@ -929,21 +930,21 @@ export const OutletsPage: React.FC = () => {
             <form onSubmit={handleUpdateOutlet} className="space-y-3.5 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">RO Code (Read-Only)</label>
+                  <label className="block text-[#475569] font-semibold mb-1">RO Code (Read-Only)</label>
                   <input
                     type="text"
                     disabled
                     value={editForm.roCode}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-400 font-mono cursor-not-allowed"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-[#64748B] font-mono cursor-not-allowed"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Outlet Type</label>
+                  <label className="block text-[#475569] font-semibold mb-1">Outlet Type</label>
                   <select
                     value={editForm.outletType}
                     onChange={(e) => setEditForm({ ...editForm, outletType: e.target.value as any })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                   >
                     <option value="COCO">COCO (Company Owned)</option>
                     <option value="CODO">CODO (Company Owned Dealer Operated)</option>
@@ -952,11 +953,11 @@ export const OutletsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Status</label>
+                  <label className="block text-[#475569] font-semibold mb-1">Status</label>
                   <select
                     value={editForm.status}
                     onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                   >
                     <option value="ACTIVE">ACTIVE</option>
                     <option value="INACTIVE">INACTIVE</option>
@@ -965,40 +966,40 @@ export const OutletsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Outlet Name</label>
+                <label className="block text-[#475569] font-semibold mb-1">Outlet Name</label>
                 <input
                   type="text"
                   required
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                  className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                 />
               </div>
 
               {/* Cascading Organizational Hierarchy Reallocation */}
-              <div className="space-y-3 p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+              <div className="space-y-3 p-3.5 bg-slate-950/60 border border-[#E2E8F0] rounded-xl">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-orange-400">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#B8530D]">
                     Organizational Hierarchy Reallocation
                   </span>
                   {(loadingStates || loadingEditDivisions || loadingEditSalesAreas) && (
-                    <span className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-                      <Loader2 className="w-3 h-3 animate-spin text-orange-400" />
+                    <span className="flex items-center gap-1.5 text-[10px] text-[#64748B] font-mono">
+                      <Loader2 className="w-3 h-3 animate-spin text-[#B8530D]" />
                       Loading hierarchy...
                     </span>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    State Office <span className="text-orange-400">*</span>
+                  <label className="block text-[#475569] font-semibold mb-1">
+                    State Office <span className="text-[#B8530D]">*</span>
                   </label>
                   <select
                     required
                     value={editForm.stateId}
                     onChange={(e) => handleEditStateChange(e.target.value)}
                     disabled={loadingStates}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="">
                       {loadingStates ? 'Loading state offices...' : '-- Select State Office --'}
@@ -1013,15 +1014,15 @@ export const OutletsPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">
-                      Division Office <span className="text-orange-400">*</span>
+                    <label className="block text-[#475569] font-semibold mb-1">
+                      Division Office <span className="text-[#B8530D]">*</span>
                     </label>
                     <select
                       required
                       value={editForm.divisionId}
                       onChange={(e) => handleEditDivisionChange(e.target.value)}
                       disabled={!editForm.stateId || loadingEditDivisions}
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <option value="">
                         {loadingEditDivisions
@@ -1039,8 +1040,8 @@ export const OutletsPage: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">
-                      Sales Area <span className="text-orange-400">*</span>
+                    <label className="block text-[#475569] font-semibold mb-1">
+                      Sales Area <span className="text-[#B8530D]">*</span>
                     </label>
                     <select
                       required
@@ -1049,7 +1050,7 @@ export const OutletsPage: React.FC = () => {
                         setEditForm((prev) => ({ ...prev, salesAreaId: e.target.value }))
                       }
                       disabled={!editForm.divisionId || loadingEditSalesAreas}
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <option value="">
                         {loadingEditSalesAreas
@@ -1069,51 +1070,51 @@ export const OutletsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Address</label>
+                <label className="block text-[#475569] font-semibold mb-1">Address</label>
                 <input
                   type="text"
                   required
                   value={editForm.address}
                   onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                  className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">City</label>
+                  <label className="block text-[#475569] font-semibold mb-1">City</label>
                   <input
                     type="text"
                     required
                     value={editForm.city}
                     onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">District</label>
+                  <label className="block text-[#475569] font-semibold mb-1">District</label>
                   <input
                     type="text"
                     required
                     value={editForm.district}
                     onChange={(e) => setEditForm({ ...editForm, district: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Pincode</label>
+                  <label className="block text-[#475569] font-semibold mb-1">Pincode</label>
                   <input
                     type="text"
                     required
                     maxLength={6}
                     value={editForm.pincode}
                     onChange={(e) => setEditForm({ ...editForm, pincode: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                    className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                   />
                 </div>
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-800">
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-[#E2E8F0]">
                 <button
                   type="button"
                   disabled={updatingOutlet}
@@ -1122,7 +1123,7 @@ export const OutletsPage: React.FC = () => {
                     setEditingOutlet(null);
                     setErrorMsg(null);
                   }}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 bg-[#F1F5F9] text-[#475569] rounded-lg font-semibold hover:bg-[#E8EEF5] transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1141,17 +1142,17 @@ export const OutletsPage: React.FC = () => {
 
       {/* Assign User to Outlet Modal */}
       {assignModalOpen && selectedOutlet && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-white">Assign Personnel to Outlet</h2>
-            <p className="text-xs text-slate-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <h2 className="text-lg font-bold text-[#17365D]">Assign Personnel to Outlet</h2>
+            <p className="text-xs text-[#64748B]">
               Assigning Dealer/CSP to{' '}
-              <span className="text-orange-400 font-bold">{selectedOutlet.name}</span> (
+              <span className="text-[#B8530D] font-bold">{selectedOutlet.name}</span> (
               {selectedOutlet.roCode})
             </p>
 
             {errorMsg && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-800 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
@@ -1159,12 +1160,12 @@ export const OutletsPage: React.FC = () => {
 
             <form onSubmit={handleAssignUser} className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Select User</label>
+                <label className="block text-[#475569] font-semibold mb-1">Select User</label>
                 <select
                   required
                   value={assignUserId}
                   onChange={(e) => setAssignUserId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                  className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                 >
                   <option value="">-- Choose User --</option>
                   {users.map((u) => (
@@ -1176,11 +1177,11 @@ export const OutletsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Assignment Type</label>
+                <label className="block text-[#475569] font-semibold mb-1">Assignment Type</label>
                 <select
                   value={assignType}
                   onChange={(e) => setAssignType(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
+                  className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
                 >
                   <option value="DEALER">DEALER (Retail Outlet Franchisee)</option>
                   <option value="CSP">CSP (Customer Service Provider)</option>
@@ -1193,7 +1194,7 @@ export const OutletsPage: React.FC = () => {
                   type="button"
                   disabled={assigningUser}
                   onClick={() => setAssignModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-[#F1F5F9] text-[#475569] rounded-lg font-semibold hover:bg-[#E8EEF5] disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1212,36 +1213,36 @@ export const OutletsPage: React.FC = () => {
 
       {/* Hide Retail Outlet Confirmation Modal */}
       {hideModalOpen && outletToHide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-rose-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-700">
               <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
-                <Trash2 className="w-5 h-5 text-rose-400" />
+                <Trash2 className="w-5 h-5 text-rose-700" />
               </div>
-              <h2 className="text-lg font-bold text-white">Archive Retail Outlet?</h2>
+              <h2 className="text-lg font-bold text-[#17365D]">Archive Retail Outlet?</h2>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <p className="text-xs text-[#475569] leading-relaxed">
               This will archive the retail outlet and immediately revoke operational and user access across the system. Historical data is preserved and can be restored by an administrator at any time.
             </p>
 
-            <div className="p-3 rounded-xl bg-slate-800/70 border border-slate-700/60 text-xs space-y-1">
+            <div className="p-3 rounded-xl bg-[#F1F5F9]/70 border border-[#D7E0EA]/60 text-xs space-y-1">
               <div className="flex justify-between">
-                <span className="text-slate-400 font-medium">Name:</span>
-                <span className="text-white font-bold">{outletToHide.name}</span>
+                <span className="text-[#64748B] font-medium">Name:</span>
+                <span className="text-[#17365D] font-bold">{outletToHide.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400 font-medium">RO Code:</span>
-                <span className="text-white font-mono font-bold">{outletToHide.roCode}</span>
+                <span className="text-[#64748B] font-medium">RO Code:</span>
+                <span className="text-[#17365D] font-mono font-bold">{outletToHide.roCode}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400 font-medium">Type:</span>
-                <span className="text-orange-400 font-mono font-bold">{outletToHide.outletType}</span>
+                <span className="text-[#64748B] font-medium">Type:</span>
+                <span className="text-[#B8530D] font-mono font-bold">{outletToHide.outletType}</span>
               </div>
             </div>
 
             {errorMsg && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-800 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
@@ -1256,7 +1257,7 @@ export const OutletsPage: React.FC = () => {
                   setOutletToHide(null);
                   setErrorMsg(null);
                 }}
-                className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-semibold hover:bg-slate-700 transition-colors"
+                className="px-4 py-2 bg-[#F1F5F9] text-[#475569] rounded-lg font-semibold hover:bg-[#E8EEF5] transition-colors"
               >
                 Cancel
               </button>
