@@ -1266,7 +1266,7 @@ export const DailyOperationsPage: React.FC = () => {
       {/* 2. DAILY STATUS HEADER */}
       {summary && (
         <div className="daily-ops-surface p-5 sm:p-6 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="grid gap-4 border-b border-slate-100 pb-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,auto)] xl:items-start">
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Overall Day Status:
@@ -1284,7 +1284,7 @@ export const DailyOperationsPage: React.FC = () => {
             </div>
 
             {/* Shift selector / Open Shift bar */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-3">
               {bootstrap && bootstrap.shiftTemplates.length > 0 && (
                 <div className="flex items-center gap-2">
                   <select
@@ -1311,7 +1311,7 @@ export const DailyOperationsPage: React.FC = () => {
               )}
             </div>
             {bootstrap && bootstrap.shiftTemplates.length > 0 && (
-              <div className="mt-2">
+              <div className="xl:col-span-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-3">
                 <label htmlFor="shift-opening-notes" className="block text-xs font-semibold text-slate-700 mb-1">
                   Optional shift opening notes
                 </label>
@@ -1321,7 +1321,7 @@ export const DailyOperationsPage: React.FC = () => {
                   onChange={e => setNewShiftNotes(e.target.value)}
                   rows={2}
                   placeholder="Optional context for the shift (saved when opening)"
-                  className="w-full max-w-xl rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-900"
+                  className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-900"
                 />
               </div>
             )}
@@ -1338,9 +1338,9 @@ export const DailyOperationsPage: React.FC = () => {
                 {progressStages.filter(step => step.complete).length} of {progressStages.length} indicators complete
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
               {progressStages.map((step, index) => (
-                <div key={step.label} className={`daily-ops-step rounded-lg border p-3 transition-colors ${
+                <div key={step.label} className={`daily-ops-step rounded-xl border p-4 transition-colors ${
                   step.complete ? 'border-emerald-200 bg-white' : 'border-slate-200 bg-white'
                 }`}>
                   <div className="flex items-center justify-between gap-2">
@@ -1358,83 +1358,16 @@ export const DailyOperationsPage: React.FC = () => {
             </div>
           </section>
 
-          {/* Completion Summary Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Tank Opening
-              </div>
-              <div className="text-base font-bold font-mono text-slate-900 mt-1">
-                {summary.completion.openingTankReadings} / {summary.completion.expectedTanks}{' '}
-                <span className="text-xs font-sans font-medium text-slate-600">Complete</span>
-              </div>
+          {/* The progress strip above is the single source of status presentation.
+              Avoid repeating the six indicators in a second grid. */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#DCE6F1] bg-white px-4 py-3">
+            <div className="flex items-center gap-2 text-xs font-medium text-[#526477]">
+              <Clock className="h-4 w-4 text-[#F47721]" />
+              <span>{summary.shiftsCount === 0 ? 'No shift started for this date' :
+                summary.shifts.every(shift => shift.status === 'CLOSED') ? 'All recorded shifts are closed' :
+                `${summary.shifts.filter(shift => shift.status === 'OPEN').length} shift(s) currently open`}</span>
             </div>
-
-            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Nozzle Meter
-              </div>
-              <div className="text-base font-bold font-mono text-slate-900 mt-1">
-                {summary.completion.nozzleMeterReadings + summary.completion.unavailableNozzles} /{' '}
-                {summary.completion.expectedNozzles}{' '}
-                <span className="text-xs font-sans font-medium text-slate-600">Complete</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Fuel Receipts
-              </div>
-              <div className="text-base font-bold font-mono text-slate-900 mt-1">
-                {summary.completion.totalReceipts === 0 ? (
-                  <span className="text-xs font-sans font-medium text-slate-600">None Recorded</span>
-                ) : summary.completion.pendingReceipts > 0 ? (
-                  <span className="text-amber-700">
-                    {summary.completion.completedReceipts}/{summary.completion.totalReceipts} (Pending)
-                  </span>
-                ) : (
-                  <span className="text-emerald-700">
-                    {summary.completion.completedReceipts}/{summary.completion.totalReceipts} Complete
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Tank Closing
-              </div>
-              <div className="text-base font-bold font-mono text-slate-900 mt-1">
-                {summary.completion.closingTankReadings} / {summary.completion.expectedTanks}{' '}
-                <span className="text-xs font-sans font-medium text-slate-600">Complete</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Reconciliation
-              </div>
-              <div className="text-sm font-bold mt-1">
-                {summary.completion.reconciliationComplete ? (
-                  <span className="text-emerald-700">Complete</span>
-                ) : (
-                  <span className="text-amber-700">Pending</span>
-                )}
-              </div>
-            </div>
-
-            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Shift Status
-              </div>
-              <div className="text-sm font-bold mt-1 text-slate-900">
-                {summary.shiftsCount === 0
-                  ? 'No Shifts'
-                  : summary.shifts.every((s) => s.status === 'CLOSED')
-                    ? 'All Closed'
-                    : `${summary.shifts.filter((s) => s.status === 'OPEN').length} Open`}
-              </div>
-            </div>
+            <span className="text-xs text-[#64748B]">Choose a shift below to view or enter operational data</span>
           </div>
 
           {/* Missing-data warnings */}
