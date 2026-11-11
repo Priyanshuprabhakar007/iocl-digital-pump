@@ -97,11 +97,14 @@ describe('Admin close empty shift', () => {
     // A single operational entry must make the exceptional close unavailable.
     await db.run((await import('drizzle-orm')).sql`INSERT INTO tank_stock_readings
       (id, operational_shift_id, outlet_id, tank_id, reading_type, source,
-       product_dip_mm_milliunits, water_dip_mm_milliunits, volume_litres_milliunits,
-       recorded_by_user_id, created_at, updated_at)
+       product_id, product_dip_mm_milliunits, water_dip_mm_milliunits,
+       gross_observed_volume_milliunits, water_volume_milliunits, net_product_volume_milliunits,
+       recorded_at, recorded_by_user_id, created_at, updated_at)
       VALUES ('empty-close-test-reading', ${id}, 'ro-1001',
         (SELECT tank_id FROM operational_shift_tanks WHERE operational_shift_id = ${id} LIMIT 1),
-        'OPENING', 'MANUAL', 0, 0, 0, 'user-admin', '2026-11-24', '2026-11-24')`);
+        'OPENING', 'MANUAL',
+        (SELECT product_id FROM operational_shift_tanks WHERE operational_shift_id = ${id} LIMIT 1),
+        0, 0, 0, 0, 0, '2026-11-24', 'user-admin', '2026-11-24', '2026-11-24')`);
     const res = await closeEmpty(cookie, id, { reason: 'Incorrectly attempt to bypass existing readings', confirm: true });
     expect(res.status).toBe(409);
     expect((await new PumpRepository(db).findOperationalShiftById(id))?.status).toBe('OPEN');
