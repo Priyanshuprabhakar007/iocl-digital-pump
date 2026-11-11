@@ -2111,7 +2111,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Map Product Modal */}
       {modalType === 'mapProduct' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
           <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-2">Map Fuel Product to Outlet</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
@@ -2144,7 +2144,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Add Tank Modal */}
       {modalType === 'addTank' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
           <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-2">Register Underground Storage Tank</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
@@ -2226,7 +2226,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Add Dispenser Modal */}
       {modalType === 'addDispenser' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
           <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-2">Register Dispensing Unit (DU)</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
@@ -2344,7 +2344,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Edit Dispenser Modal */}
       {modalType === 'editDispenser' && editingDispenser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
           <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-2">Configure Dispensing Unit (DU #{editingDispenser.dispenserNumber})</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
@@ -2475,7 +2475,7 @@ export const PumpInfrastructurePage: React.FC = () => {
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+            <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
             <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
               <h2 className="text-lg font-bold text-[#17365D]">Configure Fuel Nozzle</h2>
               {modalError && <div className="p-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
@@ -2593,7 +2593,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Add Shift Template Modal */}
       {modalType === 'addShift' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
           <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-2">Create Shift Template</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
@@ -2665,7 +2665,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Edit Global Shift Template Modal */}
       {modalType === 'editShift' && editingShift && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
           <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -2780,7 +2780,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Edit Tank Modal */}
       {modalType === 'editTank' && editingTank && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
           <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -2916,7 +2916,7 @@ export const PumpInfrastructurePage: React.FC = () => {
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+            <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
             <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -3085,7 +3085,7 @@ export const PumpInfrastructurePage: React.FC = () => {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
-              className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm"
+              className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
               onClick={() => setModalType(null)}
             />
             <div className="relative z-10 w-full max-w-4xl max-h-[92vh] overflow-y-auto bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-5">
@@ -3178,7 +3178,7 @@ export const PumpInfrastructurePage: React.FC = () => {
 
               {/* Revision Selector & Lifecycle Controls */}
               {calCharts.length > 0 && (
-                <div className="p-3.5 bg-[#F8FAFC]/55 border border-[#E2E8F0] rounded-xl space-y-3">
+                <div className="p-3.5 bg-slate-950/60 border border-[#E2E8F0] rounded-xl space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <label className="text-[11px] font-mono text-[#64748B] uppercase font-bold">
@@ -3376,7 +3376,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto bg-[#F8FAFC]/55 border border-[#E2E8F0] rounded-xl max-h-60">
+                <div className="overflow-x-auto bg-slate-950/60 border border-[#E2E8F0] rounded-xl max-h-60">
                   <table className="w-full text-left text-xs font-mono">
                     <thead className="bg-[#F1F5F9]/80 text-[#64748B] uppercase text-[10px] border-b border-[#E2E8F0] sticky top-0">
                       <tr>
@@ -3447,7 +3447,7 @@ export const PumpInfrastructurePage: React.FC = () => {
 
               {/* Dry-Run Comparison Against Original Printed IOCL Chart */}
               {calShowDryRun && (
-                <div className="bg-[#F8FAFC]/55 border border-cyan-500/30 rounded-xl p-4 space-y-3">
+                <div className="bg-slate-950/60 border border-cyan-500/30 rounded-xl p-4 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h4 className="text-xs font-bold text-cyan-300 font-mono uppercase flex items-center gap-1.5">
@@ -3871,19 +3871,19 @@ export const PumpInfrastructurePage: React.FC = () => {
                           {csvPreview.valid && (
                             <>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                                <div className="p-2 bg-[#F8FAFC]/55 rounded border border-[#E2E8F0]">
+                                <div className="p-2 bg-slate-950/60 rounded border border-[#E2E8F0]">
                                   <span className="text-[#64748B] block text-[10px]">DIP RANGE</span>
                                   <span className="text-[#B8530D] font-bold">
                                     {formatCalibrationDisplay(csvPreview.diagnostics.minDipMm)} – {formatCalibrationDisplay(csvPreview.diagnostics.maxDipMm)} mm
                                   </span>
                                 </div>
-                                <div className="p-2 bg-[#F8FAFC]/55 rounded border border-[#E2E8F0]">
+                                <div className="p-2 bg-slate-950/60 rounded border border-[#E2E8F0]">
                                   <span className="text-[#64748B] block text-[10px]">VOLUME RANGE</span>
                                   <span className="text-[#17365D] font-bold">
                                     {formatCalibrationDisplay(csvPreview.diagnostics.minVolumeLitres)} – {formatCalibrationDisplay(csvPreview.diagnostics.maxVolumeLitres)} L
                                   </span>
                                 </div>
-                                <div className="p-2 bg-[#F8FAFC]/55 rounded border border-[#E2E8F0]">
+                                <div className="p-2 bg-slate-950/60 rounded border border-[#E2E8F0]">
                                   <span className="text-[#64748B] block text-[10px]">DOMINANT STEP</span>
                                   <span className="text-[#334155]">
                                     {csvPreview.diagnostics.dominantStepMm
@@ -3892,7 +3892,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                                     {csvPreview.diagnostics.isUniformStep ? ' (Uniform)' : ' (Variable)'}
                                   </span>
                                 </div>
-                                <div className="p-2 bg-[#F8FAFC]/55 rounded border border-[#E2E8F0]">
+                                <div className="p-2 bg-slate-950/60 rounded border border-[#E2E8F0]">
                                   <span className="text-[#64748B] block text-[10px]">CURVE GEOMETRY</span>
                                   <span className="text-cyan-300">
                                     {csvPreview.diagnostics.isNonLinear ? 'Non-Linear Table' : 'Linear Table'}
