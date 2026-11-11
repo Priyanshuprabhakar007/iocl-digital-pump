@@ -174,3 +174,10 @@
   .enterprise-shell.iocl-vibrant .option4-station-art { width: 50%; opacity: .24; }
   .enterprise-shell.iocl-vibrant .option4-hero { border-radius: 18px; }
 }
+
+.enterprise-shell.iocl-vibrant .outlet-directory-card:nth-child(4n+1) .option4-outlet-icon { background: #fff1e7; color: #ff7139; }
+.enterprise-shell.iocl-vibrant .outlet-directory-card:nth-child(4n+2) .option4-outlet-icon { background: #e8f2ff; color: #236bd8; }
+.enterprise-shell.iocl-vibrant .outlet-directory-card:nth-child(4n+3) .option4-outlet-icon { background: #f1eaff; color: #8047e5; }
+.enterprise-shell.iocl-vibrant .outlet-directory-card:nth-child(4n+4) .option4-outlet-icon { background: #e4faef; color: #009d68; }
+.enterprise-shell.iocl-vibrant main :is(.option4-action,.option4-panel,.option4-stat) { min-width: 0; }
+.enterprise-shell.iocl-vibrant header .option4-hero-content { max-width: min(100%, 690px); }
