@@ -54,7 +54,7 @@ export const DashboardPage: React.FC = () => {
   if (!userCtx) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[1500px] mx-auto">
       {/* Top Banner */}
       <div className="bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-sm relative overflow-hidden">
         <div className="absolute -right-10 -bottom-10 w-60 h-60 bg-[#F47721]/5 rounded-full blur-3xl pointer-events-none" />
@@ -63,7 +63,7 @@ export const DashboardPage: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-[#B8530D] uppercase tracking-wider mb-1">
               <Activity className="w-4 h-4" />
-              <span>Phase 1A Infrastructure Operational</span>
+              <span>Workspace overview</span>
             </div>
             <h1 className="text-2xl font-extrabold text-[#17365D]">
               Welcome, {userCtx.user.name}
@@ -85,8 +85,16 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-bold text-[#17365D]">At a glance</h2>
+          <p className="text-sm text-[#64748B]">Current access and activity for your assigned scope</p>
+        </div>
+        <span className="text-xs font-medium text-[#64748B]">Read-only operational overview</span>
+      </div>
+
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white border border-[#E2E8F0] rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between text-[#64748B] mb-2">
             <span className="text-xs font-semibold">Accessible Outlets</span>
@@ -140,11 +148,18 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-[#17365D]">Access & governance</h2>
+          <p className="text-sm text-[#64748B]">Your organizational access and system protection summary</p>
+        </div>
+      </div>
+
       {/* Scope Details & Security Architecture Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
         
         {/* Active Scope Assignments */}
-        <div className="lg:col-span-7 bg-white border border-[#E2E8F0] rounded-2xl p-6 space-y-4">
+        <div className="xl:col-span-7 bg-white border border-[#E2E8F0] rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-[#17365D] tracking-wide">
               User Organizational Scope Assignments
@@ -175,7 +190,7 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {/* Security & System Status */}
-        <div className="lg:col-span-5 bg-white border border-[#E2E8F0] rounded-2xl p-6 space-y-4">
+        <div className="xl:col-span-5 bg-white border border-[#E2E8F0] rounded-2xl p-6 space-y-4">
           <h2 className="text-sm font-bold text-[#17365D] tracking-wide">
             Security Enforcement Matrix
           </h2>
