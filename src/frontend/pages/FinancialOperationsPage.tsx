@@ -45,6 +45,7 @@ import { PERMISSIONS } from '../../shared/constants';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
 import { getLocalDateInputValue } from '../../shared/utils/dateUtils';
+import './financialReportsModern.css';
 
 export const FinancialOperationsPage: React.FC = () => {
   const { userCtx, hasPermission } = useAuth();
@@ -271,17 +272,17 @@ export const FinancialOperationsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="finance-modern space-y-6 pb-10">
       {/* Header & Selectors */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+      <div className="phase3-surface p-5 sm:p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-orange-500/10 rounded-xl border border-orange-500/20">
               <Banknote className="w-6 h-6 text-orange-500" />
             </div>
             <div>
-              <h1 className="text-xl font-black text-white tracking-tight">Financial Operations</h1>
-              <p className="text-xs text-slate-400">Revenue, collections, handovers and reconciliation</p>
+              <h1 className="text-xl font-bold text-[#17365D] tracking-tight">Financial Operations</h1>
+              <p className="text-xs text-[#64748B]">Revenue, collections, handovers and reconciliation</p>
             </div>
           </div>
 
@@ -289,7 +290,7 @@ export const FinancialOperationsPage: React.FC = () => {
             <select
               value={selectedOutletId}
               onChange={(e) => setSelectedOutletId(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none"
+              className="bg-[#F1F5F9] border border-[#D7E0EA] text-[#17365D] rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none"
             >
               {outlets.map(o => (
                 <option key={o.id} value={o.id}>{o.roCode} — {o.name}</option>
@@ -299,7 +300,7 @@ export const FinancialOperationsPage: React.FC = () => {
             <select
               value={selectedShiftId}
               onChange={(e) => setSelectedShiftId(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none"
+              className="bg-[#F1F5F9] border border-[#D7E0EA] text-[#17365D] rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none"
             >
               <option value="">Select Shift...</option>
               {shiftsList.map(s => (
@@ -309,7 +310,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
             <button
               onClick={refreshData}
-              className="p-2 bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-700 transition-colors"
+              className="p-2 bg-[#F1F5F9] text-[#64748B] hover:text-[#17365D] rounded-xl border border-[#D7E0EA] transition-colors"
             >
               <RefreshCw className={`w-5 h-5 ${loadingData ? 'animate-spin' : ''}`} />
             </button>
@@ -317,11 +318,11 @@ export const FinancialOperationsPage: React.FC = () => {
         </div>
 
         {/* Tab Switcher */}
-        <div className="mt-6 flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar border-t border-slate-800 pt-4">
+        <div className="mt-6 flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar border-t border-[#E2E8F0] pt-4">
           <button
             onClick={() => setActiveTab('collections')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'collections' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              activeTab === 'collections' ? 'bg-[#17365D] text-white shadow-sm' : 'text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
             }`}
           >
             Collections
@@ -329,7 +330,7 @@ export const FinancialOperationsPage: React.FC = () => {
           <button
             onClick={() => setActiveTab('reconciliation')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'reconciliation' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              activeTab === 'reconciliation' ? 'bg-[#17365D] text-white shadow-sm' : 'text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
             }`}
           >
             Reconciliation
@@ -337,7 +338,7 @@ export const FinancialOperationsPage: React.FC = () => {
           <button
             onClick={() => setActiveTab('handovers')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'handovers' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              activeTab === 'handovers' ? 'bg-[#17365D] text-white shadow-sm' : 'text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
             }`}
           >
             Cash Handover
@@ -345,7 +346,7 @@ export const FinancialOperationsPage: React.FC = () => {
           <button
             onClick={() => setActiveTab('deposits')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'deposits' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              activeTab === 'deposits' ? 'bg-[#17365D] text-white shadow-sm' : 'text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
             }`}
           >
             Bank Deposits
@@ -354,7 +355,7 @@ export const FinancialOperationsPage: React.FC = () => {
             <button
               onClick={() => setActiveTab('credit-parties')}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'credit-parties' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                activeTab === 'credit-parties' ? 'bg-[#17365D] text-white shadow-sm' : 'text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
               }`}
             >
               Credit Parties
@@ -364,7 +365,7 @@ export const FinancialOperationsPage: React.FC = () => {
             <button
               onClick={() => setActiveTab('prices')}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'prices' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                activeTab === 'prices' ? 'bg-[#17365D] text-white shadow-sm' : 'text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
               }`}
             >
               Price Master
@@ -375,12 +376,12 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {/* Notifications */}
       {actionSuccess && (
-        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm flex items-center gap-2">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" /> <span>{actionSuccess}</span>
         </div>
       )}
       {actionError && (
-        <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-sm flex items-center gap-2">
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm flex items-center gap-2">
           <AlertCircle className="w-4 h-4" /> <span>{actionError}</span>
         </div>
       )}
@@ -390,11 +391,11 @@ export const FinancialOperationsPage: React.FC = () => {
         {activeTab === 'collections' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Shift Collections</h2>
+              <h2 className="text-lg font-bold text-[#17365D]">Shift Collections</h2>
               {selectedShift?.status === 'OPEN' && (
                 <button
                   onClick={() => setShowCollectionModal(true)}
-                  className="px-3 py-1.5 bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> Add Collection
                 </button>
@@ -403,26 +404,26 @@ export const FinancialOperationsPage: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {collections.map(c => (
-                <div key={c.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2 relative group">
+                <div key={c.id} className="bg-white border border-[#E2E8F0] rounded-xl p-4 space-y-2 relative group">
                   <div className="flex items-center justify-between">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-orange-400 border border-slate-700 uppercase">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#F1F5F9] text-[#B8530D] border border-[#D7E0EA] uppercase">
                       {c.collectionType.replace('_', ' ')}
                     </span>
-                    <span className="text-xs text-slate-500 font-mono">
+                    <span className="text-xs text-[#64748B] font-mono">
                       {new Date(c.collectedAt).toLocaleTimeString()}
                     </span>
                   </div>
-                  <div className="text-xl font-black text-white font-mono">
+                  <div className="text-xl font-bold text-[#17365D] font-mono">
                     ₹ {c.amountStr}
                   </div>
                   {c.creditPartyNameSnapshot && (
-                    <div className="text-xs text-slate-400 flex items-center gap-1">
+                    <div className="text-xs text-[#64748B] flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3 text-blue-400" />
                       {c.creditPartyNameSnapshot} ({c.creditPartyCodeSnapshot})
                     </div>
                   )}
                   {c.provider && (
-                    <div className="text-[10px] text-slate-500">
+                    <div className="text-[10px] text-[#64748B]">
                       {c.provider} {c.referenceNumber && `• ${c.referenceNumber}`}
                     </div>
                   )}
@@ -442,7 +443,7 @@ export const FinancialOperationsPage: React.FC = () => {
                 </div>
               ))}
               {collections.length === 0 && (
-                <div className="md:col-span-2 lg:col-span-3 py-12 text-center text-slate-500 italic bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl">
+                <div className="md:col-span-2 lg:col-span-3 py-12 text-center text-[#64748B] italic bg-[#F8FAFC] border border-dashed border-[#CBD5E1] rounded-2xl">
                   No collections recorded for this shift
                 </div>
               )}
@@ -454,43 +455,43 @@ export const FinancialOperationsPage: React.FC = () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Sales Revenue */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Authoritative Sales Revenue</h3>
+                  <h3 className="text-sm font-bold text-[#17365D] uppercase tracking-wider font-mono">Authoritative Sales Revenue</h3>
                   <TrendingUp className="w-4 h-4 text-emerald-500" />
                 </div>
                 <div className="space-y-3">
                   {summary.salesRevenue.byProduct.map(p => (
-                    <div key={p.productId} className="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
+                    <div key={p.productId} className="flex items-center justify-between text-xs border-b border-[#E2E8F0] pb-2">
                       <div className="font-mono">
-                        <div className="text-white font-bold">{p.productName}</div>
-                        <div className="text-slate-500">{p.quantityStr} {p.unit} @ ₹{p.pricePerUnitStr}</div>
+                        <div className="text-[#17365D] font-bold">{p.productName}</div>
+                        <div className="text-[#64748B]">{p.quantityStr} {p.unit} @ ₹{p.pricePerUnitStr}</div>
                       </div>
-                      <div className="text-white font-bold font-mono text-sm">₹{p.revenueStr}</div>
+                      <div className="text-[#17365D] font-bold font-mono text-sm">₹{p.revenueStr}</div>
                     </div>
                   ))}
 
                   {/* CNG Row / Card if applicable */}
                   {summary.salesRevenue.cngApplicable && (
                     summary.salesRevenue.cngComplete ? (
-                      <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2 bg-orange-500/5 -mx-2 px-2 py-1.5 rounded-lg border border-orange-500/20">
+                      <div className="flex items-center justify-between text-xs border-b border-[#E2E8F0] pb-2 bg-orange-500/5 -mx-2 px-2 py-1.5 rounded-lg border border-orange-500/20">
                         <div className="font-mono">
-                          <div className="text-orange-400 font-bold flex items-center gap-1.5">
+                          <div className="text-[#B8530D] font-bold flex items-center gap-1.5">
                             <span>CNG</span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-normal">Gas</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-[#B8530D] font-normal">Gas</span>
                           </div>
-                          <div className="text-slate-400">
+                          <div className="text-[#64748B]">
                             {summary.salesRevenue.cngProduct
                               ? `${summary.salesRevenue.cngProduct.quantityStr} ${summary.salesRevenue.cngProduct.unit} × ₹${summary.salesRevenue.cngProduct.pricePerUnitStr}/${summary.salesRevenue.cngProduct.unit}`
                               : 'CNG Dispensed'}
                           </div>
                         </div>
-                        <div className="text-orange-400 font-bold font-mono text-sm">
+                        <div className="text-[#B8530D] font-bold font-mono text-sm">
                           ₹{summary.salesRevenue.cngTotalStr}
                         </div>
                       </div>
                     ) : (
-                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2 text-xs text-amber-400">
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2 text-xs text-amber-700">
                         <AlertTriangle className="w-4 h-4 shrink-0" />
                         <span>CNG operational data is incomplete.</span>
                       </div>
@@ -498,49 +499,49 @@ export const FinancialOperationsPage: React.FC = () => {
                   )}
 
                   {/* Revenue Summary Totals */}
-                  <div className="pt-2 space-y-1.5 border-t border-slate-800 font-mono text-xs">
-                    <div className="flex justify-between text-slate-400">
+                  <div className="pt-2 space-y-1.5 border-t border-[#E2E8F0] font-mono text-xs">
+                    <div className="flex justify-between text-[#64748B]">
                       <span>Fuel Revenue:</span>
-                      <span className="text-white font-bold">₹{summary.salesRevenue.fuelTotalStr}</span>
+                      <span className="text-[#17365D] font-bold">₹{summary.salesRevenue.fuelTotalStr}</span>
                     </div>
                     {summary.salesRevenue.cngApplicable && summary.salesRevenue.cngComplete && (
-                      <div className="flex justify-between text-orange-400">
+                      <div className="flex justify-between text-[#B8530D]">
                         <span>CNG Revenue:</span>
                         <span className="font-bold">₹{summary.salesRevenue.cngTotalStr}</span>
                       </div>
                     )}
                     {summary.salesRevenue.lubeTotalStr != null && (
-                      <div className="flex justify-between text-indigo-400">
+                      <div className="flex justify-between text-indigo-700">
                         <span>Lube Revenue:</span>
                         <span className="font-bold">₹{summary.salesRevenue.lubeTotalStr}</span>
                       </div>
                     )}
-                    <div className="flex items-center justify-between font-black text-white text-base pt-1.5 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between font-bold text-[#17365D] text-base pt-1.5 border-t border-[#E2E8F0]">
                       <span>Authoritative Sales Total:</span>
-                      <span className="text-emerald-400">₹{summary.salesRevenue.authoritativeTotalStr}</span>
+                      <span className="text-emerald-700">₹{summary.salesRevenue.authoritativeTotalStr}</span>
                     </div>
                   </div>
 
                   {/* Component Completeness Visibility */}
-                  <div className="pt-3 border-t border-slate-800/80">
-                    <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+                  <div className="pt-3 border-t border-[#E2E8F0]">
+                    <div className="text-[10px] font-mono uppercase tracking-wider text-[#64748B] mb-2">
                       Component Completeness
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-mono">
-                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-                        <div className="text-slate-500 text-[10px]">Fuel</div>
-                        <div className="text-emerald-400 font-bold mt-0.5">
+                      <div className="p-2 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
+                        <div className="text-[#64748B] text-[10px]">Fuel</div>
+                        <div className="text-emerald-700 font-bold mt-0.5">
                           {summary.salesRevenue.includedComponents?.includes('FUEL') ? 'Included' : 'Pending'}
                         </div>
                       </div>
-                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-                        <div className="text-slate-500 text-[10px]">CNG</div>
+                      <div className="p-2 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
+                        <div className="text-[#64748B] text-[10px]">CNG</div>
                         <div className={`font-bold mt-0.5 ${
                           !summary.salesRevenue.cngApplicable
-                            ? 'text-slate-500'
+                            ? 'text-[#64748B]'
                             : summary.salesRevenue.cngComplete
-                            ? 'text-emerald-400'
-                            : 'text-amber-400'
+                            ? 'text-emerald-700'
+                            : 'text-amber-700'
                         }`}>
                           {!summary.salesRevenue.cngApplicable
                             ? 'Not Applicable'
@@ -549,9 +550,9 @@ export const FinancialOperationsPage: React.FC = () => {
                             : 'Pending'}
                         </div>
                       </div>
-                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-                        <div className="text-slate-500 text-[10px]">Lube</div>
-                        <div className="text-emerald-400 font-bold mt-0.5">
+                      <div className="p-2 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
+                        <div className="text-[#64748B] text-[10px]">Lube</div>
+                        <div className="text-emerald-700 font-bold mt-0.5">
                           {summary.salesRevenue.includedComponents?.includes('LUBE') ? 'Included' : 'Pending'}
                         </div>
                       </div>
@@ -561,39 +562,39 @@ export const FinancialOperationsPage: React.FC = () => {
               </div>
 
               {/* Collections Summary */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Collections Breakdown</h3>
+                  <h3 className="text-sm font-bold text-[#17365D] uppercase tracking-wider font-mono">Collections Breakdown</h3>
                   <Wallet className="w-4 h-4 text-orange-500" />
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between text-xs font-mono">
-                    <span className="text-slate-400">Cash:</span>
-                    <span className="text-white">₹{summary.collections.cashStr}</span>
+                    <span className="text-[#64748B]">Cash:</span>
+                    <span className="text-[#17365D]">₹{summary.collections.cashStr}</span>
                   </div>
                   <div className="flex justify-between text-xs font-mono">
-                    <span className="text-slate-400">POS Cards:</span>
-                    <span className="text-white">₹{summary.collections.posCardStr}</span>
+                    <span className="text-[#64748B]">POS Cards:</span>
+                    <span className="text-[#17365D]">₹{summary.collections.posCardStr}</span>
                   </div>
                   <div className="flex justify-between text-xs font-mono">
-                    <span className="text-slate-400">UPI Payments:</span>
-                    <span className="text-white">₹{summary.collections.upiStr}</span>
+                    <span className="text-[#64748B]">UPI Payments:</span>
+                    <span className="text-[#17365D]">₹{summary.collections.upiStr}</span>
                   </div>
                   <div className="flex justify-between text-xs font-mono">
-                    <span className="text-slate-400">Fleet Cards:</span>
-                    <span className="text-white">₹{summary.collections.fleetCardStr}</span>
+                    <span className="text-[#64748B]">Fleet Cards:</span>
+                    <span className="text-[#17365D]">₹{summary.collections.fleetCardStr}</span>
                   </div>
                   <div className="flex justify-between text-xs font-mono">
-                    <span className="text-slate-400">Credit Sales:</span>
-                    <span className="text-white">₹{summary.collections.creditSalesStr}</span>
+                    <span className="text-[#64748B]">Credit Sales:</span>
+                    <span className="text-[#17365D]">₹{summary.collections.creditSalesStr}</span>
                   </div>
                   <div className="flex justify-between text-xs font-mono">
-                    <span className="text-slate-400">Direct Bank Drops:</span>
-                    <span className="text-white">₹{summary.collections.directBankDropStr}</span>
+                    <span className="text-[#64748B]">Direct Bank Drops:</span>
+                    <span className="text-[#17365D]">₹{summary.collections.directBankDropStr}</span>
                   </div>
-                  <div className="pt-2 flex items-center justify-between font-black text-white text-lg font-mono border-t border-slate-800">
+                  <div className="pt-2 flex items-center justify-between font-bold text-[#17365D] text-lg font-mono border-t border-[#E2E8F0]">
                     <span>TOTAL</span>
-                    <span className="text-emerald-400">₹{summary.collections.totalStr}</span>
+                    <span className="text-emerald-700">₹{summary.collections.totalStr}</span>
                   </div>
                 </div>
               </div>
@@ -602,44 +603,44 @@ export const FinancialOperationsPage: React.FC = () => {
             {/* Variance & Status */}
             <div className={`p-6 rounded-2xl border-2 flex flex-col md:flex-row items-center justify-between gap-6 ${
               summary.variancePaise === 0 ? 'bg-emerald-500/5 border-emerald-500/20' : 
-              summary.variancePaise > 0 ? 'bg-rose-500/5 border-rose-500/20' : 'bg-amber-500/5 border-amber-500/20'
+              summary.variancePaise > 0 ? 'bg-rose-500/5 border-rose-500/20' : 'bg-amber-500/5 border-amber-200'
             }`}>
               <div className="flex items-center gap-4">
                 <div className={`p-4 rounded-2xl ${
-                  summary.variancePaise === 0 ? 'bg-emerald-500/20 text-emerald-400' :
-                  summary.variancePaise > 0 ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
+                  summary.variancePaise === 0 ? 'bg-emerald-500/20 text-emerald-700' :
+                  summary.variancePaise > 0 ? 'bg-rose-500/20 text-rose-700' : 'bg-amber-500/20 text-amber-700'
                 }`}>
                   {summary.variancePaise === 0 ? <CheckCircle2 className="w-8 h-8" /> : <AlertTriangle className="w-8 h-8" />}
                 </div>
                 <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 font-mono">Sales vs Collections Variance</div>
-                  <div className={`text-3xl font-black font-mono ${
-                    summary.variancePaise === 0 ? 'text-emerald-400' :
-                    summary.variancePaise > 0 ? 'text-rose-400' : 'text-amber-400'
+                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#64748B] font-mono">Sales vs Collections Variance</div>
+                  <div className={`text-3xl font-bold font-mono ${
+                    summary.variancePaise === 0 ? 'text-emerald-700' :
+                    summary.variancePaise > 0 ? 'text-rose-700' : 'text-amber-700'
                   }`}>
                     ₹ {summary.varianceStr}
                   </div>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+                  <div className="text-xs font-bold text-[#64748B] uppercase tracking-widest mt-1">
                     Status: {summary.varianceStatus || 'PENDING'}
                   </div>
                 </div>
               </div>
 
-              <div className="max-w-xs text-xs text-slate-400 bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
-                <div className="font-semibold text-slate-300 flex items-center gap-1.5 mb-1">
-                  <Info className="w-3.5 h-3.5 text-orange-400" />
+              <div className="max-w-xs text-xs text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3">
+                <div className="font-semibold text-[#475569] flex items-center gap-1.5 mb-1">
+                  <Info className="w-3.5 h-3.5 text-[#B8530D]" />
                   <span>Authoritative Finalization</span>
                 </div>
-                <p className="text-[11px] leading-relaxed text-slate-400">
+                <p className="text-[11px] leading-relaxed text-[#64748B]">
                   Authoritative financial reconciliation is finalized during Shift Close. If this shift is open, complete operational entries and finalize in Shift Operations.
                 </p>
               </div>
             </div>
 
             {summary.varianceReason && (
-              <div className="bg-slate-800/40 border border-slate-700 p-4 rounded-xl">
-                 <div className="text-[10px] font-bold text-slate-500 uppercase font-mono mb-1">Variance Reason</div>
-                 <div className="text-sm text-slate-300 italic">"{summary.varianceReason}"</div>
+              <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-4 rounded-xl">
+                 <div className="text-[10px] font-bold text-[#64748B] uppercase font-mono mb-1">Variance Reason</div>
+                 <div className="text-sm text-[#475569] italic">"{summary.varianceReason}"</div>
               </div>
             )}
           </div>
@@ -648,11 +649,11 @@ export const FinancialOperationsPage: React.FC = () => {
         {activeTab === 'handovers' && (
           <div className="space-y-4">
              <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Cash Handovers</h2>
+              <h2 className="text-lg font-bold text-[#17365D]">Cash Handovers</h2>
               {selectedShift?.status === 'OPEN' && (
                 <button
                   onClick={() => setShowHandoverModal(true)}
-                  className="px-3 py-1.5 bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> Record Handover
                 </button>
@@ -661,32 +662,32 @@ export const FinancialOperationsPage: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {handovers.map(h => (
-                <div key={h.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div key={h.id} className="bg-white border border-[#E2E8F0] rounded-xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="text-2xl font-black text-white font-mono">₹ {h.amountStr}</div>
+                    <div className="text-2xl font-bold text-[#17365D] font-mono">₹ {h.amountStr}</div>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${
-                      h.status === 'PENDING' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
-                      h.status === 'ACKNOWLEDGED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
-                      'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                      h.status === 'PENDING' ? 'bg-amber-50 text-amber-700 border-amber-500/30' :
+                      h.status === 'ACKNOWLEDGED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                      'bg-rose-50 text-rose-700 border-rose-200'
                     }`}>
                       {h.status}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-400 space-y-1">
+                  <div className="text-xs text-[#64748B] space-y-1">
                     <div>Handed over at: {new Date(h.handedOverAt).toLocaleString()}</div>
                     {h.receivedAt && <div>Acknowledged at: {new Date(h.receivedAt).toLocaleString()}</div>}
                   </div>
                   {h.status === 'PENDING' && hasPermission(PERMISSIONS.CASH_HANDOVER_ACKNOWLEDGE) && (
-                    <div className="flex gap-2 pt-2 border-t border-slate-800">
+                    <div className="flex gap-2 pt-2 border-t border-[#E2E8F0]">
                       <button
                         onClick={() => handleAcknowledgeHandover(h.id, 'ACKNOWLEDGED')}
-                        className="flex-1 px-3 py-2 bg-emerald-600/20 text-emerald-400 rounded-lg text-[10px] font-bold border border-emerald-600/30 hover:bg-emerald-600 hover:text-white transition-all"
+                        className="flex-1 px-3 py-2 bg-emerald-600/20 text-emerald-700 rounded-lg text-[10px] font-bold border border-emerald-600/30 hover:bg-emerald-600 hover:text-[#17365D] transition-all"
                       >
                         Acknowledge Receipt
                       </button>
                       <button
                          onClick={() => handleAcknowledgeHandover(h.id, 'DISPUTED')}
-                        className="flex-1 px-3 py-2 bg-rose-600/20 text-rose-400 rounded-lg text-[10px] font-bold border border-rose-600/30 hover:bg-rose-600 hover:text-white transition-all"
+                        className="flex-1 px-3 py-2 bg-rose-600/20 text-rose-700 rounded-lg text-[10px] font-bold border border-rose-600/30 hover:bg-rose-600 hover:text-[#17365D] transition-all"
                       >
                         Dispute Amount
                       </button>
@@ -701,39 +702,39 @@ export const FinancialOperationsPage: React.FC = () => {
         {activeTab === 'deposits' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Bank Deposits</h2>
+              <h2 className="text-lg font-bold text-[#17365D]">Bank Deposits</h2>
               <button
                 onClick={() => setShowDepositModal(true)}
-                className="px-3 py-1.5 bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4" /> New Deposit
               </button>
             </div>
 
             {summary && (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-6 mb-6">
+              <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-6 mb-6">
                 <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">Cash Collected (Sales)</div>
-                  <div className="text-2xl font-black text-white font-mono">₹ {summary.cashDepositControl.cashCollectedStr}</div>
+                  <div className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest font-mono">Cash Collected (Sales)</div>
+                  <div className="text-2xl font-bold text-[#17365D] font-mono">₹ {summary.cashDepositControl.cashCollectedStr}</div>
                 </div>
-                <div className="w-px h-10 bg-slate-800 hidden md:block" />
+                <div className="w-px h-10 bg-[#F1F5F9] hidden md:block" />
                 <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">Verified in Bank</div>
-                  <div className="text-2xl font-black text-emerald-400 font-mono">₹ {summary.cashDepositControl.verifiedCashDepositedStr}</div>
+                  <div className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest font-mono">Verified in Bank</div>
+                  <div className="text-2xl font-bold text-emerald-700 font-mono">₹ {summary.cashDepositControl.verifiedCashDepositedStr}</div>
                 </div>
-                <div className="w-px h-10 bg-slate-800 hidden md:block" />
+                <div className="w-px h-10 bg-[#F1F5F9] hidden md:block" />
                 <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">Pending Deposit</div>
-                  <div className={`text-2xl font-black font-mono ${summary.cashDepositControl.pendingCashDepositPaise > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  <div className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest font-mono">Pending Deposit</div>
+                  <div className={`text-2xl font-bold font-mono ${summary.cashDepositControl.pendingCashDepositPaise > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
                     ₹ {summary.cashDepositControl.pendingCashDepositStr}
                   </div>
                 </div>
               </div>
             )}
 
-            <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-800/60 text-slate-400 font-mono uppercase text-[10px] border-b border-slate-800">
+            <div className="phase3-table-scroll overflow-x-auto bg-white border border-[#E2E8F0] rounded-2xl" role="region" aria-label="Scrollable financial table" tabIndex={0}>
+              <table className="phase3-data-table w-full text-left text-xs">
+                <thead className="bg-[#F1F5F9] text-[#64748B] font-mono uppercase text-[10px] border-b border-[#E2E8F0]">
                   <tr>
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4">Channel</th>
@@ -745,28 +746,28 @@ export const FinancialOperationsPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {deposits.map(d => (
-                    <tr key={d.id} className="hover:bg-slate-800/30">
+                    <tr key={d.id} className="hover:bg-[#F1F5F9]/30">
                       <td className="py-3 px-4 font-mono">{d.depositDate}</td>
                       <td className="py-3 px-4">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">{d.depositChannel.replace('_', ' ')}</span>
+                        <span className="text-[10px] font-bold text-[#64748B] uppercase">{d.depositChannel.replace('_', ' ')}</span>
                       </td>
-                      <td className="py-3 px-4 text-right font-bold text-white font-mono">₹ {d.amountStr}</td>
+                      <td className="py-3 px-4 text-right font-bold text-[#17365D] font-mono">₹ {d.amountStr}</td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                          d.status === 'SUBMITTED' ? 'bg-amber-500/10 text-amber-400' :
-                          d.status === 'VERIFIED' ? 'bg-emerald-500/10 text-emerald-400' :
-                          'bg-rose-500/10 text-rose-400'
+                          d.status === 'SUBMITTED' ? 'bg-amber-50 text-amber-700' :
+                          d.status === 'VERIFIED' ? 'bg-emerald-50 text-emerald-700' :
+                          'bg-rose-50 text-rose-700'
                         }`}>
                           {d.status}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-slate-500 font-mono truncate max-w-[120px]">{d.referenceNumber || '—'}</td>
+                      <td className="py-3 px-4 text-[#64748B] font-mono truncate max-w-[120px]">{d.referenceNumber || '—'}</td>
                       <td className="py-3 px-4">
                         {d.status === 'SUBMITTED' && hasPermission(PERMISSIONS.BANK_DEPOSITS_VERIFY) && (
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => handleVerifyDeposit(d.id, 'VERIFIED')}
-                              className="p-1.5 bg-emerald-600/20 text-emerald-400 rounded-lg hover:bg-emerald-600 hover:text-white transition-all"
+                              className="p-1.5 bg-emerald-600/20 text-emerald-700 rounded-lg hover:bg-emerald-600 hover:text-[#17365D] transition-all"
                               title="Verify"
                             >
                               <CheckCircle className="w-4 h-4" />
@@ -776,7 +777,7 @@ export const FinancialOperationsPage: React.FC = () => {
                                 const reason = prompt('Rejection Reason:');
                                 if (reason) handleVerifyDeposit(d.id, 'REJECTED', reason);
                               }}
-                              className="p-1.5 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600 hover:text-white transition-all"
+                              className="p-1.5 bg-rose-600/20 text-rose-700 rounded-lg hover:bg-rose-600 hover:text-[#17365D] transition-all"
                               title="Reject"
                             >
                               <XCircle className="w-4 h-4" />
@@ -795,10 +796,10 @@ export const FinancialOperationsPage: React.FC = () => {
         {activeTab === 'credit-parties' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Credit Customers / Parties</h2>
+              <h2 className="text-lg font-bold text-[#17365D]">Credit Customers / Parties</h2>
               <button
                 onClick={() => setShowPartyModal(true)}
-                className="px-3 py-1.5 bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4" /> Add Party
               </button>
@@ -806,17 +807,17 @@ export const FinancialOperationsPage: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {creditParties.map(p => (
-                <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+                <div key={p.id} className="bg-white border border-[#E2E8F0] rounded-xl p-4 space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="font-bold text-white">{p.partyName}</div>
+                    <div className="font-bold text-[#17365D]">{p.partyName}</div>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      p.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'
+                      p.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#F1F5F9] text-[#64748B]'
                     }`}>
                       {p.status}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-400 font-mono">Code: {p.partyCode}</div>
-                  <div className="text-xs text-slate-500">Contact: {p.contactName || 'N/A'} • {p.phone || 'N/A'}</div>
+                  <div className="text-xs text-[#64748B] font-mono">Code: {p.partyCode}</div>
+                  <div className="text-xs text-[#64748B]">Contact: {p.contactName || 'N/A'} • {p.phone || 'N/A'}</div>
                 </div>
               ))}
             </div>
@@ -826,11 +827,11 @@ export const FinancialOperationsPage: React.FC = () => {
         {activeTab === 'prices' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Product Price Master</h2>
+              <h2 className="text-lg font-bold text-[#17365D]">Product Price Master</h2>
               {hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && (
                 <button
                   onClick={() => setShowPriceModal(true)}
-                  className="px-3 py-1.5 bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> Set New Price
                 </button>
@@ -848,20 +849,20 @@ export const FinancialOperationsPage: React.FC = () => {
               const unpricedMappedProducts = products.filter(p => !pricedProductIdsToday.has(p.id));
               const priceCoveragePct = products.length > 0 ? Math.round((pricedProductIdsToday.size / products.length) * 100) : 100;
               return (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-xl border ${priceCoveragePct === 100 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>
+                    <div className={`p-2 rounded-xl border ${priceCoveragePct === 100 ? 'bg-emerald-50 border-emerald-500/20 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
                       {priceCoveragePct === 100 ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-white">Price Coverage Status (Outlet Mapped Active Products)</div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-xs font-bold text-[#17365D]">Price Coverage Status (Outlet Mapped Active Products)</div>
+                      <div className="text-[11px] text-[#64748B]">
                         {pricedProductIdsToday.size} of {products.length} products have active price configured for today ({priceCoveragePct}%)
                       </div>
                     </div>
                   </div>
                   {unpricedMappedProducts.length > 0 && (
-                    <div className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-1.5">
+                    <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5">
                       <span className="font-bold">Missing today:</span> {unpricedMappedProducts.map(p => p.name).join(', ')}
                     </div>
                   )}
@@ -869,9 +870,9 @@ export const FinancialOperationsPage: React.FC = () => {
               );
             })()}
 
-            <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-800/60 text-slate-400 font-mono uppercase text-[10px] border-b border-slate-800">
+            <div className="phase3-table-scroll overflow-x-auto bg-white border border-[#E2E8F0] rounded-2xl" role="region" aria-label="Scrollable financial table" tabIndex={0}>
+              <table className="phase3-data-table w-full text-left text-xs">
+                <thead className="bg-[#F1F5F9] text-[#64748B] font-mono uppercase text-[10px] border-b border-[#E2E8F0]">
                   <tr>
                     <th className="py-3 px-4">Product</th>
                     <th className="py-3 px-4">Price / Unit</th>
@@ -887,17 +888,17 @@ export const FinancialOperationsPage: React.FC = () => {
                     const unit = matchedProduct?.unit || 'Unit';
                     const name = matchedProduct?.name || p.productId;
                     return (
-                      <tr key={p.id} className="hover:bg-slate-800/30">
-                        <td className="py-3 px-4 text-white font-bold">{name}</td>
-                        <td className="py-3 px-4 font-mono font-black text-sm text-orange-400">
+                      <tr key={p.id} className="hover:bg-[#F1F5F9]/30">
+                        <td className="py-3 px-4 text-[#17365D] font-bold">{name}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-sm text-[#B8530D]">
                           ₹ {formatPaiseToMoney(p.pricePaisePerUnit)}{' '}
-                          <span className="text-[10px] text-slate-400 font-normal">/ {unit}</span>
+                          <span className="text-[10px] text-[#64748B] font-normal">/ {unit}</span>
                         </td>
                         <td className="py-3 px-4 font-mono">{p.effectiveFrom}</td>
                         <td className="py-3 px-4 font-mono">{p.effectiveTo || 'Active Indefinitely'}</td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            p.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'
+                            p.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#F1F5F9] text-[#64748B]'
                           }`}>
                             {p.status}
                           </span>
@@ -906,7 +907,7 @@ export const FinancialOperationsPage: React.FC = () => {
                           <td className="py-3 px-4 text-center">
                             <button
                               onClick={() => { setEditingPrice(p); setShowEditPriceModal(true); }}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-orange-500 hover:text-white text-slate-300 rounded-lg text-[10px] font-bold transition-all"
+                              className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-orange-500 hover:text-[#17365D] text-[#475569] rounded-lg text-[10px] font-bold transition-all"
                             >
                               Edit
                             </button>
@@ -926,13 +927,13 @@ export const FinancialOperationsPage: React.FC = () => {
       
       {showCollectionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowCollectionModal(false)} />
-          <form onSubmit={handleCreateCollection} className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-white">Record Shift Collection</h2>
+          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => setShowCollectionModal(false)} />
+          <form onSubmit={handleCreateCollection} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+            <h2 className="text-lg font-bold text-[#17365D]">Record Shift Collection</h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Collection Type</label>
-                <select name="collectionType" required className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white">
+                <label className="block text-xs text-[#64748B] mb-1">Collection Type</label>
+                <select name="collectionType" required className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]">
                   <option value="CASH">Physical Cash</option>
                   <option value="POS_CARD">POS Card Swipe</option>
                   <option value="UPI">UPI / QR Code</option>
@@ -942,12 +943,12 @@ export const FinancialOperationsPage: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Amount (₹)</label>
-                <input type="text" name="amount" inputMode="decimal" required placeholder="0.00" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono" />
+                <label className="block text-xs text-[#64748B] mb-1">Amount (₹)</label>
+                <input type="text" name="amount" inputMode="decimal" required placeholder="0.00" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D] font-mono" />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Credit Party (If Credit Sale)</label>
-                <select name="creditPartyId" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white">
+                <label className="block text-xs text-[#64748B] mb-1">Credit Party (If Credit Sale)</label>
+                <select name="creditPartyId" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]">
                   <option value="">N/A</option>
                   {creditParties.filter(p => p.status === 'ACTIVE').map(p => (
                     <option key={p.id} value={p.id}>{p.partyName} ({p.partyCode})</option>
@@ -956,22 +957,22 @@ export const FinancialOperationsPage: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Provider (e.g. HDFC)</label>
-                  <input type="text" name="provider" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+                  <label className="block text-xs text-[#64748B] mb-1">Provider (e.g. HDFC)</label>
+                  <input type="text" name="provider" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Ref / Auth Code</label>
-                  <input type="text" name="referenceNumber" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+                  <label className="block text-xs text-[#64748B] mb-1">Ref / Auth Code</label>
+                  <input type="text" name="referenceNumber" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Notes</label>
-                <textarea name="notes" rows={2} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+                <label className="block text-xs text-[#64748B] mb-1">Notes</label>
+                <textarea name="notes" rows={2} className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowCollectionModal(false)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-orange-500/20">Record Collection</button>
+              <button type="button" onClick={() => setShowCollectionModal(false)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-[#17365D] text-white rounded-xl text-xs font-bold shadow-sm">Record Collection</button>
             </div>
           </form>
         </div>
@@ -979,23 +980,23 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showHandoverModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowHandoverModal(false)} />
-          <form onSubmit={handleCreateHandover} className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-white">Log Cash Handover</h2>
-            <p className="text-xs text-slate-400">Record physical custody transfer of cash to supervisor or next staff.</p>
+          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => setShowHandoverModal(false)} />
+          <form onSubmit={handleCreateHandover} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+            <h2 className="text-lg font-bold text-[#17365D]">Log Cash Handover</h2>
+            <p className="text-xs text-[#64748B]">Record physical custody transfer of cash to supervisor or next staff.</p>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Amount (₹)</label>
-                <input type="text" name="amount" inputMode="decimal" required placeholder="0.00" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono" />
+                <label className="block text-xs text-[#64748B] mb-1">Amount (₹)</label>
+                <input type="text" name="amount" inputMode="decimal" required placeholder="0.00" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D] font-mono" />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Notes</label>
-                <textarea name="notes" rows={2} placeholder="Handed over to Supervisor..." className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+                <label className="block text-xs text-[#64748B] mb-1">Notes</label>
+                <textarea name="notes" rows={2} placeholder="Handed over to Supervisor..." className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowHandoverModal(false)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20">Confirm Handover</button>
+              <button type="button" onClick={() => setShowHandoverModal(false)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20">Confirm Handover</button>
             </div>
           </form>
         </div>
@@ -1003,40 +1004,40 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showDepositModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowDepositModal(false)} />
-          <form onSubmit={handleCreateDeposit} className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-white">New Bank Deposit Submission</h2>
+          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => setShowDepositModal(false)} />
+          <form onSubmit={handleCreateDeposit} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+            <h2 className="text-lg font-bold text-[#17365D]">New Bank Deposit Submission</h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Deposit Channel</label>
-                <select name="depositChannel" required className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white">
+                <label className="block text-xs text-[#64748B] mb-1">Deposit Channel</label>
+                <select name="depositChannel" required className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]">
                   <option value="BANK_BRANCH">Bank Branch (Manual)</option>
                   <option value="CASH_DROP_BOX">Cash Drop Box / CMS</option>
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                  <div>
-                  <label className="block text-xs text-slate-400 mb-1">Amount (₹)</label>
-                  <input type="text" name="amount" inputMode="decimal" required placeholder="0.00" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono" />
+                  <label className="block text-xs text-[#64748B] mb-1">Amount (₹)</label>
+                  <input type="text" name="amount" inputMode="decimal" required placeholder="0.00" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D] font-mono" />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Deposit Date</label>
-                  <input type="date" name="depositDate" required defaultValue={getLocalDateInputValue()} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono" />
+                  <label className="block text-xs text-[#64748B] mb-1">Deposit Date</label>
+                  <input type="date" name="depositDate" required defaultValue={getLocalDateInputValue()} className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D] font-mono" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Reference / Acknowledgement #</label>
-                <input type="text" name="referenceNumber" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+                <label className="block text-xs text-[#64748B] mb-1">Reference / Acknowledgement #</label>
+                <input type="text" name="referenceNumber" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
               </div>
-              <div className="p-4 border border-dashed border-slate-700 rounded-xl flex flex-col items-center gap-2 text-slate-500">
+              <div className="p-4 border border-dashed border-[#D7E0EA] rounded-xl flex flex-col items-center gap-2 text-[#64748B]">
                 <Camera className="w-6 h-6" />
                 <span className="text-[10px]">Attach Bank Slip / Proof (via Document Vault)</span>
-                <input type="text" name="documentId" placeholder="Document ID (Optional)" className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-[10px]" />
+                <input type="text" name="documentId" placeholder="Document ID (Optional)" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg px-2 py-1 text-[10px]" />
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowDepositModal(false)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold">Submit Deposit</button>
+              <button type="button" onClick={() => setShowDepositModal(false)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-blue-600 text-[#17365D] rounded-xl text-xs font-bold">Submit Deposit</button>
             </div>
           </form>
         </div>
@@ -1044,7 +1045,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showPartyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPartyModal(false)} />
+          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => setShowPartyModal(false)} />
           <form 
             onSubmit={async (e) => {
               e.preventDefault();
@@ -1061,32 +1062,32 @@ export const FinancialOperationsPage: React.FC = () => {
               });
               if (res.success) { setShowPartyModal(false); refreshData(); }
             }}
-            className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4"
+            className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4"
           >
-            <h2 className="text-lg font-bold text-white">Register Credit Party</h2>
+            <h2 className="text-lg font-bold text-[#17365D]">Register Credit Party</h2>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Party Code</label>
-                  <input name="partyCode" required className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+                  <label className="block text-xs text-[#64748B] mb-1">Party Code</label>
+                  <input name="partyCode" required className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Party Name</label>
-                  <input name="partyName" required className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+                  <label className="block text-xs text-[#64748B] mb-1">Party Name</label>
+                  <input name="partyName" required className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Contact Person</label>
-                <input name="contactName" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+                <label className="block text-xs text-[#64748B] mb-1">Contact Person</label>
+                <input name="contactName" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Phone Number</label>
-                <input name="phone" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white" />
+                <label className="block text-xs text-[#64748B] mb-1">Phone Number</label>
+                <input name="phone" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowPartyModal(false)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">Register Party</button>
+              <button type="button" onClick={() => setShowPartyModal(false)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-[#17365D] text-white rounded-xl text-xs font-bold">Register Party</button>
             </div>
           </form>
         </div>
@@ -1094,7 +1095,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showPriceModal && hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPriceModal(false)} />
+          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => setShowPriceModal(false)} />
           <form 
             onSubmit={async (e) => {
               e.preventDefault();
@@ -1110,37 +1111,37 @@ export const FinancialOperationsPage: React.FC = () => {
               });
               if (res.success) { setShowPriceModal(false); refreshData(); } else { setActionError(res.error?.message || 'Failed to configure price'); }
             }}
-            className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4"
+            className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4"
           >
-            <h2 className="text-lg font-bold text-white">Configure Product Price</h2>
+            <h2 className="text-lg font-bold text-[#17365D]">Configure Product Price</h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Product</label>
-                <select name="productId" required className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white">
+                <label className="block text-xs text-[#64748B] mb-1">Product</label>
+                <select name="productId" required className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]">
                   {products.map(p => (
                     <option key={p.id} value={p.id}>{p.name} ({p.code}) — ₹ / {p.unit}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Selling Price (₹ / Unit)</label>
-                <input name="price" type="text" inputMode="decimal" required placeholder="0.00" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono" />
-                <span className="text-[10px] text-slate-500 mt-1 block">Specify ₹/LITRE for liquid fuels or ₹/KG for CNG</span>
+                <label className="block text-xs text-[#64748B] mb-1">Selling Price (₹ / Unit)</label>
+                <input name="price" type="text" inputMode="decimal" required placeholder="0.00" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D] font-mono" />
+                <span className="text-[10px] text-[#64748B] mt-1 block">Specify ₹/LITRE for liquid fuels or ₹/KG for CNG</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Effective From</label>
-                  <input name="effectiveFrom" type="date" required defaultValue={getLocalDateInputValue()} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
+                  <label className="block text-xs text-[#64748B] mb-1">Effective From</label>
+                  <input name="effectiveFrom" type="date" required defaultValue={getLocalDateInputValue()} className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]" />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Effective To (Optional)</label>
-                  <input name="effectiveTo" type="date" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" />
+                  <label className="block text-xs text-[#64748B] mb-1">Effective To (Optional)</label>
+                  <input name="effectiveTo" type="date" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]" />
                 </div>
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowPriceModal(false)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">Set Price</button>
+              <button type="button" onClick={() => setShowPriceModal(false)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-[#17365D] text-white rounded-xl text-xs font-bold">Set Price</button>
             </div>
           </form>
         </div>
@@ -1148,55 +1149,55 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showEditPriceModal && editingPrice && hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => { setShowEditPriceModal(false); setEditingPrice(null); }} />
-          <form onSubmit={handleUpdatePrice} className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-white">Edit Product Price</h2>
+          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => { setShowEditPriceModal(false); setEditingPrice(null); }} />
+          <form onSubmit={handleUpdatePrice} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+            <h2 className="text-lg font-bold text-[#17365D]">Edit Product Price</h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Product</label>
+                <label className="block text-xs text-[#64748B] mb-1">Product</label>
                 <input
                   type="text"
                   disabled
                   value={products.find(p => p.id === editingPrice.productId)?.name || editingPrice.productId}
-                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2 text-slate-300 text-xs"
+                  className="w-full bg-[#F1F5F9]/50 border border-[#D7E0EA]/50 rounded-xl px-3 py-2 text-[#475569] text-xs"
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Selling Price (₹ / Unit)</label>
+                <label className="block text-xs text-[#64748B] mb-1">Selling Price (₹ / Unit)</label>
                 <input
                   name="price"
                   type="text"
                   inputMode="decimal"
                   required
                   defaultValue={formatPaiseToMoney(editingPrice.pricePaisePerUnit)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
+                  className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D] font-mono"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Effective From</label>
+                  <label className="block text-xs text-[#64748B] mb-1">Effective From</label>
                   <input
                     name="effectiveFrom"
                     type="date"
                     required
                     defaultValue={editingPrice.effectiveFrom}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Effective To (Optional)</label>
+                  <label className="block text-xs text-[#64748B] mb-1">Effective To (Optional)</label>
                   <input
                     name="effectiveTo"
                     type="date"
                     defaultValue={editingPrice.effectiveTo || ''}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => { setShowEditPriceModal(false); setEditingPrice(null); }} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-orange-500/20">Save Changes</button>
+              <button type="button" onClick={() => { setShowEditPriceModal(false); setEditingPrice(null); }} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-[#17365D] text-white rounded-xl text-xs font-bold shadow-sm">Save Changes</button>
             </div>
           </form>
         </div>
