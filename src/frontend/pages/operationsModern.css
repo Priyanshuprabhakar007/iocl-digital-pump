@@ -59,7 +59,7 @@
   border-color: #e2e8f0;
 }
 /* Light surface copy, excluding icon/control buttons with deliberate contrasting fills. */
-.operations-modern :is([class~="text-white"],[class~="text-slate-100"],[class~="text-slate-200"]):not(button):not([class~="bg-orange-500"]):not([class~="bg-emerald-600"]):not([class~="bg-rose-600"]):not([class~="bg-red-600"]):not([class~="bg-blue-600"]):not([class~="bg-amber-600"]) {
+.operations-modern :is([class~="text-white"],[class~="text-slate-100"],[class~="text-slate-200"]):not(button):not([class~="bg-orange-500"]):not([class~="bg-emerald-600"]):not([class~="bg-rose-600"]):not([class~="bg-red-600"]):not([class~="bg-blue-600"]):not([class~="bg-amber-600"]):not([class*="bg-gradient"]) {
   color: #17365d;
 }
 .operations-modern :is([class~="text-slate-300"],[class~="text-slate-400"],[class~="text-slate-500"]) {
