@@ -1517,33 +1517,60 @@ export const DailyOperationsPage: React.FC = () => {
             <div className="bg-white border border-slate-200 rounded-xl p-8 text-center shadow-xs">
               <Fuel className="w-10 h-10 text-slate-400 mx-auto mb-2" />
               <h3 className="text-base font-bold text-slate-900">
-                No Operational Shift Opened for {businessDate}
+                Start by opening a shift for {businessDate}
               </h3>
               <p className="text-sm text-slate-600 mt-1 max-w-md mx-auto">
-                Select a shift template above and click <strong>Open Shift</strong> to snapshot active
-                tanks, dispensers, and nozzles for {businessDate}.
+                Choose a shift template in the panel above, then select <strong>Open Shift</strong>.
+                After opening, enter tank and nozzle readings or view the day's report.
               </p>
             </div>
           )}
 
           {activeWorkspace && (
             <>
+              <nav aria-label="Jump to daily entry task" className="rounded-2xl border border-[#DCE6F1] bg-white p-4 sm:p-5">
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <h2 className="text-base font-bold text-[#17365D]">Choose the task you need</h2>
+                    <p className="mt-1 text-xs text-[#64748B]">Jump to any section without changing the required workflow.</p>
+                  </div>
+                  <span className="rounded-lg bg-[#F1F5F9] px-2.5 py-1 text-xs font-medium text-[#526477]">
+                    {activeWorkspace.shift.status === 'OPEN' ? 'Shift open' : 'Read-only shift'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {[
+                    { label: 'Tank readings', target: 'daily-tank-readings', subtitle: 'Opening & closing dips', icon: Layers },
+                    { label: 'Nozzle readings', target: 'daily-nozzle-readings', subtitle: 'Meters & testing', icon: Gauge },
+                    { label: 'Sales & stock', target: 'daily-sales-summary', subtitle: 'Totals & reconciliation', icon: Calculator },
+                  ].map(task => {
+                    const Icon = task.icon;
+                    return <a key={task.target} href={`#${task.target}`} className="flex flex-col items-start gap-2 rounded-xl border border-[#DCE6F1] bg-[#F8FAFC] p-3 text-left transition hover:border-[#F47721] hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-[#17365D]">
+                      <Icon className="h-5 w-5 text-[#D86514]" />
+                      <span className="text-xs font-bold text-[#17365D]">{task.label}</span>
+                      <span className="text-[11px] leading-relaxed text-[#64748B]">{task.subtitle}</span>
+                    </a>;
+                  })}
+                  <button type="button" onClick={() => setViewMode('DSR')} className="flex flex-col items-start gap-2 rounded-xl border border-[#DCE6F1] bg-[#F8FAFC] p-3 text-left transition hover:border-[#F47721] hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-[#17365D]">
+                    <FileSpreadsheet className="h-5 w-5 text-[#D86514]" />
+                    <span className="text-xs font-bold text-[#17365D]">View DSR</span>
+                    <span className="text-[11px] leading-relaxed text-[#64748B]">Daily Sales Report</span>
+                  </button>
+                </div>
+              </nav>
               {/* 3. TANK DIP ENTRY GRID */}
-              <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+              <div id="daily-tank-readings" className="scroll-mt-24 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
                 <div className="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
                   <div>
                     <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                       <Layers className="w-4 h-4 text-[#003366]" />
                       1. Tank Dip Entry Grid ({activeWorkspace.tanks.length} Active Tanks)
                     </h2>
-                    <p className="text-xs text-slate-600 mt-0.5">
-                      Enter Opening &amp; Closing dips in mm. Volumes (Gross, Water, Net Product) are
-                      derived authoritatively on the server via{' '}
-                      <code className="font-mono text-[11px] bg-slate-200 px-1 rounded">
-                        TankCalibrationService.convertDipToVolume()
-                      </code>
-                      .
-                    </p>
+                    <p className="text-xs text-slate-600 mt-0.5">Enter opening and closing dip readings in millimetres. Stock volumes are calculated automatically.</p>
+                    <details className="mt-2 text-xs text-slate-600">
+                      <summary className="cursor-pointer font-medium text-[#17365D]">How are volumes calculated?</summary>
+                      <p className="mt-1">The server uses the existing tank calibration service to calculate gross, water and net stock volumes.</p>
+                    </details>
                   </div>
 
                   {!isShiftReadOnly && (
@@ -1816,7 +1843,7 @@ export const DailyOperationsPage: React.FC = () => {
               </div>
 
               {/* 4. NOZZLE METER ENTRY GRID */}
-              <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+              <div id="daily-nozzle-readings" className="scroll-mt-24 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
                 <div className="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
                   <div>
                     <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -2179,8 +2206,8 @@ export const DailyOperationsPage: React.FC = () => {
 
           {/* 5. DU / MPD AGGREGATION & PRODUCT STOCK RECONCILIATION */}
           {summary && summary.shiftsCount > 0 && (
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-              {/* DU / MPD Totals */}
+            <div id="daily-sales-summary" className="scroll-mt-24 grid grid-cols-1 xl:grid-cols-12 gap-6">
+              {/* DU / MPD Totals */
               <div className="xl:col-span-5 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
                 <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
                   <h2 className="text-base font-bold text-slate-900">
