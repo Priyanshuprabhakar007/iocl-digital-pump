@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { PERMISSIONS, PermissionCode } from '../../../shared/constants';
 import {
@@ -23,6 +23,9 @@ import {
   Landmark,
   Store,
   FileText,
+  ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -39,6 +42,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const { hasPermission, userCtx } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
+  const navigationGroups = [
+    { id: 'overview', label: 'Overview', ids: ['dashboard'] },
+    { id: 'operations', label: 'Daily Operations', ids: ['daily-ops', 'stock-ops', 'cng-ops', 'lube-ops'] },
+    { id: 'assets', label: 'Infrastructure & Assets', ids: ['outlets', 'products', 'pump-infra', 'equipment-ops', 'utilities-ops', 'hr-workforce', 'municipal-taxes', 'nfr-ops'] },
+    { id: 'finance', label: 'Finance & Reports', ids: ['financials', 'reports'] },
+    { id: 'admin', label: 'Administration', ids: ['users', 'scopes', 'hierarchy', 'org-masters', 'rbac', 'audit', 'documents'] },
+  ];
+  const [expandedGroups, setExpandedGroups] = useState<string[]>(['overview', 'operations']);
+
+  // Always reveal the current tab, including a direct URL or browser history navigation.
+  useEffect(() => {
+    const group = navigationGroups.find(item => item.ids.includes(activeTab));
+    if (group) setExpandedGroups(previous => previous.includes(group.id) ? previous : [...previous, group.id]);
+  }, [activeTab]);
 
   const navItems = [
     {
@@ -178,45 +196,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const filteredNav = navItems.filter(item => item.perm === null || hasPermission(item.perm as PermissionCode));
 
   const content = (
-    <div className="flex h-full min-h-0 w-64 flex-col overflow-hidden border-r border-slate-800 bg-slate-900 p-4 text-slate-300">
+    <div className={`flex h-full min-h-0 ${collapsed ? 'w-64 lg:w-[72px]' : 'w-64'} flex-col overflow-hidden border-r border-[#E2E8F0] bg-white p-3 text-[#17365D] transition-[width] duration-200`}>
       {/* Mobile Close Button & Brand */}
-      <div className="flex shrink-0 items-center justify-between lg:hidden mb-4 pb-2 border-b border-slate-800">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] pb-3 lg:hidden">
         <div className="flex items-center gap-2.5">
           <img src="/indianoil-logo.svg" alt="IndianOil" className="h-9 w-auto object-contain shrink-0" />
-          <span className="font-bold text-white text-xs">IOCL Navigation</span>
+          <span className="font-bold text-[#17365D] text-xs">IOCL Navigation</span>
         </div>
-        <button
-          onClick={onCloseMobile}
-          className="p-1 text-slate-400 hover:text-white rounded-md"
-        >
+        <button type="button" onClick={onCloseMobile}
+          aria-label="Close navigation" className="rounded-lg p-2 text-[#526477] hover:bg-[#F1F5F9] focus-visible:outline-2 focus-visible:outline-[#17365D]">
           <X className="w-5 h-5" />
         </button>
       </div>
 
       {/* Sidebar Brand Header (Desktop) */}
-      <div className="hidden lg:flex shrink-0 items-center gap-3 mb-4 pb-3 border-b border-slate-800">
+      <div className="hidden lg:flex shrink-0 items-center gap-3 border-b border-[#E2E8F0] pb-3 mb-3">
         <img src="/indianoil-logo.svg" alt="IndianOil" className="h-10 w-auto object-contain shrink-0" />
-        <div>
-          <div className="text-xs font-bold text-white leading-tight">IndianOil</div>
-          <div className="text-[10px] text-slate-400 font-mono">Digital Outlet Manager</div>
-        </div>
+        {!collapsed && (
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-[#17365D] leading-tight">IndianOil</div>
+            <div className="text-[10px] text-[#64748B]">Digital Outlet Manager</div>
+          </div>
+        )}
       </div>
 
       {/* Scope Context Card */}
-      {userCtx && (
-        <div className="mb-4 shrink-0 rounded-xl border border-slate-700/60 bg-slate-800/80 p-3">
-          <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase font-mono">
+      {userCtx && !collapsed && (
+        <div className="mb-3 shrink-0 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+          <div className="text-[10px] font-semibold tracking-wider text-[#64748B] uppercase">
             Active User Context
           </div>
-          <div className="text-sm font-bold text-white mt-0.5 truncate">
+          <div className="text-sm font-bold text-[#17365D] mt-0.5 truncate">
             {userCtx.user.name}
           </div>
-          <div className="text-[11px] text-orange-400 font-mono mt-0.5 truncate">
+          <div className="text-[11px] text-[#B8530D] mt-0.5 truncate">
             Emp Code: {userCtx.user.empCode}
           </div>
-          <div className="mt-2 pt-2 border-t border-slate-700/50 flex items-center justify-between text-[11px]">
-            <span className="text-slate-400 font-mono">Scope:</span>
-            <span className="font-bold text-slate-200 font-mono px-1.5 py-0.5 rounded bg-slate-700/80">
+          <div className="mt-2 pt-2 border-t border-[#E2E8F0] flex items-center justify-between text-[11px]">
+            <span className="text-[#64748B]">Scope:</span>
+            <span className="font-bold text-[#17365D] px-1.5 py-0.5 rounded bg-[#E9EFF6]">
               {userCtx.primaryScope}
             </span>
           </div>
@@ -224,34 +242,56 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       {/* Nav Menu */}
-      <nav aria-label="Main navigation" className="min-h-0 flex-1 space-y-1 overflow-y-scroll overscroll-contain pr-1 [scrollbar-width:thin] [scrollbar-color:#64748b_#0f172a]">
-        {filteredNav.map(item => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
+      <nav aria-label="Main navigation" className="min-h-0 flex-1 space-y-1 overflow-y-scroll overscroll-contain pr-1 [scrollbar-width:thin] [scrollbar-color:#A8B5C6_#FFFFFF]">
+        {navigationGroups.map(group => {
+          const available = filteredNav.filter(item => group.ids.includes(item.id));
+          if (!available.length) return null;
+          const open = expandedGroups.includes(group.id) || (collapsed && available.some(item => item.id === activeTab));
           return (
-            <button
-              key={item.id}
-              onClick={() => {
-                setActiveTab(item.id);
-                onCloseMobile();
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all ${
-                isActive
-                  ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/15'
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-              }`}
-            >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-              <span>{item.label}</span>
-            </button>
+            <div key={group.id} className="mb-2">
+              {!collapsed && (
+                <button type="button"
+                  aria-expanded={open}
+                  onClick={() => setExpandedGroups(previous => previous.includes(group.id) ? previous.filter(id => id !== group.id) : [...previous, group.id])}
+                  className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-[#64748B] hover:bg-[#F5F7FA] focus-visible:outline-2 focus-visible:outline-[#17365D]">
+                  {group.label}
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+              {(collapsed || open) && available.map(item => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button type="button" key={item.id} title={collapsed ? item.label : undefined}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => { setActiveTab(item.id); onCloseMobile(); }}
+                    className={`my-0.5 flex w-full min-h-10 items-center gap-3 rounded-lg border-l-[3px] px-2.5 py-2.5 text-left text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[#17365D] ${isActive
+                      ? 'border-l-[#F47721] bg-[#FFF0E5] text-[#17365D]'
+                      : 'border-l-transparent text-[#526477] hover:bg-[#F5F7FA] hover:text-[#17365D]'}`}>
+                    <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#D86514]' : 'text-[#64748B]'}`} />
+                    {!collapsed && <span className="min-w-0 truncate">{item.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
           );
         })}
       </nav>
 
       {/* Footer Info */}
-      <div className="shrink-0 border-t border-slate-800 pt-3 text-[10px] font-mono text-slate-500">
-        <div>IOCL Digital Outlet Manager v1.0</div>
-        <div>Cloudflare Worker + D1 Engine</div>
+      <div className="shrink-0 border-t border-[#E2E8F0] pt-3 text-[10px] text-[#64748B]">
+        {!collapsed && (
+          <>
+            <div>IOCL Digital Outlet Manager v1.0</div>
+            <div>Cloudflare Worker + D1 Engine</div>
+          </>
+        )}
+        <button type="button" onClick={() => setCollapsed(previous => !previous)}
+          className="hidden lg:flex mt-1 w-full items-center justify-center gap-2 rounded-lg p-2 text-[#526477] hover:bg-[#F1F5F9] focus-visible:outline-2 focus-visible:outline-[#17365D]"
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          {!collapsed && <span>Collapse menu</span>}
+        </button>
       </div>
     </div>
   );
