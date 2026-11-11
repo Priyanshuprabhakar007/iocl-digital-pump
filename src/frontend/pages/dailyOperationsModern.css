@@ -1,0 +1,99 @@
+/*
+ * Modern Enterprise Light — Daily Operations & DSR presentation layer.
+ * Scoped intentionally: no API, calculation, validation, or workflow overrides.
+ */
+.daily-ops-modern {
+  --daily-navy: #17365d;
+  --daily-ink: #172b4d;
+  --daily-border: #e2e8f0;
+  --daily-accent: #f47721;
+  color: var(--daily-ink);
+}
+
+.daily-ops-modern .daily-ops-surface {
+  background: #fff;
+  border: 1px solid var(--daily-border);
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(23, 54, 93, 0.035);
+}
+
+.daily-ops-modern input:not([type="checkbox"]):not([type="radio"]),
+.daily-ops-modern select,
+.daily-ops-modern textarea {
+  min-height: 42px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.daily-ops-modern input:focus-visible,
+.daily-ops-modern select:focus-visible,
+.daily-ops-modern textarea:focus-visible,
+.daily-ops-modern button:focus-visible {
+  outline: 2px solid #17365d;
+  outline-offset: 2px;
+}
+
+.daily-ops-modern .daily-ops-data-table {
+  color: #172b4d;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-ops-modern .daily-ops-data-table th {
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 700;
+  line-height: 1.4;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.daily-ops-modern .daily-ops-data-table td {
+  vertical-align: middle;
+  border-bottom: 1px solid #e9eef5;
+}
+
+.daily-ops-modern .daily-ops-data-table tbody tr:hover > td {
+  background: #f8fafc;
+}
+
+.daily-ops-modern .daily-ops-data-table th:first-child,
+.daily-ops-modern .daily-ops-data-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  box-shadow: 1px 0 0 #e2e8f0;
+}
+
+.daily-ops-modern .daily-ops-data-table tbody td:first-child {
+  background: #fff;
+}
+
+.daily-ops-modern .daily-ops-data-table tbody tr:hover td:first-child {
+  background: #f8fafc;
+}
+
+.daily-ops-modern .daily-ops-data-table tfoot td:first-child {
+  background: #f1f5f9;
+}
+
+.daily-ops-modern .daily-ops-data-table th:first-child {
+  z-index: 2;
+}
+
+.daily-ops-modern .daily-ops-table-scroll {
+  overflow-x: auto;
+  scrollbar-color: #9aaec5 #f1f5f9;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 767px) {
+  .daily-ops-modern .daily-ops-data-table {
+    min-width: 820px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-ops-modern .daily-ops-step {
+    transition: none;
+  }
+}
