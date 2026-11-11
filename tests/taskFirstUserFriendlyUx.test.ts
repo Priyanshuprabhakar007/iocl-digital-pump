@@ -11,7 +11,7 @@ describe('Task-first user-friendly workspace redesign', () => {
 
   it('offers permission-gated task shortcuts connected to existing navigation', () => {
     expect(dashboard).toContain('What would you like to do');
-    expect(dashboard).toContain('tasks.map(task =>');
+    expect(dashboard).toContain("tasks.filter(task => ['daily-ops', 'stock-ops', 'outlets', 'reports']");
     expect(dashboard).toContain('hasPermission(task.permission as PermissionCode)');
     expect(dashboard).toContain('onNavigate?.(task.id)');
     expect(app).toContain('<DashboardPage onNavigate={handleSetActiveTab} />');
