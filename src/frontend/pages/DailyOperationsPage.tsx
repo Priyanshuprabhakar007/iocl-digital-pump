@@ -17,6 +17,7 @@ import {
 } from '../services/api';
 import { useActiveOutlet } from '../context/ActiveOutletContext';
 import { useAuth } from '../context/AuthContext';
+import { PERMISSIONS } from '../../shared/constants';
 import { DailyOperationsTestDataResetPanel } from '../components/pump/DailyOperationsTestDataResetPanel';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
 import {
@@ -272,7 +273,8 @@ function getLocalTodayIso(): string {
 }
 
 export const DailyOperationsPage: React.FC = () => {
-  const { userCtx } = useAuth();
+  const { userCtx, hasPermission } = useAuth();
+  const canRecordUnavailability = hasPermission(PERMISSIONS.METER_READINGS_WRITE);
   const isGlobalAdmin = Boolean(userCtx?.roles?.includes('ADMIN') && userCtx?.isGlobalScope);
   const {
     accessibleOutlets: outlets,
@@ -296,6 +298,10 @@ export const DailyOperationsPage: React.FC = () => {
   // Open Shift form state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [openingShift, setOpeningShift] = useState<boolean>(false);
+  const [newShiftNotes, setNewShiftNotes] = useState('');
+  const [unavailableNozzle, setUnavailableNozzle] = useState<DailyOperationsNozzleEntryRow | null>(null);
+  const [unavailableReason, setUnavailableReason] = useState('');
+  const [savingUnavailable, setSavingUnavailable] = useState(false);
 
   // Bulk save states
   const [savingAllTanks, setSavingAllTanks] = useState<boolean>(false);
@@ -434,6 +440,7 @@ export const DailyOperationsPage: React.FC = () => {
       body: JSON.stringify({
         shiftTemplateId: selectedTemplateId,
         businessDate,
+        notes: newShiftNotes.trim() || null,
       }),
     });
 
@@ -443,8 +450,40 @@ export const DailyOperationsPage: React.FC = () => {
       return;
     }
 
+    setNewShiftNotes('');
     setActionSuccess('Operational shift opened with active tank and nozzle snapshots.');
     await loadBootstrap(selectedOutletId, businessDate, false);
+  };
+
+  // The old Shift Operations screen allowed operators to mark a nozzle unavailable.
+  // Keep that operational capability in this unified Daily Operations workspace.
+  const handleRecordUnavailability = async () => {
+    if (!canRecordUnavailability || !activeWorkspace || activeWorkspace.shift.status !== 'OPEN' ||
+        !unavailableNozzle || unavailableReason.trim().length < 3 || savingUnavailable) return;
+    setSavingUnavailable(true);
+    setPageError(null);
+    setActionSuccess(null);
+    try {
+      const res = await apiFetch(`/api/v1/shifts/${activeWorkspace.shift.id}/nozzle-unavailability`, {
+        method: 'POST',
+        body: JSON.stringify({
+          nozzleId: unavailableNozzle.nozzleId,
+          reason: unavailableReason.trim(),
+        }),
+      });
+      if (!res.success) {
+        setPageError(res.error?.message || 'Could not mark nozzle unavailable.');
+        return;
+      }
+      setUnavailableNozzle(null);
+      setUnavailableReason('');
+      setActionSuccess('Nozzle marked unavailable for this shift.');
+      await loadBootstrap(selectedOutletId, businessDate, true);
+    } catch (error: any) {
+      setPageError(error?.message || 'Could not mark nozzle unavailable.');
+    } finally {
+      setSavingUnavailable(false);
+    }
   };
 
   // Update local tank row after successful save without reloading page
@@ -1229,6 +1268,21 @@ export const DailyOperationsPage: React.FC = () => {
                 </div>
               )}
             </div>
+            {bootstrap && bootstrap.shiftTemplates.length > 0 && (
+              <div className="mt-2">
+                <label htmlFor="shift-opening-notes" className="block text-xs font-semibold text-slate-700 mb-1">
+                  Optional shift opening notes
+                </label>
+                <textarea
+                  id="shift-opening-notes"
+                  value={newShiftNotes}
+                  onChange={e => setNewShiftNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Optional context for the shift (saved when opening)"
+                  className="w-full max-w-xl rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-900"
+                />
+              </div>
+            )}
           </div>
 
           {/* Completion Summary Grid */}
@@ -2086,14 +2140,25 @@ export const DailyOperationsPage: React.FC = () => {
                             {/* Per-row Save */}
                             <td className="py-2.5 px-3 text-right">
                               {!isShiftReadOnly && !nozzle.unavailability && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSaveSingleNozzleRow(nozzle)}
-                                  disabled={draft.saveStatus === 'SAVING'}
-                                  className="h-7 px-2.5 rounded bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold disabled:opacity-50"
-                                >
-                                  Save
-                                </button>
+                                <div className="flex flex-wrap justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveSingleNozzleRow(nozzle)}
+                                    disabled={draft.saveStatus === 'SAVING'}
+                                    className="h-7 px-2.5 rounded bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold disabled:opacity-50"
+                                  >
+                                    Save
+                                  </button>
+                                  {canRecordUnavailability && activeWorkspace.shift.status === 'OPEN' && !nozzle.reading && (
+                                    <button
+                                      type="button"
+                                      onClick={() => { setUnavailableNozzle(nozzle); setUnavailableReason(''); }}
+                                      className="h-7 px-2.5 rounded border border-amber-400 bg-amber-50 text-amber-900 text-xs font-semibold"
+                                    >
+                                      Mark Unavailable
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -2510,6 +2575,38 @@ export const DailyOperationsPage: React.FC = () => {
                 onClick={handleAdminEmptyClose}
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {closingShiftBusy ? 'Checking & Closing...' : 'Confirm Admin Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Nozzle unavailability, retained from the former Shift Operations screen. */}
+      {canRecordUnavailability && unavailableNozzle && activeWorkspace?.shift.status === 'OPEN' && (
+        <div role="dialog" aria-modal="true" aria-labelledby="nozzle-unavailable-title"
+             className="fixed inset-0 z-50 bg-slate-900/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-xl space-y-4">
+            <h3 id="nozzle-unavailable-title" className="text-lg font-bold text-slate-900">
+              Mark Nozzle Unavailable
+            </h3>
+            <p className="text-sm text-slate-700">
+              Dispenser #{unavailableNozzle.dispenserNumber} · Nozzle #{unavailableNozzle.nozzleNumber} · {unavailableNozzle.productCode}
+            </p>
+            <label htmlFor="nozzle-unavailable-reason" className="block text-xs font-semibold text-slate-700">
+              Reason (at least 3 characters)
+            </label>
+            <textarea id="nozzle-unavailable-reason" rows={3} maxLength={500}
+              value={unavailableReason} onChange={e => setUnavailableReason(e.target.value)}
+              placeholder="e.g. Nozzle under maintenance"
+              className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-900" />
+            <div className="flex justify-end gap-2">
+              <button type="button" disabled={savingUnavailable}
+                onClick={() => setUnavailableNozzle(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700">Cancel</button>
+              <button type="button" disabled={savingUnavailable || unavailableReason.trim().length < 3}
+                onClick={handleRecordUnavailability}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {savingUnavailable ? 'Saving...' : 'Confirm Unavailability'}
               </button>
             </div>
           </div>
