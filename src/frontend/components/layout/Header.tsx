@@ -33,23 +33,23 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
 
   const getScopeBadgeColor = (scope: string) => {
     switch (scope) {
-      case 'GLOBAL': return 'bg-purple-900/60 text-purple-200 border-purple-500/40';
-      case 'STATE': return 'bg-blue-900/60 text-blue-200 border-blue-500/40';
-      case 'DIVISION': return 'bg-cyan-900/60 text-cyan-200 border-cyan-500/40';
-      case 'SALES_AREA': return 'bg-emerald-900/60 text-emerald-200 border-emerald-500/40';
-      case 'OUTLET': return 'bg-amber-900/60 text-amber-200 border-amber-500/40';
-      default: return 'bg-slate-800 text-slate-300 border-slate-700';
+      case 'GLOBAL': return 'bg-violet-50 text-violet-800 border-violet-200';
+      case 'STATE': return 'bg-blue-50 text-blue-800 border-blue-200';
+      case 'DIVISION': return 'bg-cyan-50 text-cyan-800 border-cyan-200';
+      case 'SALES_AREA': return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+      case 'OUTLET': return 'bg-amber-50 text-amber-800 border-amber-200';
+      default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3">
+    <header className="sticky top-0 z-30 min-h-[64px] bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] px-4 sm:px-6 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
       <div className="flex items-center justify-between gap-4">
         {/* Left branding */}
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <button
             onClick={onToggleMobileSidebar}
-            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 lg:hidden"
+            className="p-2 text-[#526477] hover:text-[#17365D] rounded-lg hover:bg-[#F1F5F9] lg:hidden"
             aria-label="Toggle Navigation Menu"
           >
             <Menu className="w-5 h-5" />
@@ -59,13 +59,13 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
             <img
               src="/indianoil-logo.svg"
               alt="IndianOil"
-              className="h-11 sm:h-12 md:h-14 w-auto object-contain shrink-0"
+              className="h-9 sm:h-10 w-auto object-contain shrink-0"
             />
             <div>
-              <div className="flex items-center gap-1.5 font-bold text-white tracking-wide text-sm sm:text-base">
-                IOCL <span className="text-orange-500">Digital Outlet Manager</span>
+              <div className="flex items-center gap-1.5 font-bold text-[#17365D] tracking-wide text-sm sm:text-base">
+                IOCL <span className="text-[#D86514]">Digital Outlet Manager</span>
               </div>
-              <div className="text-[11px] text-slate-400 font-mono hidden sm:block">
+              <div className="text-[11px] text-[#64748B] hidden sm:block">
                 Indian Oil Corporation Limited • Enterprise Gateway
               </div>
             </div>
@@ -73,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
         </div>
 
         {/* Center / Right Scope & User info */}
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           {/* Global Active Outlet Selector */}
           <GlobalOutletSelector />
 
@@ -89,7 +89,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
               <button
                 onClick={() => setDemoDropdownOpen(!demoDropdownOpen)}
                 disabled={switching}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] text-xs font-medium text-[#17365D] transition-colors"
                 title="Quickly test different roles & scope boundaries"
               >
                 <RefreshCw className={`w-3.5 h-3.5 text-orange-400 ${switching ? 'animate-spin' : ''}`} />
@@ -98,19 +98,19 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
               </button>
 
               {demoDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-72 rounded-lg bg-slate-800 border border-slate-700 shadow-xl py-1.5 z-50 text-xs">
-                  <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-700/60 mb-1">
+                <div className="absolute right-0 mt-2 w-72 rounded-xl bg-white border border-[#E2E8F0] shadow-xl py-1.5 z-50 text-xs">
+                  <div className="px-3 py-1.5 text-[11px] font-semibold text-[#64748B] uppercase tracking-wider border-b border-[#E2E8F0] mb-1">
                     Test Role & Scope Switching
                   </div>
                   {demoAccounts.map(acc => (
                     <button
                       key={acc.email}
                       onClick={() => handleSwitch(acc.email)}
-                      className={`w-full text-left px-3 py-2 hover:bg-slate-700/70 flex items-center justify-between transition-colors ${userCtx.user.email === acc.email ? 'bg-orange-500/10 text-orange-400 font-semibold' : 'text-slate-200'}`}
+                      className={`w-full text-left px-3 py-2 hover:bg-slate-700/70 flex items-center justify-between transition-colors ${userCtx.user.email === acc.email ? 'bg-orange-50 text-[#B8530D] font-semibold' : 'text-[#17365D]'}`}
                     >
                       <div>
                         <div className="font-medium">{acc.label}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">{acc.email}</div>
+                        <div className="text-[10px] text-[#64748B]">{acc.email}</div>
                       </div>
                       {userCtx.user.email === acc.email && (
                         <span className="w-2 h-2 rounded-full bg-orange-500" />
@@ -123,21 +123,21 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
           )}
 
           {/* Active User Badge & Logout */}
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+          <div className="flex items-center gap-2 pl-2 border-l border-[#E2E8F0]">
             <div className="text-right hidden sm:block">
-              <div className="text-xs font-semibold text-white">{userCtx.user.name}</div>
-              <div className="text-[10px] text-orange-400 font-mono">
+              <div className="text-xs font-semibold text-[#17365D]">{userCtx.user.name}</div>
+              <div className="text-[10px] text-[#B8530D]">
                 {userCtx.roles.join(', ')}
               </div>
             </div>
 
-            <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 font-medium text-xs">
+            <div className="w-9 h-9 rounded-full bg-[#EAF0F6] border border-[#DCE4ED] flex items-center justify-center text-[#17365D] font-bold text-xs">
               {userCtx.user.name.charAt(0)}
             </div>
 
             <button
               onClick={logout}
-              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+              className="p-2 text-[#64748B] hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
               title="Sign Out"
               aria-label="Sign Out"
             >

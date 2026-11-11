@@ -155,8 +155,8 @@ export const GlobalOutletSelector: React.FC<{ className?: string }> = ({ classNa
   if (accessibleOutlets.length <= 1) {
     if (accessibleOutlets.length === 1) {
       return (
-        <div className={`flex items-center gap-2 px-3 py-1.5 bg-slate-800/80 border border-slate-700/80 rounded-lg text-xs font-semibold text-slate-200 ${className}`}>
-          <Building2 className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+        <div className={`flex items-center gap-2 px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-semibold text-[#17365D] ${className}`}>
+          <Building2 className="w-3.5 h-3.5 text-[#D86514] shrink-0" />
           <span className="truncate">{accessibleOutlets[0].name} ({accessibleOutlets[0].roCode})</span>
         </div>
       );
@@ -166,12 +166,12 @@ export const GlobalOutletSelector: React.FC<{ className?: string }> = ({ classNa
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <Building2 className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+      <Building2 className="w-3.5 h-3.5 text-[#D86514] shrink-0" />
       <select
         value={activeOutletId || ''}
         onChange={(e) => setActiveOutletId(e.target.value)}
         disabled={loading}
-        className="bg-slate-800/90 border border-slate-700 hover:border-orange-500/50 text-slate-200 text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+        className="bg-[#F8FAFC] border border-[#D7E0EA] hover:border-[#F47721] text-[#17365D] text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
       >
         {accessibleOutlets.map((outlet) => (
           <option key={outlet.id} value={outlet.id}>

@@ -16,10 +16,10 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="enterprise-shell min-h-screen bg-[#F5F7FA] text-slate-100 flex flex-col font-sans">
       <Header onToggleMobileSidebar={() => setMobileOpen(!mobileOpen)} />
 
-      <div className="flex flex-1">
+      <div className="flex min-w-0 flex-1 items-stretch">
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -27,7 +27,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           onCloseMobile={() => setMobileOpen(false)}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-x-hidden">
+        <main className="min-w-0 flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-7 xl:p-8">
           {children}
         </main>
       </div>
