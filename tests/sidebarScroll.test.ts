@@ -15,11 +15,11 @@ describe('Sidebar navigation scrolling', () => {
     expect(source.indexOf('Active User Context')).toBeLessThan(nav);
     expect(source.indexOf('Sidebar Brand Header')).toBeLessThan(nav);
     expect(source.indexOf('Footer Info')).toBeGreaterThan(nav);
-    expect(source).toContain('min-h-0 w-64 flex-col overflow-hidden');
+    expect(source).toContain('flex-col overflow-hidden border-r border-[#E2E8F0] bg-white');
   });
 
   it('works in both desktop and mobile layouts', () => {
-    expect(source).toContain('h-[calc(100vh-57px)] shrink-0 overflow-hidden lg:block');
+    expect(source).toContain('h-[calc(100vh-64px)] shrink-0 overflow-hidden lg:block');
     expect(source).toContain('h-full min-h-0 w-64 overflow-hidden');
     expect(source).toContain('{content}');
   });
