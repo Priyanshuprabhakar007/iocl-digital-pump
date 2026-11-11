@@ -1,0 +1,80 @@
+/* Phase 4 — Modern Enterprise Light: Admin and Master Data.
+   Presentation only: intentionally no routing, state, or operation overrides. */
+.admin-modern {
+  color: #172b4d;
+  font-variant-numeric: tabular-nums;
+}
+.admin-modern input, .admin-modern select, .admin-modern textarea {
+  min-height: 40px;
+  color-scheme: light;
+}
+.admin-modern input:focus-visible, .admin-modern select:focus-visible,
+.admin-modern textarea:focus-visible, .admin-modern button:focus-visible {
+  outline: 2px solid #17365d;
+  outline-offset: 2px;
+}
+.admin-modern :is(button,[role="button"]) {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 120ms;
+}
+.admin-modern button[class~="bg-orange-500"],
+.admin-modern button[class~="bg-orange-600"],
+.admin-modern button[class~="bg-emerald-600"],
+.admin-modern button[class~="bg-emerald-700"],
+.admin-modern button[class~="bg-rose-600"],
+.admin-modern button[class~="bg-rose-700"],
+.admin-modern button[class~="bg-red-600"],
+.admin-modern button[class~="bg-red-700"] {
+  color: #fff;
+}
+.admin-modern .admin-table-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #9baec5 #f1f5f9;
+}
+.admin-modern .admin-data-table {
+  color: #172b4d;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.admin-modern .admin-data-table thead {
+  background: #f1f5f9;
+  color: #334155;
+}
+.admin-modern .admin-data-table th {
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.admin-modern .admin-data-table td {
+  border-bottom: 1px solid #e9eef5;
+}
+.admin-modern .admin-data-table tbody tr:hover {
+  background: #f8fafc;
+}
+.admin-modern .admin-data-table th:first-child,
+.admin-modern .admin-data-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+.admin-modern .admin-data-table th:first-child {
+  z-index: 2;
+  background: #f1f5f9;
+}
+.admin-modern .admin-data-table td:first-child {
+  background: white;
+  box-shadow: 1px 0 #e2e8f0;
+}
+.admin-modern .admin-data-table tbody tr:hover td:first-child {
+  background: #f8fafc;
+}
+@media (max-width: 767px) {
+  .admin-modern .admin-data-table { min-width: 700px; }
+  .admin-modern :is(form,[role="dialog"]) { max-height: 90dvh; overflow-y: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-modern *, .admin-modern *::before, .admin-modern *::after {
+    transition-duration: 0ms !important;
+  }
+}
