@@ -101,8 +101,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           <span className="text-xs font-medium text-[#64748B]">Only permitted workspaces appear</span>
         </div>
         {tasks.length ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {tasks.map(task => {
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {tasks.filter(task => ['daily-ops', 'stock-ops', 'outlets', 'reports'].includes(task.id)).map(task => {
               const Icon = task.icon;
               return (
                 <button
@@ -111,7 +111,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   onClick={() => onNavigate?.(task.id)}
                   disabled={!onNavigate}
                   data-tone={task.id === 'daily-ops' || task.id === 'stock-ops' ? 'orange' : task.id === 'financials' ? 'green' : task.id === 'reports' ? 'purple' : 'blue'}
-                  className={`option4-action group flex min-h-[138px] flex-col items-start p-5 text-left transition-all focus-visible:outline-2 focus-visible:outline-[#2354C6] disabled:cursor-not-allowed ${
+                  className={`option4-action group flex min-h-[108px] flex-col items-start p-4 text-left transition-all focus-visible:outline-2 focus-visible:outline-[#2354C6] disabled:cursor-not-allowed ${
                     task.featured
                       ? 'border-orange-200 bg-gradient-to-br from-white to-[#FFF6ED] hover:-translate-y-0.5 hover:border-[#F47721] hover:shadow-[0_14px_28px_rgba(244,119,33,0.15)]'
                       : 'border-[#D5E1EC] bg-gradient-to-br from-white to-[#F0F6FC] hover:border-[#4A85AE] hover:shadow-[0_12px_26px_rgba(23,54,93,0.10)]'
@@ -155,6 +155,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                 </div>
                 <p className="mt-3 text-2xl font-bold tabular-nums text-[#17365D] sm:text-3xl">{metric.value}</p>
               </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section aria-label="Work areas" className="option4-panel p-5 sm:p-6">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-[#17365D]">Work areas</h2>
+          <p className="mt-1 text-sm text-[#64748B]">Explore the tools available to your role.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {tasks.filter(task => ['daily-ops','stock-ops','financials','reports','pump-infra'].includes(task.id)).map((task, index) => {
+            const Icon = task.icon;
+            const tone = ['blue','orange','green','purple','blue'][index % 5];
+            return (
+              <button key={task.id} type="button" data-tone={tone}
+                onClick={() => onNavigate?.(task.id)} disabled={!onNavigate}
+                className="option4-action group flex min-h-[168px] flex-col items-start p-5 text-left transition-all focus-visible:outline-2 focus-visible:outline-[#2354C6] disabled:cursor-not-allowed">
+                <Icon className="h-7 w-7 text-[#2354C6]" />
+                <span className="mt-4 block text-base font-bold text-[#17365D]">{task.label}</span>
+                <span className="mt-1 flex-1 text-xs leading-relaxed text-[#64748B]">{task.description}</span>
+                <span className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-[#2354C6]">
+                  Open workspace <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </span>
+              </button>
             );
           })}
         </div>
