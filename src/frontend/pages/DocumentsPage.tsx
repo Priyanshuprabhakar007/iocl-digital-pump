@@ -1,3 +1,4 @@
+import './adminModern.css';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, apiFetchBlob } from '../services/api';
@@ -68,31 +69,31 @@ const STATUS_BADGE_STYLES: Record<
 > = {
   VALID: {
     label: 'VALID',
-    className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    className: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30',
   },
   EXPIRING_SOON: {
     label: 'EXPIRING SOON',
-    className: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    className: 'bg-amber-500/15 text-amber-800 border-amber-500/30',
   },
   EXPIRED: {
     label: 'EXPIRED',
-    className: 'bg-red-500/15 text-red-400 border-red-500/30',
+    className: 'bg-red-500/15 text-red-700 border-red-500/30',
   },
   PAYMENT_PENDING: {
     label: 'PAYMENT PENDING',
-    className: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
+    className: 'bg-orange-500/15 text-orange-800 border-orange-500/30',
   },
   ACTION_REQUIRED: {
     label: 'ACTION REQUIRED',
-    className: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+    className: 'bg-rose-500/15 text-rose-800 border-rose-500/30',
   },
   NOT_RECORDED: {
     label: 'NOT RECORDED',
-    className: 'bg-slate-800 text-slate-400 border-slate-700',
+    className: 'bg-[#F1F5F9] text-[#64748B] border-[#D7E0EA]',
   },
   NOT_APPLICABLE: {
     label: 'NOT APPLICABLE',
-    className: 'bg-slate-800/60 text-slate-500 border-slate-700/60',
+    className: 'bg-[#F1F5F9]/60 text-[#64748B] border-[#D7E0EA]/60',
   },
 };
 
@@ -102,23 +103,23 @@ const PAYMENT_BADGE_STYLES: Record<
 > = {
   PAID: {
     label: 'PAID',
-    className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    className: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20',
   },
   PENDING: {
     label: 'PENDING',
-    className: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
+    className: 'bg-amber-500/10 text-amber-800 border-amber-500/20',
   },
   OVERDUE: {
     label: 'OVERDUE',
-    className: 'bg-red-500/10 text-red-400 border-red-500/20',
+    className: 'bg-red-500/10 text-red-700 border-red-500/20',
   },
   NOT_APPLICABLE: {
     label: 'N/A',
-    className: 'bg-slate-800/60 text-slate-500 border-slate-700/50',
+    className: 'bg-[#F1F5F9]/60 text-[#64748B] border-[#D7E0EA]/50',
   },
   NOT_RECORDED: {
     label: 'NOT RECORDED',
-    className: 'bg-slate-800 text-slate-400 border-slate-700',
+    className: 'bg-[#F1F5F9] text-[#64748B] border-[#D7E0EA]',
   },
 };
 
@@ -736,17 +737,17 @@ export const DocumentsPage: React.FC = () => {
   };
 
   const getFileIcon = (mime: string) => {
-    if (mime === 'application/pdf') return <FileText className="w-4 h-4 text-red-400" />;
+    if (mime === 'application/pdf') return <FileText className="w-4 h-4 text-red-700" />;
     if (mime.startsWith('image/')) return <FileImage className="w-4 h-4 text-blue-400" />;
-    return <File className="w-4 h-4 text-slate-400" />;
+    return <File className="w-4 h-4 text-[#64748B]" />;
   };
 
   if (!canRead) {
     return (
       <div className="p-8 text-center">
-        <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-        <h2 className="text-xl font-bold text-white">Access Denied</h2>
-        <p className="text-slate-400 mt-1">
+        <AlertCircle className="w-12 h-12 text-red-700 mx-auto mb-3" />
+        <h2 className="text-xl font-bold text-[#17365D]">Access Denied</h2>
+        <p className="text-[#64748B] mt-1">
           You do not have permission to view COCO Documents & Compliance records.
         </p>
       </div>
@@ -761,18 +762,18 @@ export const DocumentsPage: React.FC = () => {
       : dueDatesAndActions.expiringWithin90Days;
 
   return (
-    <div className="space-y-6">
+    <div className="admin-modern space-y-6 pb-10">
       {/* Top Header & COCO Outlet / Report Date Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
               <ShieldCheck className="w-6 h-6 text-orange-500" />
-              <h2 className="text-2xl font-bold text-white tracking-tight">
+              <h2 className="text-2xl font-bold text-[#17365D] tracking-tight">
                 COCO Documents & Compliance Management
               </h2>
             </div>
-            <p className="text-slate-400 text-sm mt-1">
+            <p className="text-[#64748B] text-sm mt-1">
               Maintain statutory licences, municipal taxes, lease rent, utility dues, equipment AMC & generate printable A4 COCO Compliance One-Pagers.
             </p>
           </div>
@@ -791,15 +792,15 @@ export const DocumentsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => openRecordEditor(null, true)}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium rounded-lg transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] text-sm font-medium rounded-lg transition-colors cursor-pointer"
                 >
-                  <Plus className="w-4 h-4 text-orange-400" />
+                  <Plus className="w-4 h-4 text-[#B8530D]" />
                   Add Custom Category
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsVaultUploadOpen(true)}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium rounded-lg transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] text-sm font-medium rounded-lg transition-colors cursor-pointer"
                 >
                   <Upload className="w-4 h-4 text-blue-400" />
                   R2 Vault Upload
@@ -810,33 +811,33 @@ export const DocumentsPage: React.FC = () => {
         </div>
 
         {/* Outlet Selector + Report Date Selector */}
-        <div className="mt-5 pt-4 border-t border-slate-800/80 grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+        <div className="mt-5 pt-4 border-t border-[#E2E8F0]/80 grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
           <div className="md:col-span-5">
             <div className="flex items-center justify-between mb-1.5">
               <label
                 htmlFor="coco-outlet-selector"
-                className="block text-xs font-semibold uppercase tracking-wider text-slate-400"
+                className="block text-xs font-semibold uppercase tracking-wider text-[#64748B]"
               >
                 Select COCO Retail Outlet
               </label>
-              <label className="inline-flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer">
+              <label className="inline-flex items-center gap-1.5 text-xs text-[#64748B] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={showCocoOnly}
                   onChange={(e) => setShowCocoOnly(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-950 text-orange-500 focus:ring-orange-500"
+                  className="rounded border-[#D7E0EA] bg-[#F8FAFC] text-orange-500 focus:ring-orange-500"
                 />
                 Prioritize COCO Outlets
               </label>
             </div>
             <div className="relative">
-              <Building2 className="w-4 h-4 text-orange-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Building2 className="w-4 h-4 text-[#B8530D] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
                 id="coco-outlet-selector"
                 value={selectedOutletId}
                 onChange={(e) => setSelectedOutletId(e.target.value)}
                 disabled={displayedOutlets.length === 0}
-                className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white focus:outline-none focus:border-orange-500 disabled:opacity-50"
+                className="w-full pl-9 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D] focus:outline-none focus:border-orange-500 disabled:opacity-50"
               >
                 {displayedOutlets.length === 0 ? (
                   <option value="">
@@ -858,18 +859,18 @@ export const DocumentsPage: React.FC = () => {
           <div className="md:col-span-3">
             <label
               htmlFor="coco-report-date"
-              className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5"
+              className="block text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1.5"
             >
               Compliance Report Date
             </label>
             <div className="relative">
-              <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Calendar className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 id="coco-report-date"
                 type="date"
                 value={reportDate}
                 onChange={(e) => setReportDate(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white focus:outline-none focus:border-orange-500"
+                className="w-full pl-9 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D] focus:outline-none focus:border-orange-500"
               />
             </div>
           </div>
@@ -879,7 +880,7 @@ export const DocumentsPage: React.FC = () => {
               type="button"
               onClick={() => fetchOutletComplianceData(selectedOutletId, reportDate)}
               disabled={!selectedOutletId}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] disabled:opacity-40 text-[#334155] border border-[#D7E0EA] rounded-lg text-xs font-medium transition-colors cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               Refresh Status
@@ -888,7 +889,7 @@ export const DocumentsPage: React.FC = () => {
               type="button"
               onClick={handleGenerateOnePagerPdf}
               disabled={isGeneratingPdf || !selectedOutletId}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-[#17365D] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               {isGeneratingPdf ? 'Generating PDF...' : 'Generate COCO One-Pager PDF'}
@@ -901,18 +902,18 @@ export const DocumentsPage: React.FC = () => {
       {outletLoadError && (
         <div className="p-5 bg-red-500/10 border border-red-500/25 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3">
-            <AlertCircle className="w-6 h-6 text-red-400 shrink-0 mt-0.5 sm:mt-0" />
+            <AlertCircle className="w-6 h-6 text-red-700 shrink-0 mt-0.5 sm:mt-0" />
             <div>
-              <div className="font-semibold text-white text-sm">
+              <div className="font-semibold text-[#17365D] text-sm">
                 Failed to load accessible retail outlets
               </div>
-              <div className="text-xs text-red-300 mt-0.5">{outletLoadError}</div>
+              <div className="text-xs text-red-800 mt-0.5">{outletLoadError}</div>
             </div>
           </div>
           <button
             type="button"
             onClick={loadOutlets}
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#17365D] rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Retry
@@ -922,7 +923,7 @@ export const DocumentsPage: React.FC = () => {
 
       {/* Feedback Banners */}
       {bannerError && !outletLoadError && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between gap-3 text-red-400 text-sm">
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between gap-3 text-red-700 text-sm">
           <div className="flex items-center gap-2.5">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{bannerError}</span>
@@ -930,7 +931,7 @@ export const DocumentsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setBannerError(null)}
-            className="text-red-300 hover:text-white cursor-pointer"
+            className="text-red-800 hover:text-[#17365D] cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -938,7 +939,7 @@ export const DocumentsPage: React.FC = () => {
       )}
 
       {bannerSuccess && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between gap-3 text-emerald-400 text-sm">
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between gap-3 text-emerald-700 text-sm">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{bannerSuccess}</span>
@@ -946,7 +947,7 @@ export const DocumentsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setBannerSuccess(null)}
-            className="text-emerald-300 hover:text-white cursor-pointer"
+            className="text-emerald-800 hover:text-[#17365D] cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -955,47 +956,47 @@ export const DocumentsPage: React.FC = () => {
 
       {/* Status Summary Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <div className="text-xs font-medium text-slate-400">VALID</div>
-          <div className="text-2xl font-bold text-emerald-400 mt-1">{summary.validCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Active & compliant</div>
+        <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5">
+          <div className="text-xs font-medium text-[#64748B]">VALID</div>
+          <div className="text-2xl font-bold text-emerald-700 mt-1">{summary.validCount}</div>
+          <div className="text-[11px] text-[#64748B] mt-0.5">Active & compliant</div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <div className="text-xs font-medium text-slate-400">EXPIRING SOON</div>
-          <div className="text-2xl font-bold text-amber-300 mt-1">{summary.expiringSoonCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Within 30 days</div>
+        <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5">
+          <div className="text-xs font-medium text-[#64748B]">EXPIRING SOON</div>
+          <div className="text-2xl font-bold text-amber-800 mt-1">{summary.expiringSoonCount}</div>
+          <div className="text-[11px] text-[#64748B] mt-0.5">Within 30 days</div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <div className="text-xs font-medium text-slate-400">EXPIRED</div>
-          <div className="text-2xl font-bold text-red-400 mt-1">{summary.expiredCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Past validity date</div>
+        <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5">
+          <div className="text-xs font-medium text-[#64748B]">EXPIRED</div>
+          <div className="text-2xl font-bold text-red-700 mt-1">{summary.expiredCount}</div>
+          <div className="text-[11px] text-[#64748B] mt-0.5">Past validity date</div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <div className="text-xs font-medium text-slate-400">PAYMENT PENDING</div>
-          <div className="text-2xl font-bold text-orange-400 mt-1">{summary.paymentPendingCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Tax, rent or utility due</div>
+        <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5">
+          <div className="text-xs font-medium text-[#64748B]">PAYMENT PENDING</div>
+          <div className="text-2xl font-bold text-[#B8530D] mt-1">{summary.paymentPendingCount}</div>
+          <div className="text-[11px] text-[#64748B] mt-0.5">Tax, rent or utility due</div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <div className="text-xs font-medium text-slate-400">ACTION REQUIRED</div>
-          <div className="text-2xl font-bold text-rose-400 mt-1">{summary.actionRequiredCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Service / inspection due</div>
+        <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5">
+          <div className="text-xs font-medium text-[#64748B]">ACTION REQUIRED</div>
+          <div className="text-2xl font-bold text-rose-700 mt-1">{summary.actionRequiredCount}</div>
+          <div className="text-[11px] text-[#64748B] mt-0.5">Service / inspection due</div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <div className="text-xs font-medium text-slate-400">NOT RECORDED</div>
-          <div className="text-2xl font-bold text-slate-300 mt-1">{summary.notRecordedCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Never treated as valid</div>
+        <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5">
+          <div className="text-xs font-medium text-[#64748B]">NOT RECORDED</div>
+          <div className="text-2xl font-bold text-[#475569] mt-1">{summary.notRecordedCount}</div>
+          <div className="text-[11px] text-[#64748B] mt-0.5">Never treated as valid</div>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="border-b border-slate-800 flex flex-wrap gap-2">
+      <div className="border-b border-[#E2E8F0] flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => setActiveTab('REGISTER')}
           className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
             activeTab === 'REGISTER'
-              ? 'border-orange-500 text-orange-400 bg-orange-500/5'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
+              : 'border-transparent text-[#64748B] hover:text-[#334155]'
           }`}
         >
           <ClipboardCheck className="w-4 h-4" />
@@ -1007,8 +1008,8 @@ export const DocumentsPage: React.FC = () => {
           onClick={() => setActiveTab('ONE_PAGER')}
           className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
             activeTab === 'ONE_PAGER'
-              ? 'border-orange-500 text-orange-400 bg-orange-500/5'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
+              : 'border-transparent text-[#64748B] hover:text-[#334155]'
           }`}
         >
           <FileText className="w-4 h-4" />
@@ -1020,14 +1021,14 @@ export const DocumentsPage: React.FC = () => {
           onClick={() => setActiveTab('DUE_DATES')}
           className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
             activeTab === 'DUE_DATES'
-              ? 'border-orange-500 text-orange-400 bg-orange-500/5'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
+              : 'border-transparent text-[#64748B] hover:text-[#334155]'
           }`}
         >
           <Clock className="w-4 h-4" />
           Tab 3 — Due Dates & Pending Actions
           {summary.expiredCount + summary.paymentPendingCount + summary.actionRequiredCount > 0 && (
-            <span className="px-1.5 py-0.5 text-[11px] rounded bg-red-500/20 text-red-300 border border-red-500/30">
+            <span className="px-1.5 py-0.5 text-[11px] rounded bg-red-500/20 text-red-800 border border-red-500/30">
               {summary.expiredCount + summary.paymentPendingCount + summary.actionRequiredCount}
             </span>
           )}
@@ -1040,26 +1041,26 @@ export const DocumentsPage: React.FC = () => {
       {activeTab === 'REGISTER' && (
         <div className="space-y-6">
           {/* Search & Category Filter Bar */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
+          <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
             <div className="relative w-full md:w-96">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by document, category, reference, remarks..."
-                className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-orange-500"
+                className="w-full pl-9 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D] placeholder-slate-500 focus:outline-none focus:border-orange-500"
               />
             </div>
 
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
               <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-slate-400" />
+                <Filter className="w-4 h-4 text-[#64748B]" />
                 <select
                   aria-label="Filter by category"
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-orange-500"
+                  className="px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#334155] focus:outline-none focus:border-orange-500"
                 >
                   <option value="ALL">All Categories ({registerItems.length})</option>
                   {STANDARD_COCO_CATEGORIES.map((cat) => (
@@ -1074,7 +1075,7 @@ export const DocumentsPage: React.FC = () => {
                 aria-label="Filter by compliance status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-orange-500"
+                className="px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#334155] focus:outline-none focus:border-orange-500"
               >
                 <option value="ALL">All Statuses</option>
                 <option value="VALID">VALID</option>
@@ -1091,9 +1092,9 @@ export const DocumentsPage: React.FC = () => {
           {/* Discrepancy Alert Banner if any manual vs module conflict exists */}
           {summary.discrepancyCount > 0 && (
             <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
               <div className="text-xs text-amber-200 space-y-1">
-                <div className="font-semibold text-amber-300">
+                <div className="font-semibold text-amber-800">
                   Authoritative Module Conflict Flagged ({summary.discrepancyCount} Category)
                 </div>
                 <p>
@@ -1104,16 +1105,16 @@ export const DocumentsPage: React.FC = () => {
           )}
 
           {/* Main Compliance Register Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+          <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-white">
+                <h3 className="text-sm font-semibold text-[#17365D]">
                   COCO Compliance & Statutory Document Register —{' '}
-                  <span className="text-orange-400">
+                  <span className="text-[#B8530D]">
                     {selectedOutlet ? `${selectedOutlet.name} (${selectedOutlet.roCode})` : ''}
                   </span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-[#64748B] mt-0.5">
                   Showing {filteredRegisterItems.length} of {registerItems.length} categories evaluated as of{' '}
                   {formatComplianceDateDisplay(reportDate)}
                 </p>
@@ -1121,14 +1122,14 @@ export const DocumentsPage: React.FC = () => {
             </div>
 
             {isLoading ? (
-              <div className="p-8 text-center text-slate-400 text-sm">
+              <div className="p-8 text-center text-[#64748B] text-sm">
                 Loading COCO compliance register...
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="admin-table-scroll overflow-x-auto" role="region" aria-label="Scrollable administration table" tabIndex={0}>
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-800 bg-slate-950/60 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]/60 text-[11px] font-semibold text-[#64748B] uppercase tracking-wider">
                       <th className="py-3 px-3.5 w-12">Sr.</th>
                       <th className="py-3 px-3.5">Category / Particular</th>
                       <th className="py-3 px-3.5">Status</th>
@@ -1148,24 +1149,24 @@ export const DocumentsPage: React.FC = () => {
                       return (
                         <tr
                           key={item.categoryCode}
-                          className={`hover:bg-slate-800/30 transition-colors ${
-                            isMissing ? 'bg-slate-950/30' : ''
+                          className={`hover:bg-[#F1F5F9]/30 transition-colors ${
+                            isMissing ? 'bg-[#F8FAFC]/30' : ''
                           }`}
                         >
-                          <td className="py-3.5 px-3.5 font-mono text-xs text-slate-400">
+                          <td className="py-3.5 px-3.5 font-mono text-xs text-[#64748B]">
                             {item.srNo}
                           </td>
 
                           <td className="py-3.5 px-3.5">
-                            <div className="font-semibold text-white flex items-center gap-2">
+                            <div className="font-semibold text-[#17365D] flex items-center gap-2">
                               <span>{item.categoryName}</span>
                               {item.isCustomCategory && (
-                                <span className="px-1.5 py-0.5 text-[10px] rounded bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                                <span className="px-1.5 py-0.5 text-[10px] rounded bg-purple-500/15 text-violet-800 border border-purple-500/30">
                                   Custom
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-slate-400 mt-0.5">
+                            <div className="text-xs text-[#64748B] mt-0.5">
                               {item.documentTitle ? (
                                 <span>
                                   {item.documentTitle}
@@ -1174,14 +1175,14 @@ export const DocumentsPage: React.FC = () => {
                               ) : item.referenceNumber ? (
                                 <span>Ref: {item.referenceNumber}</span>
                               ) : (
-                                <span className="text-slate-500 italic">
+                                <span className="text-[#64748B] italic">
                                   No document reference recorded
                                 </span>
                               )}
                             </div>
                             {item.authoritativeSource !== 'MANUAL' &&
                               item.authoritativeSource !== 'NONE' && (
-                                <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                                <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-800 border border-blue-500/20">
                                   <Link2 className="w-3 h-3" />
                                   Linked: {SOURCE_LABELS[item.authoritativeSource]} (Read-Only)
                                 </div>
@@ -1194,9 +1195,9 @@ export const DocumentsPage: React.FC = () => {
                             >
                               {statusStyle.label}
                             </span>
-                            <div className="text-[11px] text-slate-400 mt-1">
+                            <div className="text-[11px] text-[#64748B] mt-1">
                               Status (Yes/No):{' '}
-                              <span className="font-semibold text-slate-200">
+                              <span className="font-semibold text-[#334155]">
                                 {item.statusYesNo === 'NOT_RECORDED'
                                   ? 'Not Recorded'
                                   : item.statusYesNo}
@@ -1204,20 +1205,20 @@ export const DocumentsPage: React.FC = () => {
                             </div>
                             {item.documentValidityStatus !== item.complianceStatus &&
                               item.complianceStatus === 'PAYMENT_PENDING' && (
-                                <div className="text-[10px] text-amber-300 mt-0.5">
+                                <div className="text-[10px] text-amber-800 mt-0.5">
                                   Doc Validity: {item.documentValidityStatus}
                                 </div>
                               )}
                           </td>
 
                           <td className="py-3.5 px-3.5 text-xs">
-                            <div className="text-slate-200 font-medium">
+                            <div className="text-[#334155] font-medium">
                               {item.validityDueDate
                                 ? formatComplianceDateDisplay(item.validityDueDate)
                                 : 'Not Recorded'}
                             </div>
                             {item.lastServiceDate && (
-                              <div className="text-slate-400 mt-0.5">
+                              <div className="text-[#64748B] mt-0.5">
                                 Last Service: {formatComplianceDateDisplay(item.lastServiceDate)}
                               </div>
                             )}
@@ -1225,10 +1226,10 @@ export const DocumentsPage: React.FC = () => {
                               <div
                                 className={`text-[11px] mt-0.5 font-medium ${
                                   item.daysUntilDue < 0
-                                    ? 'text-red-400'
+                                    ? 'text-red-700'
                                     : item.daysUntilDue <= 30
-                                    ? 'text-amber-300'
-                                    : 'text-emerald-400'
+                                    ? 'text-amber-800'
+                                    : 'text-emerald-700'
                                 }`}
                               >
                                 {item.daysUntilDue < 0
@@ -1237,14 +1238,14 @@ export const DocumentsPage: React.FC = () => {
                               </div>
                             )}
                             {item.frequency && (
-                              <div className="text-[11px] text-slate-500 mt-0.5">
+                              <div className="text-[11px] text-[#64748B] mt-0.5">
                                 Freq: {item.frequency}
                               </div>
                             )}
                           </td>
 
                           <td className="py-3.5 px-3.5 text-xs">
-                            <div className="font-mono font-semibold text-slate-200">
+                            <div className="font-mono font-semibold text-[#334155]">
                               {item.amountPaise !== null && item.amountPaise !== undefined
                                 ? formatIndianCurrencyFromPaise(item.amountPaise)
                                 : '-'}
@@ -1257,7 +1258,7 @@ export const DocumentsPage: React.FC = () => {
                               </span>
                             </div>
                             {item.paymentDate && (
-                              <div className="text-[10px] text-slate-400 mt-0.5">
+                              <div className="text-[10px] text-[#64748B] mt-0.5">
                                 Paid: {formatComplianceDateDisplay(item.paymentDate)}
                               </div>
                             )}
@@ -1265,33 +1266,33 @@ export const DocumentsPage: React.FC = () => {
 
                           <td className="py-3.5 px-3.5 text-xs max-w-xs">
                             {isMissing ? (
-                              <span className="text-amber-400/90 font-medium">
+                              <span className="text-amber-700/90 font-medium">
                                 Missing record — Not Recorded
                               </span>
                             ) : (
                               <div className="space-y-1">
                                 {item.remarks && (
-                                  <div className="text-slate-300">{item.remarks}</div>
+                                  <div className="text-[#475569]">{item.remarks}</div>
                                 )}
                                 {item.actionRequired && (
-                                  <div className="text-rose-300 font-medium">
+                                  <div className="text-rose-800 font-medium">
                                     Action: {item.actionRequired}
                                   </div>
                                 )}
                                 {item.responsiblePerson && (
-                                  <div className="text-slate-400 text-[11px]">
+                                  <div className="text-[#64748B] text-[11px]">
                                     Resp: {item.responsiblePerson}
                                   </div>
                                 )}
                                 {!item.remarks && !item.actionRequired && (
-                                  <span className="text-slate-500">-</span>
+                                  <span className="text-[#64748B]">-</span>
                                 )}
                               </div>
                             )}
 
                             {item.hasDiscrepancy && item.discrepancyNote && (
                               <div className="mt-1.5 p-2 rounded bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-200">
-                                <span className="font-semibold text-amber-300">Discrepancy: </span>
+                                <span className="font-semibold text-amber-800">Discrepancy: </span>
                                 {item.discrepancyNote}
                               </div>
                             )}
@@ -1299,17 +1300,17 @@ export const DocumentsPage: React.FC = () => {
 
                           <td className="py-3.5 px-3.5 text-xs">
                             {item.attachments.length === 0 ? (
-                              <span className="text-slate-500">None</span>
+                              <span className="text-[#64748B]">None</span>
                             ) : (
                               <div className="space-y-1">
                                 {item.attachments.map((att) => (
                                   <div
                                     key={att.id}
-                                    className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded px-2 py-1"
+                                    className="flex items-center gap-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded px-2 py-1"
                                   >
                                     {getFileIcon(att.mimeType)}
                                     <span
-                                      className="truncate max-w-[110px] text-slate-300"
+                                      className="truncate max-w-[110px] text-[#475569]"
                                       title={att.name}
                                     >
                                       {att.name}
@@ -1318,7 +1319,7 @@ export const DocumentsPage: React.FC = () => {
                                       type="button"
                                       onClick={() => handleViewAttachment(att)}
                                       title="View Attachment"
-                                      className="p-0.5 text-blue-400 hover:text-blue-300 cursor-pointer"
+                                      className="p-0.5 text-blue-400 hover:text-blue-800 cursor-pointer"
                                     >
                                       <Eye className="w-3.5 h-3.5" />
                                     </button>
@@ -1326,7 +1327,7 @@ export const DocumentsPage: React.FC = () => {
                                       type="button"
                                       onClick={() => handleDownloadAttachment(att)}
                                       title="Download Attachment"
-                                      className="p-0.5 text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                                      className="p-0.5 text-emerald-700 hover:text-emerald-800 cursor-pointer"
                                     >
                                       <Download className="w-3.5 h-3.5" />
                                     </button>
@@ -1341,9 +1342,9 @@ export const DocumentsPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => openRecordEditor(item, item.isCustomCategory)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] rounded-lg text-xs font-medium transition-colors cursor-pointer"
                               >
-                                <Edit3 className="w-3.5 h-3.5 text-orange-400" />
+                                <Edit3 className="w-3.5 h-3.5 text-[#B8530D]" />
                                 {item.id ? 'Edit Record' : 'Add Record'}
                               </button>
                             )}
@@ -1353,7 +1354,7 @@ export const DocumentsPage: React.FC = () => {
                     })}
                     {filteredRegisterItems.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-slate-500 text-xs">
+                        <td colSpan={8} className="py-8 text-center text-[#64748B] text-xs">
                           {outletLoadError
                             ? 'Cannot display compliance register: accessible retail outlets failed to load.'
                             : !selectedOutletId
@@ -1369,13 +1370,13 @@ export const DocumentsPage: React.FC = () => {
           </div>
 
           {/* Outlet Cloudflare R2 Document Vault Repository (Preserves & exposes all outlet attachments) */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+          <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-white">
+                <h3 className="text-sm font-semibold text-[#17365D]">
                   Outlet Cloudflare R2 Document Vault ({vaultDocs.length} Stored Files)
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-[#64748B] mt-0.5">
                   All binary PDF, JPG, and PNG attachments stored for this outlet with authenticated scope-checked viewing and downloading.
                 </p>
               </div>
@@ -1383,23 +1384,23 @@ export const DocumentsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsVaultUploadOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] rounded-lg text-xs font-medium cursor-pointer"
                 >
-                  <Upload className="w-3.5 h-3.5 text-orange-400" />
+                  <Upload className="w-3.5 h-3.5 text-[#B8530D]" />
                   Upload File to R2
                 </button>
               )}
             </div>
 
             {vaultDocs.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-500">
+              <div className="p-6 text-center text-xs text-[#64748B]">
                 No standalone files uploaded for this outlet yet.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="admin-table-scroll overflow-x-auto" role="region" aria-label="Scrollable administration table" tabIndex={0}>
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-800 bg-slate-950/40 text-[11px] font-semibold text-slate-400 uppercase">
+                    <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]/40 text-[11px] font-semibold text-[#64748B] uppercase">
                       <th className="py-2.5 px-4">Document Name</th>
                       <th className="py-2.5 px-4">Type</th>
                       <th className="py-2.5 px-4">Size</th>
@@ -1409,21 +1410,21 @@ export const DocumentsPage: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 text-xs">
                     {vaultDocs.map((doc) => (
-                      <tr key={doc.id} className="hover:bg-slate-800/30">
-                        <td className="py-2.5 px-4 font-medium text-white flex items-center gap-2">
+                      <tr key={doc.id} className="hover:bg-[#F1F5F9]/30">
+                        <td className="py-2.5 px-4 font-medium text-[#17365D] flex items-center gap-2">
                           {getFileIcon(doc.mimeType)}
                           <span>{doc.name}</span>
                         </td>
-                        <td className="py-2.5 px-4 font-mono text-slate-400">{doc.mimeType}</td>
-                        <td className="py-2.5 px-4 text-slate-400">{formatBytes(doc.sizeBytes)}</td>
-                        <td className="py-2.5 px-4 text-slate-400">
+                        <td className="py-2.5 px-4 font-mono text-[#64748B]">{doc.mimeType}</td>
+                        <td className="py-2.5 px-4 text-[#64748B]">{formatBytes(doc.sizeBytes)}</td>
+                        <td className="py-2.5 px-4 text-[#64748B]">
                           {new Date(doc.createdAt).toLocaleString()}
                         </td>
                         <td className="py-2.5 px-4 text-right space-x-2">
                           <button
                             type="button"
                             onClick={() => handleViewAttachment(doc)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/20 rounded cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-800 border border-blue-500/20 rounded cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5" />
                             View Attachment
@@ -1431,7 +1432,7 @@ export const DocumentsPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleDownloadAttachment(doc)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 border border-emerald-500/20 rounded cursor-pointer"
                           >
                             <Download className="w-3.5 h-3.5" />
                             Download
@@ -1452,23 +1453,23 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {activeTab === 'ONE_PAGER' && (
         <div className="space-y-5">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="bg-white border border-[#E2E8F0] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-orange-400">
+              <div className="text-xs font-semibold uppercase tracking-wider text-[#B8530D]">
                 A4 Portrait Printable Compliance Summary
               </div>
-              <h3 className="text-xl font-bold text-white mt-0.5">
+              <h3 className="text-xl font-bold text-[#17365D] mt-0.5">
                 {onePagerReport
                   ? `${onePagerReport.outletName} — ${onePagerReport.roCode}`
                   : selectedOutlet
                   ? `${selectedOutlet.name} — ${selectedOutlet.roCode}`
                   : 'COCO Compliance One-Pager'}
               </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Report Date: <span className="text-slate-200 font-medium">{formatComplianceDateDisplay(reportDate)}</span>
+              <p className="text-xs text-[#64748B] mt-1">
+                Report Date: <span className="text-[#334155] font-medium">{formatComplianceDateDisplay(reportDate)}</span>
                 {onePagerReport && (
                   <>
-                    {' '}• Generated by: <span className="text-slate-300">{onePagerReport.generatedBy}</span>
+                    {' '}• Generated by: <span className="text-[#475569]">{onePagerReport.generatedBy}</span>
                   </>
                 )}
               </p>
@@ -1478,7 +1479,7 @@ export const DocumentsPage: React.FC = () => {
               type="button"
               onClick={handleGenerateOnePagerPdf}
               disabled={isGeneratingPdf || !selectedOutletId}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-[#17365D] text-sm font-semibold rounded-lg shadow transition-colors cursor-pointer"
             >
               <Download className="w-4 h-4" />
               {isGeneratingPdf ? 'Generating PDF...' : 'Generate COCO One-Pager PDF'}
@@ -1486,25 +1487,25 @@ export const DocumentsPage: React.FC = () => {
           </div>
 
           {/* 14-Category Printable Preview Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+            <div className="admin-table-scroll overflow-x-auto" role="region" aria-label="Scrollable administration table" tabIndex={0}>
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-700 bg-slate-950 text-xs font-bold text-slate-200 uppercase tracking-wider">
-                    <th className="py-3.5 px-4 border-r border-slate-800 w-16 text-center">
+                  <tr className="border-b border-[#D7E0EA] bg-[#F8FAFC] text-xs font-bold text-[#334155] uppercase tracking-wider">
+                    <th className="py-3.5 px-4 border-r border-[#E2E8F0] w-16 text-center">
                       Sr. No.
                     </th>
-                    <th className="py-3.5 px-4 border-r border-slate-800">Particular</th>
-                    <th className="py-3.5 px-4 border-r border-slate-800 text-center">
+                    <th className="py-3.5 px-4 border-r border-[#E2E8F0]">Particular</th>
+                    <th className="py-3.5 px-4 border-r border-[#E2E8F0] text-center">
                       Status (Yes/No)
                     </th>
-                    <th className="py-3.5 px-4 border-r border-slate-800 text-center">
+                    <th className="py-3.5 px-4 border-r border-[#E2E8F0] text-center">
                       Validity / Due Date
                     </th>
-                    <th className="py-3.5 px-4 border-r border-slate-800 text-right">
+                    <th className="py-3.5 px-4 border-r border-[#E2E8F0] text-right">
                       Amount (₹)
                     </th>
-                    <th className="py-3.5 px-4 border-r border-slate-800 text-center">
+                    <th className="py-3.5 px-4 border-r border-[#E2E8F0] text-center">
                       Frequency
                     </th>
                     <th className="py-3.5 px-4">Remarks / Action Required</th>
@@ -1514,11 +1515,11 @@ export const DocumentsPage: React.FC = () => {
                   {(onePagerReport?.rows || []).map((row) => {
                     const badge = STATUS_BADGE_STYLES[row.complianceStatus];
                     return (
-                      <tr key={row.categoryCode} className="hover:bg-slate-800/40">
-                        <td className="py-3 px-4 border-r border-slate-800/80 text-center font-mono text-xs text-slate-300">
+                      <tr key={row.categoryCode} className="hover:bg-[#F1F5F9]/40">
+                        <td className="py-3 px-4 border-r border-[#E2E8F0]/80 text-center font-mono text-xs text-[#475569]">
                           {row.srNo}
                         </td>
-                        <td className="py-3 px-4 border-r border-slate-800/80 font-semibold text-white">
+                        <td className="py-3 px-4 border-r border-[#E2E8F0]/80 font-semibold text-[#17365D]">
                           <div>{row.particular}</div>
                           <span
                             className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${badge.className}`}
@@ -1526,19 +1527,19 @@ export const DocumentsPage: React.FC = () => {
                             {badge.label}
                           </span>
                         </td>
-                        <td className="py-3 px-4 border-r border-slate-800/80 text-center font-semibold text-slate-200">
+                        <td className="py-3 px-4 border-r border-[#E2E8F0]/80 text-center font-semibold text-[#334155]">
                           {row.statusYesNoDisplay}
                         </td>
-                        <td className="py-3 px-4 border-r border-slate-800/80 text-center text-xs text-slate-200">
+                        <td className="py-3 px-4 border-r border-[#E2E8F0]/80 text-center text-xs text-[#334155]">
                           {row.validityDueDateDisplay}
                         </td>
-                        <td className="py-3 px-4 border-r border-slate-800/80 text-right font-mono text-xs text-slate-200">
+                        <td className="py-3 px-4 border-r border-[#E2E8F0]/80 text-right font-mono text-xs text-[#334155]">
                           {row.amountInrDisplay}
                         </td>
-                        <td className="py-3 px-4 border-r border-slate-800/80 text-center text-xs text-slate-300">
+                        <td className="py-3 px-4 border-r border-[#E2E8F0]/80 text-center text-xs text-[#475569]">
                           {row.frequencyDisplay}
                         </td>
-                        <td className="py-3 px-4 text-xs text-slate-300">
+                        <td className="py-3 px-4 text-xs text-[#475569]">
                           {row.remarksActionRequiredDisplay}
                         </td>
                       </tr>
@@ -1546,7 +1547,7 @@ export const DocumentsPage: React.FC = () => {
                   })}
                   {(onePagerReport?.rows || []).length === 0 && (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
+                      <td colSpan={7} className="py-8 text-center text-[#64748B] text-xs">
                         {outletLoadError
                           ? 'Cannot generate preview: accessible retail outlets failed to load.'
                           : !selectedOutletId
@@ -1560,14 +1561,14 @@ export const DocumentsPage: React.FC = () => {
             </div>
 
             {onePagerReport && onePagerReport.customRows.length > 0 && (
-              <div className="border-t border-slate-800 p-4 bg-slate-950/40">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+              <div className="border-t border-[#E2E8F0] p-4 bg-[#F8FAFC]/40">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-2">
                   Additional Custom Categories (Included in Annex Page)
                 </h4>
-                <div className="space-y-1.5 text-xs text-slate-300">
+                <div className="space-y-1.5 text-xs text-[#475569]">
                   {onePagerReport.customRows.map((cr) => (
                     <div key={cr.categoryCode} className="flex items-center justify-between">
-                      <span className="font-medium text-white">
+                      <span className="font-medium text-[#17365D]">
                         {cr.srNo}. {cr.particular} ({cr.statusYesNoDisplay})
                       </span>
                       <span>
@@ -1590,29 +1591,29 @@ export const DocumentsPage: React.FC = () => {
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* 1. Expired Documents */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-red-500/5">
+            <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between bg-red-500/5">
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-400" />
-                  <h3 className="text-sm font-semibold text-white">
+                  <AlertCircle className="w-4 h-4 text-red-700" />
+                  <h3 className="text-sm font-semibold text-[#17365D]">
                     Expired Documents ({dueDatesAndActions.expired.length})
                   </h3>
                 </div>
-                <span className="text-xs text-red-300">As of {formatComplianceDateDisplay(reportDate)}</span>
+                <span className="text-xs text-red-800">As of {formatComplianceDateDisplay(reportDate)}</span>
               </div>
               <div className="p-4">
                 {dueDatesAndActions.expired.length === 0 ? (
-                  <p className="text-xs text-slate-500">No expired documents for this outlet.</p>
+                  <p className="text-xs text-[#64748B]">No expired documents for this outlet.</p>
                 ) : (
                   <div className="space-y-2.5">
                     {dueDatesAndActions.expired.map((item) => (
                       <div
                         key={item.categoryCode}
-                        className="p-3 bg-slate-950 border border-red-500/20 rounded-lg flex items-center justify-between gap-3"
+                        className="p-3 bg-[#F8FAFC] border border-red-500/20 rounded-lg flex items-center justify-between gap-3"
                       >
                         <div>
-                          <div className="text-sm font-semibold text-white">{item.categoryName}</div>
-                          <div className="text-xs text-red-300 mt-0.5">
+                          <div className="text-sm font-semibold text-[#17365D]">{item.categoryName}</div>
+                          <div className="text-xs text-red-800 mt-0.5">
                             Expired on {formatComplianceDateDisplay(item.validityDueDate)}{' '}
                             {item.daysUntilDue !== null
                               ? `(${Math.abs(item.daysUntilDue)} days overdue)`
@@ -1623,7 +1624,7 @@ export const DocumentsPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => openRecordEditor(item, item.isCustomCategory)}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 rounded border border-slate-700 cursor-pointer"
+                            className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-xs text-[#334155] rounded border border-[#D7E0EA] cursor-pointer"
                           >
                             Update
                           </button>
@@ -1636,15 +1637,15 @@ export const DocumentsPage: React.FC = () => {
             </div>
 
             {/* 2. Expiring within 30, 60 or 90 days */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-amber-500/5">
+            <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between bg-amber-500/5">
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-amber-400" />
-                  <h3 className="text-sm font-semibold text-white">
+                  <Clock className="w-4 h-4 text-amber-700" />
+                  <h3 className="text-sm font-semibold text-[#17365D]">
                     Expiring Within {expiryHorizon} Days ({expiringBySelectedHorizon.length})
                   </h3>
                 </div>
-                <div className="inline-flex rounded-lg bg-slate-950 p-0.5 border border-slate-800">
+                <div className="inline-flex rounded-lg bg-[#F8FAFC] p-0.5 border border-[#E2E8F0]">
                   {([30, 60, 90] as ExpiryHorizon[]).map((days) => (
                     <button
                       key={days}
@@ -1653,7 +1654,7 @@ export const DocumentsPage: React.FC = () => {
                       className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${
                         expiryHorizon === days
                           ? 'bg-amber-500 text-slate-950 font-semibold'
-                          : 'text-slate-400 hover:text-white'
+                          : 'text-[#64748B] hover:text-[#17365D]'
                       }`}
                     >
                       {days}d (
@@ -1669,7 +1670,7 @@ export const DocumentsPage: React.FC = () => {
               </div>
               <div className="p-4">
                 {expiringBySelectedHorizon.length === 0 ? (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[#64748B]">
                     No documents expiring within {expiryHorizon} days of {formatComplianceDateDisplay(reportDate)}.
                   </p>
                 ) : (
@@ -1677,11 +1678,11 @@ export const DocumentsPage: React.FC = () => {
                     {expiringBySelectedHorizon.map((item) => (
                       <div
                         key={item.categoryCode}
-                        className="p-3 bg-slate-950 border border-amber-500/20 rounded-lg flex items-center justify-between gap-3"
+                        className="p-3 bg-[#F8FAFC] border border-amber-500/20 rounded-lg flex items-center justify-between gap-3"
                       >
                         <div>
-                          <div className="text-sm font-semibold text-white">{item.categoryName}</div>
-                          <div className="text-xs text-amber-300 mt-0.5">
+                          <div className="text-sm font-semibold text-[#17365D]">{item.categoryName}</div>
+                          <div className="text-xs text-amber-800 mt-0.5">
                             Due on {formatComplianceDateDisplay(item.validityDueDate)} (in{' '}
                             {item.daysUntilDue} days)
                           </div>
@@ -1690,7 +1691,7 @@ export const DocumentsPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => openRecordEditor(item, item.isCustomCategory)}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 rounded border border-slate-700 cursor-pointer"
+                            className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-xs text-[#334155] rounded border border-[#D7E0EA] cursor-pointer"
                           >
                             Update
                           </button>
@@ -1703,18 +1704,18 @@ export const DocumentsPage: React.FC = () => {
             </div>
 
             {/* 3. Payments Pending */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-orange-500/5">
+            <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between bg-orange-500/5">
                 <div className="flex items-center gap-2">
-                  <IndianRupee className="w-4 h-4 text-orange-400" />
-                  <h3 className="text-sm font-semibold text-white">
+                  <IndianRupee className="w-4 h-4 text-[#B8530D]" />
+                  <h3 className="text-sm font-semibold text-[#17365D]">
                     Payments Pending ({dueDatesAndActions.paymentsPending.length})
                   </h3>
                 </div>
               </div>
               <div className="p-4">
                 {dueDatesAndActions.paymentsPending.length === 0 ? (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[#64748B]">
                     No pending statutory, rent, or utility payments for this outlet.
                   </p>
                 ) : (
@@ -1722,16 +1723,16 @@ export const DocumentsPage: React.FC = () => {
                     {dueDatesAndActions.paymentsPending.map((item) => (
                       <div
                         key={item.categoryCode}
-                        className="p-3 bg-slate-950 border border-orange-500/20 rounded-lg flex items-center justify-between gap-3"
+                        className="p-3 bg-[#F8FAFC] border border-orange-500/20 rounded-lg flex items-center justify-between gap-3"
                       >
                         <div>
-                          <div className="text-sm font-semibold text-white">
+                          <div className="text-sm font-semibold text-[#17365D]">
                             {item.categoryName}{' '}
-                            <span className="font-mono text-orange-300">
+                            <span className="font-mono text-orange-800">
                               ({formatIndianCurrencyFromPaise(item.amountPaise)})
                             </span>
                           </div>
-                          <div className="text-xs text-slate-400 mt-0.5">
+                          <div className="text-xs text-[#64748B] mt-0.5">
                             Source: {SOURCE_LABELS[item.authoritativeSource]} • Due:{' '}
                             {formatComplianceDateDisplay(item.validityDueDate)}
                           </div>
@@ -1740,7 +1741,7 @@ export const DocumentsPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => openRecordEditor(item, item.isCustomCategory)}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 rounded border border-slate-700 cursor-pointer"
+                            className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-xs text-[#334155] rounded border border-[#D7E0EA] cursor-pointer"
                           >
                             View / Edit
                           </button>
@@ -1753,18 +1754,18 @@ export const DocumentsPage: React.FC = () => {
             </div>
 
             {/* 4. Service & Inspection Actions Pending */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-rose-500/5">
+            <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between bg-rose-500/5">
                 <div className="flex items-center gap-2">
-                  <Wrench className="w-4 h-4 text-rose-400" />
-                  <h3 className="text-sm font-semibold text-white">
+                  <Wrench className="w-4 h-4 text-rose-700" />
+                  <h3 className="text-sm font-semibold text-[#17365D]">
                     Service & Inspection Actions Pending ({dueDatesAndActions.serviceActionsPending.length})
                   </h3>
                 </div>
               </div>
               <div className="p-4">
                 {dueDatesAndActions.serviceActionsPending.length === 0 ? (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[#64748B]">
                     No pending service, maintenance, or inspection actions.
                   </p>
                 ) : (
@@ -1772,11 +1773,11 @@ export const DocumentsPage: React.FC = () => {
                     {dueDatesAndActions.serviceActionsPending.map((item) => (
                       <div
                         key={item.categoryCode}
-                        className="p-3 bg-slate-950 border border-rose-500/20 rounded-lg flex items-center justify-between gap-3"
+                        className="p-3 bg-[#F8FAFC] border border-rose-500/20 rounded-lg flex items-center justify-between gap-3"
                       >
                         <div>
-                          <div className="text-sm font-semibold text-white">{item.categoryName}</div>
-                          <div className="text-xs text-rose-300 mt-0.5">
+                          <div className="text-sm font-semibold text-[#17365D]">{item.categoryName}</div>
+                          <div className="text-xs text-rose-800 mt-0.5">
                             {item.actionRequired ||
                               item.discrepancyNote ||
                               item.remarks ||
@@ -1787,7 +1788,7 @@ export const DocumentsPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => openRecordEditor(item, item.isCustomCategory)}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 rounded border border-slate-700 cursor-pointer"
+                            className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-xs text-[#334155] rounded border border-[#D7E0EA] cursor-pointer"
                           >
                             Update
                           </button>
@@ -1801,27 +1802,27 @@ export const DocumentsPage: React.FC = () => {
           </div>
 
           {/* 5. Not-Recorded Documents */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+          <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileWarning className="w-4 h-4 text-slate-400" />
-                <h3 className="text-sm font-semibold text-white">
+                <FileWarning className="w-4 h-4 text-[#64748B]" />
+                <h3 className="text-sm font-semibold text-[#17365D]">
                   Not-Recorded Documents ({dueDatesAndActions.notRecorded.length})
                 </h3>
               </div>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-[#64748B]">
                 Missing records are never treated as valid, paid, or verified
               </span>
             </div>
             <div className="p-4">
               {!selectedOutletId ? (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[#64748B]">
                   {outletLoadError
                     ? 'Cannot evaluate categories: accessible retail outlets failed to load.'
                     : 'Please select an accessible retail outlet to view missing compliance categories.'}
                 </p>
               ) : dueDatesAndActions.notRecorded.length === 0 ? (
-                <p className="text-xs text-emerald-400">
+                <p className="text-xs text-emerald-700">
                   All 14 standard compliance categories have been recorded for this outlet!
                 </p>
               ) : (
@@ -1829,18 +1830,18 @@ export const DocumentsPage: React.FC = () => {
                   {dueDatesAndActions.notRecorded.map((item) => (
                     <div
                       key={item.categoryCode}
-                      className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between gap-2"
+                      className="p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg flex items-center justify-between gap-2"
                     >
                       <div>
-                        <div className="text-xs font-mono text-slate-500">Category #{item.srNo}</div>
-                        <div className="text-sm font-medium text-slate-200">{item.categoryName}</div>
-                        <div className="text-[11px] text-amber-400/90 mt-0.5">Status: NOT RECORDED</div>
+                        <div className="text-xs font-mono text-[#64748B]">Category #{item.srNo}</div>
+                        <div className="text-sm font-medium text-[#334155]">{item.categoryName}</div>
+                        <div className="text-[11px] text-amber-700/90 mt-0.5">Status: NOT RECORDED</div>
                       </div>
                       {canWrite && (
                         <button
                           type="button"
                           onClick={() => openRecordEditor(item, item.isCustomCategory)}
-                          className="px-2.5 py-1.5 bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/30 rounded text-xs font-medium cursor-pointer"
+                          className="px-2.5 py-1.5 bg-orange-500/15 hover:bg-orange-500/25 text-orange-800 border border-orange-500/30 rounded text-xs font-medium cursor-pointer"
                         >
                           Add Record
                         </button>
@@ -1859,10 +1860,10 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {isEditorOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full p-6 space-y-5 my-8 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="bg-white border border-[#D7E0EA] rounded-xl max-w-2xl w-full p-6 space-y-5 my-8 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div>
-                <h3 className="text-lg font-bold text-white">
+                <h3 className="text-lg font-bold text-[#17365D]">
                   {isCustomCategoryMode
                     ? editingItem
                       ? `Edit Custom Category — ${editingItem.categoryName}`
@@ -1872,14 +1873,14 @@ export const DocumentsPage: React.FC = () => {
                           ?.particular || formCategoryCode
                       }`}
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-[#64748B] mt-0.5">
                   Outlet: {selectedOutlet?.name} ({selectedOutlet?.roCode})
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsEditorOpen(false)}
-                className="text-slate-400 hover:text-white cursor-pointer"
+                className="text-[#64748B] hover:text-[#17365D] cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1887,7 +1888,7 @@ export const DocumentsPage: React.FC = () => {
 
             {editingItem?.linkedModuleData && (
               <div className="p-3.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-xs text-blue-200 space-y-1">
-                <div className="font-semibold text-blue-300 flex items-center gap-1.5">
+                <div className="font-semibold text-blue-800 flex items-center gap-1.5">
                   <Link2 className="w-3.5 h-3.5" />
                   Read-Only Authoritative Module Integration:{' '}
                   {editingItem.linkedModuleData.sourceLabel}
@@ -1899,7 +1900,7 @@ export const DocumentsPage: React.FC = () => {
                     {formatIndianCurrencyFromPaise(editingItem.linkedModuleData.amountPaise)}
                   </strong>
                 </p>
-                <p className="text-[11px] text-blue-300/80">
+                <p className="text-[11px] text-blue-800/80">
                   Saving supplementary compliance notes or attachments below will not overwrite financial module records. Any discrepancy with module figures is automatically flagged.
                 </p>
               </div>
@@ -1908,7 +1909,7 @@ export const DocumentsPage: React.FC = () => {
             <form onSubmit={handleSaveComplianceRecord} className="space-y-4">
               {!isCustomCategoryMode ? (
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Standard Compliance Category
                   </label>
                   <select
@@ -1922,7 +1923,7 @@ export const DocumentsPage: React.FC = () => {
                         setFormCategoryCode(code);
                       }
                     }}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   >
                     {STANDARD_COCO_CATEGORIES.map((cat) => (
                       <option key={cat.code} value={cat.code}>
@@ -1933,7 +1934,7 @@ export const DocumentsPage: React.FC = () => {
                 </div>
               ) : (
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Custom Category Name *
                   </label>
                   <input
@@ -1942,14 +1943,14 @@ export const DocumentsPage: React.FC = () => {
                     value={formCustomCategoryName}
                     onChange={(e) => setFormCustomCategoryName(e.target.value)}
                     placeholder="e.g., Pollution Control Consent (CTO)"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Document Title
                   </label>
                   <input
@@ -1957,12 +1958,12 @@ export const DocumentsPage: React.FC = () => {
                     value={formDocumentTitle}
                     onChange={(e) => setFormDocumentTitle(e.target.value)}
                     placeholder="e.g., PESO Form XIV Storage Licence"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Licence / Bill Reference Number
                   </label>
                   <input
@@ -1970,20 +1971,20 @@ export const DocumentsPage: React.FC = () => {
                     value={formReferenceNumber}
                     onChange={(e) => setFormReferenceNumber(e.target.value)}
                     placeholder="e.g., P/HQ/WB/15/4921"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Status (Yes / No / N/A)
                   </label>
                   <select
                     value={formStatusYesNo}
                     onChange={(e) => setFormStatusYesNo(e.target.value as CocoStatusYesNo)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   >
                     <option value="YES">Yes (Available / Functional)</option>
                     <option value="NO">No (Pending / Defective)</option>
@@ -1992,45 +1993,45 @@ export const DocumentsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Issue Date
                   </label>
                   <input
                     type="date"
                     value={formIssueDate}
                     onChange={(e) => setFormIssueDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Validity / Due Date
                   </label>
                   <input
                     type="date"
                     value={formValidityDueDate}
                     onChange={(e) => setFormValidityDueDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Last Service Date (Optional)
                   </label>
                   <input
                     type="date"
                     value={formLastServiceDate}
                     onChange={(e) => setFormLastServiceDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Amount in INR (₹)
                   </label>
                   <input
@@ -2040,12 +2041,12 @@ export const DocumentsPage: React.FC = () => {
                     value={formAmountRupees}
                     onChange={(e) => setFormAmountRupees(e.target.value)}
                     placeholder="e.g., 24500"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Frequency
                   </label>
                   <input
@@ -2053,20 +2054,20 @@ export const DocumentsPage: React.FC = () => {
                     value={formFrequency}
                     onChange={(e) => setFormFrequency(e.target.value)}
                     placeholder="Monthly / Quarterly / Yearly"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Payment Status
                   </label>
                   <select
                     value={formPaymentStatus}
                     onChange={(e) => setFormPaymentStatus(e.target.value as CocoPaymentStatus)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   >
                     <option value="PAID">PAID</option>
                     <option value="PENDING">PENDING</option>
@@ -2077,19 +2078,19 @@ export const DocumentsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Payment Date
                   </label>
                   <input
                     type="date"
                     value={formPaymentDate}
                     onChange={(e) => setFormPaymentDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Responsible Person
                   </label>
                   <input
@@ -2097,14 +2098,14 @@ export const DocumentsPage: React.FC = () => {
                     value={formResponsiblePerson}
                     onChange={(e) => setFormResponsiblePerson(e.target.value)}
                     placeholder="e.g., Outlet Manager / FO"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Remarks / Status Notes
                   </label>
                   <textarea
@@ -2112,12 +2113,12 @@ export const DocumentsPage: React.FC = () => {
                     value={formRemarks}
                     onChange={(e) => setFormRemarks(e.target.value)}
                     placeholder="Enter licence / bill / AMC remarks..."
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-[#475569] mb-1">
                     Action Required (If Any)
                   </label>
                   <textarea
@@ -2125,18 +2126,18 @@ export const DocumentsPage: React.FC = () => {
                     value={formActionRequired}
                     onChange={(e) => setFormActionRequired(e.target.value)}
                     placeholder="Leave blank if no action is pending..."
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D]"
                   />
                 </div>
               </div>
 
               {/* Supporting Attachments Section */}
-              <div className="border-t border-slate-800 pt-4 space-y-2.5">
+              <div className="border-t border-[#E2E8F0] pt-4 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#475569]">
                     Supporting Attachments (Cloudflare R2 Document Vault)
                   </label>
-                  <label className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-orange-300 border border-slate-700 rounded text-xs font-medium cursor-pointer">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-orange-800 border border-[#D7E0EA] rounded text-xs font-medium cursor-pointer">
                     <Upload className="w-3.5 h-3.5" />
                     {modalUploadingFile ? 'Uploading...' : 'Upload & Attach PDF/JPG/PNG'}
                     <input
@@ -2150,17 +2151,17 @@ export const DocumentsPage: React.FC = () => {
                 </div>
 
                 {vaultDocs.length === 0 ? (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[#64748B]">
                     No files uploaded for this outlet yet. Use "Upload & Attach PDF/JPG/PNG" above.
                   </p>
                 ) : (
-                  <div className="max-h-32 overflow-y-auto bg-slate-950 border border-slate-800 rounded-lg p-2 space-y-1">
+                  <div className="max-h-32 overflow-y-auto bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg p-2 space-y-1">
                     {vaultDocs.map((doc) => {
                       const checked = formAttachmentIds.includes(doc.id);
                       return (
                         <label
                           key={doc.id}
-                          className="flex items-center justify-between px-2 py-1 rounded hover:bg-slate-900 text-xs text-slate-300 cursor-pointer"
+                          className="flex items-center justify-between px-2 py-1 rounded hover:bg-white text-xs text-[#475569] cursor-pointer"
                         >
                           <span className="flex items-center gap-2">
                             <input
@@ -2175,12 +2176,12 @@ export const DocumentsPage: React.FC = () => {
                                   );
                                 }
                               }}
-                              className="rounded border-slate-700 bg-slate-900 text-orange-500"
+                              className="rounded border-[#D7E0EA] bg-white text-orange-500"
                             />
                             {getFileIcon(doc.mimeType)}
                             <span>{doc.name}</span>
                           </span>
-                          <span className="text-slate-500">{formatBytes(doc.sizeBytes)}</span>
+                          <span className="text-[#64748B]">{formatBytes(doc.sizeBytes)}</span>
                         </label>
                       );
                     })}
@@ -2188,18 +2189,18 @@ export const DocumentsPage: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E2E8F0]">
                 <button
                   type="button"
                   onClick={() => setIsEditorOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg cursor-pointer"
+                  className="px-4 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#475569] text-sm rounded-lg cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingRecord}
-                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg cursor-pointer"
+                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-[#17365D] text-sm font-semibold rounded-lg cursor-pointer"
                 >
                   {isSavingRecord ? 'Saving...' : 'Save Compliance Record'}
                 </button>
@@ -2214,31 +2215,31 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {isVaultUploadOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+          <div className="bg-white border border-[#D7E0EA] rounded-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+              <h3 className="text-base font-bold text-[#17365D] flex items-center gap-2">
                 <Upload className="w-4 h-4 text-orange-500" />
                 Upload to Cloudflare R2 Document Vault
               </h3>
               <button
                 type="button"
                 onClick={() => setIsVaultUploadOpen(false)}
-                className="text-slate-400 hover:text-white cursor-pointer"
+                className="text-[#64748B] hover:text-[#17365D] cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleStandaloneVaultUpload} className="space-y-4">
-              <div className="text-xs text-slate-400">
+              <div className="text-xs text-[#64748B]">
                 Target Outlet:{' '}
-                <span className="text-white font-semibold">
+                <span className="text-[#17365D] font-semibold">
                   {selectedOutlet?.name} ({selectedOutlet?.roCode})
                 </span>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label className="block text-xs font-medium text-[#475569] mb-1.5">
                   File (PDF, PNG, JPEG — Max 5 MB)
                 </label>
                 <input
@@ -2246,7 +2247,7 @@ export const DocumentsPage: React.FC = () => {
                   required
                   accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
                   onChange={(e) => setVaultFile(e.target.files?.[0] || null)}
-                  className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-orange-500/15 file:text-orange-400 hover:file:bg-orange-500/25 cursor-pointer border border-slate-800 rounded-lg p-1.5 bg-slate-950"
+                  className="w-full text-xs text-[#64748B] file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-orange-500/15 file:text-[#B8530D] hover:file:bg-orange-500/25 cursor-pointer border border-[#E2E8F0] rounded-lg p-1.5 bg-[#F8FAFC]"
                 />
               </div>
 
@@ -2254,14 +2255,14 @@ export const DocumentsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsVaultUploadOpen(false)}
-                  className="px-3.5 py-2 bg-slate-800 text-slate-300 text-xs rounded-lg cursor-pointer"
+                  className="px-3.5 py-2 bg-[#F1F5F9] text-[#475569] text-xs rounded-lg cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!vaultFile || isVaultUploading}
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg cursor-pointer"
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-[#17365D] text-xs font-semibold rounded-lg cursor-pointer"
                 >
                   {isVaultUploading ? 'Uploading...' : 'Upload to R2 Vault'}
                 </button>
@@ -2276,13 +2277,13 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {previewAttachment && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-4xl w-full p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="bg-white border border-[#D7E0EA] rounded-xl max-w-4xl w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div className="flex items-center gap-2">
                 {getFileIcon(previewAttachment.mimeType)}
                 <div>
-                  <h3 className="text-sm font-bold text-white">{previewAttachment.name}</h3>
-                  <p className="text-[11px] text-slate-400">
+                  <h3 className="text-sm font-bold text-[#17365D]">{previewAttachment.name}</h3>
+                  <p className="text-[11px] text-[#64748B]">
                     {previewAttachment.mimeType} • {formatBytes(previewAttachment.sizeBytes)} •
                     Served via authenticated scope-verified R2 stream
                   </p>
@@ -2292,7 +2293,7 @@ export const DocumentsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleDownloadAttachment(previewAttachment)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-[#17365D] text-xs font-medium rounded-lg cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   Download
@@ -2304,16 +2305,16 @@ export const DocumentsPage: React.FC = () => {
                     setPreviewBlobUrl(null);
                     setPreviewAttachment(null);
                   }}
-                  className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
+                  className="p-1.5 text-[#64748B] hover:text-[#17365D] cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            <div className="bg-slate-950 border border-slate-800 rounded-lg min-h-[420px] max-h-[70vh] flex items-center justify-center overflow-auto p-3">
+            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg min-h-[420px] max-h-[70vh] flex items-center justify-center overflow-auto p-3">
               {isPreviewLoading ? (
-                <div className="text-sm text-slate-400">
+                <div className="text-sm text-[#64748B]">
                   Loading authenticated attachment from Cloudflare R2...
                 </div>
               ) : previewBlobUrl ? (
@@ -2331,7 +2332,7 @@ export const DocumentsPage: React.FC = () => {
                   />
                 )
               ) : (
-                <div className="text-sm text-slate-400">Preview unavailable.</div>
+                <div className="text-sm text-[#64748B]">Preview unavailable.</div>
               )}
             </div>
           </div>
