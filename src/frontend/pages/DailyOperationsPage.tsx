@@ -1569,7 +1569,7 @@ export const DailyOperationsPage: React.FC = () => {
                     <p className="text-xs text-slate-600 mt-0.5">Enter opening and closing dip readings in millimetres. Stock volumes are calculated automatically.</p>
                     <details className="mt-2 text-xs text-slate-600">
                       <summary className="cursor-pointer font-medium text-[#17365D]">How are volumes calculated?</summary>
-                      <p className="mt-1">The server uses the existing tank calibration service to calculate gross, water and net stock volumes.</p>
+                      <p className="mt-1">The server uses the existing TankCalibrationService to calculate gross, water and net stock volumes.</p>
                     </details>
                   </div>
 
