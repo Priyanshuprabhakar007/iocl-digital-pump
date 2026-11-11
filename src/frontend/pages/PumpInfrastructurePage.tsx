@@ -2579,7 +2579,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                   <button
                     type="submit"
                     disabled={modalSubmitting || isNoPositionsAvailable || matchingTanks.length === 0}
-                    className="px-4 py-2 bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-[#17365D] rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
+                    className="px-4 py-2 bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
                   >
                     {modalSubmitting ? 'Saving...' : 'Configure Nozzle'}
                   </button>
@@ -3677,7 +3677,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                           <button
                             type="submit"
                             disabled={modalSubmitting}
-                            className="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-[#17365D] rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
+                            className="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
                           >
                             {modalSubmitting
                               ? 'Saving...'
