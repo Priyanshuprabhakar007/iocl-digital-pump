@@ -456,6 +456,7 @@ export const OutletsPage: React.FC = () => {
     <div className="admin-modern space-y-5 pb-10 max-w-[1500px] mx-auto">
       {/* Page Header */}
       <div className="option4-hero flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-7">
+        <img className="option4-station-art" src="/option4-fuel-station.svg" alt="" aria-hidden="true" />
         <div className="option4-hero-content max-w-2xl">
           <span className="option4-eyebrow">Infrastructure & Assets / Retail Outlets</span>
           <div className="mt-3 flex items-center gap-2">
@@ -593,6 +594,7 @@ export const OutletsPage: React.FC = () => {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
+                          <span className="option4-outlet-icon flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 text-[#FF7139]" aria-hidden="true"><Building2 className="h-5 w-5" /></span>
                           <span className="font-extrabold text-sm text-[#17365D]">{ro.name}</span>
                           <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-orange-500/10 text-[#B8530D] border border-orange-500/30">
                             {ro.outletType}
