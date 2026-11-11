@@ -1159,9 +1159,11 @@ export const DailyOperationsPage: React.FC = () => {
   return (
     <div className="daily-ops-modern space-y-6 pb-12">
       {/* 1. TOP BAR: OUTLET, BUSINESS DATE & VIEW SWITCHER */}
-      <div className="daily-ops-surface p-5 sm:p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
+      <div className="space-y-3">
+        <div className="option4-hero p-5 sm:p-7">
+          <img className="option4-station-art" src="/option4-fuel-station.svg" alt="" aria-hidden="true" />
+          <div className="option4-hero-content max-w-2xl">
+            <span className="option4-eyebrow">Daily operations / Daily Sales Report</span>
             <div className="flex items-center gap-2.5">
               <Fuel className="w-6 h-6 text-[#003366]" />
               <h1 className="text-xl font-bold text-slate-900">
@@ -1177,8 +1179,10 @@ export const DailyOperationsPage: React.FC = () => {
               Manage tank dips, nozzle readings, stock reconciliation and the Daily Sales Report in one workspace.
             </p>
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="option4-panel p-4 sm:p-5">
+          <div className="flex flex-wrap items-end gap-3">
             {/* Outlet selector */}
             <div className="flex flex-col">
               <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
@@ -1265,7 +1269,7 @@ export const DailyOperationsPage: React.FC = () => {
 
       {/* 2. DAILY STATUS HEADER */}
       {summary && (
-        <div className="daily-ops-surface p-5 sm:p-6 space-y-4">
+        <div className="option4-panel p-5 sm:p-6 space-y-4">
           <div className="grid gap-4 border-b border-slate-100 pb-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,auto)] xl:items-start">
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -1328,19 +1332,20 @@ export const DailyOperationsPage: React.FC = () => {
           </div>
 
           {/* Read-only completion overview; existing data-entry workflow remains unchanged. */}
-          <section aria-label="Daily operations progress" className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 sm:p-4">
+          <section aria-label="Daily operations progress" className="option4-progress p-3 sm:p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-sm font-bold text-[#17365D]">Daily workflow progress</h2>
                 <p className="text-xs text-[#64748B]">Live status from saved operational records — not a required step sequence</p>
               </div>
-              <span className="rounded-full border border-[#D7E3EF] bg-white px-3 py-1 text-xs font-semibold text-[#17365D]">
+              <span className="rounded-full border border-[#C6D8FF] bg-white px-3 py-1 text-xs font-bold text-[#2354C6]">
                 {progressStages.filter(step => step.complete).length} of {progressStages.length} indicators complete
               </span>
             </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
               {progressStages.map((step, index) => (
-                <div key={step.label} className={`daily-ops-step rounded-xl border p-4 transition-colors ${
+                <div key={step.label} data-tone={["orange","blue","purple","green","blue","purple"][index]}
+                  className={`option4-step daily-ops-step rounded-xl border p-4 transition-colors ${
                   step.complete ? 'border-emerald-200 bg-white' : 'border-slate-200 bg-white'
                 }`}>
                   <div className="flex items-center justify-between gap-2">
@@ -1538,20 +1543,20 @@ export const DailyOperationsPage: React.FC = () => {
                     {activeWorkspace.shift.status === 'OPEN' ? 'Shift open' : 'Read-only shift'}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {[
                     { label: 'Tank readings', target: 'daily-tank-readings', subtitle: 'Opening & closing dips', icon: Layers },
                     { label: 'Nozzle readings', target: 'daily-nozzle-readings', subtitle: 'Meters & testing', icon: Gauge },
                     { label: 'Sales & stock', target: 'daily-sales-summary', subtitle: 'Totals & reconciliation', icon: Calculator },
                   ].map(task => {
                     const Icon = task.icon;
-                    return <a key={task.target} href={`#${task.target}`} className="flex flex-col items-start gap-2 rounded-xl border border-[#DCE6F1] bg-[#F8FAFC] p-3 text-left transition hover:border-[#F47721] hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-[#17365D]">
+                    return <a key={task.target} href={`#${task.target}`} className="option4-action flex flex-col items-start gap-2 p-3 text-left transition focus-visible:outline-2 focus-visible:outline-[#2354C6]">
                       <Icon className="h-5 w-5 text-[#D86514]" />
                       <span className="text-xs font-bold text-[#17365D]">{task.label}</span>
                       <span className="text-[11px] leading-relaxed text-[#64748B]">{task.subtitle}</span>
                     </a>;
                   })}
-                  <button type="button" onClick={() => setViewMode('DSR')} className="flex flex-col items-start gap-2 rounded-xl border border-[#DCE6F1] bg-[#F8FAFC] p-3 text-left transition hover:border-[#F47721] hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-[#17365D]">
+                  <button type="button" onClick={() => setViewMode('DSR')} className="option4-action flex flex-col items-start gap-2 p-3 text-left transition focus-visible:outline-2 focus-visible:outline-[#2354C6]">
                     <FileSpreadsheet className="h-5 w-5 text-[#D86514]" />
                     <span className="text-xs font-bold text-[#17365D]">View DSR</span>
                     <span className="text-[11px] leading-relaxed text-[#64748B]">Daily Sales Report</span>
