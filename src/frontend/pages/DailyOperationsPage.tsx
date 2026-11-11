@@ -2207,7 +2207,7 @@ export const DailyOperationsPage: React.FC = () => {
           {/* 5. DU / MPD AGGREGATION & PRODUCT STOCK RECONCILIATION */}
           {summary && summary.shiftsCount > 0 && (
             <div id="daily-sales-summary" className="scroll-mt-24 grid grid-cols-1 xl:grid-cols-12 gap-6">
-              {/* DU / MPD Totals */
+              {/* DU / MPD Totals */}
               <div className="xl:col-span-5 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
                 <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
                   <h2 className="text-base font-bold text-slate-900">
