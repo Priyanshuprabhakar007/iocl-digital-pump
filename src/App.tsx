@@ -13,7 +13,6 @@ import { AuditPage } from './frontend/pages/AuditPage';
 import { DocumentsPage } from './frontend/pages/DocumentsPage';
 import { ProductsPage } from './frontend/pages/ProductsPage';
 import { PumpInfrastructurePage } from './frontend/pages/PumpInfrastructurePage';
-import { ShiftOperationsPage } from './frontend/pages/ShiftOperationsPage';
 import { StockOperationsPage } from './frontend/pages/StockOperationsPage';
 import { CngOperationsPage } from './frontend/pages/CngOperationsPage';
 import { FinancialOperationsPage } from './frontend/pages/FinancialOperationsPage';
@@ -34,7 +33,8 @@ const ROUTE_TAB_MAP: Record<string, string> = {
   '/outlets': 'outlets',
   '/products': 'products',
   '/pump-infrastructure': 'pump-infra',
-  '/shifts': 'shift-ops',
+  // Old bookmarks remain functional and open the unified Daily Operations page.
+  '/shifts': 'daily-ops',
   '/workforce': 'hr-workforce',
   '/stock': 'stock-ops',
   '/cng': 'cng-ops',
@@ -56,7 +56,8 @@ const ROUTE_TAB_MAP: Record<string, string> = {
 
 const TAB_ROUTE_MAP: Record<string, string> = Object.entries(ROUTE_TAB_MAP).reduce(
   (acc, [path, tab]) => {
-    acc[tab] = path;
+    // Keep /daily-operations canonical; /shifts is a backward-compatible alias.
+    if (!acc[tab]) acc[tab] = path;
     return acc;
   },
   {} as Record<string, string>
@@ -100,7 +101,6 @@ function MainAppContent() {
       outlets: PERMISSIONS.OUTLETS_READ,
       products: PERMISSIONS.PRODUCTS_READ,
       'pump-infra': PERMISSIONS.TANKS_READ,
-      'shift-ops': PERMISSIONS.SHIFTS_READ,
       'hr-workforce': PERMISSIONS.HR_READ,
       'stock-ops': PERMISSIONS.TANK_STOCK_READ,
       'cng-ops': PERMISSIONS.CNG_OPERATIONS_READ,
@@ -153,7 +153,6 @@ function MainAppContent() {
         {activeTab === 'outlets' && <OutletsPage />}
         {activeTab === 'products' && <ProductsPage />}
         {activeTab === 'pump-infra' && <PumpInfrastructurePage />}
-        {activeTab === 'shift-ops' && <ShiftOperationsPage />}
         {activeTab === 'hr-workforce' && <WorkforceOperationsPage />}
         {activeTab === 'stock-ops' && <StockOperationsPage />}
         {activeTab === 'cng-ops' && <CngOperationsPage />}
