@@ -1109,6 +1109,27 @@ export const StockOperationsPage: React.FC = () => {
         </div>
       </section>
 
+      {/* Read-only record counts from the currently selected operational shift. */}
+      <section aria-label="Shift stock snapshot" className="option4-panel p-4 sm:p-5">
+        <div className="mb-3">
+          <h2 className="text-base font-bold text-[#17365D]">Shift stock overview</h2>
+          <p className="text-xs text-[#64748B]">Current records for the selected shift — no sample data</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { label: 'Tanks', value: tankSnapshots.length, tone: 'blue' },
+            { label: 'Dip readings', value: tankReadings.length, tone: 'orange' },
+            { label: 'Fuel receipts', value: receipts.length, tone: 'green' },
+            { label: 'Pending receipts', value: shiftReceiptSummary.pendingReceipts.length, tone: 'purple' },
+          ].map(stat => (
+            <div key={stat.label} className="option4-stat p-4" data-tone={stat.tone}>
+              <p className="text-xs font-semibold text-[#53698F]">{stat.label}</p>
+              <p className="mt-2 text-2xl font-extrabold tabular-nums text-[#17365D]">{stat.value}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Tab Content: OPENING & CLOSING STOCK */}
       {(activeTab === 'OPENING' || activeTab === 'CLOSING') && (
         <div className="space-y-6">
