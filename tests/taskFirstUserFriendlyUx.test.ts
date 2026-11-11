@@ -10,7 +10,7 @@ describe('Task-first user-friendly workspace redesign', () => {
   const app = file('src/App.tsx');
 
   it('offers permission-gated task shortcuts connected to existing navigation', () => {
-    expect(dashboard).toContain('What would you like to do?');
+    expect(dashboard).toContain('What would you like to do');
     expect(dashboard).toContain('tasks.map(task =>');
     expect(dashboard).toContain('hasPermission(task.permission as PermissionCode)');
     expect(dashboard).toContain('onNavigate?.(task.id)');
@@ -19,7 +19,7 @@ describe('Task-first user-friendly workspace redesign', () => {
       expect(dashboard).toContain(`id: '${route}'`);
     }
     expect(dashboard).toContain('Access & security information');
-    expect(dashboard).toContain('<details className="group');
+    expect(dashboard).toContain('<details className="option4-panel group');
   });
 
   it('allows users to find an authorized page without scanning all menu groups', () => {
