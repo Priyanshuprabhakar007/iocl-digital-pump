@@ -77,6 +77,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   return (
     <div className="option4-dashboard mx-auto max-w-[1500px] space-y-5 pb-10 text-[#172B4D]">
       <header className="option4-hero p-6 sm:p-8 lg:p-9">
+        <img className="option4-station-art" src="/option4-fuel-station.svg" alt="" aria-hidden="true" />
         <div className="relative z-10 max-w-3xl">
           <span className="option4-eyebrow">IOCL • Operations workspace</span>
           <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-[#12265C] sm:text-4xl">
