@@ -36,6 +36,7 @@ export const OutletsPage: React.FC = () => {
   // Soft-hide / visibility management states
   const [showHidden, setShowHidden] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [directoryLayout, setDirectoryLayout] = useState<'GRID' | 'LIST'>('GRID');
   const [hideModalOpen, setHideModalOpen] = useState(false);
   const [outletToHide, setOutletToHide] = useState<RetailOutlet | null>(null);
   const [hidingLoading, setHidingLoading] = useState(false);
@@ -469,7 +470,7 @@ export const OutletsPage: React.FC = () => {
         {hasPermission(PERMISSIONS.OUTLETS_CREATE) && (
           <button
             onClick={openCreateModal}
-            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-[#17365D] text-xs font-bold rounded-lg shadow-lg shadow-orange-500/20 flex items-center gap-2 self-start sm:self-auto"
+            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-xs font-bold rounded-lg shadow-lg shadow-orange-500/20 flex items-center gap-2 self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
             <span>Register New Outlet</span>
@@ -489,6 +490,22 @@ export const OutletsPage: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Directory overview: view-only counts from the existing scoped outlet data. */}
+      <section aria-label="Outlet directory overview" className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <div className="rounded-2xl border border-[#DDE6F0] bg-white px-5 py-4">
+          <p className="text-xs font-medium text-[#64748B]">Accessible outlets</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-[#17365D]">{visibilityFilteredOutlets.length}</p>
+        </div>
+        <div className="rounded-2xl border border-[#DDE6F0] bg-white px-5 py-4">
+          <p className="text-xs font-medium text-[#64748B]">Matching current search</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-[#17365D]">{displayedOutlets.length}</p>
+        </div>
+        <div className="col-span-2 rounded-2xl border border-[#DDE6F0] bg-white px-5 py-4 lg:col-span-1">
+          <p className="text-xs font-medium text-[#64748B]">Archived outlets</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-[#17365D]">{archivedCount}</p>
+        </div>
+      </section>
 
       {/* Scope Banner & Show Hidden Controls */}
           <>
@@ -524,13 +541,27 @@ export const OutletsPage: React.FC = () => {
                 </span>
               </div>
             </div>
-            <SectionSearchBar
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search outlet name, RO code, city, sales area..."
-              resultCount={displayedOutlets.length}
-              totalCount={visibilityFilteredOutlets.length}
-            />
+            <div className="rounded-2xl border border-[#DDE6F0] bg-white p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-[#17365D]">Browse retail outlets</h2>
+                  <p className="text-xs text-[#64748B]">Search your accessible records or choose a comfortable layout.</p>
+                </div>
+                <div className="inline-flex rounded-lg border border-[#D7E0EA] bg-[#F8FAFC] p-1" role="group" aria-label="Directory layout">
+                  <button type="button" aria-pressed={directoryLayout === 'GRID'} onClick={() => setDirectoryLayout('GRID')}
+                    className={`rounded-md px-4 py-2 text-xs font-bold transition-colors ${directoryLayout === 'GRID' ? 'bg-[#17365D] text-white shadow-sm' : 'text-[#526477] hover:bg-white'}`}>Cards</button>
+                  <button type="button" aria-pressed={directoryLayout === 'LIST'} onClick={() => setDirectoryLayout('LIST')}
+                    className={`rounded-md px-4 py-2 text-xs font-bold transition-colors ${directoryLayout === 'LIST' ? 'bg-[#17365D] text-white shadow-sm' : 'text-[#526477] hover:bg-white'}`}>List</button>
+                </div>
+              </div>
+              <SectionSearchBar
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search outlet name, RO code, city, sales area..."
+                resultCount={displayedOutlets.length}
+                totalCount={visibilityFilteredOutlets.length}
+              />
+            </div>
 
             {/* Outlet Cards / Table */}
             {loading ? (
@@ -548,11 +579,11 @@ export const OutletsPage: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+              <div className={directoryLayout === 'LIST' ? 'outlets-directory-list grid grid-cols-1 gap-3' : 'outlets-directory-grid grid grid-cols-1 lg:grid-cols-2 gap-4'}>
                 {displayedOutlets.map((ro) => (
                   <div
                     key={ro.id}
-                    className={`bg-white border rounded-2xl p-5 space-y-4 shadow-lg transition-all ${
+                    className={`outlet-directory-card bg-white border rounded-2xl p-5 space-y-4 shadow-sm transition-all ${
                       ro.directoryHidden
                         ? 'border-rose-900/40 bg-white/90'
                         : 'border-[#E2E8F0] hover:border-[#D7E0EA]'
@@ -594,7 +625,7 @@ export const OutletsPage: React.FC = () => {
                     </div>
 
                     {/* Hierarchy Info */}
-                    <div className="p-3 rounded-xl bg-[#F1F5F9]/60 border border-[#D7E0EA]/50 text-[11px] font-mono space-y-1 text-[#475569]">
+                    <div className="outlet-hierarchy p-3 rounded-xl bg-[#F1F5F9]/60 border border-[#D7E0EA]/50 text-[11px] font-mono space-y-1 text-[#475569]">
                       <div className="flex justify-between">
                         <span className="text-[#64748B]">State Office:</span>
                         <span className="text-[#334155] font-semibold">{ro.stateName || ro.stateId}</span>
@@ -738,7 +769,7 @@ export const OutletsPage: React.FC = () => {
               </div>
 
               {/* Cascading Organizational Hierarchy Selection */}
-              <div className="space-y-3 p-3.5 bg-slate-950/60 border border-[#E2E8F0] rounded-xl">
+              <div className="space-y-3 p-3.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#B8530D]">
                     Organizational Hierarchy Allocation
@@ -977,7 +1008,7 @@ export const OutletsPage: React.FC = () => {
               </div>
 
               {/* Cascading Organizational Hierarchy Reallocation */}
-              <div className="space-y-3 p-3.5 bg-slate-950/60 border border-[#E2E8F0] rounded-xl">
+              <div className="space-y-3 p-3.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#B8530D]">
                     Organizational Hierarchy Reallocation
