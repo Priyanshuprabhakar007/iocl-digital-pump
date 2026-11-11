@@ -336,7 +336,7 @@ export const ProductsPage: React.FC = () => {
       {/* Product Master Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalOpen(false)} />
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalOpen(false)} />
           <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-1">
               {editingProduct ? 'Edit Fuel Grade' : 'Register New Fuel Product'}
