@@ -1,3 +1,4 @@
+import './operationsModern.css';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/api';
@@ -184,12 +185,12 @@ export const MunicipalTaxesPage: React.FC = () => {
   if (!canRead) {
     return (
       <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
-        <div className="p-12 rounded-2xl bg-slate-900/60 border border-slate-800 text-center space-y-4">
-          <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl inline-block">
+        <div className="p-12 rounded-2xl bg-white border border-[#E2E8F0] text-center space-y-4">
+          <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-700 rounded-2xl inline-block">
             <ShieldAlert className="w-8 h-8" />
           </div>
-          <h2 className="text-lg font-bold text-white">Access Restricted</h2>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
+          <h2 className="text-lg font-bold text-[#17365D]">Access Restricted</h2>
+          <p className="text-xs text-[#64748B] max-w-md mx-auto">
             You do not have permission to view Municipal Taxes & Statutory Dues ({PERMISSIONS.MUNICIPAL_TAXES_READ}). Please contact your system administrator.
           </p>
         </div>
@@ -198,19 +199,19 @@ export const MunicipalTaxesPage: React.FC = () => {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="operations-modern p-4 md:p-8 max-w-7xl mx-auto space-y-6">
       {/* Header & Outlet Selector */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400">
+            <div className="p-2 rounded-xl bg-orange-500/10 border border-orange-500/20 text-[#B8530D]">
               <Landmark className="w-6 h-6" />
             </div>
-            <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">
+            <h1 className="text-xl md:text-2xl font-bold text-[#17365D] tracking-tight">
               Municipal Taxes & Statutory Dues
             </h1>
           </div>
-          <p className="text-xs text-slate-400 font-mono">
+          <p className="text-xs text-[#64748B] font-mono">
             Track, assess, and settle statutory dues, property taxes, and local license fees
           </p>
         </div>
@@ -218,14 +219,14 @@ export const MunicipalTaxesPage: React.FC = () => {
         {/* Outlet Switcher & Actions */}
         <div className="flex items-center gap-3">
           {loadingOutlets ? (
-            <div className="h-10 w-48 bg-slate-800/60 rounded-xl animate-pulse" />
+            <div className="h-10 w-48 bg-[#F1F5F9] rounded-xl animate-pulse" />
           ) : outlets.length > 0 ? (
             <div className="relative min-w-[200px]">
-              <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Building2 className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
                 value={selectedOutletId}
                 onChange={e => handleOutletChange(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl pl-9 pr-8 py-2.5 font-medium focus:outline-none focus:border-orange-500 transition-colors"
+                className="w-full bg-white border border-[#E2E8F0] text-[#334155] text-xs rounded-xl pl-9 pr-8 py-2.5 font-medium focus:outline-none focus:border-orange-500 transition-colors"
               >
                 {outlets.map(outlet => (
                   <option key={outlet.id} value={outlet.id}>
@@ -235,17 +236,17 @@ export const MunicipalTaxesPage: React.FC = () => {
               </select>
             </div>
           ) : (
-            <span className="text-xs text-slate-500 font-mono">No accessible outlets</span>
+            <span className="text-xs text-[#64748B] font-mono">No accessible outlets</span>
           )}
 
           <button
             type="button"
             onClick={() => selectedOutletId && fetchWorkspaceData(selectedOutletId)}
             disabled={loadingData || !selectedOutletId}
-            className="p-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-slate-300 border border-slate-800 rounded-xl text-xs transition-colors"
+            className="p-2.5 bg-white hover:bg-[#F1F5F9] disabled:opacity-50 text-[#475569] border border-[#E2E8F0] rounded-xl text-xs transition-colors"
             title="Refresh workspace data"
           >
-            <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin text-orange-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin text-[#B8530D]' : ''}`} />
           </button>
 
           {canWrite && (
@@ -253,7 +254,7 @@ export const MunicipalTaxesPage: React.FC = () => {
               type="button"
               onClick={handleOpenCreateModal}
               disabled={!selectedOutletId}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-lg shadow-orange-500/20 transition-all"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 text-[#17365D] rounded-xl text-xs font-bold shadow-lg shadow-orange-500/20 transition-all"
             >
               <Plus className="w-4 h-4" />
               <span>Create Due</span>
@@ -264,24 +265,24 @@ export const MunicipalTaxesPage: React.FC = () => {
 
       {/* Notifications */}
       {errorMessage && (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-between text-xs text-rose-300">
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-between text-xs text-rose-800">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-700" />
             <span>{errorMessage}</span>
           </div>
-          <button onClick={() => setErrorMessage(null)} className="p-1 hover:text-white">
+          <button onClick={() => setErrorMessage(null)} className="p-1 hover:text-[#17365D]">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       {successMessage && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between text-xs text-emerald-300">
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between text-xs text-emerald-800">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
             <span>{successMessage}</span>
           </div>
-          <button onClick={() => setSuccessMessage(null)} className="p-1 hover:text-white">
+          <button onClick={() => setSuccessMessage(null)} className="p-1 hover:text-[#17365D]">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -291,17 +292,17 @@ export const MunicipalTaxesPage: React.FC = () => {
       <MunicipalTaxSummaryPanel summary={summary} loading={loadingData} />
 
       {/* Filter Toolbar */}
-      <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-3">
+      <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] space-y-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
-            <Filter className="w-3.5 h-3.5 text-orange-400" />
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#64748B] font-mono">
+            <Filter className="w-3.5 h-3.5 text-[#B8530D]" />
             <span>Filter Statutory Dues</span>
           </div>
           {(filters.taxType || filters.status || filters.assessmentFrequency || filters.fromDate || filters.toDate) && (
             <button
               type="button"
               onClick={handleClearFilters}
-              className="text-[11px] text-orange-400 hover:text-orange-300 font-mono transition-colors"
+              className="text-[11px] text-[#B8530D] hover:text-orange-800 font-mono transition-colors"
             >
               Clear Filters
             </button>
@@ -311,13 +312,13 @@ export const MunicipalTaxesPage: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
           {/* Tax Type */}
           <div>
-            <label className="block text-[10px] font-semibold text-slate-400 uppercase font-mono mb-1">
+            <label className="block text-[10px] font-semibold text-[#64748B] uppercase font-mono mb-1">
               Tax Type
             </label>
             <select
               value={filters.taxType}
               onChange={e => setFilters(prev => ({ ...prev, taxType: e.target.value }))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-orange-500"
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-2.5 py-1.5 text-[#334155] focus:outline-none focus:border-orange-500"
             >
               <option value="">All Tax Types</option>
               <option value="PROPERTY_TAX">Property Tax</option>
@@ -329,13 +330,13 @@ export const MunicipalTaxesPage: React.FC = () => {
 
           {/* Status */}
           <div>
-            <label className="block text-[10px] font-semibold text-slate-400 uppercase font-mono mb-1">
+            <label className="block text-[10px] font-semibold text-[#64748B] uppercase font-mono mb-1">
               Status
             </label>
             <select
               value={filters.status}
               onChange={e => setFilters(prev => ({ ...prev, status: e.target.value }))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-orange-500"
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-2.5 py-1.5 text-[#334155] focus:outline-none focus:border-orange-500"
             >
               <option value="">All Statuses</option>
               <option value="PENDING">Pending</option>
@@ -345,13 +346,13 @@ export const MunicipalTaxesPage: React.FC = () => {
 
           {/* Assessment Frequency */}
           <div>
-            <label className="block text-[10px] font-semibold text-slate-400 uppercase font-mono mb-1">
+            <label className="block text-[10px] font-semibold text-[#64748B] uppercase font-mono mb-1">
               Frequency
             </label>
             <select
               value={filters.assessmentFrequency}
               onChange={e => setFilters(prev => ({ ...prev, assessmentFrequency: e.target.value }))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-orange-500"
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-2.5 py-1.5 text-[#334155] focus:outline-none focus:border-orange-500"
             >
               <option value="">All Frequencies</option>
               <option value="ANNUAL">Annual</option>
@@ -361,27 +362,27 @@ export const MunicipalTaxesPage: React.FC = () => {
 
           {/* From Date */}
           <div>
-            <label className="block text-[10px] font-semibold text-slate-400 uppercase font-mono mb-1">
+            <label className="block text-[10px] font-semibold text-[#64748B] uppercase font-mono mb-1">
               From Due Date
             </label>
             <input
               type="date"
               value={filters.fromDate}
               onChange={e => setFilters(prev => ({ ...prev, fromDate: e.target.value }))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 font-mono focus:outline-none focus:border-orange-500"
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-2.5 py-1.5 text-[#334155] font-mono focus:outline-none focus:border-orange-500"
             />
           </div>
 
           {/* To Date */}
           <div>
-            <label className="block text-[10px] font-semibold text-slate-400 uppercase font-mono mb-1">
+            <label className="block text-[10px] font-semibold text-[#64748B] uppercase font-mono mb-1">
               To Due Date
             </label>
             <input
               type="date"
               value={filters.toDate}
               onChange={e => setFilters(prev => ({ ...prev, toDate: e.target.value }))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-200 font-mono focus:outline-none focus:border-orange-500"
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-2.5 py-1.5 text-[#334155] font-mono focus:outline-none focus:border-orange-500"
             />
           </div>
         </div>
