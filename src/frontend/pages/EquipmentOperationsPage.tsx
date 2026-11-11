@@ -1,3 +1,4 @@
+import './operationsModern.css';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Wrench,
@@ -246,13 +247,13 @@ export const EquipmentOperationsPage: React.FC = () => {
   if (!canRead) {
     return (
       <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center max-w-2xl mx-auto shadow-2xl">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-8 text-center max-w-2xl mx-auto shadow-2xl">
           <div className="w-12 h-12 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center justify-center mx-auto mb-4 text-rose-500">
             <ShieldAlert className="w-6 h-6" />
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">Access Restricted</h2>
-          <p className="text-sm text-slate-400 mb-6">
-            You do not have permission (<code className="text-amber-400 font-mono text-xs">equipment.read</code>) to view equipment assets and breakdown operations. Please contact your system administrator.
+          <h2 className="text-xl font-bold text-[#17365D] mb-2">Access Restricted</h2>
+          <p className="text-sm text-[#64748B] mb-6">
+            You do not have permission (<code className="text-amber-700 font-mono text-xs">equipment.read</code>) to view equipment assets and breakdown operations. Please contact your system administrator.
           </p>
         </div>
       </div>
@@ -262,21 +263,21 @@ export const EquipmentOperationsPage: React.FC = () => {
   const selectedOutlet = outlets.find((o) => o.id === selectedOutletId);
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="operations-modern p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Top Header & Context Selection */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/80 p-5 rounded-2xl border border-slate-800 backdrop-blur-md shadow-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-[#E2E8F0] backdrop-blur-md shadow-sm">
         <div className="flex items-center gap-3.5">
           <div className="w-11 h-11 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-center text-amber-500 shrink-0 shadow-inner">
             <Wrench className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+            <h1 className="text-xl font-bold text-[#17365D] tracking-tight flex items-center gap-2">
               Equipment & Breakdowns
-              <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
                 Phase 3C
               </span>
             </h1>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-[#64748B] mt-0.5">
               Forecourt equipment health, breakdown tickets, technician assignments & resolution ledger
             </p>
           </div>
@@ -284,13 +285,13 @@ export const EquipmentOperationsPage: React.FC = () => {
 
         {/* Outlet Selector & Refresh Actions */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
-            <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+          <div className="flex items-center gap-2 bg-[#F1F5F9] px-3 py-1.5 rounded-xl border border-[#D7E0EA]">
+            <Building2 className="w-4 h-4 text-[#64748B] shrink-0" />
             <select
               value={selectedOutletId}
               onChange={(e) => handleOutletChange(e.target.value)}
               disabled={loadingOutlets || outlets.length === 0}
-              className="bg-transparent text-xs font-medium text-white focus:outline-none cursor-pointer max-w-[200px] truncate"
+              className="bg-transparent text-xs font-medium text-[#17365D] focus:outline-none cursor-pointer max-w-[200px] truncate"
             >
               {loadingOutlets ? (
                 <option value="">Loading Outlets...</option>
@@ -298,7 +299,7 @@ export const EquipmentOperationsPage: React.FC = () => {
                 <option value="">No Accessible Outlets</option>
               ) : (
                 outlets.map((outlet) => (
-                  <option key={outlet.id} value={outlet.id} className="bg-slate-900 text-white">
+                  <option key={outlet.id} value={outlet.id} className="bg-white text-[#17365D]">
                     {outlet.name} ({outlet.roCode})
                   </option>
                 ))
@@ -309,10 +310,10 @@ export const EquipmentOperationsPage: React.FC = () => {
           <button
             onClick={() => selectedOutletId && loadOutletEquipmentData(selectedOutletId)}
             disabled={loadingData || !selectedOutletId}
-            className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition-colors"
+            className="p-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] disabled:opacity-50 text-[#475569] hover:text-[#17365D] rounded-xl border border-[#D7E0EA] transition-colors"
             title="Refresh All Equipment Data"
           >
-            <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin text-amber-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin text-amber-700' : ''}`} />
           </button>
 
           {canCreateTicket && selectedOutletId && (
@@ -329,14 +330,14 @@ export const EquipmentOperationsPage: React.FC = () => {
 
       {/* Global Notifications */}
       {errorMessage && (
-        <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-xs text-rose-400 flex items-center justify-between gap-3 shadow-lg">
+        <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-xs text-rose-700 flex items-center justify-between gap-3 shadow-lg">
           <div className="flex items-center gap-2.5">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
           <button
             onClick={() => setErrorMessage(null)}
-            className="text-rose-400 hover:text-white text-xs font-semibold px-2 py-0.5 rounded bg-rose-500/20"
+            className="text-rose-700 hover:text-[#17365D] text-xs font-semibold px-2 py-0.5 rounded bg-rose-500/20"
           >
             Dismiss
           </button>
@@ -344,14 +345,14 @@ export const EquipmentOperationsPage: React.FC = () => {
       )}
 
       {successMessage && (
-        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-xs text-emerald-400 flex items-center justify-between gap-3 shadow-lg">
+        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-xs text-emerald-700 flex items-center justify-between gap-3 shadow-lg">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{successMessage}</span>
           </div>
           <button
             onClick={() => setSuccessMessage(null)}
-            className="text-emerald-400 hover:text-white text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/20"
+            className="text-emerald-700 hover:text-[#17365D] text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/20"
           >
             Dismiss
           </button>
@@ -360,10 +361,10 @@ export const EquipmentOperationsPage: React.FC = () => {
 
       {/* No Outlets Empty State */}
       {!loadingOutlets && outlets.length === 0 && (
-        <div className="p-12 text-center bg-slate-900/60 border border-slate-800 rounded-2xl">
+        <div className="p-12 text-center bg-white border border-[#E2E8F0] rounded-2xl">
           <Building2 className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-slate-300 mb-1">No Accessible Outlets</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
+          <h3 className="text-base font-semibold text-[#475569] mb-1">No Accessible Outlets</h3>
+          <p className="text-xs text-[#64748B] max-w-md mx-auto">
             You do not currently have access to any retail outlets. Please check your role assignments and scope configuration.
           </p>
         </div>
@@ -378,19 +379,19 @@ export const EquipmentOperationsPage: React.FC = () => {
           />
 
           {/* Navigation Workspace Tabs */}
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-1">
+          <div className="flex items-center gap-2 border-b border-[#E2E8F0] pb-1">
             <button
               onClick={() => setActiveTab('tickets')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                 activeTab === 'tickets'
-                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? 'bg-amber-500/10 text-amber-700 border border-amber-500/30 shadow-md'
+                  : 'text-[#64748B] hover:text-[#334155] hover:bg-[#F1F5F9]'
               }`}
             >
               <ActivitySquare className="w-4 h-4" />
               <span>Breakdowns & Tickets</span>
               {tickets.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300 font-mono">
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#F1F5F9] text-[#475569] font-mono">
                   {tickets.length}
                 </span>
               )}
@@ -400,14 +401,14 @@ export const EquipmentOperationsPage: React.FC = () => {
               onClick={() => setActiveTab('assets')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                 activeTab === 'assets'
-                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? 'bg-amber-500/10 text-amber-700 border border-amber-500/30 shadow-md'
+                  : 'text-[#64748B] hover:text-[#334155] hover:bg-[#F1F5F9]'
               }`}
             >
               <Cpu className="w-4 h-4" />
               <span>Auxiliary Assets</span>
               {assets.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300 font-mono">
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#F1F5F9] text-[#475569] font-mono">
                   {assets.length}
                 </span>
               )}
@@ -417,8 +418,8 @@ export const EquipmentOperationsPage: React.FC = () => {
               onClick={() => setActiveTab('dg_logs')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                 activeTab === 'dg_logs'
-                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? 'bg-amber-500/10 text-amber-700 border border-amber-500/30 shadow-md'
+                  : 'text-[#64748B] hover:text-[#334155] hover:bg-[#F1F5F9]'
               }`}
             >
               <Activity className="w-4 h-4" />
