@@ -20,6 +20,7 @@ import { PERMISSIONS } from '../../shared/constants';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
 import { getLocalMonthInputValue } from '../../shared/utils/dateUtils';
+import './financialReportsModern.css';
 
 export const ReportsPage: React.FC = () => {
   const { hasPermission } = useAuth();
@@ -206,50 +207,50 @@ export const ReportsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="reports-modern mx-auto max-w-7xl space-y-6 pb-10">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-slate-900/80 p-5 rounded-2xl border border-slate-800 shadow-lg">
+      <div className="phase3-surface flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 p-5 sm:p-6">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
+          <h2 className="text-xl font-bold text-[#17365D] flex items-center gap-2.5">
             <FileText className="w-6 h-6 text-orange-500" />
             Monthly Operations & Performance Report
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[#64748B] mt-1">
             Integrated operational summary across DG sets, fuel sales, equipment maintenance, and workforce.
           </p>
         </div>
 
         {/* Filters and Actions */}
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg text-xs">
-            <Building2 className="w-4 h-4 text-orange-400 shrink-0" />
+          <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#D7E0EA] px-3 py-1.5 rounded-lg text-xs">
+            <Building2 className="w-4 h-4 text-[#B8530D] shrink-0" />
             <select
               value={selectedOutletId}
               onChange={(e) => setSelectedOutletId(e.target.value)}
-              className="bg-transparent text-white font-medium focus:outline-none cursor-pointer"
+              className="bg-transparent text-[#17365D] font-medium focus:outline-none cursor-pointer"
             >
               {outlets.map((o) => (
-                <option key={o.id} value={o.id} className="bg-slate-900 text-white">
+                <option key={o.id} value={o.id} className="bg-white text-[#17365D]">
                   {o.name} ({o.roCode})
                 </option>
               ))}
             </select>
           </div>
 
-          <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg text-xs">
-            <Calendar className="w-4 h-4 text-orange-400 shrink-0" />
+          <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#D7E0EA] px-3 py-1.5 rounded-lg text-xs">
+            <Calendar className="w-4 h-4 text-[#B8530D] shrink-0" />
             <input
               type="month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-transparent text-white font-medium focus:outline-none cursor-pointer"
+              className="bg-transparent text-[#17365D] font-medium focus:outline-none cursor-pointer"
             />
           </div>
           
           <select
             value={cutoffMode}
             onChange={(e) => setCutoffMode(e.target.value as any)}
-            className="bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg text-xs text-white"
+            className="bg-[#F8FAFC] border border-[#D7E0EA] px-3 py-1.5 rounded-lg text-xs text-[#17365D]"
           >
             <option value="MONTH_END">Complete Month</option>
             <option value="SELECTED_DATE">Selected Date</option>
@@ -261,7 +262,7 @@ export const ReportsPage: React.FC = () => {
               type="date"
               value={cutoffDate}
               onChange={(e) => setCutoffDate(e.target.value)}
-              className="bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg text-xs text-white"
+              className="bg-[#F8FAFC] border border-[#D7E0EA] px-3 py-1.5 rounded-lg text-xs text-[#17365D]"
             />
           )}
 
@@ -269,7 +270,7 @@ export const ReportsPage: React.FC = () => {
             onClick={fetchReport}
             disabled={loading}
             title="Refresh Report Data"
-            className="p-2 text-slate-300 hover:text-white rounded-lg bg-slate-800 hover:bg-slate-700 transition"
+            className="p-2 text-[#475569] hover:text-[#17365D] rounded-lg bg-[#F1F5F9] hover:bg-[#E8EEF5] transition" aria-label="Refresh report"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -287,12 +288,12 @@ export const ReportsPage: React.FC = () => {
                     ? 'Please select required filters'
                     : 'Preview PDF report in new browser tab'
                 }
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 text-slate-200 text-xs font-medium rounded-lg transition"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] disabled:opacity-50 disabled:cursor-not-allowed border border-[#D7E0EA] text-[#334155] text-xs font-medium rounded-lg transition"
               >
                 {pdfLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                  <Loader2 className="w-4 h-4 animate-spin text-[#64748B]" />
                 ) : (
-                  <Eye className="w-4 h-4 text-slate-300" />
+                  <Eye className="w-4 h-4 text-[#475569]" />
                 )}
                 <span>{pdfLoading ? 'Generating PDF...' : 'Preview PDF'}</span>
               </button>
@@ -307,7 +308,7 @@ export const ReportsPage: React.FC = () => {
                     ? 'Please select required filters'
                     : 'Download PDF report'
                 }
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed border border-orange-500/50 text-white text-xs font-medium rounded-lg transition shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#17365D] hover:bg-[#102A4A] disabled:opacity-50 disabled:cursor-not-allowed border border-[#17365D] text-white text-xs font-medium rounded-lg transition shadow-sm"
               >
                 {pdfLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin text-white" />
@@ -321,24 +322,32 @@ export const ReportsPage: React.FC = () => {
         </div>
       </div>
 
+      <div aria-label="Report selection summary" className="flex flex-wrap items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 text-xs text-[#526477]">
+        <FileText className="h-4 w-4 text-[#17365D]" />
+        <span>Reporting period: <strong className="text-[#17365D]">{selectedMonth}</strong></span>
+        <span aria-hidden="true">•</span>
+        <span>Cutoff: <strong className="text-[#17365D]">{cutoffMode === 'MONTH_END' ? 'Complete Month' : cutoffMode === 'SELECTED_DATE' ? 'Selected Date' : 'Latest Data'}</strong></span>
+        {cutoffMode === 'SELECTED_DATE' && cutoffDate && <span>({cutoffDate})</span>}
+      </div>
+
       {/* JSON Report Error */}
       {error && (
-        <div className="p-4 bg-red-900/30 border border-red-700/50 rounded-xl flex items-center gap-3 text-red-300 text-xs shadow-md">
-          <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-800 text-xs shadow-md">
+          <AlertCircle className="w-5 h-5 shrink-0 text-red-700" />
           <span>{error}</span>
         </div>
       )}
 
       {/* PDF Error Display */}
       {pdfError && (
-        <div className="p-4 bg-red-900/30 border border-red-700/50 rounded-xl flex items-center justify-between gap-3 text-red-300 text-xs shadow-md">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between gap-3 text-red-800 text-xs shadow-md">
           <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
+            <AlertCircle className="w-5 h-5 shrink-0 text-red-700" />
             <span>{pdfError}</span>
           </div>
           <button
             onClick={() => setPdfError(null)}
-            className="text-red-400 hover:text-red-200 text-xs underline cursor-pointer"
+            className="text-red-700 hover:text-red-200 text-xs underline cursor-pointer"
           >
             Dismiss
           </button>
@@ -350,55 +359,55 @@ export const ReportsPage: React.FC = () => {
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* DG Operations Card */}
-            <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-3">
-              <div className="flex items-center justify-between text-amber-400 font-bold text-sm">
+            <div className="phase3-surface p-5 space-y-3">
+              <div className="flex items-center justify-between text-amber-700 font-bold text-sm">
                 <span className="flex items-center gap-2">
                   <Zap className="w-5 h-5" />
                   DG Daily Operations
                 </span>
-                <span className="text-xs bg-amber-950/60 text-amber-300 px-2 py-0.5 rounded border border-amber-800/50 font-mono">
+                <span className="text-xs bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-200 font-mono">
                   {report.dgSummary.totalLogs} Logs
                 </span>
               </div>
-              <div className="space-y-2 pt-2 border-t border-slate-800 text-xs font-mono">
+              <div className="space-y-2 pt-2 border-t border-[#E2E8F0] text-xs font-mono">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Total Run Hours:</span>
-                  <span className="text-white font-bold">{report.dgSummary.totalRunHours} hrs</span>
+                  <span className="text-[#64748B]">Total Run Hours:</span>
+                  <span className="text-[#17365D] font-bold">{report.dgSummary.totalRunHours} hrs</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Diesel Consumed:</span>
-                  <span className="text-orange-400 font-bold">{report.dgSummary.totalDieselConsumedLitres} L</span>
+                  <span className="text-[#64748B]">Diesel Consumed:</span>
+                  <span className="text-[#B8530D] font-bold">{report.dgSummary.totalDieselConsumedLitres} L</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Avg Daily Run:</span>
-                  <span className="text-amber-300">{report.dgSummary.averageDailyRunHours} hrs/day</span>
+                  <span className="text-[#64748B]">Avg Daily Run:</span>
+                  <span className="text-amber-800">{report.dgSummary.averageDailyRunHours} hrs/day</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Grid Failures:</span>
-                  <span className="text-red-400">{report.dgSummary.totalGridFailureMinutes} mins</span>
+                  <span className="text-[#64748B]">Grid Failures:</span>
+                  <span className="text-red-700">{report.dgSummary.totalGridFailureMinutes} mins</span>
                 </div>
               </div>
             </div>
 
             {/* Fuel Sales Card */}
-            <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-3">
-              <div className="flex items-center justify-between text-emerald-400 font-bold text-sm">
+            <div className="phase3-surface p-5 space-y-3">
+              <div className="flex items-center justify-between text-emerald-700 font-bold text-sm">
                 <span className="flex items-center gap-2">
                   <Fuel className="w-5 h-5" />
                   Shift & Fuel Sales
                 </span>
-                <span className="text-xs bg-emerald-950/60 text-emerald-300 px-2 py-0.5 rounded border border-emerald-800/50 font-mono">
+                <span className="text-xs bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 font-mono">
                   {report.fuelSummary.totalShiftsCount} Shifts
                 </span>
               </div>
-              <div className="space-y-2 pt-2 border-t border-slate-800 text-xs font-mono">
+              <div className="space-y-2 pt-2 border-t border-[#E2E8F0] text-xs font-mono">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Completed Shifts:</span>
-                  <span className="text-white font-bold">{report.fuelSummary.totalShiftsCount}</span>
+                  <span className="text-[#64748B]">Completed Shifts:</span>
+                  <span className="text-[#17365D] font-bold">{report.fuelSummary.totalShiftsCount}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Reconciled Revenue:</span>
-                  <span className="text-emerald-400 font-bold">
+                  <span className="text-[#64748B]">Reconciled Revenue:</span>
+                  <span className="text-emerald-700 font-bold">
                     ₹{(report.fuelSummary.totalSalesPaise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -406,47 +415,47 @@ export const ReportsPage: React.FC = () => {
             </div>
 
             {/* Breakdown Maintenance Card */}
-            <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-3">
-              <div className="flex items-center justify-between text-blue-400 font-bold text-sm">
+            <div className="phase3-surface p-5 space-y-3">
+              <div className="flex items-center justify-between text-blue-700 font-bold text-sm">
                 <span className="flex items-center gap-2">
                   <Wrench className="w-5 h-5" />
                   Equipment Breakdowns
                 </span>
-                <span className="text-xs bg-blue-950/60 text-blue-300 px-2 py-0.5 rounded border border-blue-800/50 font-mono">
+                <span className="text-xs bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-200 font-mono">
                   {report.breakdownSummary.totalTickets} Tickets
                 </span>
               </div>
-              <div className="space-y-2 pt-2 border-t border-slate-800 text-xs font-mono">
+              <div className="space-y-2 pt-2 border-t border-[#E2E8F0] text-xs font-mono">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Open Tickets:</span>
-                  <span className="text-amber-400 font-bold">{report.breakdownSummary.openTickets}</span>
+                  <span className="text-[#64748B]">Open Tickets:</span>
+                  <span className="text-amber-700 font-bold">{report.breakdownSummary.openTickets}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Resolved Tickets:</span>
-                  <span className="text-emerald-400 font-bold">{report.breakdownSummary.resolvedTickets}</span>
+                  <span className="text-[#64748B]">Resolved Tickets:</span>
+                  <span className="text-emerald-700 font-bold">{report.breakdownSummary.resolvedTickets}</span>
                 </div>
               </div>
             </div>
 
             {/* HR Workforce Card */}
-            <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-3">
-              <div className="flex items-center justify-between text-indigo-400 font-bold text-sm">
+            <div className="phase3-surface p-5 space-y-3">
+              <div className="flex items-center justify-between text-indigo-700 font-bold text-sm">
                 <span className="flex items-center gap-2">
                   <Users className="w-5 h-5" />
                   Workforce & Staff
                 </span>
-                <span className="text-xs bg-indigo-950/60 text-indigo-300 px-2 py-0.5 rounded border border-indigo-800/50 font-mono">
+                <span className="text-xs bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded border border-indigo-200 font-mono">
                   {report.hrSummary.totalStaff} Active Staff
                 </span>
               </div>
-              <div className="space-y-2 pt-2 border-t border-slate-800 text-xs font-mono">
+              <div className="space-y-2 pt-2 border-t border-[#E2E8F0] text-xs font-mono">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Active Staff Count:</span>
-                  <span className="text-white font-bold">{report.hrSummary.totalStaff}</span>
+                  <span className="text-[#64748B]">Active Staff Count:</span>
+                  <span className="text-[#17365D] font-bold">{report.hrSummary.totalStaff}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Staff Present Days:</span>
-                  <span className="text-indigo-300 font-bold">{report.hrSummary.presentDaysCount} man-days</span>
+                  <span className="text-[#64748B]">Staff Present Days:</span>
+                  <span className="text-indigo-800 font-bold">{report.hrSummary.presentDaysCount} man-days</span>
                 </div>
               </div>
             </div>
