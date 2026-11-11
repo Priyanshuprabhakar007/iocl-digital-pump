@@ -1,3 +1,4 @@
+import './adminModern.css';
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -200,15 +201,15 @@ export const RbacPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="admin-modern space-y-6 pb-10">
       {/* Page Header */}
-      <div className="pb-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="pb-4 border-b border-[#E2E8F0] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-6 h-6 text-purple-400" />
-            <h1 className="text-xl font-extrabold text-white">RBAC Matrix & Granular Permissions</h1>
+            <h1 className="text-xl font-extrabold text-[#17365D]">RBAC Matrix & Granular Permissions</h1>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[#64748B] mt-1">
             Role defines WHAT actions a user can execute. Scope defines WHERE they can execute it.
           </p>
         </div>
@@ -216,18 +217,18 @@ export const RbacPage: React.FC = () => {
 
       {/* Global Admin: Manage User Permissions Section */}
       {isGlobalAdmin && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-[#E2E8F0]/80 pb-3">
             <div className="flex items-center gap-2">
               <UserIcon className="w-5 h-5 text-purple-400" />
-              <span className="font-bold text-sm text-white">User Permission Inspection & Overrides</span>
+              <span className="font-bold text-sm text-[#17365D]">User Permission Inspection & Overrides</span>
             </div>
-            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-xs text-[#475569] cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={showInactiveUsers}
                 onChange={(e) => setShowInactiveUsers(e.target.checked)}
-                className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-purple-500 focus:ring-purple-500"
+                className="w-4 h-4 rounded bg-[#F1F5F9] border-[#D7E0EA] text-purple-500 focus:ring-purple-500"
               />
               <span>Show Inactive Users</span>
             </label>
@@ -235,24 +236,24 @@ export const RbacPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[11px] font-mono text-slate-400 mb-1">Search User Accounts</label>
+              <label className="block text-[11px] font-mono text-[#64748B] mb-1">Search User Accounts</label>
               <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                <Search className="w-4 h-4 text-[#64748B] absolute left-3 top-3 pointer-events-none" />
                 <input
                   type="text"
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
                   placeholder="Filter by name, emp code, or email..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl pl-9 pr-4 py-2 text-xs text-[#17365D] placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-[11px] font-mono text-slate-400 mb-1">Select Personnel</label>
+              <label className="block text-[11px] font-mono text-[#64748B] mb-1">Select Personnel</label>
               <select
                 value={selectedUserId}
                 onChange={(e) => setSelectedUserId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-purple-500"
+                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs text-[#17365D] font-mono focus:outline-none focus:border-purple-500"
               >
                 <option value="">-- Choose User for Permission Override --</option>
                 {filteredUsers.map((u) => (
@@ -266,8 +267,8 @@ export const RbacPage: React.FC = () => {
 
           {/* Restriction Notice */}
           {selectedUserId && restriction.isDisabled && (
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
-              <Info className="w-4 h-4 shrink-0 text-amber-400" />
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 text-xs flex items-center gap-2">
+              <Info className="w-4 h-4 shrink-0 text-amber-700" />
               <span>{restriction.message}</span>
             </div>
           )}
@@ -277,21 +278,21 @@ export const RbacPage: React.FC = () => {
             <div
               className={`flex items-center justify-between p-3 rounded-xl text-xs border ${
                 feedback.type === 'success'
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-800'
               }`}
             >
               <div className="flex items-center gap-2">
                 {feedback.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
                 ) : (
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-700" />
                 )}
                 <span>{feedback.message}</span>
               </div>
               <button
                 onClick={() => setFeedback(null)}
-                className="text-slate-400 hover:text-white text-xs ml-3"
+                className="text-[#64748B] hover:text-[#17365D] text-xs ml-3"
               >
                 Dismiss
               </button>
@@ -311,30 +312,30 @@ export const RbacPage: React.FC = () => {
 
       {/* RBAC Matrix Table */}
       {loading ? (
-        <div className="py-12 text-center text-xs text-slate-400 font-mono animate-pulse">
+        <div className="py-12 text-center text-xs text-[#64748B] font-mono animate-pulse">
           Loading system RBAC configuration...
         </div>
       ) : filteredPermissions.length === 0 ? (
-        <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl p-8 bg-slate-900/50">
-          <p className="text-sm font-semibold text-slate-300">No matching permissions or roles found.</p>
+        <div className="py-12 text-center border border-dashed border-[#E2E8F0] rounded-2xl p-8 bg-white/50">
+          <p className="text-sm font-semibold text-[#475569]">No matching permissions or roles found.</p>
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-800/80 text-slate-400 font-mono uppercase text-[10px] tracking-wider border-b border-slate-700/80">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden shadow-sm">
+          <div className="admin-table-scroll overflow-x-auto" role="region" aria-label="Scrollable administration table" tabIndex={0}>
+            <table className="admin-data-table w-full text-left text-xs">
+              <thead className="bg-[#F1F5F9]/80 text-[#64748B] font-mono uppercase text-[10px] tracking-wider border-b border-[#D7E0EA]/80">
                 <tr>
                   <th className="p-4">Permission Code</th>
                   <th className="p-4">Description</th>
                   {roles.map((r) => (
-                    <th key={r.id} className="p-4 text-center font-bold text-white whitespace-nowrap">
+                    <th key={r.id} className="p-4 text-center font-bold text-[#17365D] whitespace-nowrap">
                       {r.code}
                     </th>
                   ))}
                   {/* Selected User Access Column Header */}
                   {selectedUserId && (
                     <th className="p-4 text-center bg-purple-950/40 text-purple-200 border-l border-purple-800/60 min-w-[200px]">
-                      <div className="font-bold text-xs uppercase tracking-wide text-purple-300">
+                      <div className="font-bold text-xs uppercase tracking-wide text-violet-800">
                         USER ACCESS
                       </div>
                       <div className="text-[10px] font-normal text-purple-200/80 truncate max-w-[180px] mx-auto mt-0.5">
@@ -344,7 +345,7 @@ export const RbacPage: React.FC = () => {
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-200">
+              <tbody className="divide-y divide-slate-800 text-[#334155]">
                 {filteredPermissions.map((p) => {
                   const cellState = selectedUserId && selectedUserDetails
                     ? computeUserPermissionCellState({
@@ -357,11 +358,11 @@ export const RbacPage: React.FC = () => {
                     : null;
                   const isRowSaving = savingPermCodes.has(p.code);
                   return (
-                    <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="p-4 font-mono font-bold text-orange-400 whitespace-nowrap">
+                    <tr key={p.id} className="hover:bg-[#F1F5F9]/40 transition-colors">
+                      <td className="p-4 font-mono font-bold text-[#B8530D] whitespace-nowrap">
                         {p.code}
                       </td>
-                      <td className="p-4 text-slate-300">
+                      <td className="p-4 text-[#475569]">
                         {p.description}
                       </td>
                       {/* Read-only Role Columns */}
@@ -373,14 +374,14 @@ export const RbacPage: React.FC = () => {
                           <td key={r.id} className="p-4 text-center">
                             {hasPerm ? (
                               <div
-                                className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto"
+                                className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-700 flex items-center justify-center mx-auto"
                                 title={`Granted to role ${r.code}`}
                               >
                                 <Check className="w-3.5 h-3.5" />
                               </div>
                             ) : (
                               <div
-                                className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-600 flex items-center justify-center mx-auto"
+                                className="w-6 h-6 rounded-full bg-[#F1F5F9] border border-[#D7E0EA] text-slate-600 flex items-center justify-center mx-auto"
                                 title={`Not granted to role ${r.code}`}
                               >
                                 -
@@ -393,7 +394,7 @@ export const RbacPage: React.FC = () => {
                       {selectedUserId && (
                         <td className="p-4 text-center bg-purple-500/5 border-l border-purple-900/40">
                           {loadingUserDetails ? (
-                            <div className="w-6 h-6 rounded-full bg-slate-800 animate-pulse mx-auto" />
+                            <div className="w-6 h-6 rounded-full bg-[#F1F5F9] animate-pulse mx-auto" />
                           ) : isRowSaving ? (
                             <div className="w-6 h-6 flex items-center justify-center mx-auto">
                               <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
@@ -410,7 +411,7 @@ export const RbacPage: React.FC = () => {
                                     restriction.isDisabled ? 'opacity-60 cursor-not-allowed' : 'hover:scale-105 cursor-pointer'
                                   }`}
                                 >
-                                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center group-hover:bg-emerald-500/30 group-hover:border-emerald-400 transition-colors">
+                                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-500/30 group-hover:border-emerald-400 transition-colors">
                                     <Check className="w-3.5 h-3.5" />
                                   </div>
                                 </button>
@@ -424,7 +425,7 @@ export const RbacPage: React.FC = () => {
                                     restriction.isDisabled ? 'opacity-60 cursor-not-allowed' : 'hover:scale-105 cursor-pointer'
                                   }`}
                                 >
-                                  <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-600 flex items-center justify-center group-hover:border-slate-500 group-hover:bg-slate-700/50 transition-colors">
+                                  <div className="w-6 h-6 rounded-full bg-[#F1F5F9] border border-[#D7E0EA] text-slate-600 flex items-center justify-center group-hover:border-slate-500 group-hover:bg-[#E8EEF5]/50 transition-colors">
                                     <span className="w-1.5 h-1.5 rounded-full bg-slate-600 group-hover:bg-slate-400" />
                                   </div>
                                 </button>
@@ -434,8 +435,8 @@ export const RbacPage: React.FC = () => {
                                 <span
                                   className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border select-none ${
                                     cellState.overrideEffect === 'ALLOW'
-                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                      : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                      ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30'
+                                      : 'bg-rose-500/10 text-rose-700 border-rose-500/30'
                                   }`}
                                   title={cellState.tooltip}
                                 >
