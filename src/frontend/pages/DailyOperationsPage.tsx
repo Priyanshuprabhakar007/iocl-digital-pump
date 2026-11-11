@@ -16,6 +16,7 @@ import {
   saveTankReadingsBatch,
 } from '../services/api';
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { useAuth } from '../context/AuthContext';
 import { DailyOperationsTestDataResetPanel } from '../components/pump/DailyOperationsTestDataResetPanel';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
 import {
@@ -271,6 +272,8 @@ function getLocalTodayIso(): string {
 }
 
 export const DailyOperationsPage: React.FC = () => {
+  const { userCtx } = useAuth();
+  const isGlobalAdmin = Boolean(userCtx?.roles?.includes('ADMIN') && userCtx?.isGlobalScope);
   const {
     accessibleOutlets: outlets,
     activeOutletId,
@@ -299,6 +302,9 @@ export const DailyOperationsPage: React.FC = () => {
   const [savingAllNozzles, setSavingAllNozzles] = useState<boolean>(false);
   const [runningReconciliation, setRunningReconciliation] = useState<boolean>(false);
   const [closingShiftBusy, setClosingShiftBusy] = useState<boolean>(false);
+  const [adminEmptyCloseOpen, setAdminEmptyCloseOpen] = useState(false);
+  const [adminEmptyCloseReason, setAdminEmptyCloseReason] = useState('');
+  const [adminEmptyCloseConfirmed, setAdminEmptyCloseConfirmed] = useState(false);
 
   // Per-row local draft maps keyed by `${shiftId}:${tankId}` and `${shiftId}:${nozzleId}`
   const [tankDrafts, setTankDrafts] = useState<Record<string, TankDraftRow>>({});
@@ -981,6 +987,37 @@ export const DailyOperationsPage: React.FC = () => {
     await loadBootstrap(selectedOutletId, businessDate, true);
   };
 
+  const handleAdminEmptyClose = async () => {
+    if (!isGlobalAdmin || !activeWorkspace || activeWorkspace.shift.status !== 'OPEN' ||
+        closingShiftBusy || adminEmptyCloseReason.trim().length < 10 || !adminEmptyCloseConfirmed) return;
+
+    const targetShiftId = activeWorkspace.shift.id;
+    setClosingShiftBusy(true);
+    setPageError(null);
+    setActionSuccess(null);
+    try {
+      const res = await apiFetch(`/api/v1/shifts/${targetShiftId}/close-empty`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: adminEmptyCloseReason.trim(), confirm: true }),
+      });
+
+      if (!res.success) {
+        setPageError(res.error?.message || 'Cannot close this shift: it may contain operational records.');
+        return;
+      }
+
+      setAdminEmptyCloseOpen(false);
+      setAdminEmptyCloseReason('');
+      setAdminEmptyCloseConfirmed(false);
+      setActionSuccess('Empty shift closed by Admin. No reconciliation or sales were generated.');
+      await loadBootstrap(selectedOutletId, businessDate, true);
+    } catch (error: any) {
+      setPageError(error?.message || 'Admin empty-shift closure failed.');
+    } finally {
+      setClosingShiftBusy(false);
+    }
+  };
+
   const handleKeyDownOnInput = (
     e: React.KeyboardEvent<HTMLInputElement>,
     idx: number,
@@ -1384,6 +1421,23 @@ export const DailyOperationsPage: React.FC = () => {
                     <Calculator className="w-3.5 h-3.5" />
                     {runningReconciliation ? 'Computing...' : 'Compute Stock Reconciliation'}
                   </button>
+
+                  {isGlobalAdmin && activeWorkspace.shift.status === 'OPEN' && (
+                    <button
+                      type="button"
+                      data-testid="admin-close-empty-shift-btn"
+                      onClick={() => {
+                        setAdminEmptyCloseReason('');
+                        setAdminEmptyCloseConfirmed(false);
+                        setAdminEmptyCloseOpen(true);
+                      }}
+                      disabled={closingShiftBusy}
+                      className="h-8 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      Admin: Close Empty Shift
+                    </button>
+                  )}
 
                   {activeWorkspace.shift.status === 'OPEN' && (
                     <button
@@ -2408,6 +2462,55 @@ export const DailyOperationsPage: React.FC = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin-only empty shift close: normal close and reconciliation remain unchanged. */}
+      {isGlobalAdmin && adminEmptyCloseOpen && activeWorkspace?.shift.status === 'OPEN' && (
+        <div role="dialog" aria-modal="true" aria-labelledby="admin-empty-close-title"
+             className="fixed inset-0 z-50 bg-slate-900/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-amber-300 bg-white p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-2 text-amber-800">
+              <ShieldAlert className="w-6 h-6" />
+              <h3 id="admin-empty-close-title" className="font-bold text-lg">Admin: Close Empty Shift</h3>
+            </div>
+            <p className="text-sm text-slate-700">
+              Only a shift with no recorded operational or financial entries can be closed this way.
+              No readings, sales, or reconciliations will be created. This action is audited.
+            </p>
+            <p className="text-xs font-semibold text-slate-600">
+              Outlet: {selectedOutlet?.name || selectedOutletId} · Date: {businessDate} · Shift: {activeWorkspace.shiftTemplateName}
+            </p>
+            <label htmlFor="daily-admin-close-reason" className="block text-sm font-semibold text-slate-800">
+              Reason for closing (required, 10–500 characters)
+            </label>
+            <textarea id="daily-admin-close-reason"
+              value={adminEmptyCloseReason}
+              onChange={(event) => setAdminEmptyCloseReason(event.target.value)}
+              maxLength={500} rows={3}
+              placeholder="Example: Shift opened by mistake; no operational data was entered."
+              className="w-full rounded-lg border border-slate-300 p-3 text-sm text-slate-900"
+            />
+            <label className="flex items-start gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={adminEmptyCloseConfirmed}
+                onChange={(event) => setAdminEmptyCloseConfirmed(event.target.checked)}
+                className="mt-1" />
+              I confirm this shift has no recorded activity and authorize closing it without reconciliation.
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" disabled={closingShiftBusy}
+                onClick={() => setAdminEmptyCloseOpen(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">
+                Cancel
+              </button>
+              <button type="button" data-testid="confirm-admin-close-empty-shift"
+                disabled={closingShiftBusy || !adminEmptyCloseConfirmed || adminEmptyCloseReason.trim().length < 10}
+                onClick={handleAdminEmptyClose}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {closingShiftBusy ? 'Checking & Closing...' : 'Confirm Admin Close'}
+              </button>
             </div>
           </div>
         </div>
