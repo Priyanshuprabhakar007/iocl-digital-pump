@@ -73,6 +73,9 @@ export const ShiftOperationsPage: React.FC = () => {
   const [unavailReason, setUnavailReason] = useState('');
 
   const [closeConfirmModal, setCloseConfirmModal] = useState(false);
+  const [emptyCloseModal, setEmptyCloseModal] = useState(false);
+  const [emptyCloseReason, setEmptyCloseReason] = useState('');
+  const [emptyCloseConfirmed, setEmptyCloseConfirmed] = useState(false);
   const [closingSubmitting, setClosingSubmitting] = useState(false);
   const [savingReadingNozzleId, setSavingReadingNozzleId] = useState<string | null>(null);
 
@@ -269,6 +272,34 @@ export const ShiftOperationsPage: React.FC = () => {
     }
   };
 
+  const handleAdminEmptyClose = async () => {
+    if (closingSubmitting || !selectedShiftId || emptyCloseReason.trim().length < 10 || !emptyCloseConfirmed) return;
+    setClosingSubmitting(true);
+    setActionError(null);
+    try {
+      const res = await apiFetch<OperationalShift>(`/api/v1/shifts/${selectedShiftId}/close-empty`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: emptyCloseReason.trim(), confirm: true }),
+      });
+      if (!res.success || !res.data) {
+        setActionError(res.error?.message || 'Unable to close: shift must have no recorded entries.');
+        return;
+      }
+      setEmptyCloseModal(false);
+      setEmptyCloseReason('');
+      setEmptyCloseConfirmed(false);
+      setActionSuccess('Empty shift closed by administrator; no sales or reconciliation were generated.');
+      setSelectedShift(res.data);
+      await loadOutletShifts();
+      await loadShiftWorkspace();
+    } catch (err: any) {
+      setActionError(err?.message || 'Failed to close empty shift');
+    } finally {
+      setClosingSubmitting(false);
+    }
+  };
+
+  const isGlobalAdmin = Boolean(userCtx?.roles?.includes('ADMIN') && userCtx?.isGlobalScope);
   const selectedOutlet = outlets.find(o => o.id === selectedOutletId);
   const isShiftOpen = selectedShift?.status === 'OPEN';
 
@@ -411,6 +442,17 @@ export const ShiftOperationsPage: React.FC = () => {
                   Sales Summary
                 </button>
               </div>
+
+              {isShiftOpen && isGlobalAdmin && (
+                <button
+                  type="button"
+                  onClick={() => { setEmptyCloseModal(true); setEmptyCloseConfirmed(false); setEmptyCloseReason(''); }}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Admin: Close Empty Shift
+                </button>
+              )}
 
               {/* Close Shift Action Button */}
               {isShiftOpen && (
@@ -827,6 +869,41 @@ export const ShiftOperationsPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADMIN-ONLY: exceptional empty shift close, separate from normal reconciliation */ }
+      {emptyCloseModal && isGlobalAdmin && isShiftOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => !closingSubmitting && setEmptyCloseModal(false)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-amber-600/40 bg-slate-900 p-6 shadow-2xl space-y-4">
+            <h2 className="text-lg font-bold text-white">Admin: Close Shift Without Data</h2>
+            <p className="text-sm text-amber-200">
+              Only genuinely empty shifts qualify. No meter readings, tank readings, receipts, sales, collections or reconciliation records may exist.
+              This bypass does not create zero sales or financial reconciliations.
+            </p>
+            <p className="text-xs text-slate-300">Outlet: {selectedOutlet?.name || selectedOutletId} | Shift: {selectedShift?.businessDate}</p>
+            <label className="block text-xs font-semibold text-slate-200" htmlFor="admin-empty-close-reason">Mandatory reason (10–500 characters)</label>
+            <textarea
+              id="admin-empty-close-reason"
+              value={emptyCloseReason}
+              onChange={e => setEmptyCloseReason(e.target.value)}
+              maxLength={500}
+              rows={3}
+              placeholder="Explain why this shift has no operational entries"
+              className="w-full rounded-lg border border-slate-600 bg-slate-950 p-3 text-sm text-white"
+            />
+            <label className="flex gap-2 text-xs text-slate-200">
+              <input type="checkbox" checked={emptyCloseConfirmed} onChange={e => setEmptyCloseConfirmed(e.target.checked)} />
+              I confirm this shift has no recorded operational activity and must be administratively closed. This will be logged.
+            </label>
+            <div className="flex justify-end gap-2">
+              <button type="button" disabled={closingSubmitting} onClick={() => setEmptyCloseModal(false)} className="rounded-lg bg-slate-700 px-4 py-2 text-sm text-white">Cancel</button>
+              <button type="button" disabled={closingSubmitting || !emptyCloseConfirmed || emptyCloseReason.trim().length < 10} onClick={handleAdminEmptyClose} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                {closingSubmitting ? 'Checking & Closing...' : 'Confirm Admin Close'}
+              </button>
+            </div>
           </div>
         </div>
       )}
