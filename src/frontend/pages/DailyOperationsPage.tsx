@@ -19,6 +19,7 @@ import { useActiveOutlet } from '../context/ActiveOutletContext';
 import { useAuth } from '../context/AuthContext';
 import { PERMISSIONS } from '../../shared/constants';
 import { DailyOperationsTestDataResetPanel } from '../components/pump/DailyOperationsTestDataResetPanel';
+import './dailyOperationsModern.css';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
 import {
   CheckCircle2,
@@ -1114,16 +1115,57 @@ export const DailyOperationsPage: React.FC = () => {
   const summary = dailySummary;
   const badge = statusBadgeConfig(summary?.status || 'NOT_STARTED');
 
+  // Presentation-only indicators: reuse existing authoritative completion fields.
+  // They never gate, reorder, or change an operation.
+  const progressStages = summary ? [
+    {
+      label: 'Shift',
+      detail: summary.shiftsCount === 0 ? 'Not opened' : `${summary.shiftsCount} recorded`,
+      complete: summary.shiftsCount > 0,
+    },
+    {
+      label: 'Tank Opening',
+      detail: `${summary.completion.openingTankReadings} / ${summary.completion.expectedTanks}`,
+      complete: summary.completion.expectedTanks > 0 &&
+        summary.completion.openingTankReadings >= summary.completion.expectedTanks,
+    },
+    {
+      label: 'Nozzle Meters',
+      detail: `${summary.completion.nozzleMeterReadings + summary.completion.unavailableNozzles} / ${summary.completion.expectedNozzles}`,
+      complete: summary.completion.expectedNozzles > 0 &&
+        summary.completion.nozzleMeterReadings + summary.completion.unavailableNozzles >= summary.completion.expectedNozzles,
+    },
+    {
+      label: 'Receipts',
+      detail: summary.completion.totalReceipts === 0
+        ? 'None recorded'
+        : `${summary.completion.completedReceipts} / ${summary.completion.totalReceipts}`,
+      complete: summary.completion.totalReceipts > 0 &&
+        summary.completion.pendingReceipts === 0,
+    },
+    {
+      label: 'Tank Closing',
+      detail: `${summary.completion.closingTankReadings} / ${summary.completion.expectedTanks}`,
+      complete: summary.completion.expectedTanks > 0 &&
+        summary.completion.closingTankReadings >= summary.completion.expectedTanks,
+    },
+    {
+      label: 'Reconciliation',
+      detail: summary.completion.reconciliationComplete ? 'Complete' : 'Pending',
+      complete: summary.completion.reconciliationComplete,
+    },
+  ] : [];
+
   return (
-    <div className="space-y-6 pb-12">
+    <div className="daily-ops-modern space-y-6 pb-12">
       {/* 1. TOP BAR: OUTLET, BUSINESS DATE & VIEW SWITCHER */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+      <div className="daily-ops-surface p-5 sm:p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
               <Fuel className="w-6 h-6 text-[#003366]" />
               <h1 className="text-xl font-bold text-slate-900">
-                Daily Fuel Operations &amp; DSR Workflow
+                Daily Operations &amp; DSR
               </h1>
               {backgroundRefreshing && (
                 <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
@@ -1132,7 +1174,7 @@ export const DailyOperationsPage: React.FC = () => {
               )}
             </div>
             <p className="text-sm text-slate-600 mt-1">
-              Single-screen tank dip conversion, nozzle meter entry, DU/MPD sales, stock reconciliation &amp; Daily Sales Report
+              Manage tank dips, nozzle readings, stock reconciliation and the Daily Sales Report in one workspace.
             </p>
           </div>
 
@@ -1223,7 +1265,7 @@ export const DailyOperationsPage: React.FC = () => {
 
       {/* 2. DAILY STATUS HEADER */}
       {summary && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+        <div className="daily-ops-surface p-5 sm:p-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -1284,6 +1326,37 @@ export const DailyOperationsPage: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Read-only completion overview; existing data-entry workflow remains unchanged. */}
+          <section aria-label="Daily operations progress" className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 sm:p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-bold text-[#17365D]">Daily workflow progress</h2>
+                <p className="text-xs text-[#64748B]">Live status from saved operational records — not a required step sequence</p>
+              </div>
+              <span className="rounded-full border border-[#D7E3EF] bg-white px-3 py-1 text-xs font-semibold text-[#17365D]">
+                {progressStages.filter(step => step.complete).length} of {progressStages.length} indicators complete
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+              {progressStages.map((step, index) => (
+                <div key={step.label} className={`daily-ops-step rounded-lg border p-3 transition-colors ${
+                  step.complete ? 'border-emerald-200 bg-white' : 'border-slate-200 bg-white'
+                }`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    {step.complete
+                      ? <CheckCircle2 className="h-4 w-4 text-emerald-700" aria-label="Complete" />
+                      : <Clock className="h-4 w-4 text-amber-700" aria-label="Not complete" />}
+                  </div>
+                  <div className="mt-2 text-xs font-semibold text-[#17365D]">{step.label}</div>
+                  <div className="mt-1 text-xs tabular-nums text-[#526477]">{step.detail}</div>
+                </div>
+              ))}
+            </div>
+          </section>
 
           {/* Completion Summary Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -1366,14 +1439,15 @@ export const DailyOperationsPage: React.FC = () => {
 
           {/* Missing-data warnings */}
           {summary.missingFields.length > 0 && (
-            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3.5">
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <div className="text-xs font-bold uppercase tracking-wider text-amber-900">
-                    Missing Data &amp; Completion Warnings ({summary.missingFields.length})
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <details open className="group rounded-xl border border-amber-200 bg-amber-50/70 p-3.5">
+              <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-md text-amber-900 focus-visible:outline-2 focus-visible:outline-amber-700">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />
+                <span className="flex-1 text-xs font-bold">Missing Data &amp; Completion Warnings ({summary.missingFields.length})</span>
+                <span className="text-xs font-medium text-amber-800 group-open:hidden">Show details +</span>
+                <span className="hidden text-xs font-medium text-amber-800 group-open:inline">Hide details −</span>
+              </summary>
+              <div className="mt-3 pl-0 sm:pl-6">
+                  <div className="flex flex-wrap gap-1.5">
                     {summary.missingFields.map((mf, i) => (
                       <span
                         key={i}
@@ -1387,9 +1461,8 @@ export const DailyOperationsPage: React.FC = () => {
                       </span>
                     ))}
                   </div>
-                </div>
               </div>
-            </div>
+            </details>
           )}
         </div>
       )}
@@ -1553,8 +1626,8 @@ export const DailyOperationsPage: React.FC = () => {
                   )}
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                <div className="daily-ops-table-scroll overflow-x-auto" role="region" aria-label="Scrollable operations table" tabIndex={0}>
+                  <table className="daily-ops-data-table w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-100/80 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                         <th className="py-2.5 px-3">Tank #</th>
@@ -1861,8 +1934,8 @@ export const DailyOperationsPage: React.FC = () => {
                   )}
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                <div className="daily-ops-table-scroll overflow-x-auto" role="region" aria-label="Scrollable operations table" tabIndex={0}>
+                  <table className="daily-ops-data-table w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-100/80 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                         <th className="py-2.5 px-3">DU / MPD</th>
@@ -2262,8 +2335,8 @@ export const DailyOperationsPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                <div className="daily-ops-table-scroll overflow-x-auto" role="region" aria-label="Scrollable operations table" tabIndex={0}>
+                  <table className="daily-ops-data-table w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-100/80 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                         <th className="py-2.5 px-3">Product</th>
@@ -2371,7 +2444,7 @@ export const DailyOperationsPage: React.FC = () => {
       {viewMode === 'DSR' && summary && (
         <div className="space-y-6" data-testid="dsr-summary-view">
           {/* DSR Header Banner */}
-          <div className="bg-[#003366] text-white rounded-xl p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
+          <div className="rounded-2xl border border-[#DDE6EF] bg-[#17365D] p-6 text-white shadow-sm flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="text-xs uppercase tracking-widest text-blue-200 font-semibold">
                 Indian Oil Corporation Limited • Retail Outlet Daily Sales Report (DSR)
@@ -2401,8 +2474,8 @@ export const DailyOperationsPage: React.FC = () => {
                 1. Product-wise Daily Stock &amp; Sales Statement
               </h3>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <div className="daily-ops-table-scroll overflow-x-auto" role="region" aria-label="Scrollable operations table" tabIndex={0}>
+              <table className="daily-ops-data-table w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                     <th className="py-3 px-4">Product</th>
@@ -2473,8 +2546,8 @@ export const DailyOperationsPage: React.FC = () => {
                 2. Dispenser (DU / MPD) &amp; Nozzle-wise Sales Statement
               </h3>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <div className="daily-ops-table-scroll overflow-x-auto" role="region" aria-label="Scrollable operations table" tabIndex={0}>
+              <table className="daily-ops-data-table w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                     <th className="py-2.5 px-4">Shift</th>
