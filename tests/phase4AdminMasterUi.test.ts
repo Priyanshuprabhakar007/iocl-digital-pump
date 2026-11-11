@@ -26,11 +26,13 @@ describe('Phase 4 — Admin and Master Data enterprise-light presentation', () =
   });
 
   it('preserves user and hierarchy permission-aware operations', () => {
-    for (const name of ['UsersPage', 'RbacPage', 'ScopesPage', 'HierarchyPage', 'OrganizationMastersPage']) {
+    for (const name of ['UsersPage', 'ScopesPage', 'HierarchyPage', 'OrganizationMastersPage']) {
       const source = read(name);
       expect(source).toContain('useAuth');
       expect(source).toContain('hasPermission');
     }
+    // RBAC uses its own global-admin scope guard rather than hasPermission.
+    expect(read('RbacPage')).toContain('isGlobalAdmin');
   });
 
   it('retains outlet, product and pump master management functionality', () => {
