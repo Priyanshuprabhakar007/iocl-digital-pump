@@ -16,7 +16,6 @@
   --iocl-muted: #526477;
   --iocl-border: #E2E8F0;
   background-color: var(--iocl-canvas);
-  color: var(--iocl-text);
 }
 
 .enterprise-shell button,
