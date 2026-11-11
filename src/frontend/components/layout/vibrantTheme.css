@@ -1,0 +1,81 @@
+/*
+ * IOCL warm enterprise palette — authenticated app only.
+ * Color, depth, and affordance changes. All data flows and semantics stay intact.
+ */
+.enterprise-shell.iocl-vibrant {
+  --iocl-canvas: #f7f5f1;
+  --iocl-surface: #fff;
+  --iocl-navy: #112b49;
+  --iocl-orange: #f47721;
+  --iocl-text: #172b4d;
+  --iocl-muted: #526477;
+  --iocl-border: #d5e0ec;
+  background: #f7f5f1;
+}
+.enterprise-shell.iocl-vibrant main {
+  background:
+    radial-gradient(ellipse 62% 35% at 100% 0%, rgba(244,119,33,.075), transparent 78%),
+    radial-gradient(ellipse 50% 28% at 0% 18%, rgba(35,106,157,.07), transparent 78%),
+    #f7f5f1;
+}
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.admin-modern,.operations-modern,.finance-modern,.reports-modern) {
+  color: #172b4d;
+  background-color: transparent;
+}
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-surface,[class~="bg-white"][class~="rounded-2xl"],[class~="bg-white"][class~="rounded-xl"]) {
+  border-color: #d5e2ec;
+  box-shadow: 0 6px 18px rgba(17,43,73,.065);
+}
+.enterprise-shell.iocl-vibrant main :is(.admin-modern,.operations-modern,.finance-modern,.reports-modern) :is(h1,h2) {
+  letter-spacing: -.015em;
+}
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.operations-modern,.admin-modern,.finance-modern,.reports-modern) :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea):not([class*="bg-slate-9"]) {
+  border-color: #c8d8e7;
+}
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.operations-modern,.admin-modern,.finance-modern,.reports-modern) :is(input,select,textarea):focus-visible {
+  outline: 2px solid #f47721;
+  outline-offset: 2px;
+}
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.operations-modern,.admin-modern,.finance-modern,.reports-modern) :is(table) thead {
+  background-color: #e5edf5;
+}
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.operations-modern,.admin-modern,.finance-modern,.reports-modern) :is(table) thead th {
+  color: #17365d;
+  font-weight: 750;
+}
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.operations-modern,.admin-modern,.finance-modern,.reports-modern) :is(table) tbody tr:hover {
+  background-color: #fff5ed;
+}
+.enterprise-shell.iocl-vibrant main .daily-ops-step {
+  box-shadow: 0 4px 12px rgba(17,43,73,.05);
+  border-top: 3px solid #f47721;
+}
+.enterprise-shell.iocl-vibrant main [aria-label="Daily operations progress"] {
+  border-color: #c9dbe9;
+  background: linear-gradient(130deg, #e9f3fb, #fff9f2);
+}
+.enterprise-shell.iocl-vibrant main [aria-label="Outlet directory overview"] > div {
+  background: linear-gradient(130deg, #fff, #f2f7fc);
+  border-top: 3px solid #f47721;
+  box-shadow: 0 5px 15px rgba(17,43,73,.07);
+}
+.enterprise-shell.iocl-vibrant main .outlet-directory-card:hover {
+  border-color: #e8aa7b;
+  box-shadow: 0 12px 24px rgba(17,43,73,.10);
+}
+.enterprise-shell.iocl-vibrant main [aria-label="Stock operations sections"] > div:last-child > button[aria-current="step"] {
+  box-shadow: 0 6px 20px rgba(244,119,33,.13);
+}
+.enterprise-shell.iocl-vibrant main :is(button,a):focus-visible {
+  outline-color: #f47721;
+}
+@media (max-width: 640px) {
+  .enterprise-shell.iocl-vibrant main {
+    background: #f7f5f1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .enterprise-shell.iocl-vibrant * {
+    transition-duration: 0ms !important;
+  }
+}

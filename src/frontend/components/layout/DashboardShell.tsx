@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
+import './vibrantTheme.css';
 
 interface DashboardShellProps {
   activeTab: string;
@@ -16,7 +17,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="enterprise-shell min-h-screen bg-[#F5F7FA] text-slate-100 flex flex-col font-sans">
+    <div className="enterprise-shell iocl-vibrant min-h-screen bg-[#F7F5F1] text-[#172B4D] flex flex-col font-sans">
       <Header onToggleMobileSidebar={() => setMobileOpen(!mobileOpen)} />
 
       <div className="flex min-w-0 flex-1 items-stretch">

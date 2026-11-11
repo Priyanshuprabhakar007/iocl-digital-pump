@@ -43,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
   };
 
   return (
-    <header className="sticky top-0 z-30 min-h-[64px] bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] px-4 sm:px-6 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+    <header className="sticky top-0 z-30 min-h-[64px] bg-white/95 backdrop-blur-md border-b-2 border-[#F47721] px-4 sm:px-6 py-2 shadow-[0_6px_22px_rgba(17,43,73,0.08)]">
       <div className="flex items-center justify-between gap-4">
         {/* Left branding */}
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -131,7 +131,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
               </div>
             </div>
 
-            <div className="w-9 h-9 rounded-full bg-[#EAF0F6] border border-[#DCE4ED] flex items-center justify-center text-[#17365D] font-bold text-xs">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#17365D] to-[#275B84] border border-[#17365D] flex items-center justify-center text-white font-bold text-xs">
               {userCtx.user.name.charAt(0)}
             </div>
 

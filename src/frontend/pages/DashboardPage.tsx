@@ -76,7 +76,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
   return (
     <div className="mx-auto max-w-[1440px] space-y-8 pb-10 text-[#172B4D]">
-      <header className="relative overflow-hidden rounded-[24px] bg-[#17365D] px-6 py-7 text-white shadow-sm sm:px-8 sm:py-9">
+      <header className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#0F2A49] via-[#17365D] to-[#285E83] px-6 py-7 text-white shadow-[0_18px_35px_rgba(23,54,93,0.18)] sm:px-8 sm:py-9">
         <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border border-white/15 pointer-events-none" />
         <div className="absolute -right-6 top-3 h-44 w-44 rounded-full bg-[#F47721]/15 blur-2xl pointer-events-none" />
         <div className="relative z-10 flex flex-wrap items-center justify-between gap-5">
@@ -114,8 +114,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   disabled={!onNavigate}
                   className={`group flex min-h-[138px] flex-col items-start rounded-2xl border p-5 text-left transition-all focus-visible:outline-2 focus-visible:outline-[#F47721] disabled:cursor-not-allowed ${
                     task.featured
-                      ? 'border-[#CFDCE9] bg-white hover:-translate-y-0.5 hover:border-[#F47721] hover:shadow-md'
-                      : 'border-[#E2E8F0] bg-white hover:border-[#B2C7DB] hover:shadow-sm'
+                      ? 'border-orange-200 bg-gradient-to-br from-white to-[#FFF6ED] hover:-translate-y-0.5 hover:border-[#F47721] hover:shadow-[0_14px_28px_rgba(244,119,33,0.15)]'
+                      : 'border-[#D5E1EC] bg-gradient-to-br from-white to-[#F0F6FC] hover:border-[#4A85AE] hover:shadow-[0_12px_26px_rgba(23,54,93,0.10)]'
                   }`}
                 >
                   <span className="flex w-full items-center justify-between">
@@ -149,7 +149,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           ].map(metric => {
             const Icon = metric.icon;
             return (
-              <div key={metric.label} className="rounded-2xl border border-[#E2E8F0] bg-white p-4 sm:p-5">
+              <div key={metric.label} className="rounded-2xl border border-[#D7E3EE] bg-gradient-to-b from-white to-[#F2F7FB] p-4 sm:p-5 shadow-[0_5px_16px_rgba(17,43,73,0.06)]">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-[#64748B]">{metric.label}</p>
                   <Icon className="h-4 w-4 text-[#D86514]" />
