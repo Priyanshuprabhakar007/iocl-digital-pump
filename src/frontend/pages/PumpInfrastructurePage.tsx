@@ -1,3 +1,4 @@
+import './adminModern.css';
 import React, { useState, useEffect } from 'react';
 import { apiFetch, clearApiCache } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -1245,7 +1246,7 @@ export const PumpInfrastructurePage: React.FC = () => {
 
   if (loadingOutlets) {
     return (
-      <div className="py-16 text-center text-slate-500 text-sm font-mono flex items-center justify-center gap-2">
+      <div className="py-16 text-center text-[#64748B] text-sm font-mono flex items-center justify-center gap-2">
         <RefreshCw className="w-4 h-4 animate-spin text-orange-500" />
         Loading accessible retail outlets...
       </div>
@@ -1254,37 +1255,37 @@ export const PumpInfrastructurePage: React.FC = () => {
 
   if (outlets.length === 0) {
     return (
-      <div className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl">
+      <div className="p-8 text-center bg-white border border-[#E2E8F0] rounded-2xl">
         <Building2 className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-        <h2 className="text-base font-bold text-white">No Retail Outlets In Your Scope</h2>
-        <p className="text-xs text-slate-400 mt-1">You do not have scope access to manage retail outlets.</p>
+        <h2 className="text-base font-bold text-[#17365D]">No Retail Outlets In Your Scope</h2>
+        <p className="text-xs text-[#64748B] mt-1">You do not have scope access to manage retail outlets.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="admin-modern space-y-6 pb-10">
       {/* Top Header & Outlet Selector */}
-      <div className="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 shadow-xl shadow-black/20">
+      <div className="bg-white border border-[#E2E8F0]/80 rounded-2xl p-5 shadow-sm shadow-black/20">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-orange-500" />
-              <h1 className="text-xl font-black text-white tracking-tight">
+              <h1 className="text-xl font-black text-[#17365D] tracking-tight">
                 Pump Operations Infrastructure
               </h1>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-[#64748B] mt-1">
               Configure Tanks, Multi-Product Dispensers, Nozzles, and Shift Timing for your outlet
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs font-mono font-semibold text-slate-400">Select Outlet:</span>
+            <span className="text-xs font-mono font-semibold text-[#64748B]">Select Outlet:</span>
             <select
               value={selectedOutletId}
               onChange={(e) => setSelectedOutletId(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold focus:outline-none focus:border-orange-500"
+              className="bg-[#F1F5F9] border border-[#D7E0EA] text-[#17365D] rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold focus:outline-none focus:border-orange-500"
             >
               {outlets.map(o => (
                 <option key={o.id} value={o.id}>
@@ -1297,23 +1298,23 @@ export const PumpInfrastructurePage: React.FC = () => {
 
         {/* Selected Outlet Summary Strip */}
         {selectedOutlet && (
-          <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-wrap items-center gap-4 text-xs font-mono">
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <span className="text-slate-500">TYPE:</span>
-              <span className="font-bold text-orange-400">{selectedOutlet.outletType}</span>
+          <div className="mt-4 pt-4 border-t border-[#E2E8F0]/80 flex flex-wrap items-center gap-4 text-xs font-mono">
+            <div className="flex items-center gap-1.5 text-[#475569]">
+              <span className="text-[#64748B]">TYPE:</span>
+              <span className="font-bold text-[#B8530D]">{selectedOutlet.outletType}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <MapPin className="w-3.5 h-3.5 text-slate-500" />
+            <div className="flex items-center gap-1.5 text-[#475569]">
+              <MapPin className="w-3.5 h-3.5 text-[#64748B]" />
               <span>{selectedOutlet.city}, {selectedOutlet.district}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <span className="text-slate-500">PIN:</span>
+            <div className="flex items-center gap-1.5 text-[#475569]">
+              <span className="text-[#64748B]">PIN:</span>
               <span>{selectedOutlet.pincode}</span>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={loadOutletData}
-                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 border border-slate-700"
+                className="flex items-center gap-1 text-[11px] text-[#64748B] hover:text-[#17365D] px-2 py-1 rounded bg-[#F1F5F9] border border-[#D7E0EA]"
               >
                 <RefreshCw className={`w-3 h-3 ${loadingData ? 'animate-spin text-orange-500' : ''}`} />
                 <span>Reload</span>
@@ -1325,26 +1326,26 @@ export const PumpInfrastructurePage: React.FC = () => {
 
       {/* Notifications */}
       {successMsg && (
-        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs sm:text-sm flex items-center gap-2">
+        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-700 text-xs sm:text-sm flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
       {error && (
-        <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs sm:text-sm flex items-center gap-2">
+        <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-700 text-xs sm:text-sm flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Sub-tab Navigation */}
-      <div className="flex items-center gap-1 border-b border-slate-800 pb-2 overflow-x-auto">
+      <div className="flex items-center gap-1 border-b border-[#E2E8F0] pb-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('products')}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'products'
               ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
           }`}
         >
           <Fuel className="w-3.5 h-3.5" />
@@ -1356,7 +1357,7 @@ export const PumpInfrastructurePage: React.FC = () => {
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'tanks'
               ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
           }`}
         >
           <Gauge className="w-3.5 h-3.5" />
@@ -1369,7 +1370,7 @@ export const PumpInfrastructurePage: React.FC = () => {
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'globalCalibration'
                 ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
             }`}
             data-testid="tab-global-calibration-masters"
           >
@@ -1383,7 +1384,7 @@ export const PumpInfrastructurePage: React.FC = () => {
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'dispensers'
               ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
           }`}
         >
           <Sliders className="w-3.5 h-3.5" />
@@ -1395,7 +1396,7 @@ export const PumpInfrastructurePage: React.FC = () => {
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'nozzles'
               ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
           }`}
         >
           <Flame className="w-3.5 h-3.5" />
@@ -1407,7 +1408,7 @@ export const PumpInfrastructurePage: React.FC = () => {
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'fuelMapping'
               ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
           }`}
         >
           <Network className="w-3.5 h-3.5" />
@@ -1419,7 +1420,7 @@ export const PumpInfrastructurePage: React.FC = () => {
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
             activeTab === 'shifts'
               ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
           }`}
         >
           <Clock className="w-3.5 h-3.5" />
@@ -1433,7 +1434,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {activeTab === 'products' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+            <h2 className="text-sm font-bold text-[#17365D] uppercase tracking-wider font-mono">
               Retail Outlet Fuel Products
             </h2>
             {canWriteProducts && (
@@ -1443,7 +1444,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                   setModalError(null);
                   setModalType('mapProduct');
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-[#17365D] rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Map New Product</span>
@@ -1453,20 +1454,20 @@ export const PumpInfrastructurePage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {outletProducts.map(op => (
-              <div key={op.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div key={op.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-4 flex items-center justify-between">
                 <div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-orange-400 border border-slate-700">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#F1F5F9] text-[#B8530D] border border-[#D7E0EA]">
                     {op.product?.code || 'FUEL'}
                   </span>
-                  <div className="text-sm font-bold text-white mt-2">
+                  <div className="text-sm font-bold text-[#17365D] mt-2">
                     {op.product?.name || 'Product'}
                   </div>
-                  <div className="text-xs text-slate-400 font-mono mt-0.5">
+                  <div className="text-xs text-[#64748B] font-mono mt-0.5">
                     Unit: {op.product?.unit} • Category: {op.product?.category}
                   </div>
                 </div>
                 <div className="flex flex-col items-end">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-700 border-emerald-500/20">
                     Active
                   </span>
                 </div>
@@ -1495,7 +1496,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {activeTab === 'tanks' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+            <h2 className="text-sm font-bold text-[#17365D] uppercase tracking-wider font-mono">
               Underground Storage Tanks (UST)
             </h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -1503,9 +1504,9 @@ export const PumpInfrastructurePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setActiveTab('globalCalibration')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-orange-300 border border-orange-500/30 rounded-lg text-xs font-mono font-bold transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-orange-800 border border-orange-500/30 rounded-lg text-xs font-mono font-bold transition-colors"
                 >
-                  <Layers className="w-3.5 h-3.5 text-orange-400" />
+                  <Layers className="w-3.5 h-3.5 text-[#B8530D]" />
                   <span>Global Calibration Masters (20 KL / 50 KL)</span>
                 </button>
               )}
@@ -1521,7 +1522,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                     setModalError(null);
                     setModalType('addTank');
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-[#17365D] rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Storage Tank</span>
@@ -1537,31 +1538,31 @@ export const PumpInfrastructurePage: React.FC = () => {
               const calStatus = getTankCalibrationStatus(calPoints.length);
 
               return (
-                <div key={t.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                <div key={t.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-3">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded bg-slate-800 text-orange-400 font-mono text-xs font-bold border border-slate-700">
+                        <span className="px-2 py-0.5 rounded bg-[#F1F5F9] text-[#B8530D] font-mono text-xs font-bold border border-[#D7E0EA]">
                           Tank #{t.tankNumber}
                         </span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-700 border border-amber-500/20">
                           {t.productCode || t.productName}
                         </span>
                       </div>
-                      <h3 className="text-base font-bold text-white mt-1.5">{t.name}</h3>
+                      <h3 className="text-base font-bold text-[#17365D] mt-1.5">{t.name}</h3>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-700 border-emerald-500/20">
                       {t.status}
                     </span>
                   </div>
 
                   {/* Visual Safe Fill Capacity Meter */}
                   <div>
-                    <div className="flex justify-between text-xs text-slate-400 font-mono mb-1">
+                    <div className="flex justify-between text-xs text-[#64748B] font-mono mb-1">
                       <span>Safe Fill Limit: {t.safeFillCapacityLitres.toLocaleString()} L</span>
                       <span>Total: {t.capacityLitres.toLocaleString()} L</span>
                     </div>
-                    <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700/80">
+                    <div className="w-full bg-[#F1F5F9] rounded-full h-3 overflow-hidden border border-[#D7E0EA]/80">
                       <div
                         className="bg-gradient-to-r from-blue-500 to-amber-500 h-full rounded-full"
                         style={{ width: `${safeFillPercent}%` }}
@@ -1569,21 +1570,21 @@ export const PumpInfrastructurePage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-800 grid grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="pt-2 border-t border-[#E2E8F0] grid grid-cols-2 gap-2 text-xs font-mono">
                     <div>
-                      <span className="text-slate-500 block text-[10px]">MIN OPERATING LEVEL</span>
-                      <span className="text-slate-200">{t.minimumOperatingLevelLitres.toLocaleString()} Litres</span>
+                      <span className="text-[#64748B] block text-[10px]">MIN OPERATING LEVEL</span>
+                      <span className="text-[#334155]">{t.minimumOperatingLevelLitres.toLocaleString()} Litres</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[10px]">COMMISSIONED</span>
-                      <span className="text-slate-200">{t.commissionedAt ? new Date(t.commissionedAt).toLocaleDateString() : 'N/A'}</span>
+                      <span className="text-[#64748B] block text-[10px]">COMMISSIONED</span>
+                      <span className="text-[#334155]">{t.commissionedAt ? new Date(t.commissionedAt).toLocaleDateString() : 'N/A'}</span>
                     </div>
                   </div>
 
                   {/* Tank Calibration Status Badge */}
-                  <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                  <div className="pt-2 border-t border-[#E2E8F0]/80 space-y-1.5">
                     <div className="flex items-center justify-between text-xs font-mono">
-                      <span className="text-slate-400">Calibration:</span>
+                      <span className="text-[#64748B]">Calibration:</span>
                       <span
                         className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border inline-flex items-center gap-1.5 ${calStatus.badgeClass}`}
                       >
@@ -1596,20 +1597,20 @@ export const PumpInfrastructurePage: React.FC = () => {
                       </span>
                     </div>
                     {!calStatus.isConfigured && calStatus.warningText && (
-                      <div className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 font-mono flex items-center gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <div className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 font-mono flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                         <span>{calStatus.warningText}</span>
                       </div>
                     )}
                   </div>
 
                   {(canReadTankCalibration || canWriteTanks) && (
-                    <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2">
+                    <div className="pt-2 border-t border-[#E2E8F0]/80 flex items-center gap-2">
                       {canReadTankCalibration && (
                         <button
                           type="button"
                           onClick={() => openCalibrationModal(t)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-orange-400 hover:text-orange-300 border border-slate-700/80 rounded-xl text-xs font-semibold transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-[#F1F5F9]/80 hover:bg-[#E8EEF5]/80 text-[#B8530D] hover:text-orange-800 border border-[#D7E0EA]/80 rounded-xl text-xs font-semibold transition-colors"
                         >
                           <Layers className="w-3.5 h-3.5" />
                           <span>Calibration Chart</span>
@@ -1619,9 +1620,9 @@ export const PumpInfrastructurePage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => openEditTank(t)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-[#F1F5F9]/80 hover:bg-[#E8EEF5]/80 text-[#475569] hover:text-[#17365D] rounded-xl text-xs font-semibold transition-colors"
                         >
-                          <Edit2 className="w-3.5 h-3.5 text-orange-400" />
+                          <Edit2 className="w-3.5 h-3.5 text-[#B8530D]" />
                           <span>Edit Tank</span>
                         </button>
                       )}
@@ -1638,7 +1639,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {activeTab === 'dispensers' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+            <h2 className="text-sm font-bold text-[#17365D] uppercase tracking-wider font-mono">
               Multi-Product Dispenser Units (MPD)
             </h2>
             {canWriteDispensers && (
@@ -1652,7 +1653,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                   setModalError(null);
                   setModalType('addDispenser');
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-[#17365D] rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Dispenser</span>
@@ -1662,48 +1663,48 @@ export const PumpInfrastructurePage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {dispensers.map(d => (
-              <div key={d.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+              <div key={d.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 rounded bg-slate-800 text-orange-400 font-mono text-xs font-bold border border-slate-700">
+                    <span className="px-2.5 py-1 rounded bg-[#F1F5F9] text-[#B8530D] font-mono text-xs font-bold border border-[#D7E0EA]">
                       MPD #{d.dispenserNumber}
                     </span>
                     <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono text-[10px] font-bold border border-blue-500/20">
                       {d.nozzleCapacity || 6}-Nozzle DU
                     </span>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-700 border-emerald-500/20">
                     {d.status}
                   </span>
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-bold text-white">{d.name}</h3>
-                  <div className="text-xs text-slate-400 mt-0.5">
+                  <h3 className="text-sm font-bold text-[#17365D]">{d.name}</h3>
+                  <div className="text-xs text-[#64748B] mt-0.5">
                     {d.manufacturer || 'Standard'} {d.model && `• ${d.model}`}
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-800 grid grid-cols-2 gap-2 text-xs font-mono">
+                <div className="pt-2 border-t border-[#E2E8F0] grid grid-cols-2 gap-2 text-xs font-mono">
                   <div>
-                    <span className="text-slate-500 block text-[10px]">SERIAL NO.</span>
-                    <span className="text-slate-300 font-bold truncate block">{d.serialNumber || 'N/A'}</span>
+                    <span className="text-[#64748B] block text-[10px]">SERIAL NO.</span>
+                    <span className="text-[#475569] font-bold truncate block">{d.serialNumber || 'N/A'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px]">CONNECTED NOZZLES</span>
-                    <span className="text-orange-400 font-bold">
+                    <span className="text-[#64748B] block text-[10px]">CONNECTED NOZZLES</span>
+                    <span className="text-[#B8530D] font-bold">
                       {d.nozzlesCount || 0} / {d.nozzleCapacity || 6}
                     </span>
                   </div>
                 </div>
 
                 {canWriteDispensers && (
-                  <div className="pt-2 border-t border-slate-800/80">
+                  <div className="pt-2 border-t border-[#E2E8F0]/80">
                     <button
                       onClick={() => openEditDispenser(d)}
-                      className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+                      className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#F1F5F9]/80 hover:bg-[#E8EEF5]/80 text-[#475569] hover:text-[#17365D] rounded-xl text-xs font-semibold transition-colors"
                     >
-                      <Edit2 className="w-3.5 h-3.5 text-orange-400" />
+                      <Edit2 className="w-3.5 h-3.5 text-[#B8530D]" />
                       <span>Configure DU</span>
                     </button>
                   </div>
@@ -1718,13 +1719,13 @@ export const PumpInfrastructurePage: React.FC = () => {
       {activeTab === 'nozzles' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+            <h2 className="text-sm font-bold text-[#17365D] uppercase tracking-wider font-mono">
               Fuel Delivery Nozzles
             </h2>
             {canWriteNozzles && (
               <button
                 onClick={() => openAddNozzleModal()}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-[#17365D] rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Configure Nozzle</span>
@@ -1734,7 +1735,7 @@ export const PumpInfrastructurePage: React.FC = () => {
 
           {nozzleDiagnostics && nozzleDiagnostics.orphanNozzlesCount > 0 && (
             <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl space-y-2">
-              <div className="flex items-center gap-2 text-amber-400 text-xs font-bold font-mono">
+              <div className="flex items-center gap-2 text-amber-700 text-xs font-bold font-mono">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 <span>
                   HIDDEN / ORPHAN NOZZLE TOPOLOGY DETECTED ({nozzleDiagnostics.orphanNozzlesCount})
@@ -1744,13 +1745,13 @@ export const PumpInfrastructurePage: React.FC = () => {
                 {nozzleDiagnostics.orphanNozzles.map((orp: NozzleDiagnosticItem) => (
                   <div
                     key={orp.id}
-                    className="flex flex-wrap items-center justify-between gap-2 bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono"
+                    className="flex flex-wrap items-center justify-between gap-2 bg-white/80 border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs font-mono"
                   >
-                    <div className="text-slate-300">
-                      <span className="font-bold text-amber-400">
+                    <div className="text-[#475569]">
+                      <span className="font-bold text-amber-700">
                         MPD #{orp.dispenserNumber || '?'} / Nozzle {orp.nozzleNumber}
                       </span>{' '}
-                      • Status: <span className="text-rose-400">{orp.integrityStatus}</span>{' '}
+                      • Status: <span className="text-rose-700">{orp.integrityStatus}</span>{' '}
                       {orp.brokenRelations?.length > 0 && `(${orp.brokenRelations.join(', ')})`}
                     </div>
                     {canWriteNozzles && (
@@ -1771,8 +1772,8 @@ export const PumpInfrastructurePage: React.FC = () => {
             const duNozzles = nozzles.filter(n => n.dispenserId === d.id);
             return getAvailableNozzleNumbers(d.nozzleCapacity, duNozzles).length > 0;
           }) && (
-            <div className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-slate-400 font-mono text-[11px] mr-1">Unconfigured DU Positions:</span>
+            <div className="p-3.5 bg-white/90 border border-[#E2E8F0] rounded-2xl flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-[#64748B] font-mono text-[11px] mr-1">Unconfigured DU Positions:</span>
               {dispensers.map(d => {
                 const duNozzles = nozzles.filter(n => n.dispenserId === d.id);
                 const missingNums = getAvailableNozzleNumbers(d.nozzleCapacity, duNozzles);
@@ -1780,7 +1781,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                   <button
                     key={`${d.id}-${num}`}
                     onClick={() => openAddNozzleModal(d.id, num)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 font-mono text-[11px] font-bold transition-colors"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#B8530D] border border-[#D7E0EA] font-mono text-[11px] font-bold transition-colors"
                   >
                     <Plus className="w-3 h-3" />
                     <span>MPD #{d.dispenserNumber} / Nozzle {num}</span>
@@ -1790,9 +1791,9 @@ export const PumpInfrastructurePage: React.FC = () => {
             </div>
           )}
 
-          <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-2xl">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-800/60 text-slate-400 font-mono uppercase text-[10px] border-b border-slate-800">
+          <div className="overflow-x-auto bg-white border border-[#E2E8F0] rounded-2xl">
+            <table className="admin-data-table w-full text-left text-xs">
+              <thead className="bg-[#F1F5F9]/60 text-[#64748B] font-mono uppercase text-[10px] border-b border-[#E2E8F0]">
                 <tr>
                   <th className="py-3 px-4">DU / MPD</th>
                   <th className="py-3 px-4">Nozzle #</th>
@@ -1804,28 +1805,28 @@ export const PumpInfrastructurePage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {nozzles.map(n => (
-                  <tr key={n.id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="py-3 px-4 font-medium text-white">
+                  <tr key={n.id} className="hover:bg-[#F1F5F9]/30 transition-colors">
+                    <td className="py-3 px-4 font-medium text-[#17365D]">
                       MPD #{n.dispenserNumber} ({n.dispenserName || `DU #${n.dispenserNumber}`})
                     </td>
-                    <td className="py-3 px-4 font-mono font-bold text-orange-400">
+                    <td className="py-3 px-4 font-mono font-bold text-[#B8530D]">
                       Nozzle {n.nozzleNumber}
                     </td>
                     <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      <span className="px-2 py-0.5 rounded font-mono font-bold bg-amber-500/10 text-amber-700 border border-amber-500/20">
                         {n.productCode || n.productName}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-slate-300 font-mono">
+                    <td className="py-3 px-4 text-[#475569] font-mono">
                       Tank #{n.tankNumber} ({n.tankName || `Tank #${n.tankNumber}`})
                     </td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                         n.status === 'ACTIVE'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20'
                           : n.status === 'MAINTENANCE'
-                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                          ? 'bg-amber-500/10 text-amber-700 border-amber-500/20'
+                          : 'bg-[#F1F5F9] text-[#64748B] border-[#D7E0EA]'
                       }`}>
                         {n.status}
                       </span>
@@ -1834,13 +1835,13 @@ export const PumpInfrastructurePage: React.FC = () => {
                       {canWriteNozzles ? (
                         <button
                           onClick={() => openEditNozzle(n)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-orange-400 hover:text-orange-300 border border-slate-700 rounded-lg text-xs font-semibold transition-colors"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#B8530D] hover:text-orange-800 border border-[#D7E0EA] rounded-lg text-xs font-semibold transition-colors"
                         >
                           <Edit2 className="w-3 h-3" />
                           <span>Edit Mapping</span>
                         </button>
                       ) : (
-                        <span className="text-[11px] text-slate-500 italic">Read-only</span>
+                        <span className="text-[11px] text-[#64748B] italic">Read-only</span>
                       )}
                     </td>
                   </tr>
@@ -1856,10 +1857,10 @@ export const PumpInfrastructurePage: React.FC = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+              <h2 className="text-sm font-bold text-[#17365D] uppercase tracking-wider font-mono">
                 Global Shift Master
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-[#64748B] mt-0.5">
                 Centrally defined shift definitions shared across all retail outlets ({shiftTemplates.length} templates)
               </p>
             </div>
@@ -1874,7 +1875,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                   setModalError(null);
                   setModalType('addShift');
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 text-[#17365D] rounded-lg text-xs font-bold shadow-md shadow-orange-500/20"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Shift Template</span>
@@ -1887,10 +1888,10 @@ export const PumpInfrastructurePage: React.FC = () => {
               const isOvernight = s.startTime > s.endTime;
               const isActive = s.status === 'ACTIVE';
               return (
-                <div key={s.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                <div key={s.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded font-mono font-bold text-orange-400 bg-slate-800 border border-slate-700 text-xs">
+                      <span className="px-2 py-0.5 rounded font-mono font-bold text-[#B8530D] bg-[#F1F5F9] border border-[#D7E0EA] text-xs">
                         {s.code}
                       </span>
                       {isOvernight && (
@@ -1902,37 +1903,37 @@ export const PumpInfrastructurePage: React.FC = () => {
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                         isActive
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                          ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20'
+                          : 'bg-rose-500/10 text-rose-700 border-rose-500/20'
                       }`}
                     >
                       {s.status || 'ACTIVE'}
                     </span>
                   </div>
-                  <h3 className="text-base font-bold text-white">{s.name}</h3>
-                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-300">
+                  <h3 className="text-base font-bold text-[#17365D]">{s.name}</h3>
+                  <div className="pt-2 border-t border-[#E2E8F0] flex items-center justify-between text-xs font-mono text-[#475569]">
                     <div className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-orange-400" />
+                      <Clock className="w-3.5 h-3.5 text-[#B8530D]" />
                       <span>{s.startTime} → {s.endTime}</span>
                     </div>
-                    <span className="text-slate-500">Seq #{s.sequence}</span>
+                    <span className="text-[#64748B]">Seq #{s.sequence}</span>
                   </div>
 
                   {canWriteShifts && (
-                    <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2">
+                    <div className="pt-2 border-t border-[#E2E8F0]/80 flex items-center gap-2">
                       <button
                         onClick={() => openEditShift(s)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#475569] hover:text-[#17365D] rounded-xl text-xs font-semibold transition"
                       >
-                        <Edit2 className="w-3.5 h-3.5 text-orange-400" />
+                        <Edit2 className="w-3.5 h-3.5 text-[#B8530D]" />
                         <span>Edit Shift</span>
                       </button>
                       <button
                         onClick={() => handleToggleShiftStatus(s)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
                           isActive
-                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
-                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                            ? 'bg-rose-500/10 text-rose-700 border-rose-500/20 hover:bg-rose-500/20'
+                            : 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 hover:bg-emerald-500/20'
                         }`}
                       >
                         {isActive ? 'Deactivate' : 'Activate'}
@@ -1954,11 +1955,11 @@ export const PumpInfrastructurePage: React.FC = () => {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                  <Network className="w-4 h-4 text-orange-400" />
+                <h2 className="text-sm font-bold text-[#17365D] uppercase tracking-wider font-mono flex items-center gap-2">
+                  <Network className="w-4 h-4 text-[#B8530D]" />
                   <span>Physical Fuel Topology Tree (PRODUCT → TANK → DU → NOZZLE)</span>
                 </h2>
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-[#64748B] mt-1">
                   Hierarchical physical mapping derived from active tanks, DUs, and configured nozzles.
                 </p>
               </div>
@@ -1967,11 +1968,11 @@ export const PumpInfrastructurePage: React.FC = () => {
             {/* Warnings Summary Panel */}
             {mappingTree.warningsSummary.length > 0 && (
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 space-y-2">
-                <div className="flex items-center gap-2 text-amber-400 text-xs font-bold font-mono">
+                <div className="flex items-center gap-2 text-amber-700 text-xs font-bold font-mono">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
                   <span>TOPOLOGY AUDIT WARNINGS ({mappingTree.warningsSummary.length})</span>
                 </div>
-                <ul className="list-disc list-inside space-y-1 text-xs text-amber-300/80 font-mono">
+                <ul className="list-disc list-inside space-y-1 text-xs text-amber-800/80 font-mono">
                   {mappingTree.warningsSummary.map((warn, idx) => (
                     <li key={idx}>{warn}</li>
                   ))}
@@ -1982,81 +1983,81 @@ export const PumpInfrastructurePage: React.FC = () => {
             {/* Product Mapping Nodes */}
             <div className="space-y-6">
               {mappingTree.products.map(pNode => (
-                <div key={pNode.product.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div key={pNode.product.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-4">
                   {/* Product Header */}
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0]">
                     <div className="flex items-center gap-3">
                       <span className={`px-2.5 py-1 rounded font-mono text-xs font-bold border ${getProductCategoryBadgeClass(pNode.product.category)}`}>
                         {pNode.product.code}
                       </span>
                       <div>
-                        <h3 className="text-sm font-bold text-white">{pNode.product.name}</h3>
-                        <span className="text-[10px] text-slate-400 font-mono">Category: {pNode.product.category} • Unit: {pNode.product.unit}</span>
+                        <h3 className="text-sm font-bold text-[#17365D]">{pNode.product.name}</h3>
+                        <span className="text-[10px] text-[#64748B] font-mono">Category: {pNode.product.category} • Unit: {pNode.product.unit}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 font-mono text-xs">
-                      <span className="text-slate-400">Tanks: <strong className="text-slate-200">{pNode.totalTanksCount}</strong></span>
-                      <span className="text-slate-400">Nozzles: <strong className="text-orange-400">{pNode.totalNozzlesCount}</strong></span>
+                      <span className="text-[#64748B]">Tanks: <strong className="text-[#334155]">{pNode.totalTanksCount}</strong></span>
+                      <span className="text-[#64748B]">Nozzles: <strong className="text-[#B8530D]">{pNode.totalNozzlesCount}</strong></span>
                     </div>
                   </div>
 
                   {/* Product Node Warnings */}
                   {pNode.warnings.map((w, idx) => (
-                    <div key={idx} className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs rounded-xl font-mono flex items-center gap-2">
+                    <div key={idx} className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 text-xs rounded-xl font-mono flex items-center gap-2">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                       <span>{w}</span>
                     </div>
                   ))}
 
                   {/* Tanks under Product */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-2 border-l-2 border-slate-800">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-2 border-l-2 border-[#E2E8F0]">
                     {pNode.tanks.map(tNode => (
-                      <div key={tNode.tank.id} className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 space-y-3">
+                      <div key={tNode.tank.id} className="bg-[#F8FAFC]/60 border border-[#E2E8F0]/80 rounded-xl p-4 space-y-3">
                         <div className="flex items-start justify-between">
                           <div>
-                            <span className="px-2 py-0.5 rounded bg-slate-800 text-orange-400 font-mono text-[10px] font-bold border border-slate-700">
+                            <span className="px-2 py-0.5 rounded bg-[#F1F5F9] text-[#B8530D] font-mono text-[10px] font-bold border border-[#D7E0EA]">
                               Tank #{tNode.tank.tankNumber}
                             </span>
-                            <h4 className="text-xs font-bold text-white mt-1">{tNode.tank.name}</h4>
+                            <h4 className="text-xs font-bold text-[#17365D] mt-1">{tNode.tank.name}</h4>
                           </div>
-                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-emerald-500/10 text-emerald-700 border-emerald-500/20">
                             {tNode.tank.status}
                           </span>
                         </div>
 
-                        <div className="text-[10px] font-mono text-slate-400 flex justify-between">
+                        <div className="text-[10px] font-mono text-[#64748B] flex justify-between">
                           <span>Safe Fill: {tNode.tank.safeFillCapacityLitres.toLocaleString()} L</span>
                           <span>Cap: {tNode.tank.capacityLitres.toLocaleString()} L</span>
                         </div>
 
                         {/* Tank Warnings */}
                         {tNode.warnings.map((w, idx) => (
-                          <div key={idx} className="p-2 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-mono rounded-lg">
+                          <div key={idx} className="p-2 bg-amber-500/10 border border-amber-500/20 text-amber-700 text-[10px] font-mono rounded-lg">
                             ⚠️ {w}
                           </div>
                         ))}
 
                         {/* DUs connected to Tank */}
                         {tNode.connectedDus.length > 0 && (
-                          <div className="space-y-2 pt-2 border-t border-slate-800/60">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Connected Dispensing Units</span>
+                          <div className="space-y-2 pt-2 border-t border-[#E2E8F0]/60">
+                            <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider font-mono">Connected Dispensing Units</span>
                             {tNode.connectedDus.map(duNode => (
-                              <div key={duNode.dispenser.id} className="bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-2">
+                              <div key={duNode.dispenser.id} className="bg-white border border-[#E2E8F0] rounded-lg p-3 space-y-2">
                                 <div className="flex items-center justify-between text-xs">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="font-mono font-bold text-slate-200">DU #{duNode.dispenser.dispenserNumber}</span>
+                                    <span className="font-mono font-bold text-[#334155]">DU #{duNode.dispenser.dispenserNumber}</span>
                                     <span className="text-[10px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
                                       {duNode.duTypeLabel}
                                     </span>
                                   </div>
-                                  <span className="text-[10px] font-mono text-slate-400">
+                                  <span className="text-[10px] font-mono text-[#64748B]">
                                     {duNode.utilization.ratioText}
                                   </span>
                                 </div>
 
                                 {/* DU Warnings */}
                                 {duNode.warnings.map((w, idx) => (
-                                  <div key={idx} className="text-[9px] font-mono text-amber-400/80">
+                                  <div key={idx} className="text-[9px] font-mono text-amber-700/80">
                                     ℹ️ {w}
                                   </div>
                                 ))}
@@ -2064,7 +2065,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                                 {/* Nozzles List */}
                                 <div className="flex flex-wrap gap-1.5 pt-1">
                                   {duNode.nozzles.map(nNode => (
-                                    <span key={nNode.id} className="px-2 py-0.5 bg-slate-800 text-orange-400 border border-slate-700 text-[10px] font-bold font-mono rounded">
+                                    <span key={nNode.id} className="px-2 py-0.5 bg-[#F1F5F9] text-[#B8530D] border border-[#D7E0EA] text-[10px] font-bold font-mono rounded">
                                       Nozzle #{nNode.nozzleNumber} ({nNode.status})
                                     </span>
                                   ))}
@@ -2082,20 +2083,20 @@ export const PumpInfrastructurePage: React.FC = () => {
 
             {/* Unassigned DUs */}
             {mappingTree.unassignedDispensers.length > 0 && (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
-                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+              <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-3">
+                <h3 className="text-xs font-bold text-[#475569] uppercase tracking-wider font-mono flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-700" />
                   <span>Unassigned Dispensing Units (0 Configured Nozzles)</span>
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {mappingTree.unassignedDispensers.map(duNode => (
-                    <div key={duNode.dispenser.id} className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs space-y-1">
-                      <div className="flex justify-between font-mono font-bold text-white">
+                    <div key={duNode.dispenser.id} className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3 text-xs space-y-1">
+                      <div className="flex justify-between font-mono font-bold text-[#17365D]">
                         <span>DU #{duNode.dispenser.dispenserNumber}</span>
                         <span className="text-blue-400">{duNode.duTypeLabel}</span>
                       </div>
-                      <div className="text-[10px] text-slate-400">{duNode.dispenser.name}</div>
-                      <div className="text-[10px] font-mono text-amber-400">0 / {duNode.utilization.capacity} nozzles configured</div>
+                      <div className="text-[10px] text-[#64748B]">{duNode.dispenser.name}</div>
+                      <div className="text-[10px] font-mono text-amber-700">0 / {duNode.utilization.capacity} nozzles configured</div>
                     </div>
                   ))}
                 </div>
@@ -2110,17 +2111,17 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Map Product Modal */}
       {modalType === 'mapProduct' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-2">Map Fuel Product to Outlet</h2>
-            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
+          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-[#17365D] mb-2">Map Fuel Product to Outlet</h2>
+            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleMapProduct} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Select Catalog Product</label>
+                <label className="block text-xs font-semibold text-[#475569] mb-1">Select Catalog Product</label>
                 <select
                   value={selectedProductId}
                   onChange={(e) => setSelectedProductId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-200"
+                  className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs sm:text-sm text-[#334155]"
                 >
                   {catalogProducts.map(p => (
                     <option key={p.id} value={p.id}>
@@ -2130,7 +2131,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-3">
-                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
+                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
                 <button type="submit" disabled={modalSubmitting} className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">
                   {modalSubmitting ? 'Mapping...' : 'Confirm Mapping'}
                 </button>
@@ -2143,27 +2144,27 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Add Tank Modal */}
       {modalType === 'addTank' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-2">Register Underground Storage Tank</h2>
-            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
+          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-[#17365D] mb-2">Register Underground Storage Tank</h2>
+            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleAddTank} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Tank Number</label>
+                  <label className="block text-xs text-[#475569] mb-1">Tank Number</label>
                   <input
                     type="number"
                     value={tankNumber}
                     onChange={(e) => setTankNumber(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Fuel Grade</label>
+                  <label className="block text-xs text-[#475569] mb-1">Fuel Grade</label>
                   <select
                     value={selectedProductId}
                     onChange={(e) => setSelectedProductId(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   >
                     {outletProducts.map(op => (
                       <option key={op.productId} value={op.productId}>
@@ -2174,45 +2175,45 @@ export const PumpInfrastructurePage: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-slate-300 mb-1">Tank Name</label>
+                <label className="block text-xs text-[#475569] mb-1">Tank Name</label>
                 <input
                   type="text"
                   value={tankName}
                   onChange={(e) => setTankName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                 />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-1">Total Cap (L)</label>
+                  <label className="block text-[10px] text-[#64748B] mb-1">Total Cap (L)</label>
                   <input
                     type="number"
                     value={tankCapacity}
                     onChange={(e) => setTankCapacity(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2 py-1.5 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-2 py-1.5 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-1">Safe Fill (L)</label>
+                  <label className="block text-[10px] text-[#64748B] mb-1">Safe Fill (L)</label>
                   <input
                     type="number"
                     value={tankSafeFill}
                     onChange={(e) => setTankSafeFill(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2 py-1.5 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-2 py-1.5 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-1">Min Level (L)</label>
+                  <label className="block text-[10px] text-[#64748B] mb-1">Min Level (L)</label>
                   <input
                     type="number"
                     value={tankMinOperating}
                     onChange={(e) => setTankMinOperating(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2 py-1.5 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-2 py-1.5 text-xs text-[#17365D]"
                   />
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-3">
-                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
+                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
                 <button type="submit" disabled={modalSubmitting} className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">
                   {modalSubmitting ? 'Creating...' : 'Create Tank'}
                 </button>
@@ -2225,80 +2226,80 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Add Dispenser Modal */}
       {modalType === 'addDispenser' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-2">Register Dispensing Unit (DU)</h2>
-            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
+          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-[#17365D] mb-2">Register Dispensing Unit (DU)</h2>
+            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleAddDispenser} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">DU # / Number</label>
+                  <label className="block text-xs text-[#475569] mb-1">DU # / Number</label>
                   <input
                     type="number"
                     value={dispNumber}
                     onChange={(e) => setDispNumber(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">DU Name</label>
+                  <label className="block text-xs text-[#475569] mb-1">DU Name</label>
                   <input
                     type="text"
                     value={dispName}
                     onChange={(e) => setDispName(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Manufacturer / Make</label>
+                  <label className="block text-xs text-[#475569] mb-1">Manufacturer / Make</label>
                   <input
                     type="text"
                     value={dispManufacturer}
                     onChange={(e) => setDispManufacturer(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Model</label>
+                  <label className="block text-xs text-[#475569] mb-1">Model</label>
                   <input
                     type="text"
                     value={dispModel}
                     onChange={(e) => setDispModel(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Serial Number</label>
+                  <label className="block text-xs text-[#475569] mb-1">Serial Number</label>
                   <input
                     type="text"
                     value={dispSerial}
                     onChange={(e) => setDispSerial(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Commissioned Date</label>
+                  <label className="block text-xs text-[#475569] mb-1">Commissioned Date</label>
                   <input
                     type="date"
                     value={dispCommissionedAt}
                     onChange={(e) => setDispCommissionedAt(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-slate-300 mb-1">DU Operational Status</label>
+                <label className="block text-xs text-[#475569] mb-1">DU Operational Status</label>
                 <select
                   value={dispStatus}
                   onChange={(e) => setDispStatus(e.target.value as any)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                 >
                   <option value="ACTIVE">ACTIVE</option>
                   <option value="INACTIVE">INACTIVE</option>
@@ -2308,7 +2309,7 @@ export const PumpInfrastructurePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-[#475569] mb-1">
                   DU Type / Nozzle Capacity
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -2319,8 +2320,8 @@ export const PumpInfrastructurePage: React.FC = () => {
                       onClick={() => setDispNozzleCapacity(cap)}
                       className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                         dispNozzleCapacity === cap
-                          ? 'bg-orange-500/20 border-orange-500 text-orange-400 shadow-sm shadow-orange-500/20'
-                          : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
+                          ? 'bg-orange-500/20 border-orange-500 text-[#B8530D] shadow-sm shadow-orange-500/20'
+                          : 'bg-[#F1F5F9]/80 border-[#D7E0EA] text-[#64748B] hover:text-[#17365D]'
                       }`}
                     >
                       {getDuTypeLabel(cap)}
@@ -2330,7 +2331,7 @@ export const PumpInfrastructurePage: React.FC = () => {
               </div>
 
               <div className="flex justify-end gap-2 pt-3">
-                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
+                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
                 <button type="submit" disabled={modalSubmitting} className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">
                   {modalSubmitting ? 'Registering...' : 'Register Dispenser'}
                 </button>
@@ -2343,77 +2344,77 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Edit Dispenser Modal */}
       {modalType === 'editDispenser' && editingDispenser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-2">Configure Dispensing Unit (DU #{editingDispenser.dispenserNumber})</h2>
-            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
+          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-[#17365D] mb-2">Configure Dispensing Unit (DU #{editingDispenser.dispenserNumber})</h2>
+            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleEditDispenser} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">DU Number (Read Only)</label>
-                  <div className="w-full bg-slate-800/60 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold font-mono text-orange-400">
+                  <label className="block text-xs text-[#64748B] mb-1">DU Number (Read Only)</label>
+                  <div className="w-full bg-[#F1F5F9]/60 border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs font-bold font-mono text-[#B8530D]">
                     DU #{editingDispenser.dispenserNumber}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">DU Name</label>
+                  <label className="block text-xs text-[#475569] mb-1">DU Name</label>
                   <input
                     type="text"
                     value={dispName}
                     onChange={(e) => setDispName(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Manufacturer</label>
+                  <label className="block text-xs text-[#475569] mb-1">Manufacturer</label>
                   <input
                     type="text"
                     value={dispManufacturer}
                     onChange={(e) => setDispManufacturer(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Model</label>
+                  <label className="block text-xs text-[#475569] mb-1">Model</label>
                   <input
                     type="text"
                     value={dispModel}
                     onChange={(e) => setDispModel(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Serial Number</label>
+                  <label className="block text-xs text-[#475569] mb-1">Serial Number</label>
                   <input
                     type="text"
                     value={dispSerial}
                     onChange={(e) => setDispSerial(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Commissioned Date</label>
+                  <label className="block text-xs text-[#475569] mb-1">Commissioned Date</label>
                   <input
                     type="date"
                     value={dispCommissionedAt}
                     onChange={(e) => setDispCommissionedAt(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-slate-300 mb-1">DU Operational Status</label>
+                <label className="block text-xs text-[#475569] mb-1">DU Operational Status</label>
                 <select
                   value={dispStatus}
                   onChange={(e) => setDispStatus(e.target.value as any)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                 >
                   <option value="ACTIVE">ACTIVE</option>
                   <option value="INACTIVE">INACTIVE</option>
@@ -2423,7 +2424,7 @@ export const PumpInfrastructurePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-[#475569] mb-1">
                   DU Type / Nozzle Capacity
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -2434,21 +2435,21 @@ export const PumpInfrastructurePage: React.FC = () => {
                       onClick={() => setDispNozzleCapacity(cap)}
                       className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                         dispNozzleCapacity === cap
-                          ? 'bg-orange-500/20 border-orange-500 text-orange-400 shadow-sm shadow-orange-500/20'
-                          : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
+                          ? 'bg-orange-500/20 border-orange-500 text-[#B8530D] shadow-sm shadow-orange-500/20'
+                          : 'bg-[#F1F5F9]/80 border-[#D7E0EA] text-[#64748B] hover:text-[#17365D]'
                       }`}
                     >
                       {getDuTypeLabel(cap)}
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1">
+                <p className="text-[10px] text-[#64748B] mt-1">
                   Cannot be reduced below existing configured nozzle positions on this unit.
                 </p>
               </div>
 
               <div className="flex justify-end gap-2 pt-3">
-                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
+                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
                 <button type="submit" disabled={modalSubmitting} className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">
                   {modalSubmitting ? 'Saving...' : 'Update Dispenser'}
                 </button>
@@ -2474,21 +2475,21 @@ export const PumpInfrastructurePage: React.FC = () => {
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
-            <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
-              <h2 className="text-lg font-bold text-white">Configure Fuel Nozzle</h2>
-              {modalError && <div className="p-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
+            <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+            <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+              <h2 className="text-lg font-bold text-[#17365D]">Configure Fuel Nozzle</h2>
+              {modalError && <div className="p-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
 
               <form onSubmit={handleAddNozzle} className="space-y-3">
                 {/* 1. Select DU */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-[#475569] mb-1">
                     1. Select Dispensing Unit (DU)
                   </label>
                   <select
                     value={resolved.dispenserId}
                     onChange={(e) => handleNozzleDispenserChange(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-medium"
                   >
                     {dispensers.map(d => (
                       <option key={d.id} value={d.id}>
@@ -2500,11 +2501,11 @@ export const PumpInfrastructurePage: React.FC = () => {
 
                 {/* 2. Select Nozzle Position */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-[#475569] mb-1">
                     2. Select Available Nozzle Position
                   </label>
                   {isNoPositionsAvailable ? (
-                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs rounded-xl font-medium">
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 text-xs rounded-xl font-medium">
                       All nozzle positions on this DU ({selectedDu?.nozzleCapacity || 6}) are already configured.
                     </div>
                   ) : (
@@ -2514,7 +2515,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                         setNozzleNumber(Number(e.target.value));
                         setModalError(null);
                       }}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold font-mono"
+                      className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-bold font-mono"
                     >
                       {availablePositions.map(pos => (
                         <option key={pos} value={pos}>
@@ -2527,13 +2528,13 @@ export const PumpInfrastructurePage: React.FC = () => {
 
                 {/* 3. Select Fuel Product */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-[#475569] mb-1">
                     3. Select Fuel Product (Active Liquid Grades)
                   </label>
                   <select
                     value={resolved.productId}
                     onChange={(e) => handleNozzleProductChange(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-medium"
                   >
                     {activeLiquidOps.map(op => {
                       const prod = op.product || catalogProducts.find(p => p.id === op.productId);
@@ -2548,11 +2549,11 @@ export const PumpInfrastructurePage: React.FC = () => {
 
                 {/* 4. Select Underground Tank */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-[#475569] mb-1">
                     4. Select Connected Underground Tank
                   </label>
                   {matchingTanks.length === 0 ? (
-                    <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl font-medium">
+                    <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-700 text-xs rounded-xl font-medium">
                       No active underground tanks configured for this product grade. Please create an underground tank first.
                     </div>
                   ) : (
@@ -2562,7 +2563,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                         setNozzleTankId(e.target.value);
                         setModalError(null);
                       }}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium"
+                      className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-medium"
                     >
                       {matchingTanks.map(t => (
                         <option key={t.id} value={t.id}>
@@ -2574,11 +2575,11 @@ export const PumpInfrastructurePage: React.FC = () => {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-3">
-                  <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
+                  <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
                   <button
                     type="submit"
                     disabled={modalSubmitting || isNoPositionsAvailable || matchingTanks.length === 0}
-                    className="px-4 py-2 bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
+                    className="px-4 py-2 bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-[#17365D] rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
                   >
                     {modalSubmitting ? 'Saving...' : 'Configure Nozzle'}
                   </button>
@@ -2592,66 +2593,66 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Add Shift Template Modal */}
       {modalType === 'addShift' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-2">Create Shift Template</h2>
-            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-400 text-xs rounded-xl">{modalError}</div>}
+          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-[#17365D] mb-2">Create Shift Template</h2>
+            {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleAddShift} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Shift Code</label>
+                  <label className="block text-xs text-[#475569] mb-1">Shift Code</label>
                   <input
                     type="text"
                     value={shiftCode}
                     onChange={(e) => setShiftCode(e.target.value.toUpperCase())}
                     placeholder="e.g. SHIFT_1"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Sequence</label>
+                  <label className="block text-xs text-[#475569] mb-1">Sequence</label>
                   <input
                     type="number"
                     value={shiftSeq}
                     onChange={(e) => setShiftSeq(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-mono"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-slate-300 mb-1">Name</label>
+                <label className="block text-xs text-[#475569] mb-1">Name</label>
                 <input
                   type="text"
                   value={shiftName}
                   onChange={(e) => setShiftName(e.target.value)}
                   placeholder="e.g. Morning Shift"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Start Time (24h)</label>
+                  <label className="block text-xs text-[#475569] mb-1">Start Time (24h)</label>
                   <input
                     type="text"
                     value={shiftStart}
                     onChange={(e) => setShiftStart(e.target.value)}
                     placeholder="06:00"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">End Time (24h)</label>
+                  <label className="block text-xs text-[#475569] mb-1">End Time (24h)</label>
                   <input
                     type="text"
                     value={shiftEnd}
                     onChange={(e) => setShiftEnd(e.target.value)}
                     placeholder="14:00"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-mono"
                   />
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-3">
-                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300">Cancel</button>
+                <button type="button" onClick={() => setModalType(null)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
                 <button type="submit" disabled={modalSubmitting} className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold">
                   {modalSubmitting ? 'Saving...' : 'Save Template'}
                 </button>
@@ -2664,26 +2665,26 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Edit Global Shift Template Modal */}
       {modalType === 'editShift' && editingShift && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
+          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-white">Edit Shift Template ({editingShift.code})</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <h2 className="text-lg font-bold text-[#17365D]">Edit Shift Template ({editingShift.code})</h2>
+                <p className="text-xs text-[#64748B] mt-0.5">
                   Update central shift timing, sequence, and operational status
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setModalType(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                className="p-1 rounded-lg text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {modalError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs rounded-xl flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{modalError}</span>
               </div>
@@ -2692,66 +2693,66 @@ export const PumpInfrastructurePage: React.FC = () => {
             <form onSubmit={handleEditShift} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Shift Code (Immutable)</label>
-                  <div className="w-full bg-slate-800/60 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold font-mono text-orange-400">
+                  <label className="block text-xs text-[#64748B] mb-1">Shift Code (Immutable)</label>
+                  <div className="w-full bg-[#F1F5F9]/60 border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs font-bold font-mono text-[#B8530D]">
                     {editingShift.code}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Sequence</label>
+                  <label className="block text-xs text-[#475569] mb-1">Sequence</label>
                   <input
                     type="number"
                     value={editShiftSeq}
                     onChange={(e) => setEditShiftSeq(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-slate-300 mb-1">Shift Name</label>
+                <label className="block text-xs text-[#475569] mb-1">Shift Name</label>
                 <input
                   type="text"
                   value={editShiftName}
                   onChange={(e) => setEditShiftName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Start Time (24h)</label>
+                  <label className="block text-xs text-[#475569] mb-1">Start Time (24h)</label>
                   <input
                     type="text"
                     value={editShiftStart}
                     onChange={(e) => setEditShiftStart(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">End Time (24h)</label>
+                  <label className="block text-xs text-[#475569] mb-1">End Time (24h)</label>
                   <input
                     type="text"
                     value={editShiftEnd}
                     onChange={(e) => setEditShiftEnd(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-slate-300 mb-1">Operational Status</label>
+                <label className="block text-xs text-[#475569] mb-1">Operational Status</label>
                 <select
                   value={editShiftStatus}
                   onChange={(e) => setEditShiftStatus(e.target.value as any)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                 >
                   <option value="ACTIVE">ACTIVE</option>
                   <option value="INACTIVE">INACTIVE</option>
                 </select>
               </div>
 
-              <div className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-[11px] text-slate-400">
+              <div className="p-2.5 bg-[#F8FAFC]/60 border border-[#E2E8F0] rounded-xl text-[11px] text-[#64748B]">
                 ℹ️ Notice: Inactivating a shift template prevents it from being used for new operational shifts or roster schedules, while all historical shifts remain completely intact.
               </div>
 
@@ -2759,7 +2760,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setModalType(null)}
-                  className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300"
+                  className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]"
                 >
                   Cancel
                 </button>
@@ -2779,26 +2780,26 @@ export const PumpInfrastructurePage: React.FC = () => {
       {/* Edit Tank Modal */}
       {modalType === 'editTank' && editingTank && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
+          <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-white">Edit Tank #{editingTank.tankNumber}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <h2 className="text-lg font-bold text-[#17365D]">Edit Tank #{editingTank.tankNumber}</h2>
+                <p className="text-xs text-[#64748B] mt-0.5">
                   Update tank specifications and operational lifecycle status
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setModalType(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                className="p-1 rounded-lg text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {modalError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs rounded-xl flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{modalError}</span>
               </div>
@@ -2807,17 +2808,17 @@ export const PumpInfrastructurePage: React.FC = () => {
             <form onSubmit={handleEditTank} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Tank Number (Read Only)</label>
-                  <div className="w-full bg-slate-800/60 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold font-mono text-orange-400">
+                  <label className="block text-xs text-[#64748B] mb-1">Tank Number (Read Only)</label>
+                  <div className="w-full bg-[#F1F5F9]/60 border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs font-bold font-mono text-[#B8530D]">
                     Tank #{editingTank.tankNumber}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-300 mb-1">Fuel Grade</label>
+                  <label className="block text-xs text-[#475569] mb-1">Fuel Grade</label>
                   <select
                     value={editTankProductId}
                     onChange={(e) => setEditTankProductId(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                   >
                     {outletProducts.map(op => (
                       <option key={op.productId} value={op.productId}>
@@ -2829,51 +2830,51 @@ export const PumpInfrastructurePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs text-slate-300 mb-1">Tank Name</label>
+                <label className="block text-xs text-[#475569] mb-1">Tank Name</label>
                 <input
                   type="text"
                   value={editTankName}
                   onChange={(e) => setEditTankName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                 />
               </div>
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-1">Total Cap (L)</label>
+                  <label className="block text-[10px] text-[#64748B] mb-1">Total Cap (L)</label>
                   <input
                     type="number"
                     value={editTankCapacity}
                     onChange={(e) => setEditTankCapacity(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2 py-1.5 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-2 py-1.5 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-1">Safe Fill (L)</label>
+                  <label className="block text-[10px] text-[#64748B] mb-1">Safe Fill (L)</label>
                   <input
                     type="number"
                     value={editTankSafeFill}
                     onChange={(e) => setEditTankSafeFill(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2 py-1.5 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-2 py-1.5 text-xs text-[#17365D]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-1">Min Level (L)</label>
+                  <label className="block text-[10px] text-[#64748B] mb-1">Min Level (L)</label>
                   <input
                     type="number"
                     value={editTankMinOperating}
                     onChange={(e) => setEditTankMinOperating(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2 py-1.5 text-xs text-white"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-2 py-1.5 text-xs text-[#17365D]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-slate-300 mb-1">Tank Operational Status</label>
+                <label className="block text-xs text-[#475569] mb-1">Tank Operational Status</label>
                 <select
                   value={editTankStatus}
                   onChange={(e) => setEditTankStatus(e.target.value as any)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]"
                 >
                   <option value="ACTIVE">ACTIVE</option>
                   <option value="INACTIVE">INACTIVE</option>
@@ -2882,7 +2883,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                 </select>
               </div>
 
-              <div className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-[11px] text-slate-400">
+              <div className="p-2.5 bg-[#F8FAFC]/60 border border-[#E2E8F0] rounded-xl text-[11px] text-[#64748B]">
                 ℹ️ Notice: Changing fuel grade product on an operational tank will be safely rejected if connected nozzles, historical meter readings, or fuel receipts are recorded.
               </div>
 
@@ -2890,7 +2891,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setModalType(null)}
-                  className="px-4 py-2 bg-slate-800 rounded-xl text-xs text-slate-300"
+                  className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]"
                 >
                   Cancel
                 </button>
@@ -2915,26 +2916,26 @@ export const PumpInfrastructurePage: React.FC = () => {
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setModalType(null)} />
-            <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm" onClick={() => setModalType(null)} />
+            <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-bold text-white">Edit Nozzle Mapping</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <h2 className="text-lg font-bold text-[#17365D]">Edit Nozzle Mapping</h2>
+                  <p className="text-xs text-[#64748B] mt-0.5">
                     Correct retail outlet infrastructure configuration for future operational shifts
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setModalType(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                  className="p-1 rounded-lg text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {modalError && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs rounded-xl flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{modalError}</span>
                 </div>
@@ -2943,34 +2944,34 @@ export const PumpInfrastructurePage: React.FC = () => {
               <form onSubmit={handleEditNozzle} className="space-y-4">
                 {/* 1. Dispensing Unit (Immutable) */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  <label className="block text-xs font-semibold text-[#64748B] mb-1">
                     Dispensing Unit (DU / MPD)
                   </label>
-                  <div className="w-full bg-slate-800/60 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-200">
+                  <div className="w-full bg-[#F1F5F9]/60 border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs font-mono font-bold text-[#334155]">
                     MPD #{editingNozzle.dispenserNumber} ({editingNozzle.dispenserName || `DU #${editingNozzle.dispenserNumber}`})
                   </div>
-                  <span className="text-[10px] text-slate-500 mt-1 block">Dispenser unit assignment is immutable in this phase</span>
+                  <span className="text-[10px] text-[#64748B] mt-1 block">Dispenser unit assignment is immutable in this phase</span>
                 </div>
 
                 {/* 2. Nozzle Position (Immutable) */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  <label className="block text-xs font-semibold text-[#64748B] mb-1">
                     Nozzle Number / Position
                   </label>
-                  <div className="w-full bg-slate-800/60 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono font-bold text-orange-400">
+                  <div className="w-full bg-[#F1F5F9]/60 border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs font-mono font-bold text-[#B8530D]">
                     Position #{editingNozzle.nozzleNumber}
                   </div>
                 </div>
 
                 {/* 3. Fuel Product Dropdown */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-[#475569] mb-1">
                     Fuel Product (Active Liquid Grades)
                   </label>
                   <select
                     value={editNozzleProductId}
                     onChange={(e) => handleEditNozzleProductChange(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium focus:outline-none focus:border-orange-500"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-medium focus:outline-none focus:border-orange-500"
                   >
                     {activeLiquidOps.map(op => {
                       const prod = op.product || catalogProducts.find(p => p.id === op.productId);
@@ -2985,18 +2986,18 @@ export const PumpInfrastructurePage: React.FC = () => {
 
                 {/* 4. Connected Tank Dropdown */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-[#475569] mb-1">
                     Connected Underground Tank (Active)
                   </label>
                   {matchingTanks.length === 0 ? (
-                    <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl font-medium">
+                    <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-700 text-xs rounded-xl font-medium">
                       No active tanks found for this fuel product grade.
                     </div>
                   ) : (
                     <select
                       value={editNozzleTankId}
                       onChange={(e) => handleEditNozzleTankChange(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium focus:outline-none focus:border-orange-500"
+                      className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-medium focus:outline-none focus:border-orange-500"
                     >
                       {matchingTanks.map(t => (
                         <option key={t.id} value={t.id}>
@@ -3006,7 +3007,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                     </select>
                   )}
                   {isMismatched && (
-                    <span className="text-[10px] text-amber-400 mt-1 block">
+                    <span className="text-[10px] text-amber-700 mt-1 block">
                       ⚠️ Please select a valid tank matching the selected fuel product.
                     </span>
                   )}
@@ -3014,13 +3015,13 @@ export const PumpInfrastructurePage: React.FC = () => {
 
                 {/* 5. Operational Status */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-[#475569] mb-1">
                     Lifecycle Status
                   </label>
                   <select
                     value={editNozzleStatus}
                     onChange={(e) => setEditNozzleStatus(e.target.value as any)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium focus:outline-none focus:border-orange-500"
+                    className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-medium focus:outline-none focus:border-orange-500"
                   >
                     <option value="ACTIVE">ACTIVE</option>
                     <option value="INACTIVE">INACTIVE</option>
@@ -3030,7 +3031,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                 </div>
 
                 {/* Notice regarding historical safety */}
-                <div className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-[11px] text-slate-400">
+                <div className="p-2.5 bg-[#F8FAFC]/60 border border-[#E2E8F0] rounded-xl text-[11px] text-[#64748B]">
                   ℹ️ Changes to this nozzle mapping take effect immediately for future shifts. Historical shift snapshots and closed meter readings remain safely unchanged.
                 </div>
 
@@ -3038,14 +3039,14 @@ export const PumpInfrastructurePage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setModalType(null)}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs text-slate-300 font-semibold transition-colors"
+                    className="px-4 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] rounded-xl text-xs text-[#475569] font-semibold transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={modalSubmitting || matchingTanks.length === 0 || isMismatched}
-                    className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20 transition-all"
+                    className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-[#17365D] rounded-xl text-xs font-bold shadow-md shadow-orange-500/20 transition-all"
                   >
                     {modalSubmitting ? 'Saving...' : 'Save Mapping'}
                   </button>
@@ -3084,15 +3085,15 @@ export const PumpInfrastructurePage: React.FC = () => {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
-              className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
+              className="fixed inset-0 bg-[#F8FAFC]/55 backdrop-blur-sm"
               onClick={() => setModalType(null)}
             />
-            <div className="relative z-10 w-full max-w-4xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5">
+            <div className="relative z-10 w-full max-w-4xl max-h-[92vh] overflow-y-auto bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-5">
               {/* Header */}
-              <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] pb-4">
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-bold text-white">
+                    <h2 className="text-lg font-bold text-[#17365D]">
                       Tank Calibration Chart
                     </h2>
                     <span
@@ -3109,12 +3110,12 @@ export const PumpInfrastructurePage: React.FC = () => {
                       <span
                         className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border inline-flex items-center gap-1 font-mono ${
                           calSelectedChart.status === 'ACTIVE'
-                            ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                            ? 'bg-emerald-500/10 text-emerald-800 border-emerald-500/30'
                             : calSelectedChart.status === 'APPROVED'
                               ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30'
                               : calSelectedChart.status === 'DRAFT'
-                                ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                                ? 'bg-amber-500/10 text-amber-800 border-amber-500/30'
+                                : 'bg-[#F1F5F9] text-[#64748B] border-[#D7E0EA]'
                         }`}
                       >
                         Rev #{calSelectedChart.revisionNumber} • {calSelectedChart.status}
@@ -3124,13 +3125,13 @@ export const PumpInfrastructurePage: React.FC = () => {
                       <span
                         className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border inline-flex items-center gap-1 font-mono ${
                           isChartLocked
-                            ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
-                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                            ? 'bg-rose-500/10 text-rose-800 border-rose-500/30'
+                            : 'bg-[#F1F5F9] text-[#475569] border-[#D7E0EA]'
                         }`}
                       >
                         {isChartLocked ? (
                           <>
-                            <Lock className="w-3 h-3 shrink-0 text-rose-400" />
+                            <Lock className="w-3 h-3 shrink-0 text-rose-700" />
                             <span>Locked (Historical Readings)</span>
                           </>
                         ) : (
@@ -3141,26 +3142,26 @@ export const PumpInfrastructurePage: React.FC = () => {
                   </div>
                   <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono">
                     <div>
-                      <span className="text-slate-500 block text-[10px]">TANK</span>
-                      <span className="text-orange-400 font-bold">
+                      <span className="text-[#64748B] block text-[10px]">TANK</span>
+                      <span className="text-[#B8530D] font-bold">
                         Tank #{calibratingTank.tankNumber} — {calibratingTank.productCode || calibratingTank.productName}
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[10px]">NOMINAL CAPACITY</span>
-                      <span className="text-white font-bold">
+                      <span className="text-[#64748B] block text-[10px]">NOMINAL CAPACITY</span>
+                      <span className="text-[#17365D] font-bold">
                         {calibratingTank.capacityLitres.toLocaleString()} L
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[10px]">SAFE FILL LIMIT</span>
-                      <span className="text-slate-300">
+                      <span className="text-[#64748B] block text-[10px]">SAFE FILL LIMIT</span>
+                      <span className="text-[#475569]">
                         {calibratingTank.safeFillCapacityLitres.toLocaleString()} L
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[10px]">UNITS</span>
-                      <span className="text-slate-300">
+                      <span className="text-[#64748B] block text-[10px]">UNITS</span>
+                      <span className="text-[#475569]">
                         Dip: mm • Vol: Litres (L)
                       </span>
                     </div>
@@ -3169,7 +3170,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setModalType(null)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                  className="p-1.5 rounded-lg text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -3177,16 +3178,16 @@ export const PumpInfrastructurePage: React.FC = () => {
 
               {/* Revision Selector & Lifecycle Controls */}
               {calCharts.length > 0 && (
-                <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
+                <div className="p-3.5 bg-[#F8FAFC]/55 border border-[#E2E8F0] rounded-xl space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <label className="text-[11px] font-mono text-slate-400 uppercase font-bold">
+                      <label className="text-[11px] font-mono text-[#64748B] uppercase font-bold">
                         Chart Revision:
                       </label>
                       <select
                         value={calSelectedChart?.id || ''}
                         onChange={e => handleSelectCalibrationChartRevision(e.target.value)}
-                        className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                        className="bg-white border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono focus:outline-none focus:border-orange-500"
                       >
                         {calCharts.map(ch => (
                           <option key={ch.id} value={ch.id}>
@@ -3217,7 +3218,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                             type="button"
                             disabled={modalSubmitting || calPoints.length < 2}
                             onClick={() => handleUpdateCalibrationChartStatus(calSelectedChart.id, 'ACTIVE')}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-50 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-bold"
+                            className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-50 text-emerald-800 border border-emerald-500/30 text-[11px] font-mono font-bold"
                           >
                             Activate Revision #{calSelectedChart.revisionNumber}
                           </button>
@@ -3226,9 +3227,9 @@ export const PumpInfrastructurePage: React.FC = () => {
                           type="button"
                           disabled={modalSubmitting}
                           onClick={handleForkCalibrationRevision}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-slate-700 text-[11px] font-mono font-semibold"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E8EEF5] disabled:opacity-50 text-[#334155] border border-[#D7E0EA] text-[11px] font-mono font-semibold"
                         >
-                          <GitBranch className="w-3 h-3 text-orange-400" />
+                          <GitBranch className="w-3 h-3 text-[#B8530D]" />
                           <span>Fork New Draft Revision</span>
                         </button>
                       </div>
@@ -3237,10 +3238,10 @@ export const PumpInfrastructurePage: React.FC = () => {
 
                   {/* Selected Revision Metadata */}
                   {calSelectedChart && (
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-slate-800/80 text-[11px] font-mono">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-[#E2E8F0]/80 text-[11px] font-mono">
                       <div>
-                        <span className="text-slate-500 block text-[10px]">DIMENSIONS (D × L)</span>
-                        <span className="text-slate-200">
+                        <span className="text-[#64748B] block text-[10px]">DIMENSIONS (D × L)</span>
+                        <span className="text-[#334155]">
                           {calSelectedChart.tankDiameterMmStr
                             ? `${formatCalibrationDisplay(calSelectedChart.tankDiameterMmStr)} mm`
                             : '—'}{' '}
@@ -3251,8 +3252,8 @@ export const PumpInfrastructurePage: React.FC = () => {
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-500 block text-[10px]">MAX DIP / VOL</span>
-                        <span className="text-slate-200">
+                        <span className="text-[#64748B] block text-[10px]">MAX DIP / VOL</span>
+                        <span className="text-[#334155]">
                           {calSelectedChart.maxDipMmStr
                             ? `${formatCalibrationDisplay(calSelectedChart.maxDipMmStr)} mm`
                             : `${formatCalibrationDisplay(currentChartDiagnostics.maxDipMm)} mm`}{' '}
@@ -3263,8 +3264,8 @@ export const PumpInfrastructurePage: React.FC = () => {
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-500 block text-[10px]">CURVE / STEP</span>
-                        <span className="text-slate-200">
+                        <span className="text-[#64748B] block text-[10px]">CURVE / STEP</span>
+                        <span className="text-[#334155]">
                           {currentChartDiagnostics.isNonLinear ? 'Non-Linear' : 'Linear'}
                           {currentChartDiagnostics.dominantStepMm
                             ? ` (${formatCalibrationDisplay(currentChartDiagnostics.dominantStepMm)} mm)`
@@ -3272,14 +3273,14 @@ export const PumpInfrastructurePage: React.FC = () => {
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-500 block text-[10px]">SOURCE / CERT</span>
-                        <span className="text-slate-200 truncate block" title={calSelectedChart.sourceFileName || calSelectedChart.referenceDocument || ''}>
+                        <span className="text-[#64748B] block text-[10px]">SOURCE / CERT</span>
+                        <span className="text-[#334155] truncate block" title={calSelectedChart.sourceFileName || calSelectedChart.referenceDocument || ''}>
                           {calSelectedChart.sourceFileName || calSelectedChart.referenceDocument || 'Manual / Seed'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-500 block text-[10px]">EFFECTIVE FROM</span>
-                        <span className="text-slate-200">
+                        <span className="text-[#64748B] block text-[10px]">EFFECTIVE FROM</span>
+                        <span className="text-[#334155]">
                           {calSelectedChart.effectiveFrom
                             ? calSelectedChart.effectiveFrom.slice(0, 10)
                             : 'Immediate'}
@@ -3299,8 +3300,8 @@ export const PumpInfrastructurePage: React.FC = () => {
               )}
 
               {!calStatus.isConfigured && (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs rounded-xl font-mono flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-800 text-xs rounded-xl font-mono flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
                   <span>
                     {calStatus.warningText ||
                       'At least 2 calibration points are required before Daily Operations allows tank dip entry.'}
@@ -3309,9 +3310,9 @@ export const PumpInfrastructurePage: React.FC = () => {
               )}
 
               {currentChartDiagnostics.missingStepWarnings.length > 0 && (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs rounded-xl font-mono space-y-1">
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-800 text-xs rounded-xl font-mono space-y-1">
                   <div className="font-bold flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                     <span>
                       Step Interval Diagnostics ({currentChartDiagnostics.missingStepWarnings.length} gap notice{currentChartDiagnostics.missingStepWarnings.length > 1 ? 's' : ''})
                     </span>
@@ -3325,7 +3326,7 @@ export const PumpInfrastructurePage: React.FC = () => {
               )}
 
               {modalError && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center gap-2">
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-700 text-xs rounded-xl flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{modalError}</span>
                 </div>
@@ -3334,7 +3335,7 @@ export const PumpInfrastructurePage: React.FC = () => {
               {/* Calibration Points Table & Action Toolbar */}
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#475569] font-mono">
                     Calibration Points ({calPoints.length})
                     {calSelectedChart ? ` — Rev #${calSelectedChart.revisionNumber}` : ''}
                   </h3>
@@ -3345,7 +3346,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                         setCalShowDryRun(prev => !prev);
                         setModalError(null);
                       }}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-[11px] font-mono font-semibold transition-colors"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E8EEF5] text-cyan-400 border border-[#D7E0EA] text-[11px] font-mono font-semibold transition-colors"
                     >
                       <FlaskConical className="w-3 h-3" />
                       <span>{calShowDryRun ? 'Hide Dry-Run Verifier' : 'Dry-Run vs Printed Chart'}</span>
@@ -3355,7 +3356,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                         <button
                           type="button"
                           onClick={handleLoadDummyCalibrationPreset}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 text-[11px] font-mono font-semibold transition-colors"
+                          className="px-2.5 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E8EEF5] text-amber-700 border border-[#D7E0EA] text-[11px] font-mono font-semibold transition-colors"
                         >
                           Load 5-Point UAT Preset (0–2000 mm)
                         </button>
@@ -3365,7 +3366,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                             setCalShowBulkImport(prev => !prev);
                             setModalError(null);
                           }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-orange-400 border border-slate-700 text-[11px] font-mono font-semibold transition-colors"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#B8530D] border border-[#D7E0EA] text-[11px] font-mono font-semibold transition-colors"
                         >
                           <Upload className="w-3 h-3" />
                           <span>{calShowBulkImport ? 'Hide CSV / Bulk Import' : 'CSV / Bulk Import Chart'}</span>
@@ -3375,9 +3376,9 @@ export const PumpInfrastructurePage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto bg-slate-950/70 border border-slate-800 rounded-xl max-h-60">
+                <div className="overflow-x-auto bg-[#F8FAFC]/55 border border-[#E2E8F0] rounded-xl max-h-60">
                   <table className="w-full text-left text-xs font-mono">
-                    <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] border-b border-slate-800 sticky top-0">
+                    <thead className="bg-[#F1F5F9]/80 text-[#64748B] uppercase text-[10px] border-b border-[#E2E8F0] sticky top-0">
                       <tr>
                         <th className="py-2.5 px-4">Dip (mm)</th>
                         <th className="py-2.5 px-4">Volume (L)</th>
@@ -3391,7 +3392,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                         <tr>
                           <td
                             colSpan={canWriteTankCalibration && !isChartLocked ? 3 : 2}
-                            className="py-6 text-center text-slate-500"
+                            className="py-6 text-center text-[#64748B]"
                           >
                             Loading calibration chart...
                           </td>
@@ -3400,18 +3401,18 @@ export const PumpInfrastructurePage: React.FC = () => {
                         <tr>
                           <td
                             colSpan={canWriteTankCalibration && !isChartLocked ? 3 : 2}
-                            className="py-6 text-center text-slate-500"
+                            className="py-6 text-center text-[#64748B]"
                           >
                             No calibration points configured for this tank yet.
                           </td>
                         </tr>
                       ) : (
                         calPoints.map(pt => (
-                          <tr key={pt.id} className="hover:bg-slate-800/40">
-                            <td className="py-2 px-4 font-bold text-orange-400">
+                          <tr key={pt.id} className="hover:bg-[#F1F5F9]/40">
+                            <td className="py-2 px-4 font-bold text-[#B8530D]">
                               {formatCalibrationDisplay(pt.dipMmStr ?? pt.dipMillimetresMilliunits / 1000)}
                             </td>
-                            <td className="py-2 px-4 text-white">
+                            <td className="py-2 px-4 text-[#17365D]">
                               {formatCalibrationDisplay(pt.volumeLitreStr ?? pt.volumeMilliunits / 1000)}
                             </td>
                             {canWriteTankCalibration && !isChartLocked && (
@@ -3420,16 +3421,16 @@ export const PumpInfrastructurePage: React.FC = () => {
                                   type="button"
                                   disabled={modalSubmitting}
                                   onClick={() => startEditCalibrationPoint(pt)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px]"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] text-[11px]"
                                 >
-                                  <Edit2 className="w-3 h-3 text-orange-400" />
+                                  <Edit2 className="w-3 h-3 text-[#B8530D]" />
                                   <span>Edit</span>
                                 </button>
                                 <button
                                   type="button"
                                   disabled={modalSubmitting}
                                   onClick={() => handleDeleteCalibrationPoint(pt)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[11px]"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 border border-rose-500/20 text-[11px]"
                                 >
                                   <Trash2 className="w-3 h-3" />
                                   <span>Delete</span>
@@ -3446,14 +3447,14 @@ export const PumpInfrastructurePage: React.FC = () => {
 
               {/* Dry-Run Comparison Against Original Printed IOCL Chart */}
               {calShowDryRun && (
-                <div className="bg-slate-950/70 border border-cyan-500/30 rounded-xl p-4 space-y-3">
+                <div className="bg-[#F8FAFC]/55 border border-cyan-500/30 rounded-xl p-4 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h4 className="text-xs font-bold text-cyan-300 font-mono uppercase flex items-center gap-1.5">
                         <FlaskConical className="w-3.5 h-3.5 text-cyan-400" />
                         <span>Dry-Run Comparison vs Printed IOCL Chart</span>
                       </h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="text-[11px] text-[#64748B] mt-0.5">
                         Paste or upload reference checkpoints (<code className="text-cyan-300">dip_mm, printed_volume_litres</code>) from the scanned IOCL chart to verify exact and interpolated volume conversions before or after activation.
                       </p>
                     </div>
@@ -3461,11 +3462,11 @@ export const PumpInfrastructurePage: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleLoadSampleDryRunCheckpoints}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-[11px] font-mono font-semibold"
+                        className="px-2.5 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E8EEF5] text-cyan-300 border border-[#D7E0EA] text-[11px] font-mono font-semibold"
                       >
                         Load Sample Checkpoints
                       </button>
-                      <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-mono font-semibold">
+                      <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] text-[11px] font-mono font-semibold">
                         <Upload className="w-3 h-3 text-cyan-400" />
                         <span>Upload Checkpoints CSV</span>
                         <input
@@ -3481,13 +3482,13 @@ export const PumpInfrastructurePage: React.FC = () => {
                   <form onSubmit={handleRunDryRunComparison} className="space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                        <label className="block text-[10px] text-[#64748B] font-mono uppercase mb-1">
                           Compare Against
                         </label>
                         <select
                           value={calDryRunSource}
                           onChange={e => setCalDryRunSource(e.target.value as 'SAVED_CHART' | 'CSV_PREVIEW')}
-                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono"
                         >
                           <option value="SAVED_CHART">
                             Selected Saved Revision ({calSelectedChart ? `Rev #${calSelectedChart.revisionNumber}` : 'Active Chart'})
@@ -3498,7 +3499,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                        <label className="block text-[10px] text-[#64748B] font-mono uppercase mb-1">
                           Acceptable Tolerance (L)
                         </label>
                         <input
@@ -3507,14 +3508,14 @@ export const PumpInfrastructurePage: React.FC = () => {
                           min="0"
                           value={calDryRunTolerance}
                           onChange={e => setCalDryRunTolerance(e.target.value)}
-                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono"
                         />
                       </div>
                       <div className="flex items-end">
                         <button
                           type="submit"
                           disabled={modalSubmitting}
-                          className="w-full py-1.5 px-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold font-mono"
+                          className="w-full py-1.5 px-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-[#17365D] rounded-lg text-xs font-bold font-mono"
                         >
                           {modalSubmitting ? 'Evaluating...' : 'Run Dry-Run Verification'}
                         </button>
@@ -3526,38 +3527,38 @@ export const PumpInfrastructurePage: React.FC = () => {
                       value={calDryRunText}
                       onChange={e => setCalDryRunText(e.target.value)}
                       placeholder={`dip_mm,printed_volume_litres\n0,0\n250,2500\n500,5000\n1250,12500\n2000,20000`}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl p-2.5 text-xs text-[#17365D] font-mono focus:outline-none focus:border-cyan-500"
                     />
                   </form>
 
                   {calDryRunReport && (
-                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <div className="space-y-2 pt-2 border-t border-[#E2E8F0]">
                       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] font-mono">
-                        <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                          <span className="text-slate-500 block text-[10px]">CHECKPOINTS</span>
-                          <span className="text-white font-bold">{calDryRunReport.checkpointsCount}</span>
+                        <div className="p-2 bg-white rounded-lg border border-[#E2E8F0]">
+                          <span className="text-[#64748B] block text-[10px]">CHECKPOINTS</span>
+                          <span className="text-[#17365D] font-bold">{calDryRunReport.checkpointsCount}</span>
                         </div>
                         <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
-                          <span className="text-emerald-400/80 block text-[10px]">PASSED (≤ {formatCalibrationDisplay(calDryRunReport.toleranceLitres)} L)</span>
-                          <span className="text-emerald-300 font-bold">{calDryRunReport.passedCount}</span>
+                          <span className="text-emerald-700/80 block text-[10px]">PASSED (≤ {formatCalibrationDisplay(calDryRunReport.toleranceLitres)} L)</span>
+                          <span className="text-emerald-800 font-bold">{calDryRunReport.passedCount}</span>
                         </div>
                         <div className="p-2 bg-rose-500/10 rounded-lg border border-rose-500/20">
-                          <span className="text-rose-400/80 block text-[10px]">EXCEEDED / OUT OF RANGE</span>
-                          <span className="text-rose-300 font-bold">{calDryRunReport.failedCount}</span>
+                          <span className="text-rose-700/80 block text-[10px]">EXCEEDED / OUT OF RANGE</span>
+                          <span className="text-rose-800 font-bold">{calDryRunReport.failedCount}</span>
                         </div>
-                        <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                          <span className="text-slate-500 block text-[10px]">MAX |DELTA|</span>
-                          <span className="text-white font-bold">{formatCalibrationDisplay(calDryRunReport.maxAbsDeltaLitres)} L</span>
+                        <div className="p-2 bg-white rounded-lg border border-[#E2E8F0]">
+                          <span className="text-[#64748B] block text-[10px]">MAX |DELTA|</span>
+                          <span className="text-[#17365D] font-bold">{formatCalibrationDisplay(calDryRunReport.maxAbsDeltaLitres)} L</span>
                         </div>
-                        <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                          <span className="text-slate-500 block text-[10px]">MEAN |DELTA|</span>
-                          <span className="text-white font-bold">{formatCalibrationDisplay(calDryRunReport.meanAbsDeltaLitres)} L</span>
+                        <div className="p-2 bg-white rounded-lg border border-[#E2E8F0]">
+                          <span className="text-[#64748B] block text-[10px]">MEAN |DELTA|</span>
+                          <span className="text-[#17365D] font-bold">{formatCalibrationDisplay(calDryRunReport.meanAbsDeltaLitres)} L</span>
                         </div>
                       </div>
 
-                      <div className="overflow-x-auto bg-slate-900 border border-slate-800 rounded-xl max-h-48">
+                      <div className="overflow-x-auto bg-white border border-[#E2E8F0] rounded-xl max-h-48">
                         <table className="w-full text-left text-[11px] font-mono">
-                          <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] border-b border-slate-800 sticky top-0">
+                          <thead className="bg-[#F1F5F9]/80 text-[#64748B] uppercase text-[10px] border-b border-[#E2E8F0] sticky top-0">
                             <tr>
                               <th className="py-2 px-3">Dip (mm)</th>
                               <th className="py-2 px-3">Printed (L)</th>
@@ -3569,14 +3570,14 @@ export const PumpInfrastructurePage: React.FC = () => {
                           </thead>
                           <tbody className="divide-y divide-slate-800/60">
                             {calDryRunReport.rows.map((r, idx) => (
-                              <tr key={idx} className="hover:bg-slate-800/40">
-                                <td className="py-1.5 px-3 font-bold text-orange-400">
+                              <tr key={idx} className="hover:bg-[#F1F5F9]/40">
+                                <td className="py-1.5 px-3 font-bold text-[#B8530D]">
                                   {formatCalibrationDisplay(r.dipMm)}
                                 </td>
-                                <td className="py-1.5 px-3 text-slate-200">
+                                <td className="py-1.5 px-3 text-[#334155]">
                                   {formatCalibrationDisplay(r.printedVolumeLitres)}
                                 </td>
-                                <td className="py-1.5 px-3 text-white font-semibold">
+                                <td className="py-1.5 px-3 text-[#17365D] font-semibold">
                                   {r.calculatedVolumeLitres !== null
                                     ? formatCalibrationDisplay(r.calculatedVolumeLitres)
                                     : '—'}
@@ -3585,23 +3586,23 @@ export const PumpInfrastructurePage: React.FC = () => {
                                   <span
                                     className={`px-1.5 py-0.5 rounded text-[10px] ${
                                       r.matchType === 'EXACT_POINT'
-                                        ? 'bg-emerald-500/15 text-emerald-300'
+                                        ? 'bg-emerald-500/15 text-emerald-800'
                                         : r.matchType === 'INTERPOLATED'
                                           ? 'bg-cyan-500/15 text-cyan-300'
-                                          : 'bg-rose-500/15 text-rose-300'
+                                          : 'bg-rose-500/15 text-rose-800'
                                     }`}
                                   >
                                     {r.matchType}
                                   </span>
                                 </td>
-                                <td className="py-1.5 px-3 text-slate-200">
+                                <td className="py-1.5 px-3 text-[#334155]">
                                   {r.deltaLitres !== null ? `${Number(r.deltaLitres) > 0 ? '+' : ''}${formatCalibrationDisplay(r.deltaLitres)} L` : r.error}
                                 </td>
                                 <td className="py-1.5 px-3 text-right">
                                   {r.withinTolerance ? (
-                                    <span className="text-emerald-400 font-bold">PASS</span>
+                                    <span className="text-emerald-700 font-bold">PASS</span>
                                   ) : (
-                                    <span className="text-rose-400 font-bold">FAIL</span>
+                                    <span className="text-rose-700 font-bold">FAIL</span>
                                   )}
                                 </td>
                               </tr>
@@ -3616,12 +3617,12 @@ export const PumpInfrastructurePage: React.FC = () => {
 
               {/* Write Controls: Single Point Add/Edit & Bulk Import */}
               {canWriteTankCalibration ? (
-                <div className="space-y-4 pt-2 border-t border-slate-800">
+                <div className="space-y-4 pt-2 border-t border-[#E2E8F0]">
                   {/* Single Point Add / Edit Form (Disabled if chart is referenced by historical readings) */}
                   {!isChartLocked && (
-                    <form onSubmit={handleSaveCalibrationPoint} className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+                    <form onSubmit={handleSaveCalibrationPoint} className="bg-[#F8FAFC]/60 border border-[#E2E8F0] rounded-xl p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold text-white font-mono uppercase">
+                        <h4 className="text-xs font-bold text-[#17365D] font-mono uppercase">
                           {calEditingPoint
                             ? `Edit Point (${formatCalibrationDisplay(calEditingPoint.dipMmStr)} mm)`
                             : 'Add Calibration Point'}
@@ -3630,7 +3631,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                           <button
                             type="button"
                             onClick={cancelEditCalibrationPoint}
-                            className="text-[11px] text-slate-400 hover:text-white font-mono"
+                            className="text-[11px] text-[#64748B] hover:text-[#17365D] font-mono"
                           >
                             Cancel Edit
                           </button>
@@ -3639,7 +3640,7 @@ export const PumpInfrastructurePage: React.FC = () => {
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                         <div>
-                          <label className="block text-[11px] text-slate-400 font-mono mb-1">
+                          <label className="block text-[11px] text-[#64748B] font-mono mb-1">
                             Dip (mm)
                           </label>
                           <input
@@ -3652,11 +3653,11 @@ export const PumpInfrastructurePage: React.FC = () => {
                               setCalDipInput(e.target.value);
                               setModalError(null);
                             }}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                            className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-mono focus:outline-none focus:border-orange-500"
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] text-slate-400 font-mono mb-1">
+                          <label className="block text-[11px] text-[#64748B] font-mono mb-1">
                             Volume (L)
                           </label>
                           <input
@@ -3669,14 +3670,14 @@ export const PumpInfrastructurePage: React.FC = () => {
                               setCalVolumeInput(e.target.value);
                               setModalError(null);
                             }}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                            className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D] font-mono focus:outline-none focus:border-orange-500"
                           />
                         </div>
                         <div>
                           <button
                             type="submit"
                             disabled={modalSubmitting}
-                            className="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
+                            className="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-[#17365D] rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
                           >
                             {modalSubmitting
                               ? 'Saving...'
@@ -3693,25 +3694,25 @@ export const PumpInfrastructurePage: React.FC = () => {
                   {calShowBulkImport && (
                     <form
                       onSubmit={handleBulkImportCalibration}
-                      className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-4"
+                      className="bg-[#F8FAFC]/60 border border-[#E2E8F0] rounded-xl p-4 space-y-4"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <h4 className="text-xs font-bold text-white font-mono uppercase flex items-center gap-1.5">
-                            <FileSpreadsheet className="w-3.5 h-3.5 text-orange-400" />
+                          <h4 className="text-xs font-bold text-[#17365D] font-mono uppercase flex items-center gap-1.5">
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-[#B8530D]" />
                             <span>CSV / Bulk Import Calibration Chart</span>
                           </h4>
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            Paste rows as <code className="text-orange-400">dip_mm,volume_litres</code> (non-linear or linear tables supported) or upload an IOCL calibration CSV file.
+                          <p className="text-[11px] text-[#64748B] mt-0.5">
+                            Paste rows as <code className="text-[#B8530D]">dip_mm,volume_litres</code> (non-linear or linear tables supported) or upload an IOCL calibration CSV file.
                             {isChartLocked && (
-                              <span className="text-amber-300 block mt-0.5">
+                              <span className="text-amber-800 block mt-0.5">
                                 ℹ️ Because Rev #{calSelectedChart?.revisionNumber} is referenced by historical readings, importing will automatically create a new revision without overwriting historical data.
                               </span>
                             )}
                           </p>
                         </div>
-                        <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold">
-                          <Upload className="w-3.5 h-3.5 text-orange-400" />
+                        <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] text-xs font-semibold">
+                          <Upload className="w-3.5 h-3.5 text-[#B8530D]" />
                           <span>Upload CSV</span>
                           <input
                             type="file"
@@ -3725,7 +3726,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                       {/* Chart Dimensions & Metadata Inputs */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
                         <div>
-                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                          <label className="block text-[10px] text-[#64748B] font-mono uppercase mb-1">
                             Tank Diameter (mm)
                           </label>
                           <input
@@ -3735,11 +3736,11 @@ export const PumpInfrastructurePage: React.FC = () => {
                             placeholder="e.g. 2000"
                             value={calDiameterMmInput}
                             onChange={e => setCalDiameterMmInput(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                            className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                          <label className="block text-[10px] text-[#64748B] font-mono uppercase mb-1">
                             Tank Length (mm)
                           </label>
                           <input
@@ -3749,11 +3750,11 @@ export const PumpInfrastructurePage: React.FC = () => {
                             placeholder="e.g. 6600"
                             value={calLengthMmInput}
                             onChange={e => setCalLengthMmInput(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                            className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                          <label className="block text-[10px] text-[#64748B] font-mono uppercase mb-1">
                             Max Dip Limit (mm)
                           </label>
                           <input
@@ -3763,18 +3764,18 @@ export const PumpInfrastructurePage: React.FC = () => {
                             placeholder="e.g. 2000"
                             value={calMaxDipMmInput}
                             onChange={e => setCalMaxDipMmInput(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                            className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                          <label className="block text-[10px] text-[#64748B] font-mono uppercase mb-1">
                             Save Mode
                           </label>
                           <select
                             value={canApproveCalibrationChart ? calSaveMode : 'DRAFT'}
                             onChange={e => setCalSaveMode(e.target.value as 'ACTIVE' | 'DRAFT')}
                             disabled={!canApproveCalibrationChart}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono disabled:opacity-60"
+                            className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono disabled:opacity-60"
                           >
                             <option value="DRAFT">Save as Draft Revision (DRAFT)</option>
                             {canApproveCalibrationChart && (
@@ -3783,7 +3784,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                          <label className="block text-[10px] text-[#64748B] font-mono uppercase mb-1">
                             Source File Name
                           </label>
                           <input
@@ -3791,11 +3792,11 @@ export const PumpInfrastructurePage: React.FC = () => {
                             placeholder="e.g. iocl_tank1_20kl.csv"
                             value={calSourceFileName}
                             onChange={e => setCalSourceFileName(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                            className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                          <label className="block text-[10px] text-[#64748B] font-mono uppercase mb-1">
                             Calibration Cert / Ref Doc
                           </label>
                           <input
@@ -3803,22 +3804,22 @@ export const PumpInfrastructurePage: React.FC = () => {
                             placeholder="e.g. W&M/IOCL/2026/01"
                             value={calReferenceDocument}
                             onChange={e => setCalReferenceDocument(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                            className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                          <label className="block text-[10px] text-[#64748B] font-mono uppercase mb-1">
                             Effective From Date
                           </label>
                           <input
                             type="date"
                             value={calEffectiveFrom}
                             onChange={e => setCalEffectiveFrom(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                            className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-400 font-mono uppercase mb-1">
+                          <label className="block text-[10px] text-[#64748B] font-mono uppercase mb-1">
                             Revision Notes
                           </label>
                           <input
@@ -3826,7 +3827,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                             placeholder="Optional notes"
                             value={calNotes}
                             onChange={e => setCalNotes(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                            className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg px-2.5 py-1.5 text-xs text-[#17365D] font-mono"
                           />
                         </div>
                       </div>
@@ -3840,29 +3841,29 @@ export const PumpInfrastructurePage: React.FC = () => {
                           setModalError(null);
                         }}
                         placeholder={`dip_mm,volume_litres\n0,0\n500,5000\n1000,10000\n1500,15000\n2000,20000`}
-                        className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono focus:outline-none focus:border-orange-500"
+                        className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl p-3 text-xs text-[#17365D] font-mono focus:outline-none focus:border-orange-500"
                       />
 
                       {/* Pre-Save CSV Validation & Preview Panel */}
                       {calShowPreview && csvPreview && (
-                        <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2.5 font-mono text-xs">
+                        <div className="p-3 bg-white border border-[#E2E8F0] rounded-xl space-y-2.5 font-mono text-xs">
                           <div className="flex items-center justify-between">
-                            <span className="font-bold uppercase text-[11px] text-slate-300">
+                            <span className="font-bold uppercase text-[11px] text-[#475569]">
                               Pre-Save Import Preview & Validation
                             </span>
                             {csvPreview.valid ? (
-                              <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 text-[10px] font-bold">
+                              <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-800 text-[10px] font-bold">
                                 VALID ({csvPreview.diagnostics.pointsCount} POINTS)
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded bg-rose-500/15 text-rose-300 text-[10px] font-bold">
+                              <span className="px-2 py-0.5 rounded bg-rose-500/15 text-rose-800 text-[10px] font-bold">
                                 VALIDATION FAILED
                               </span>
                             )}
                           </div>
 
                           {!csvPreview.valid && csvPreview.error && (
-                            <div className="text-rose-400 text-[11px]">
+                            <div className="text-rose-700 text-[11px]">
                               ❌ {csvPreview.error}
                             </div>
                           )}
@@ -3870,29 +3871,29 @@ export const PumpInfrastructurePage: React.FC = () => {
                           {csvPreview.valid && (
                             <>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                                <div className="p-2 bg-slate-950/70 rounded border border-slate-800">
-                                  <span className="text-slate-500 block text-[10px]">DIP RANGE</span>
-                                  <span className="text-orange-400 font-bold">
+                                <div className="p-2 bg-[#F8FAFC]/55 rounded border border-[#E2E8F0]">
+                                  <span className="text-[#64748B] block text-[10px]">DIP RANGE</span>
+                                  <span className="text-[#B8530D] font-bold">
                                     {formatCalibrationDisplay(csvPreview.diagnostics.minDipMm)} – {formatCalibrationDisplay(csvPreview.diagnostics.maxDipMm)} mm
                                   </span>
                                 </div>
-                                <div className="p-2 bg-slate-950/70 rounded border border-slate-800">
-                                  <span className="text-slate-500 block text-[10px]">VOLUME RANGE</span>
-                                  <span className="text-white font-bold">
+                                <div className="p-2 bg-[#F8FAFC]/55 rounded border border-[#E2E8F0]">
+                                  <span className="text-[#64748B] block text-[10px]">VOLUME RANGE</span>
+                                  <span className="text-[#17365D] font-bold">
                                     {formatCalibrationDisplay(csvPreview.diagnostics.minVolumeLitres)} – {formatCalibrationDisplay(csvPreview.diagnostics.maxVolumeLitres)} L
                                   </span>
                                 </div>
-                                <div className="p-2 bg-slate-950/70 rounded border border-slate-800">
-                                  <span className="text-slate-500 block text-[10px]">DOMINANT STEP</span>
-                                  <span className="text-slate-200">
+                                <div className="p-2 bg-[#F8FAFC]/55 rounded border border-[#E2E8F0]">
+                                  <span className="text-[#64748B] block text-[10px]">DOMINANT STEP</span>
+                                  <span className="text-[#334155]">
                                     {csvPreview.diagnostics.dominantStepMm
                                       ? `${formatCalibrationDisplay(csvPreview.diagnostics.dominantStepMm)} mm`
                                       : '—'}
                                     {csvPreview.diagnostics.isUniformStep ? ' (Uniform)' : ' (Variable)'}
                                   </span>
                                 </div>
-                                <div className="p-2 bg-slate-950/70 rounded border border-slate-800">
-                                  <span className="text-slate-500 block text-[10px]">CURVE GEOMETRY</span>
+                                <div className="p-2 bg-[#F8FAFC]/55 rounded border border-[#E2E8F0]">
+                                  <span className="text-[#64748B] block text-[10px]">CURVE GEOMETRY</span>
                                   <span className="text-cyan-300">
                                     {csvPreview.diagnostics.isNonLinear ? 'Non-Linear Table' : 'Linear Table'}
                                   </span>
@@ -3910,9 +3911,9 @@ export const PumpInfrastructurePage: React.FC = () => {
                                 </div>
                               )}
 
-                              <div className="max-h-36 overflow-y-auto border border-slate-800 rounded-lg">
+                              <div className="max-h-36 overflow-y-auto border border-[#E2E8F0] rounded-lg">
                                 <table className="w-full text-left text-[11px]">
-                                  <thead className="bg-slate-800/80 text-slate-400 text-[10px] sticky top-0">
+                                  <thead className="bg-[#F1F5F9]/80 text-[#64748B] text-[10px] sticky top-0">
                                     <tr>
                                       <th className="py-1.5 px-3">#</th>
                                       <th className="py-1.5 px-3">Dip (mm)</th>
@@ -3922,14 +3923,14 @@ export const PumpInfrastructurePage: React.FC = () => {
                                   <tbody className="divide-y divide-slate-800/60">
                                     {csvPreview.normalizedPoints.slice(0, 10).map((pt, idx) => (
                                       <tr key={idx}>
-                                        <td className="py-1 px-3 text-slate-500">{idx + 1}</td>
-                                        <td className="py-1 px-3 text-orange-400">{formatCalibrationDisplay(pt.dipMillimetres)}</td>
-                                        <td className="py-1 px-3 text-white">{formatCalibrationDisplay(pt.volumeLitres)}</td>
+                                        <td className="py-1 px-3 text-[#64748B]">{idx + 1}</td>
+                                        <td className="py-1 px-3 text-[#B8530D]">{formatCalibrationDisplay(pt.dipMillimetres)}</td>
+                                        <td className="py-1 px-3 text-[#17365D]">{formatCalibrationDisplay(pt.volumeLitres)}</td>
                                       </tr>
                                     ))}
                                     {csvPreview.normalizedPoints.length > 10 && (
                                       <tr>
-                                        <td colSpan={3} className="py-1.5 px-3 text-center text-slate-400">
+                                        <td colSpan={3} className="py-1.5 px-3 text-center text-[#64748B]">
                                           ... +{csvPreview.normalizedPoints.length - 10} more rows (final row: {formatCalibrationDisplay(csvPreview.normalizedPoints[csvPreview.normalizedPoints.length - 1].dipMillimetres)} mm → {formatCalibrationDisplay(csvPreview.normalizedPoints[csvPreview.normalizedPoints.length - 1].volumeLitres)} L)
                                         </td>
                                       </tr>
@@ -3943,12 +3944,12 @@ export const PumpInfrastructurePage: React.FC = () => {
                       )}
 
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <label className="inline-flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+                        <label className="inline-flex items-center gap-2 text-[11px] text-[#64748B] font-mono">
                           <input
                             type="checkbox"
                             checked={calAllowOverCapacity}
                             onChange={e => setCalAllowOverCapacity(e.target.checked)}
-                            className="rounded border-slate-700 bg-slate-800 text-orange-500"
+                            className="rounded border-[#D7E0EA] bg-[#F1F5F9] text-orange-500"
                           />
                           <span>Allow volume above nominal tank capacity ({calibratingTank.capacityLitres.toLocaleString()} L)</span>
                         </label>
@@ -3957,7 +3958,7 @@ export const PumpInfrastructurePage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setCalShowPreview(prev => !prev)}
-                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs text-cyan-300 font-mono font-semibold"
+                            className="px-3 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] rounded-xl text-xs text-cyan-300 font-mono font-semibold"
                           >
                             {calShowPreview ? 'Hide Preview' : 'Preview CSV'}
                           </button>
@@ -3967,14 +3968,14 @@ export const PumpInfrastructurePage: React.FC = () => {
                               setCalShowBulkImport(false);
                               setModalError(null);
                             }}
-                            className="px-3 py-1.5 bg-slate-800 rounded-xl text-xs text-slate-300"
+                            className="px-3 py-1.5 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]"
                           >
                             Cancel
                           </button>
                           <button
                             type="submit"
                             disabled={modalSubmitting}
-                            className="px-4 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
+                            className="px-4 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 disabled:opacity-50 text-[#17365D] rounded-xl text-xs font-bold shadow-md shadow-orange-500/20"
                           >
                             {modalSubmitting
                               ? 'Importing...'
@@ -3990,16 +3991,16 @@ export const PumpInfrastructurePage: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs text-slate-400 font-mono">
+                <div className="p-3 bg-[#F8FAFC]/60 border border-[#E2E8F0] rounded-xl text-xs text-[#64748B] font-mono">
                   Read-only view (TANK_CALIBRATION_READ). Contact an administrator or authorized officer with TANK_CALIBRATION_WRITE to modify calibration points.
                 </div>
               )}
 
-              <div className="flex justify-end pt-2 border-t border-slate-800">
+              <div className="flex justify-end pt-2 border-t border-[#E2E8F0]">
                 <button
                   type="button"
                   onClick={() => setModalType(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs text-slate-200 font-semibold"
+                  className="px-4 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] rounded-xl text-xs text-[#334155] font-semibold"
                 >
                   Close
                 </button>
