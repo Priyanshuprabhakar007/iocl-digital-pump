@@ -2278,7 +2278,7 @@ export const DailyOperationsPage: React.FC = () => {
                         <th className="py-2.5 px-3 text-right">Variance</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 text-xs font-mono">
+                    <tbody className="divide-y divide-slate-200 text-xs font-mono text-slate-900">
                       {summary.byProduct.map((prod) => (
                         <tr key={prod.productId} className="hover:bg-slate-50">
                           <td className="py-2.5 px-3 font-sans font-bold text-slate-900">
@@ -2417,7 +2417,7 @@ export const DailyOperationsPage: React.FC = () => {
                     <th className="py-3 px-4 text-right">Variance (L)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-sm font-mono">
+                <tbody className="divide-y divide-slate-200 text-sm font-mono text-slate-900">
                   {summary.byProduct.map((p) => (
                     <tr key={p.productId} className="hover:bg-slate-50">
                       <td className="py-3 px-4 font-sans font-bold text-slate-900">
@@ -2488,7 +2488,7 @@ export const DailyOperationsPage: React.FC = () => {
                     <th className="py-2.5 px-4 text-right">Net Sales (L)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-xs font-mono">
+                <tbody className="divide-y divide-slate-200 text-xs font-mono text-slate-900">
                   {summary.byDispenser.flatMap((disp) =>
                     disp.nozzles.map((n) => (
                       <tr
