@@ -78,3 +78,32 @@
     transition-duration: 0ms !important;
   }
 }
+
+/* UX refinement: make directory search match the light shell rather than a dark field. */
+.admin-modern .relative input[aria-label="Section search"] {
+  background: #fff;
+  color: #17365d;
+  border: 1px solid #cbd5e1;
+  box-shadow: none;
+}
+.admin-modern .relative input[aria-label="Section search"]::placeholder { color: #64748b; }
+.admin-modern .relative input[aria-label="Section search"]:focus {
+  border-color: #17365d;
+  box-shadow: 0 0 0 3px rgba(23,54,93,.09);
+}
+.admin-modern .outlet-directory-card {
+  min-width: 0;
+  box-shadow: 0 2px 8px rgba(23,54,93,.045);
+}
+.admin-modern .outlets-directory-list .outlet-directory-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.25fr);
+  column-gap: 24px;
+  align-items: start;
+}
+.admin-modern .outlets-directory-list .outlet-directory-card > :first-child { grid-column: 1; }
+.admin-modern .outlets-directory-list .outlet-directory-card > .outlet-hierarchy { grid-column: 2; grid-row: 1 / span 2; }
+.admin-modern .outlets-directory-list .outlet-directory-card > :last-child { grid-column: 1 / -1; }
+@media (max-width: 900px) {
+  .admin-modern .outlets-directory-list .outlet-directory-card { display: block; }
+}
