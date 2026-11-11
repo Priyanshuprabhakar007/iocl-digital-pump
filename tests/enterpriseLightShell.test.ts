@@ -13,7 +13,7 @@ describe('IndianOil enterprise theme — global shell invariants', () => {
     expect(shell).toContain('iocl-vibrant');
     expect(shell).toContain("import './vibrantTheme.css'");
     expect(header).toContain('bg-white/95');
-    expect(sidebar).toContain('bg-gradient-to-b from-[#112B49]');
+    expect(sidebar).toContain('bg-gradient-to-b from-[#1646B1]');
     expect(app).toContain("'/daily-operations': 'daily-ops'");
     expect(app).toContain("'/shifts': 'daily-ops'");
   });
