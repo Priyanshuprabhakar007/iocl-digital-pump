@@ -310,6 +310,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
             <button
               onClick={refreshData}
+              aria-label="Refresh financial data"
               className="p-2 bg-[#F1F5F9] text-[#64748B] hover:text-[#17365D] rounded-xl border border-[#D7E0EA] transition-colors"
             >
               <RefreshCw className={`w-5 h-5 ${loadingData ? 'animate-spin' : ''}`} />
@@ -373,6 +374,25 @@ export const FinancialOperationsPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Read-only shift overview: all values come from the existing financial-summary response. */}
+      {summary && (
+        <section aria-label="Financial shift overview" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Authoritative Sales', value: summary.salesRevenue.authoritativeTotalStr, tone: 'text-[#17365D]' },
+            { label: 'Total Collections', value: summary.collections.totalStr, tone: 'text-[#17365D]' },
+            { label: 'Sales vs Collections Variance', value: summary.varianceStr,
+              tone: summary.variancePaise === 0 ? 'text-emerald-700' : 'text-amber-800' },
+            { label: 'Pending Cash Deposit', value: summary.cashDepositControl.pendingCashDepositStr,
+              tone: summary.cashDepositControl.pendingCashDepositPaise > 0 ? 'text-amber-800' : 'text-emerald-700' },
+          ].map(metric => (
+            <div key={metric.label} className="phase3-surface p-4">
+              <div className="text-xs font-semibold text-[#526477]">{metric.label}</div>
+              <div className={`mt-2 text-xl font-bold tabular-nums ${metric.tone}`}>₹ {metric.value}</div>
+            </div>
+          ))}
+        </section>
+      )}
 
       {/* Notifications */}
       {actionSuccess && (
@@ -681,13 +701,13 @@ export const FinancialOperationsPage: React.FC = () => {
                     <div className="flex gap-2 pt-2 border-t border-[#E2E8F0]">
                       <button
                         onClick={() => handleAcknowledgeHandover(h.id, 'ACKNOWLEDGED')}
-                        className="flex-1 px-3 py-2 bg-emerald-600/20 text-emerald-700 rounded-lg text-[10px] font-bold border border-emerald-600/30 hover:bg-emerald-600 hover:text-[#17365D] transition-all"
+                        className="flex-1 px-3 py-2 bg-emerald-600/20 text-emerald-700 rounded-lg text-[10px] font-bold border border-emerald-600/30 hover:bg-emerald-700 hover:text-white transition-all"
                       >
                         Acknowledge Receipt
                       </button>
                       <button
                          onClick={() => handleAcknowledgeHandover(h.id, 'DISPUTED')}
-                        className="flex-1 px-3 py-2 bg-rose-600/20 text-rose-700 rounded-lg text-[10px] font-bold border border-rose-600/30 hover:bg-rose-600 hover:text-[#17365D] transition-all"
+                        className="flex-1 px-3 py-2 bg-rose-600/20 text-rose-700 rounded-lg text-[10px] font-bold border border-rose-600/30 hover:bg-rose-700 hover:text-white transition-all"
                       >
                         Dispute Amount
                       </button>
@@ -767,7 +787,7 @@ export const FinancialOperationsPage: React.FC = () => {
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => handleVerifyDeposit(d.id, 'VERIFIED')}
-                              className="p-1.5 bg-emerald-600/20 text-emerald-700 rounded-lg hover:bg-emerald-600 hover:text-[#17365D] transition-all"
+                              className="p-1.5 bg-emerald-600/20 text-emerald-700 rounded-lg hover:bg-emerald-700 hover:text-white transition-all"
                               title="Verify"
                             >
                               <CheckCircle className="w-4 h-4" />
@@ -777,7 +797,7 @@ export const FinancialOperationsPage: React.FC = () => {
                                 const reason = prompt('Rejection Reason:');
                                 if (reason) handleVerifyDeposit(d.id, 'REJECTED', reason);
                               }}
-                              className="p-1.5 bg-rose-600/20 text-rose-700 rounded-lg hover:bg-rose-600 hover:text-[#17365D] transition-all"
+                              className="p-1.5 bg-rose-600/20 text-rose-700 rounded-lg hover:bg-rose-700 hover:text-white transition-all"
                               title="Reject"
                             >
                               <XCircle className="w-4 h-4" />
@@ -907,7 +927,7 @@ export const FinancialOperationsPage: React.FC = () => {
                           <td className="py-3 px-4 text-center">
                             <button
                               onClick={() => { setEditingPrice(p); setShowEditPriceModal(true); }}
-                              className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-orange-500 hover:text-[#17365D] text-[#475569] rounded-lg text-[10px] font-bold transition-all"
+                              className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#17365D] hover:text-white text-[#475569] rounded-lg text-[10px] font-bold transition-all"
                             >
                               Edit
                             </button>
@@ -927,7 +947,7 @@ export const FinancialOperationsPage: React.FC = () => {
       
       {showCollectionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => setShowCollectionModal(false)} />
+          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowCollectionModal(false)} />
           <form onSubmit={handleCreateCollection} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">Record Shift Collection</h2>
             <div className="space-y-3">
@@ -980,7 +1000,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showHandoverModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => setShowHandoverModal(false)} />
+          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowHandoverModal(false)} />
           <form onSubmit={handleCreateHandover} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">Log Cash Handover</h2>
             <p className="text-xs text-[#64748B]">Record physical custody transfer of cash to supervisor or next staff.</p>
@@ -1004,7 +1024,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showDepositModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => setShowDepositModal(false)} />
+          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowDepositModal(false)} />
           <form onSubmit={handleCreateDeposit} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">New Bank Deposit Submission</h2>
             <div className="space-y-3">
@@ -1045,7 +1065,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showPartyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => setShowPartyModal(false)} />
+          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowPartyModal(false)} />
           <form 
             onSubmit={async (e) => {
               e.preventDefault();
@@ -1095,7 +1115,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showPriceModal && hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => setShowPriceModal(false)} />
+          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowPriceModal(false)} />
           <form 
             onSubmit={async (e) => {
               e.preventDefault();
@@ -1149,7 +1169,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showEditPriceModal && editingPrice && hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-[#F1F5F9]/80 backdrop-blur-sm" onClick={() => { setShowEditPriceModal(false); setEditingPrice(null); }} />
+          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => { setShowEditPriceModal(false); setEditingPrice(null); }} />
           <form onSubmit={handleUpdatePrice} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">Edit Product Price</h2>
             <div className="space-y-3">
