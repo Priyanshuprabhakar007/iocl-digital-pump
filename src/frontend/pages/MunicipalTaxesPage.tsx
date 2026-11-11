@@ -254,7 +254,7 @@ export const MunicipalTaxesPage: React.FC = () => {
               type="button"
               onClick={handleOpenCreateModal}
               disabled={!selectedOutletId}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 text-[#17365D] rounded-xl text-xs font-bold shadow-lg shadow-orange-500/20 transition-all"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-lg shadow-orange-500/20 transition-all"
             >
               <Plus className="w-4 h-4" />
               <span>Create Due</span>
