@@ -178,9 +178,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const filteredNav = navItems.filter(item => item.perm === null || hasPermission(item.perm as PermissionCode));
 
   const content = (
-    <div className="flex flex-col h-full bg-slate-900 border-r border-slate-800 text-slate-300 w-64 p-4">
+    <div className="flex h-full min-h-0 w-64 flex-col overflow-hidden border-r border-slate-800 bg-slate-900 p-4 text-slate-300">
       {/* Mobile Close Button & Brand */}
-      <div className="flex items-center justify-between lg:hidden mb-4 pb-2 border-b border-slate-800">
+      <div className="flex shrink-0 items-center justify-between lg:hidden mb-4 pb-2 border-b border-slate-800">
         <div className="flex items-center gap-2.5">
           <img src="/indianoil-logo.svg" alt="IndianOil" className="h-9 w-auto object-contain shrink-0" />
           <span className="font-bold text-white text-xs">IOCL Navigation</span>
@@ -194,7 +194,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Sidebar Brand Header (Desktop) */}
-      <div className="hidden lg:flex items-center gap-3 mb-4 pb-3 border-b border-slate-800">
+      <div className="hidden lg:flex shrink-0 items-center gap-3 mb-4 pb-3 border-b border-slate-800">
         <img src="/indianoil-logo.svg" alt="IndianOil" className="h-10 w-auto object-contain shrink-0" />
         <div>
           <div className="text-xs font-bold text-white leading-tight">IndianOil</div>
@@ -204,7 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Scope Context Card */}
       {userCtx && (
-        <div className="mb-6 p-3 rounded-xl bg-slate-800/80 border border-slate-700/60">
+        <div className="mb-4 shrink-0 rounded-xl border border-slate-700/60 bg-slate-800/80 p-3">
           <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase font-mono">
             Active User Context
           </div>
@@ -224,7 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       {/* Nav Menu */}
-      <nav className="flex-1 space-y-1">
+      <nav aria-label="Main navigation" className="min-h-0 flex-1 space-y-1 overflow-y-scroll overscroll-contain pr-1 [scrollbar-width:thin] [scrollbar-color:#64748b_#0f172a]">
         {filteredNav.map(item => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -249,7 +249,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Footer Info */}
-      <div className="pt-4 border-t border-slate-800 text-[10px] text-slate-500 font-mono">
+      <div className="shrink-0 border-t border-slate-800 pt-3 text-[10px] font-mono text-slate-500">
         <div>IOCL Digital Outlet Manager v1.0</div>
         <div>Cloudflare Worker + D1 Engine</div>
       </div>
@@ -259,7 +259,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:block h-[calc(100vh-57px)] sticky top-[57px]">
+      <aside className="sticky top-[57px] hidden h-[calc(100vh-57px)] shrink-0 overflow-hidden lg:block">
         {content}
       </aside>
 
@@ -267,7 +267,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden flex">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={onCloseMobile} />
-          <div className="relative z-10 w-64 h-full">
+          <div className="relative z-10 h-full min-h-0 w-64 overflow-hidden">
             {content}
           </div>
         </div>
