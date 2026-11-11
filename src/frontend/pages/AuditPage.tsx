@@ -91,7 +91,7 @@ export const AuditPage: React.FC = () => {
 
       {/* Inspect Drawer/Modal */}
       {selectedLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#F8FAFC]/55 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
           <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">Audit Payload Details</h2>
 
