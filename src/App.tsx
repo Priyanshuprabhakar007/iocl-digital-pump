@@ -148,7 +148,7 @@ function MainAppContent() {
   return (
     <ActiveOutletProvider>
       <DashboardShell activeTab={activeTab} setActiveTab={handleSetActiveTab}>
-        {activeTab === 'dashboard' && <DashboardPage />}
+        {activeTab === 'dashboard' && <DashboardPage onNavigate={handleSetActiveTab} />}
         {activeTab === 'daily-ops' && <DailyOperationsPage />}
         {activeTab === 'outlets' && <OutletsPage />}
         {activeTab === 'products' && <ProductsPage />}
