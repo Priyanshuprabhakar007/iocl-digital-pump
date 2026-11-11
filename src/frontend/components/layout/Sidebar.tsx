@@ -299,7 +299,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="sticky top-[57px] hidden h-[calc(100vh-57px)] shrink-0 overflow-hidden lg:block">
+      <aside className="sticky top-[64px] hidden h-[calc(100vh-64px)] shrink-0 overflow-hidden lg:block">
         {content}
       </aside>
 
