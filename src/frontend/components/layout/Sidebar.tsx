@@ -14,7 +14,6 @@ import {
   X,
   Fuel,
   Gauge,
-  Clock,
   Droplets,
   Flame,
   Banknote,
@@ -71,12 +70,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Pump Infrastructure',
       icon: Gauge,
       perm: PERMISSIONS.TANKS_READ,
-    },
-    {
-      id: 'shift-ops',
-      label: 'Shift Operations',
-      icon: Clock,
-      perm: PERMISSIONS.SHIFTS_READ,
     },
     {
       id: 'hr-workforce',
