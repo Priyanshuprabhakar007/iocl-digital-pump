@@ -1130,7 +1130,7 @@ export const OutletsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={updatingOutlet || loadingEditDivisions || loadingEditSalesAreas}
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-[#17365D] rounded-lg font-bold shadow-md transition-colors"
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg font-bold shadow-md transition-colors"
                 >
                   {updatingOutlet ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -1265,7 +1265,7 @@ export const OutletsPage: React.FC = () => {
                 type="button"
                 disabled={hidingLoading}
                 onClick={handleHideOutlet}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-[#17365D] rounded-lg font-bold shadow-md transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-lg font-bold shadow-md transition-colors flex items-center gap-2"
               >
                 {hidingLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 <span>Hide Outlet</span>
