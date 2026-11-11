@@ -12,10 +12,10 @@ describe('Sidebar navigation scrolling', () => {
 
   it('keeps the branding and user context outside the scrolling menu', () => {
     const nav = source.indexOf('<nav aria-label="Main navigation"');
-    expect(source.indexOf('Active User Context')).toBeLessThan(nav);
+    expect(source.indexOf('Scope: {userCtx.primaryScope}')).toBeLessThan(nav);
     expect(source.indexOf('Sidebar Brand Header')).toBeLessThan(nav);
     expect(source.indexOf('Footer Info')).toBeGreaterThan(nav);
-    expect(source).toContain('flex-col overflow-hidden border-r border-[#E2E8F0] bg-white');
+    expect(source).toContain('flex-col overflow-hidden border-r border-[#142842] bg-gradient-to-b');
   });
 
   it('works in both desktop and mobile layouts', () => {
