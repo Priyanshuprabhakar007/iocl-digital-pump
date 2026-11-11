@@ -686,7 +686,7 @@ export const OutletsPage: React.FC = () => {
 
       {/* Register New Outlet Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#F8FAFC]/55 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
           <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-[#17365D]">Register Retail Outlet</h2>
 
@@ -738,7 +738,7 @@ export const OutletsPage: React.FC = () => {
               </div>
 
               {/* Cascading Organizational Hierarchy Selection */}
-              <div className="space-y-3 p-3.5 bg-[#F8FAFC]/55 border border-[#E2E8F0] rounded-xl">
+              <div className="space-y-3 p-3.5 bg-slate-950/60 border border-[#E2E8F0] rounded-xl">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#B8530D]">
                     Organizational Hierarchy Allocation
@@ -906,7 +906,7 @@ export const OutletsPage: React.FC = () => {
 
       {/* Edit Retail Outlet Modal */}
       {editModalOpen && editingOutlet && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#F8FAFC]/55 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
           <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div>
@@ -977,7 +977,7 @@ export const OutletsPage: React.FC = () => {
               </div>
 
               {/* Cascading Organizational Hierarchy Reallocation */}
-              <div className="space-y-3 p-3.5 bg-[#F8FAFC]/55 border border-[#E2E8F0] rounded-xl">
+              <div className="space-y-3 p-3.5 bg-slate-950/60 border border-[#E2E8F0] rounded-xl">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#B8530D]">
                     Organizational Hierarchy Reallocation
@@ -1142,7 +1142,7 @@ export const OutletsPage: React.FC = () => {
 
       {/* Assign User to Outlet Modal */}
       {assignModalOpen && selectedOutlet && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#F8FAFC]/55 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
           <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">Assign Personnel to Outlet</h2>
             <p className="text-xs text-[#64748B]">
@@ -1213,7 +1213,7 @@ export const OutletsPage: React.FC = () => {
 
       {/* Hide Retail Outlet Confirmation Modal */}
       {hideModalOpen && outletToHide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#F8FAFC]/55 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
           <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-rose-700">
               <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
