@@ -1,3 +1,4 @@
+import './operationsModern.css';
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
 import {
@@ -951,22 +952,22 @@ export const StockOperationsPage: React.FC = () => {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="operations-modern p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+          <h1 className="text-xl md:text-2xl font-black text-[#17365D] tracking-tight flex items-center gap-2">
             <Droplets className="w-6 h-6 text-orange-500" />
             Stock & Decantation Operations
           </h1>
-          <p className="text-xs md:text-sm text-slate-400 mt-1">
+          <p className="text-xs md:text-sm text-[#64748B] mt-1">
             Tank stock dips, tanker receipts, quality density verification, and authoritative reconciliation
           </p>
         </div>
 
         <button
           onClick={() => selectedShiftId && loadShiftData(selectedShiftId)}
-          className="self-start sm:self-auto px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 flex items-center gap-1.5 transition-colors"
+          className="self-start sm:self-auto px-3 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] text-xs font-bold rounded-lg border border-[#D7E0EA] flex items-center gap-1.5 transition-colors"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           Refresh
@@ -974,15 +975,15 @@ export const StockOperationsPage: React.FC = () => {
       </div>
 
       {/* Selectors Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-white p-4 rounded-xl border border-[#E2E8F0]">
         <div>
-          <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+          <label className="block text-[11px] font-bold text-[#64748B] uppercase tracking-wider mb-1">
             Retail Outlet
           </label>
           <select
             value={selectedOutletId}
             onChange={e => setSelectedOutletId(e.target.value)}
-            className="w-full bg-slate-800 text-white text-sm font-semibold rounded-lg p-2.5 border border-slate-700 focus:border-orange-500 focus:outline-none"
+            className="w-full bg-[#F1F5F9] text-[#17365D] text-sm font-semibold rounded-lg p-2.5 border border-[#D7E0EA] focus:border-orange-500 focus:outline-none"
           >
             {outlets.map(o => (
               <option key={o.id} value={o.id}>
@@ -993,13 +994,13 @@ export const StockOperationsPage: React.FC = () => {
         </div>
 
         <div>
-          <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+          <label className="block text-[11px] font-bold text-[#64748B] uppercase tracking-wider mb-1">
             Operational Shift
           </label>
           <select
             value={selectedShiftId}
             onChange={e => setSelectedShiftId(e.target.value)}
-            className="w-full bg-slate-800 text-white text-sm font-semibold rounded-lg p-2.5 border border-slate-700 focus:border-orange-500 focus:outline-none"
+            className="w-full bg-[#F1F5F9] text-[#17365D] text-sm font-semibold rounded-lg p-2.5 border border-[#D7E0EA] focus:border-orange-500 focus:outline-none"
           >
             {shifts.length === 0 ? (
               <option value="">No shifts available</option>
@@ -1014,14 +1015,14 @@ export const StockOperationsPage: React.FC = () => {
         </div>
 
         {currentShift && (
-          <div className="flex items-center justify-between gap-2 text-xs text-slate-300 font-mono bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50 self-end">
+          <div className="flex items-center justify-between gap-2 text-xs text-[#475569] font-mono bg-[#F1F5F9] p-2.5 rounded-lg border border-[#D7E0EA]/50 self-end">
             <div className="flex items-center gap-2">
-              <span className="text-slate-400">Status:</span>
+              <span className="text-[#64748B]">Status:</span>
               <span
                 className={`px-2 py-0.5 rounded font-bold ${
                   currentShift.status === 'OPEN'
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-slate-700 text-slate-300'
+                    ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-500/30'
+                    : 'bg-[#E8EEF5] text-[#475569]'
                 }`}
               >
                 {currentShift.status}
@@ -1031,8 +1032,8 @@ export const StockOperationsPage: React.FC = () => {
               <span
                 className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                   shiftReceiptSummary.allReceiptsFinalized
-                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    ? 'bg-emerald-500/15 text-emerald-800 border border-emerald-500/30'
+                    : 'bg-amber-500/20 text-amber-800 border border-amber-500/30'
                 }`}
               >
                 Receipts: {shiftReceiptSummary.completedCount + shiftReceiptSummary.cancelledCount}/
@@ -1045,20 +1046,20 @@ export const StockOperationsPage: React.FC = () => {
 
       {/* Error & Success Messages */}
       {errorMsg && (
-        <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs font-semibold flex items-center gap-2">
+        <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
       {successMsg && (
-        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-semibold flex items-center gap-2">
+        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-700 text-xs font-semibold flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {/* Operations Navigation Tabs */}
-      <div className="flex border-b border-slate-800 overflow-x-auto scrollbar-none">
+      <div className="flex border-b border-[#E2E8F0] overflow-x-auto scrollbar-none">
         {[
           { id: 'OPENING', label: '1. Opening Stock', icon: Droplets },
           {
@@ -1080,8 +1081,8 @@ export const StockOperationsPage: React.FC = () => {
               onClick={() => setActiveTab(tab.id as any)}
               className={`flex items-center gap-2 px-4 py-3 text-xs md:text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
                 isActive
-                  ? 'border-orange-500 text-orange-400 bg-orange-500/5'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
+                  : 'border-transparent text-[#64748B] hover:text-[#334155] hover:border-[#D7E0EA]'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -1096,20 +1097,20 @@ export const StockOperationsPage: React.FC = () => {
         <div className="space-y-6">
           {/* Record Dip Form */}
           {currentShift?.status === 'OPEN' && (
-            <form onSubmit={handleRecordDip} className="bg-slate-900/90 p-4 md:p-5 rounded-xl border border-slate-800 space-y-4">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <form onSubmit={handleRecordDip} className="bg-white p-4 md:p-5 rounded-xl border border-[#E2E8F0] space-y-4">
+              <h3 className="text-sm font-bold text-[#17365D] uppercase tracking-wider flex items-center gap-2">
                 <Droplets className="w-4 h-4 text-orange-500" />
                 Record {activeTab} Dip Reading
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Tank</label>
+                  <label className="block text-[11px] font-bold text-[#64748B] uppercase mb-1">Tank</label>
                   <select
                     value={dipForm.tankId}
                     onChange={e => setDipForm({ ...dipForm, tankId: e.target.value })}
                     required
-                    className="w-full bg-slate-800 text-white text-xs font-semibold rounded-lg p-2.5 border border-slate-700 focus:border-orange-500 focus:outline-none"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] text-xs font-semibold rounded-lg p-2.5 border border-[#D7E0EA] focus:border-orange-500 focus:outline-none"
                   >
                     <option value="">Select Tank</option>
                     {tankSnapshots.map(t => (
@@ -1121,11 +1122,11 @@ export const StockOperationsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Source</label>
+                  <label className="block text-[11px] font-bold text-[#64748B] uppercase mb-1">Source</label>
                   <select
                     value={dipForm.source}
                     onChange={e => setDipForm({ ...dipForm, source: e.target.value as any })}
-                    className="w-full bg-slate-800 text-white text-xs font-semibold rounded-lg p-2.5 border border-slate-700 focus:border-orange-500 focus:outline-none"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] text-xs font-semibold rounded-lg p-2.5 border border-[#D7E0EA] focus:border-orange-500 focus:outline-none"
                   >
                     <option value="MANUAL">MANUAL DIP</option>
                     <option value="ATG">AUTOMATIC TANK GAUGE (ATG)</option>
@@ -1133,7 +1134,7 @@ export const StockOperationsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Product Dip (mm)</label>
+                  <label className="block text-[11px] font-bold text-[#64748B] uppercase mb-1">Product Dip (mm)</label>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -1141,19 +1142,19 @@ export const StockOperationsPage: React.FC = () => {
                     value={dipForm.productDipMm}
                     onChange={e => setDipForm({ ...dipForm, productDipMm: e.target.value })}
                     required
-                    className="w-full bg-slate-800 text-white text-xs font-semibold rounded-lg p-2.5 border border-slate-700 focus:border-orange-500 focus:outline-none font-mono"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] text-xs font-semibold rounded-lg p-2.5 border border-[#D7E0EA] focus:border-orange-500 focus:outline-none font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Water Dip (mm)</label>
+                  <label className="block text-[11px] font-bold text-[#64748B] uppercase mb-1">Water Dip (mm)</label>
                   <input
                     type="text"
                     inputMode="decimal"
                     placeholder="e.g. 0.000"
                     value={dipForm.waterDipMm}
                     onChange={e => setDipForm({ ...dipForm, waterDipMm: e.target.value })}
-                    className="w-full bg-slate-800 text-white text-xs font-semibold rounded-lg p-2.5 border border-slate-700 focus:border-orange-500 focus:outline-none font-mono"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] text-xs font-semibold rounded-lg p-2.5 border border-[#D7E0EA] focus:border-orange-500 focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -1171,16 +1172,16 @@ export const StockOperationsPage: React.FC = () => {
           )}
 
           {/* Snapshot Tanks Readings Table */}
-          <div className="bg-slate-900/90 rounded-xl border border-slate-800 overflow-hidden">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+          <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
+            <div className="p-4 border-b border-[#E2E8F0] flex items-center justify-between">
+              <h3 className="text-sm font-bold text-[#17365D] uppercase tracking-wider">
                 {activeTab} Tank Stock Dips
               </h3>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-800/80 text-[10px] text-slate-400 uppercase font-mono tracking-wider">
+              <table className="w-full text-left text-xs text-[#475569]">
+                <thead className="bg-[#F1F5F9] text-[10px] text-[#64748B] uppercase font-mono tracking-wider">
                   <tr>
                     <th className="p-3">Tank #</th>
                     <th className="p-3">Product</th>
@@ -1196,16 +1197,16 @@ export const StockOperationsPage: React.FC = () => {
                   {tankSnapshots.map(ts => {
                     const reading = tankReadings.find(r => r.tankId === ts.tankId && r.readingType === activeTab);
                     return (
-                      <tr key={ts.tankId} className="hover:bg-slate-800/40">
-                        <td className="p-3 font-bold text-white">Tank #{ts.tankNumber}</td>
+                      <tr key={ts.tankId} className="hover:bg-[#F1F5F9]">
+                        <td className="p-3 font-bold text-[#17365D]">Tank #{ts.tankNumber}</td>
                         <td className="p-3">{ts.productCode} - {ts.productName}</td>
-                        <td className="p-3 text-slate-400">{reading ? reading.source : '-'}</td>
-                        <td className="p-3 text-slate-200">{reading ? reading.productDipMmStr : '-'}</td>
-                        <td className="p-3 text-slate-200">{reading ? reading.waterDipMmStr : '-'}</td>
-                        <td className="p-3 text-right text-slate-300">{reading ? reading.grossObservedVolumeStr : '-'}</td>
-                        <td className="p-3 text-right text-slate-400">{reading ? reading.waterVolumeStr : '-'}</td>
-                        <td className="p-3 text-right font-bold text-orange-400">
-                          {reading ? `${reading.netProductVolumeStr} L` : <span className="text-red-400 font-normal">MISSING</span>}
+                        <td className="p-3 text-[#64748B]">{reading ? reading.source : '-'}</td>
+                        <td className="p-3 text-[#334155]">{reading ? reading.productDipMmStr : '-'}</td>
+                        <td className="p-3 text-[#334155]">{reading ? reading.waterDipMmStr : '-'}</td>
+                        <td className="p-3 text-right text-[#475569]">{reading ? reading.grossObservedVolumeStr : '-'}</td>
+                        <td className="p-3 text-right text-[#64748B]">{reading ? reading.waterVolumeStr : '-'}</td>
+                        <td className="p-3 text-right font-bold text-[#B8530D]">
+                          {reading ? `${reading.netProductVolumeStr} L` : <span className="text-red-700 font-normal">MISSING</span>}
                         </td>
                       </tr>
                     );
@@ -1222,11 +1223,11 @@ export const StockOperationsPage: React.FC = () => {
         <div className="space-y-6">
           <div className="flex flex-wrap justify-between items-center gap-3">
             <div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-bold text-[#17365D] uppercase tracking-wider flex items-center gap-2">
                 <Fuel className="w-4 h-4 text-orange-500" />
                 Tanker Fuel Deliveries
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-[#64748B] mt-0.5">
                 Every tanker receipt must reach COMPLETED (with verified PRE & POST tank dips) or CANCELLED before shift closing.
               </p>
             </div>
@@ -1254,7 +1255,7 @@ export const StockOperationsPage: React.FC = () => {
                 <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wide">
                   {shiftReceiptSummary.shiftCloseBlockedByReceipts ? (
                     <>
-                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
                       <span>
                         Shift Close Blocked — {shiftReceiptSummary.pendingReceipts.length} Non-Finalised Fuel Receipt
                         {shiftReceiptSummary.pendingReceipts.length === 1 ? '' : 's'}
@@ -1262,7 +1263,7 @@ export const StockOperationsPage: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
                       <span>
                         All Shift Fuel Receipts Finalised ({shiftReceiptSummary.completedCount} Completed,{' '}
                         {shiftReceiptSummary.cancelledCount} Cancelled)
@@ -1270,7 +1271,7 @@ export const StockOperationsPage: React.FC = () => {
                     </>
                   )}
                 </div>
-                <p className="text-xs text-slate-300">
+                <p className="text-xs text-[#475569]">
                   {shiftReceiptSummary.shiftCloseBlockedByReceipts
                     ? `Pending receipts: ${shiftReceiptSummary.pendingReceipts
                         .map(r => `TT ${r.ttNumber} (Inv ${r.invoiceNumber} — ${r.status})`)
@@ -1294,7 +1295,7 @@ export const StockOperationsPage: React.FC = () => {
           )}
 
           {receipts.length === 0 ? (
-            <div className="p-8 text-center bg-slate-900/60 rounded-xl border border-slate-800 text-slate-400 text-xs font-mono">
+            <div className="p-8 text-center bg-white rounded-xl border border-[#E2E8F0] text-[#64748B] text-xs font-mono">
               No fuel receipts recorded for this shift.
             </div>
           ) : (
@@ -1303,24 +1304,24 @@ export const StockOperationsPage: React.FC = () => {
               const readiness = evaluateReceiptCompletionReadiness(rcpt, tankReadings);
 
               return (
-                <div key={rcpt.id} className="bg-slate-900/90 rounded-xl border border-slate-800 overflow-hidden p-4 space-y-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-3">
+                <div key={rcpt.id} className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden p-4 space-y-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#E2E8F0] pb-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs sm:text-sm font-bold text-white font-mono">
+                        <span className="text-xs sm:text-sm font-bold text-[#17365D] font-mono">
                           TT: {rcpt.ttNumber} — Invoice: {rcpt.invoiceNumber}
                         </span>
                         <span
                           className={`px-2 py-0.5 text-[10px] font-extrabold rounded font-mono ${
                             rcpt.status === 'COMPLETED'
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-500/30'
                               : rcpt.status === 'CANCELLED'
-                              ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                              ? 'bg-red-500/20 text-red-700 border border-red-500/30'
                               : rcpt.status === 'DECANTED'
                               ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                               : rcpt.status === 'VERIFIED'
                               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                              : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                              : 'bg-amber-500/20 text-amber-700 border border-amber-500/30'
                           }`}
                         >
                           {rcpt.status}
@@ -1328,14 +1329,14 @@ export const StockOperationsPage: React.FC = () => {
                         <span
                           className={`px-2 py-0.5 text-[10px] font-bold rounded font-mono ${
                             rcpt.sealVerified
-                              ? 'bg-slate-800 text-slate-300 border border-slate-700'
-                              : 'bg-red-500/15 text-red-300 border border-red-500/30'
+                              ? 'bg-[#F1F5F9] text-[#475569] border border-[#D7E0EA]'
+                              : 'bg-red-500/15 text-red-800 border border-red-500/30'
                           }`}
                         >
                           {rcpt.sealVerified ? 'SEAL VERIFIED' : 'SEAL EXCEPTION'}
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5 font-mono">
+                      <div className="text-[11px] text-[#64748B] flex flex-wrap gap-x-3 gap-y-0.5 font-mono">
                         <span>Inv Date: {rcpt.invoiceDate}</span>
                         <span>Arrived: {new Date(rcpt.arrivalAt).toLocaleString()}</span>
                         {rcpt.decantationStartedAt && (
@@ -1346,7 +1347,7 @@ export const StockOperationsPage: React.FC = () => {
                         )}
                       </div>
                       {rcpt.sealExceptionReason && (
-                        <div className="text-[11px] text-amber-300 font-mono bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1 inline-block">
+                        <div className="text-[11px] text-amber-800 font-mono bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1 inline-block">
                           Audit / Seal Note: {rcpt.sealExceptionReason}
                         </div>
                       )}
@@ -1365,7 +1366,7 @@ export const StockOperationsPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => openManageReceiptModal(rcpt, true)}
-                          className="px-2.5 py-1.5 bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30 text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
+                          className="px-2.5 py-1.5 bg-red-500/15 hover:bg-red-500/25 text-red-800 border border-red-500/30 text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
                         >
                           <XCircle className="w-3.5 h-3.5" />
                           Cancel Receipt
@@ -1376,11 +1377,11 @@ export const StockOperationsPage: React.FC = () => {
 
                   {/* Missing Requirements Hint on Non-finalized Receipt Card */}
                   {!isFinalized && readiness.missingRequirements.length > 0 && (
-                    <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 text-[11px] text-slate-300 space-y-1">
-                      <div className="font-bold text-amber-400 uppercase tracking-wider text-[10px]">
+                    <div className="p-2.5 rounded-lg bg-[#F8FAFC]/70 border border-[#E2E8F0] text-[11px] text-[#475569] space-y-1">
+                      <div className="font-bold text-amber-700 uppercase tracking-wider text-[10px]">
                         Remaining Requirements Before Completion:
                       </div>
-                      <ul className="list-disc list-inside space-y-0.5 text-slate-400 font-mono">
+                      <ul className="list-disc list-inside space-y-0.5 text-[#64748B] font-mono">
                         {readiness.missingRequirements.map((req, idx) => (
                           <li key={idx}>{req}</li>
                         ))}
@@ -1390,8 +1391,8 @@ export const StockOperationsPage: React.FC = () => {
 
                   {/* Lines Table */}
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-slate-300 font-mono">
-                      <thead className="bg-slate-800/80 text-[10px] text-slate-400 uppercase">
+                    <table className="w-full text-left text-xs text-[#475569] font-mono">
+                      <thead className="bg-[#F1F5F9] text-[10px] text-[#64748B] uppercase">
                         <tr>
                           <th className="p-2.5">Tank</th>
                           <th className="p-2.5">Product</th>
@@ -1415,31 +1416,31 @@ export const StockOperationsPage: React.FC = () => {
                             : undefined;
                           return (
                             <tr key={l.id}>
-                              <td className="p-2.5 font-bold text-white">Tank #{l.tankNumber}</td>
+                              <td className="p-2.5 font-bold text-[#17365D]">Tank #{l.tankNumber}</td>
                               <td className="p-2.5">{l.productCode}</td>
                               <td className="p-2.5 text-right">{l.invoiceQuantityStr} L</td>
                               <td className="p-2.5 text-right">
                                 {preR ? (
-                                  <span className="text-emerald-300">
+                                  <span className="text-emerald-800">
                                     {preR.productDipMmStr} mm ({preR.netProductVolumeStr} L)
                                   </span>
                                 ) : (
-                                  <span className="text-amber-400">MISSING PRE</span>
+                                  <span className="text-amber-700">MISSING PRE</span>
                                 )}
                               </td>
                               <td className="p-2.5 text-right">
                                 {postR ? (
-                                  <span className="text-emerald-300">
+                                  <span className="text-emerald-800">
                                     {postR.productDipMmStr} mm ({postR.netProductVolumeStr} L)
                                   </span>
                                 ) : (
-                                  <span className="text-amber-400">MISSING POST</span>
+                                  <span className="text-amber-700">MISSING POST</span>
                                 )}
                               </td>
-                              <td className="p-2.5 text-right font-bold text-slate-200">
+                              <td className="p-2.5 text-right font-bold text-[#334155]">
                                 {l.measuredReceivedQuantityStr ? `${l.measuredReceivedQuantityStr} L` : '-'}
                               </td>
-                              <td className="p-2.5 text-right text-orange-400">
+                              <td className="p-2.5 text-right text-[#B8530D]">
                                 {l.receiptVarianceStr ? `${l.receiptVarianceStr} L` : '-'}
                               </td>
                               <td className="p-2.5 text-right">
@@ -1451,10 +1452,10 @@ export const StockOperationsPage: React.FC = () => {
                                 <span
                                   className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                     l.qualityStatus === 'PASS'
-                                      ? 'bg-emerald-500/20 text-emerald-400'
+                                      ? 'bg-emerald-500/20 text-emerald-700'
                                       : l.qualityStatus === 'OUT_OF_TOLERANCE'
-                                      ? 'bg-red-500/20 text-red-400'
-                                      : 'bg-slate-700 text-slate-300'
+                                      ? 'bg-red-500/20 text-red-700'
+                                      : 'bg-[#E8EEF5] text-[#475569]'
                                   }`}
                                 >
                                   {l.qualityStatus}
@@ -1478,11 +1479,11 @@ export const StockOperationsPage: React.FC = () => {
         <div className="space-y-6">
           <div className="flex flex-wrap justify-between items-center gap-4">
             <div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-bold text-[#17365D] uppercase tracking-wider flex items-center gap-2">
                 <Calculator className="w-4 h-4 text-orange-500" />
                 Shift Stock Reconciliation
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-[#64748B] mt-0.5">
                 Theoretical Closing = Opening + Completed Receipts - Sales
               </p>
             </div>
@@ -1500,19 +1501,19 @@ export const StockOperationsPage: React.FC = () => {
           </div>
 
           {!reconciliation ? (
-            <div className="p-8 text-center bg-slate-900/60 rounded-xl border border-slate-800 text-slate-400 text-xs font-mono">
+            <div className="p-8 text-center bg-white rounded-xl border border-[#E2E8F0] text-[#64748B] text-xs font-mono">
               No reconciliation report available yet. Enter Opening/Closing dips and click Compute.
             </div>
           ) : (
             <div className="space-y-6">
               {/* By Tank Table */}
-              <div className="bg-slate-900/90 rounded-xl border border-slate-800 overflow-hidden">
-                <div className="p-3.5 bg-slate-800/80 border-b border-slate-800 font-bold text-xs text-white uppercase">
+              <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
+                <div className="p-3.5 bg-[#F1F5F9] border-b border-[#E2E8F0] font-bold text-xs text-[#17365D] uppercase">
                   Tank-Level Reconciliation
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-slate-300 font-mono">
-                    <thead className="bg-slate-800/50 text-[10px] text-slate-400 uppercase">
+                  <table className="w-full text-left text-xs text-[#475569] font-mono">
+                    <thead className="bg-[#F1F5F9] text-[10px] text-[#64748B] uppercase">
                       <tr>
                         <th className="p-3">Tank #</th>
                         <th className="p-3">Product</th>
@@ -1527,24 +1528,24 @@ export const StockOperationsPage: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-800">
                       {reconciliation.byTank.map(t => (
-                        <tr key={t.tankId} className="hover:bg-slate-800/30">
-                          <td className="p-3 font-bold text-white">Tank #{t.tankNumber}</td>
+                        <tr key={t.tankId} className="hover:bg-[#F1F5F9]/30">
+                          <td className="p-3 font-bold text-[#17365D]">Tank #{t.tankNumber}</td>
                           <td className="p-3">{t.productCode}</td>
                           <td className="p-3 text-right">{t.openingStockStr ?? '-'} L</td>
-                          <td className="p-3 text-right text-emerald-400">+{t.receiptQuantityStr} L</td>
-                          <td className="p-3 text-right text-amber-400">-{t.salesQuantityStr} L</td>
-                          <td className="p-3 text-right font-bold text-slate-200">{t.theoreticalClosingStockStr ?? '-'} L</td>
-                          <td className="p-3 text-right font-bold text-white">{t.physicalClosingStockStr ?? '-'} L</td>
-                          <td className="p-3 text-right font-bold text-orange-400">{t.varianceStr ?? '-'} L</td>
+                          <td className="p-3 text-right text-emerald-700">+{t.receiptQuantityStr} L</td>
+                          <td className="p-3 text-right text-amber-700">-{t.salesQuantityStr} L</td>
+                          <td className="p-3 text-right font-bold text-[#334155]">{t.theoreticalClosingStockStr ?? '-'} L</td>
+                          <td className="p-3 text-right font-bold text-[#17365D]">{t.physicalClosingStockStr ?? '-'} L</td>
+                          <td className="p-3 text-right font-bold text-[#B8530D]">{t.varianceStr ?? '-'} L</td>
                           <td className="p-3 text-center">
                             {t.varianceStatus ? (
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-black ${
                                   t.varianceStatus === 'BALANCED'
-                                    ? 'bg-slate-700 text-slate-300'
+                                    ? 'bg-[#E8EEF5] text-[#475569]'
                                     : t.varianceStatus === 'GAIN'
-                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                    ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-500/30'
+                                    : 'bg-red-500/20 text-red-700 border border-red-500/30'
                                 }`}
                               >
                                 {t.varianceStatus}
@@ -1561,13 +1562,13 @@ export const StockOperationsPage: React.FC = () => {
               </div>
 
               {/* By Product Summary */}
-              <div className="bg-slate-900/90 rounded-xl border border-slate-800 overflow-hidden">
-                <div className="p-3.5 bg-slate-800/80 border-b border-slate-800 font-bold text-xs text-white uppercase">
+              <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
+                <div className="p-3.5 bg-[#F1F5F9] border-b border-[#E2E8F0] font-bold text-xs text-[#17365D] uppercase">
                   Product-Level Reconciliation Summary
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-slate-300 font-mono">
-                    <thead className="bg-slate-800/50 text-[10px] text-slate-400 uppercase">
+                  <table className="w-full text-left text-xs text-[#475569] font-mono">
+                    <thead className="bg-[#F1F5F9] text-[10px] text-[#64748B] uppercase">
                       <tr>
                         <th className="p-3">Product</th>
                         <th className="p-3 text-right">Opening Total</th>
@@ -1581,23 +1582,23 @@ export const StockOperationsPage: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-800">
                       {reconciliation.byProduct.map(p => (
-                        <tr key={p.productId} className="hover:bg-slate-800/30">
-                          <td className="p-3 font-bold text-white">{p.productCode} - {p.productName}</td>
+                        <tr key={p.productId} className="hover:bg-[#F1F5F9]/30">
+                          <td className="p-3 font-bold text-[#17365D]">{p.productCode} - {p.productName}</td>
                           <td className="p-3 text-right">{p.openingStockStr ?? '-'} L</td>
-                          <td className="p-3 text-right text-emerald-400">+{p.receiptQuantityStr} L</td>
-                          <td className="p-3 text-right text-amber-400">-{p.salesQuantityStr} L</td>
-                          <td className="p-3 text-right font-bold text-slate-200">{p.theoreticalClosingStockStr ?? '-'} L</td>
-                          <td className="p-3 text-right font-bold text-white">{p.physicalClosingStockStr ?? '-'} L</td>
-                          <td className="p-3 text-right font-bold text-orange-400">{p.varianceStr ?? '-'} L</td>
+                          <td className="p-3 text-right text-emerald-700">+{p.receiptQuantityStr} L</td>
+                          <td className="p-3 text-right text-amber-700">-{p.salesQuantityStr} L</td>
+                          <td className="p-3 text-right font-bold text-[#334155]">{p.theoreticalClosingStockStr ?? '-'} L</td>
+                          <td className="p-3 text-right font-bold text-[#17365D]">{p.physicalClosingStockStr ?? '-'} L</td>
+                          <td className="p-3 text-right font-bold text-[#B8530D]">{p.varianceStr ?? '-'} L</td>
                           <td className="p-3 text-center">
                             {p.varianceStatus ? (
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-black ${
                                   p.varianceStatus === 'BALANCED'
-                                    ? 'bg-slate-700 text-slate-300'
+                                    ? 'bg-[#E8EEF5] text-[#475569]'
                                     : p.varianceStatus === 'GAIN'
-                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                    ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-500/30'
+                                    : 'bg-red-500/20 text-red-700 border border-red-500/30'
                                 }`}
                               >
                                 {p.varianceStatus}
@@ -1620,20 +1621,20 @@ export const StockOperationsPage: React.FC = () => {
       {/* Manage Fuel Receipt Lifecycle & Decantation Modal */}
       {managingReceipt && managingReceiptReadiness && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full p-4 sm:p-6 space-y-5 max-h-[92vh] overflow-y-auto">
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-4xl w-full p-4 sm:p-6 space-y-5 max-h-[92vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+            <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] pb-4">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-black text-[#17365D] flex items-center gap-2">
                     <Fuel className="w-5 h-5 text-orange-500" />
                     Manage Fuel Receipt — TT {managingReceipt.ttNumber}
                   </h3>
-                  <span className="px-2.5 py-0.5 rounded text-xs font-extrabold font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  <span className="px-2.5 py-0.5 rounded text-xs font-extrabold font-mono bg-amber-500/20 text-amber-800 border border-amber-500/30">
                     {managingReceipt.status}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 font-mono mt-1">
+                <p className="text-xs text-[#64748B] font-mono mt-1">
                   Invoice: {managingReceipt.invoiceNumber} | Date: {managingReceipt.invoiceDate} | Arrived:{' '}
                   {new Date(managingReceipt.arrivalAt).toLocaleString()}
                 </p>
@@ -1641,15 +1642,15 @@ export const StockOperationsPage: React.FC = () => {
               <button
                 type="button"
                 onClick={closeManageReceiptModal}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                className="p-1.5 rounded-lg bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#475569]"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Lifecycle Stepper */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+            <div className="bg-[#F8FAFC]/80 border border-[#E2E8F0] rounded-xl p-3.5">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[#64748B] mb-2">
                 Authorised Receipt Lifecycle Progression
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
@@ -1663,16 +1664,16 @@ export const StockOperationsPage: React.FC = () => {
                       key={step}
                       className={`p-2.5 rounded-lg border flex items-center justify-between ${
                         isCurrent
-                          ? 'bg-orange-500/15 border-orange-500/50 text-orange-300 font-bold'
+                          ? 'bg-orange-500/15 border-orange-500/50 text-orange-800 font-bold'
                           : isDone
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                          : 'bg-slate-900 border-slate-800 text-slate-500'
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
+                          : 'bg-white border-[#E2E8F0] text-[#64748B]'
                       }`}
                     >
                       <span>
                         {index + 1}. {step}
                       </span>
-                      {isDone && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                      {isDone && <Check className="w-3.5 h-3.5 text-emerald-700" />}
                     </div>
                   );
                 })}
@@ -1680,14 +1681,14 @@ export const StockOperationsPage: React.FC = () => {
             </div>
 
             {manageModalError && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs font-semibold flex items-center gap-2">
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 <span>{manageModalError}</span>
               </div>
             )}
 
             {manageModalSuccess && (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-semibold flex items-center gap-2">
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-700 text-xs font-semibold flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>{manageModalSuccess}</span>
               </div>
@@ -1695,14 +1696,14 @@ export const StockOperationsPage: React.FC = () => {
 
             {/* Step 1: Tanker Arrival & Seal Verification (ARRIVED -> VERIFIED) */}
             {managingReceipt.status === 'ARRIVED' && (
-              <div className="bg-slate-950/70 border border-cyan-500/30 rounded-xl p-4 space-y-3">
+              <div className="bg-[#F8FAFC]/70 border border-cyan-500/30 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-300">
                     Step 1: Tanker Seal & Invoice Verification (ARRIVED → VERIFIED)
                   </h4>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <label className="flex items-center gap-2 text-slate-200 font-semibold cursor-pointer">
+                  <label className="flex items-center gap-2 text-[#334155] font-semibold cursor-pointer">
                     <input
                       type="checkbox"
                       checked={sealVerifiedInput}
@@ -1713,7 +1714,7 @@ export const StockOperationsPage: React.FC = () => {
                   </label>
                   {!sealVerifiedInput && (
                     <div>
-                      <label className="block text-[10px] font-bold text-amber-300 uppercase mb-1">
+                      <label className="block text-[10px] font-bold text-amber-800 uppercase mb-1">
                         Seal Exception Reason (Required)
                       </label>
                       <input
@@ -1721,7 +1722,7 @@ export const StockOperationsPage: React.FC = () => {
                         placeholder="Describe seal discrepancy or authorisation..."
                         value={sealExceptionInput}
                         onChange={e => setSealExceptionInput(e.target.value)}
-                        className="w-full bg-slate-800 text-white rounded-lg p-2 border border-amber-500/40 text-xs"
+                        className="w-full bg-[#F1F5F9] text-[#17365D] rounded-lg p-2 border border-amber-500/40 text-xs"
                       />
                     </div>
                   )}
@@ -1731,7 +1732,7 @@ export const StockOperationsPage: React.FC = () => {
                     type="button"
                     disabled={manageActionBusy}
                     onClick={() => handleTransitionReceiptStatus(managingReceipt, 'VERIFIED')}
-                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-[#17365D] text-xs font-bold rounded-lg flex items-center gap-1.5 disabled:opacity-50"
                   >
                     <ArrowRight className="w-3.5 h-3.5" />
                     Verify Tanker & Seal (Advance to VERIFIED)
@@ -1742,7 +1743,7 @@ export const StockOperationsPage: React.FC = () => {
 
             {/* Step 2: Decantation Tank Readings (PRE_RECEIPT & POST_RECEIPT) & Quality */}
             <div className="space-y-4">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#17365D] flex items-center gap-2">
                 <Droplets className="w-4 h-4 text-orange-500" />
                 Tank Line Decantation Dips (PRE_RECEIPT & POST_RECEIPT) & Quality Parameters
               </h4>
@@ -1788,36 +1789,36 @@ export const StockOperationsPage: React.FC = () => {
                 return (
                   <div
                     key={line.id}
-                    className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-4"
+                    className="bg-[#F8FAFC]/80 border border-[#E2E8F0] rounded-xl p-4 space-y-4"
                   >
                     {/* Line Summary Header */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3 font-mono text-xs">
-                      <div className="font-bold text-white">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E2E8F0] pb-3 font-mono text-xs">
+                      <div className="font-bold text-[#17365D]">
                         Tank #{line.tankNumber} ({line.productCode} - {line.productName})
                       </div>
                       <div className="flex flex-wrap items-center gap-3 text-[11px]">
-                        <span className="text-slate-300">
-                          Invoice Qty: <strong className="text-white">{line.invoiceQuantityStr} L</strong>
+                        <span className="text-[#475569]">
+                          Invoice Qty: <strong className="text-[#17365D]">{line.invoiceQuantityStr} L</strong>
                         </span>
-                        <span className="text-slate-300">
+                        <span className="text-[#475569]">
                           Measured Qty:{' '}
-                          <strong className="text-emerald-400">
+                          <strong className="text-emerald-700">
                             {line.measuredReceivedQuantityStr ? `${line.measuredReceivedQuantityStr} L` : 'Pending Dips'}
                           </strong>
                         </span>
-                        <span className="text-slate-300">
+                        <span className="text-[#475569]">
                           Variance:{' '}
-                          <strong className="text-orange-400">
+                          <strong className="text-[#B8530D]">
                             {line.receiptVarianceStr ? `${line.receiptVarianceStr} L` : '-'}
                           </strong>
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             line.qualityStatus === 'PASS'
-                              ? 'bg-emerald-500/20 text-emerald-400'
+                              ? 'bg-emerald-500/20 text-emerald-700'
                               : line.qualityStatus === 'OUT_OF_TOLERANCE'
-                              ? 'bg-red-500/20 text-red-400'
-                              : 'bg-slate-800 text-slate-300'
+                              ? 'bg-red-500/20 text-red-700'
+                              : 'bg-[#F1F5F9] text-[#475569]'
                           }`}
                         >
                           Quality: {line.qualityStatus}
@@ -1828,33 +1829,33 @@ export const StockOperationsPage: React.FC = () => {
                     {/* PRE_RECEIPT and POST_RECEIPT Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* PRE_RECEIPT Panel */}
-                      <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-3.5 space-y-3">
+                      <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-orange-400 uppercase font-mono">
+                          <span className="text-xs font-bold text-[#B8530D] uppercase font-mono">
                             1. PRE_RECEIPT Tank Dip
                           </span>
                           {linkedPre ? (
-                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-800 text-[10px] font-mono font-bold">
                               LINKED ({linkedPre.netProductVolumeStr} L)
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">
+                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-800 text-[10px] font-mono font-bold">
                               REQUIRED
                             </span>
                           )}
                         </div>
 
                         {linkedPre && (
-                          <div className="p-2.5 rounded bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 space-y-0.5">
+                          <div className="p-2.5 rounded bg-[#F8FAFC] border border-[#E2E8F0] text-[11px] font-mono text-[#475569] space-y-0.5">
                             <div>
                               Product Dip: <strong>{linkedPre.productDipMmStr} mm</strong> | Water Dip:{' '}
                               <strong>{linkedPre.waterDipMmStr} mm</strong>
                             </div>
                             <div>
-                              Net Stock: <strong className="text-emerald-400">{linkedPre.netProductVolumeStr} L</strong>{' '}
+                              Net Stock: <strong className="text-emerald-700">{linkedPre.netProductVolumeStr} L</strong>{' '}
                               ({linkedPre.source})
                             </div>
-                            <div className="text-slate-500">
+                            <div className="text-[#64748B]">
                               Recorded: {new Date(linkedPre.recordedAt).toLocaleString()}
                             </div>
                           </div>
@@ -1864,7 +1865,7 @@ export const StockOperationsPage: React.FC = () => {
                           <div className="space-y-2.5 pt-1">
                             <div className="grid grid-cols-3 gap-2 text-xs">
                               <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                                   Source
                                 </label>
                                 <select
@@ -1872,14 +1873,14 @@ export const StockOperationsPage: React.FC = () => {
                                   onChange={e =>
                                     updateLineFormField(line.id, { preSource: e.target.value as 'MANUAL' | 'ATG' })
                                   }
-                                  className="w-full bg-slate-800 text-white rounded p-2 border border-slate-700 text-xs"
+                                  className="w-full bg-[#F1F5F9] text-[#17365D] rounded p-2 border border-[#D7E0EA] text-xs"
                                 >
                                   <option value="MANUAL">MANUAL</option>
                                   <option value="ATG">ATG</option>
                                 </select>
                               </div>
                               <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                                   Product Dip (mm)
                                 </label>
                                 <input
@@ -1888,11 +1889,11 @@ export const StockOperationsPage: React.FC = () => {
                                   placeholder="Actual mm"
                                   value={lf.preProductDipMm}
                                   onChange={e => updateLineFormField(line.id, { preProductDipMm: e.target.value })}
-                                  className="w-full bg-slate-800 text-white rounded p-2 border border-slate-700 text-xs font-mono"
+                                  className="w-full bg-[#F1F5F9] text-[#17365D] rounded p-2 border border-[#D7E0EA] text-xs font-mono"
                                 />
                               </div>
                               <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                                   Water Dip (mm)
                                 </label>
                                 <input
@@ -1901,7 +1902,7 @@ export const StockOperationsPage: React.FC = () => {
                                   placeholder="0.000"
                                   value={lf.preWaterDipMm}
                                   onChange={e => updateLineFormField(line.id, { preWaterDipMm: e.target.value })}
-                                  className="w-full bg-slate-800 text-white rounded p-2 border border-slate-700 text-xs font-mono"
+                                  className="w-full bg-[#F1F5F9] text-[#17365D] rounded p-2 border border-[#D7E0EA] text-xs font-mono"
                                 />
                               </div>
                             </div>
@@ -1922,7 +1923,7 @@ export const StockOperationsPage: React.FC = () => {
                                   onChange={e =>
                                     updateLineFormField(line.id, { existingPreReadingId: e.target.value })
                                   }
-                                  className="flex-1 bg-slate-800 text-white rounded p-1.5 border border-slate-700 text-[11px] font-mono"
+                                  className="flex-1 bg-[#F1F5F9] text-[#17365D] rounded p-1.5 border border-[#D7E0EA] text-[11px] font-mono"
                                 >
                                   <option value="">Select existing PRE_RECEIPT reading...</option>
                                   {availableUnlinkedPre.map(r => (
@@ -1943,7 +1944,7 @@ export const StockOperationsPage: React.FC = () => {
                                       lf.existingPreReadingId
                                     )
                                   }
-                                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-[11px] font-bold flex items-center gap-1 disabled:opacity-50"
+                                  className="px-2.5 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] rounded text-[11px] font-bold flex items-center gap-1 disabled:opacity-50"
                                 >
                                   <Link2 className="w-3 h-3" />
                                   Link
@@ -1955,34 +1956,34 @@ export const StockOperationsPage: React.FC = () => {
                       </div>
 
                       {/* POST_RECEIPT Panel */}
-                      <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-3.5 space-y-3">
+                      <div className="bg-white border border-[#E2E8F0] rounded-lg p-3.5 space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-orange-400 uppercase font-mono">
+                          <span className="text-xs font-bold text-[#B8530D] uppercase font-mono">
                             2. POST_RECEIPT Tank Dip
                           </span>
                           {linkedPost ? (
-                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-800 text-[10px] font-mono font-bold">
                               LINKED ({linkedPost.netProductVolumeStr} L)
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">
+                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-800 text-[10px] font-mono font-bold">
                               REQUIRED
                             </span>
                           )}
                         </div>
 
                         {linkedPost && (
-                          <div className="p-2.5 rounded bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 space-y-0.5">
+                          <div className="p-2.5 rounded bg-[#F8FAFC] border border-[#E2E8F0] text-[11px] font-mono text-[#475569] space-y-0.5">
                             <div>
                               Product Dip: <strong>{linkedPost.productDipMmStr} mm</strong> | Water Dip:{' '}
                               <strong>{linkedPost.waterDipMmStr} mm</strong>
                             </div>
                             <div>
                               Net Stock:{' '}
-                              <strong className="text-emerald-400">{linkedPost.netProductVolumeStr} L</strong> (
+                              <strong className="text-emerald-700">{linkedPost.netProductVolumeStr} L</strong> (
                               {linkedPost.source})
                             </div>
-                            <div className="text-slate-500">
+                            <div className="text-[#64748B]">
                               Recorded: {new Date(linkedPost.recordedAt).toLocaleString()}
                             </div>
                           </div>
@@ -1992,7 +1993,7 @@ export const StockOperationsPage: React.FC = () => {
                           <div className="space-y-2.5 pt-1">
                             <div className="grid grid-cols-3 gap-2 text-xs">
                               <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                                   Source
                                 </label>
                                 <select
@@ -2000,14 +2001,14 @@ export const StockOperationsPage: React.FC = () => {
                                   onChange={e =>
                                     updateLineFormField(line.id, { postSource: e.target.value as 'MANUAL' | 'ATG' })
                                   }
-                                  className="w-full bg-slate-800 text-white rounded p-2 border border-slate-700 text-xs"
+                                  className="w-full bg-[#F1F5F9] text-[#17365D] rounded p-2 border border-[#D7E0EA] text-xs"
                                 >
                                   <option value="MANUAL">MANUAL</option>
                                   <option value="ATG">ATG</option>
                                 </select>
                               </div>
                               <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                                   Product Dip (mm)
                                 </label>
                                 <input
@@ -2016,11 +2017,11 @@ export const StockOperationsPage: React.FC = () => {
                                   placeholder="Actual mm"
                                   value={lf.postProductDipMm}
                                   onChange={e => updateLineFormField(line.id, { postProductDipMm: e.target.value })}
-                                  className="w-full bg-slate-800 text-white rounded p-2 border border-slate-700 text-xs font-mono"
+                                  className="w-full bg-[#F1F5F9] text-[#17365D] rounded p-2 border border-[#D7E0EA] text-xs font-mono"
                                 />
                               </div>
                               <div>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                                   Water Dip (mm)
                                 </label>
                                 <input
@@ -2029,7 +2030,7 @@ export const StockOperationsPage: React.FC = () => {
                                   placeholder="0.000"
                                   value={lf.postWaterDipMm}
                                   onChange={e => updateLineFormField(line.id, { postWaterDipMm: e.target.value })}
-                                  className="w-full bg-slate-800 text-white rounded p-2 border border-slate-700 text-xs font-mono"
+                                  className="w-full bg-[#F1F5F9] text-[#17365D] rounded p-2 border border-[#D7E0EA] text-xs font-mono"
                                 />
                               </div>
                             </div>
@@ -2050,7 +2051,7 @@ export const StockOperationsPage: React.FC = () => {
                                   onChange={e =>
                                     updateLineFormField(line.id, { existingPostReadingId: e.target.value })
                                   }
-                                  className="flex-1 bg-slate-800 text-white rounded p-1.5 border border-slate-700 text-[11px] font-mono"
+                                  className="flex-1 bg-[#F1F5F9] text-[#17365D] rounded p-1.5 border border-[#D7E0EA] text-[11px] font-mono"
                                 >
                                   <option value="">Select existing POST_RECEIPT reading...</option>
                                   {availableUnlinkedPost.map(r => (
@@ -2071,7 +2072,7 @@ export const StockOperationsPage: React.FC = () => {
                                       lf.existingPostReadingId
                                     )
                                   }
-                                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-[11px] font-bold flex items-center gap-1 disabled:opacity-50"
+                                  className="px-2.5 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] rounded text-[11px] font-bold flex items-center gap-1 disabled:opacity-50"
                                 >
                                   <Link2 className="w-3 h-3" />
                                   Link
@@ -2084,10 +2085,10 @@ export const StockOperationsPage: React.FC = () => {
                     </div>
 
                     {/* Density & Temperature Quality Parameters */}
-                    <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-3 flex flex-col sm:flex-row sm:items-end gap-3">
+                    <div className="bg-white border border-[#E2E8F0] rounded-lg p-3 flex flex-col sm:flex-row sm:items-end gap-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 font-mono text-xs">
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                          <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                             Observed Density (kg/m³)
                           </label>
                           <input
@@ -2096,11 +2097,11 @@ export const StockOperationsPage: React.FC = () => {
                             placeholder="e.g. 745.000"
                             value={lf.density}
                             onChange={e => updateLineFormField(line.id, { density: e.target.value })}
-                            className="w-full bg-slate-800 text-white rounded p-2 border border-slate-700 text-xs"
+                            className="w-full bg-[#F1F5F9] text-[#17365D] rounded p-2 border border-[#D7E0EA] text-xs"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                          <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                             Invoice Density (kg/m³)
                           </label>
                           <input
@@ -2109,11 +2110,11 @@ export const StockOperationsPage: React.FC = () => {
                             placeholder="e.g. 744.000"
                             value={lf.invoiceDensity}
                             onChange={e => updateLineFormField(line.id, { invoiceDensity: e.target.value })}
-                            className="w-full bg-slate-800 text-white rounded p-2 border border-slate-700 text-xs"
+                            className="w-full bg-[#F1F5F9] text-[#17365D] rounded p-2 border border-[#D7E0EA] text-xs"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                          <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                             Temperature (°C)
                           </label>
                           <input
@@ -2122,7 +2123,7 @@ export const StockOperationsPage: React.FC = () => {
                             placeholder="e.g. 28.500"
                             value={lf.temperature}
                             onChange={e => updateLineFormField(line.id, { temperature: e.target.value })}
-                            className="w-full bg-slate-800 text-white rounded p-2 border border-slate-700 text-xs"
+                            className="w-full bg-[#F1F5F9] text-[#17365D] rounded p-2 border border-[#D7E0EA] text-xs"
                           />
                         </div>
                       </div>
@@ -2130,7 +2131,7 @@ export const StockOperationsPage: React.FC = () => {
                         type="button"
                         disabled={manageActionBusy}
                         onClick={() => handleSaveLineQuality(managingReceipt, line)}
-                        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg shrink-0 disabled:opacity-50"
+                        className="px-3.5 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] text-xs font-bold rounded-lg shrink-0 disabled:opacity-50"
                       >
                         Save Quality / Density
                       </button>
@@ -2142,20 +2143,20 @@ export const StockOperationsPage: React.FC = () => {
 
             {/* Step 3: Transition VERIFIED -> DECANTED */}
             {managingReceipt.status === 'VERIFIED' && (
-              <div className="bg-slate-950/70 border border-blue-500/30 rounded-xl p-4 space-y-3">
+              <div className="bg-[#F8FAFC]/70 border border-blue-500/30 rounded-xl p-4 space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-blue-300">
                   Step 2: Record Physical Decantation (VERIFIED → DECANTED)
                 </h4>
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                   <div className="text-xs flex-1">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                       Decantation Started At (Optional — leave blank to use current server timestamp)
                     </label>
                     <input
                       type="datetime-local"
                       value={decantStartInput}
                       onChange={e => setDecantStartInput(e.target.value)}
-                      className="bg-slate-800 text-white rounded-lg p-2 border border-slate-700 text-xs font-mono"
+                      className="bg-[#F1F5F9] text-[#17365D] rounded-lg p-2 border border-[#D7E0EA] text-xs font-mono"
                     />
                   </div>
                   <button
@@ -2172,16 +2173,16 @@ export const StockOperationsPage: React.FC = () => {
             )}
 
             {/* Step 4: Completion Readiness Validation & Transition DECANTED -> COMPLETED */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div className="bg-[#F8FAFC]/80 border border-[#E2E8F0] rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-700">
                   Final Step: Completion Validation & Finalisation (DECANTED → COMPLETED)
                 </h4>
                 <span
                   className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
                     managingReceiptReadiness.canComplete
-                      ? 'bg-emerald-500/20 text-emerald-300'
-                      : 'bg-amber-500/20 text-amber-300'
+                      ? 'bg-emerald-500/20 text-emerald-800'
+                      : 'bg-amber-500/20 text-amber-800'
                   }`}
                 >
                   {managingReceiptReadiness.canComplete ? 'READY TO COMPLETE' : 'INCOMPLETE REQUIREMENTS'}
@@ -2200,21 +2201,21 @@ export const StockOperationsPage: React.FC = () => {
                   </ul>
                 </div>
               ) : (
-                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 font-mono">
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-800 font-mono">
                   All receiving tank lines have valid PRE_RECEIPT and POST_RECEIPT dip readings and receipt status is DECANTED.
                 </div>
               )}
 
               <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pt-1">
                 <div className="text-xs">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  <label className="block text-[10px] font-bold text-[#64748B] uppercase mb-1">
                     Decantation Completed At (Optional — leave blank to use current server timestamp)
                   </label>
                   <input
                     type="datetime-local"
                     value={decantCompleteInput}
                     onChange={e => setDecantCompleteInput(e.target.value)}
-                    className="bg-slate-800 text-white rounded-lg p-2 border border-slate-700 text-xs font-mono"
+                    className="bg-[#F1F5F9] text-[#17365D] rounded-lg p-2 border border-[#D7E0EA] text-xs font-mono"
                   />
                 </div>
                 <button
@@ -2230,16 +2231,16 @@ export const StockOperationsPage: React.FC = () => {
             </div>
 
             {/* Authorised Cancellation Section */}
-            <div className="border-t border-slate-800 pt-4">
+            <div className="border-t border-[#E2E8F0] pt-4">
               {!showCancelSection ? (
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-[#64748B]">
                     Incorrect entry or undelivered tanker? Cancel with an audited reason.
                   </span>
                   <button
                     type="button"
                     onClick={() => setShowCancelSection(true)}
-                    className="px-3 py-1.5 bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30 text-xs font-bold rounded-lg flex items-center gap-1.5"
+                    className="px-3 py-1.5 bg-red-500/15 hover:bg-red-500/25 text-red-800 border border-red-500/30 text-xs font-bold rounded-lg flex items-center gap-1.5"
                   >
                     <ShieldAlert className="w-3.5 h-3.5" />
                     Authorised Cancellation...
@@ -2248,24 +2249,24 @@ export const StockOperationsPage: React.FC = () => {
               ) : (
                 <div className="bg-red-950/30 border border-red-500/40 rounded-xl p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-red-300 flex items-center gap-1.5">
-                      <ShieldAlert className="w-4 h-4 text-red-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-red-800 flex items-center gap-1.5">
+                      <ShieldAlert className="w-4 h-4 text-red-700" />
                       Authorised Fuel Receipt Cancellation (Preserves Record & Audit Trail)
                     </h4>
                     <button
                       type="button"
                       onClick={() => setShowCancelSection(false)}
-                      className="text-xs text-slate-400 hover:text-slate-200"
+                      className="text-xs text-[#64748B] hover:text-[#334155]"
                     >
                       Hide
                     </button>
                   </div>
-                  <p className="text-xs text-slate-300">
+                  <p className="text-xs text-[#475569]">
                     Cancelling transitions this receipt to <strong>CANCELLED</strong>, excludes its volume from stock
                     reconciliation, preserves the historical record, and logs the reason in the audit trail.
                   </p>
                   <div>
-                    <label className="block text-[10px] font-bold text-red-300 uppercase mb-1">
+                    <label className="block text-[10px] font-bold text-red-800 uppercase mb-1">
                       Cancellation Audit Reason (Required, min 3 characters)
                     </label>
                     <input
@@ -2273,14 +2274,14 @@ export const StockOperationsPage: React.FC = () => {
                       placeholder="e.g. Duplicate invoice entry / Tanker diverted before decantation"
                       value={cancellationReasonInput}
                       onChange={e => setCancellationReasonInput(e.target.value)}
-                      className="w-full bg-slate-900 text-white rounded-lg p-2.5 border border-red-500/40 text-xs font-mono"
+                      className="w-full bg-white text-[#17365D] rounded-lg p-2.5 border border-red-500/40 text-xs font-mono"
                     />
                   </div>
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => setShowCancelSection(false)}
-                      className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs font-bold rounded-lg"
+                      className="px-3 py-1.5 bg-[#F1F5F9] text-[#475569] text-xs font-bold rounded-lg"
                     >
                       Keep Receipt Open
                     </button>
@@ -2304,9 +2305,9 @@ export const StockOperationsPage: React.FC = () => {
       {/* Fuel Receipt Creation Modal */}
       {showReceiptModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 max-h-[92vh] overflow-y-auto">
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-lg w-full p-5 space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <h3 className="text-base font-bold text-[#17365D] flex items-center gap-2">
                 <Fuel className="w-5 h-5 text-orange-500" />
                 Record Tanker Fuel Receipt
               </h3>
@@ -2314,8 +2315,8 @@ export const StockOperationsPage: React.FC = () => {
                 <span
                   className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
                     currentShift.status === 'OPEN'
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-500/30'
+                      : 'bg-red-500/20 text-red-700 border border-red-500/30'
                   }`}
                 >
                   Shift {currentShift.businessDate} ({currentShift.status})
@@ -2327,9 +2328,9 @@ export const StockOperationsPage: React.FC = () => {
               <div
                 role="alert"
                 data-testid="receipt-modal-error"
-                className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-xs font-semibold flex items-start gap-2"
+                className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-800 text-xs font-semibold flex items-start gap-2"
               >
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <AlertTriangle className="w-4 h-4 text-red-700 shrink-0 mt-0.5" />
                 <span>{receiptModalError}</span>
               </div>
             )}
@@ -2340,7 +2341,7 @@ export const StockOperationsPage: React.FC = () => {
                 data-testid="receipt-date-warning"
                 className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-xs flex items-start gap-2"
               >
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                 <span>{receiptDateWarning.warningMessage}</span>
               </div>
             )}
@@ -2348,59 +2349,59 @@ export const StockOperationsPage: React.FC = () => {
             <form onSubmit={handleCreateReceipt} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">TT Number</label>
+                  <label className="block font-bold text-[#64748B] uppercase mb-1">TT Number</label>
                   <input
                     type="text"
                     placeholder="e.g. PB29AJ7443"
                     value={receiptForm.ttNumber}
                     onChange={e => setReceiptForm({ ...receiptForm, ttNumber: e.target.value })}
                     required
-                    className="w-full bg-slate-800 text-white rounded-lg p-2.5 border border-slate-700 focus:outline-none"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] rounded-lg p-2.5 border border-[#D7E0EA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Invoice Number</label>
+                  <label className="block font-bold text-[#64748B] uppercase mb-1">Invoice Number</label>
                   <input
                     type="text"
                     placeholder="e.g. 19914781"
                     value={receiptForm.invoiceNumber}
                     onChange={e => setReceiptForm({ ...receiptForm, invoiceNumber: e.target.value })}
                     required
-                    className="w-full bg-slate-800 text-white rounded-lg p-2.5 border border-slate-700 focus:outline-none"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] rounded-lg p-2.5 border border-[#D7E0EA] focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Invoice Date</label>
+                  <label className="block font-bold text-[#64748B] uppercase mb-1">Invoice Date</label>
                   <input
                     type="date"
                     value={receiptForm.invoiceDate}
                     onChange={e => setReceiptForm({ ...receiptForm, invoiceDate: e.target.value })}
                     required
-                    className="w-full bg-slate-800 text-white rounded-lg p-2.5 border border-slate-700 focus:outline-none"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] rounded-lg p-2.5 border border-[#D7E0EA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Arrival Time</label>
+                  <label className="block font-bold text-[#64748B] uppercase mb-1">Arrival Time</label>
                   <input
                     type="datetime-local"
                     value={receiptForm.arrivalTime}
                     onChange={e => setReceiptForm({ ...receiptForm, arrivalTime: e.target.value })}
                     required
-                    className="w-full bg-slate-800 text-white rounded-lg p-2.5 border border-slate-700 focus:outline-none"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] rounded-lg p-2.5 border border-[#D7E0EA] focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-400 uppercase mb-1">Receiving Tank</label>
+                <label className="block font-bold text-[#64748B] uppercase mb-1">Receiving Tank</label>
                 <select
                   value={receiptForm.lineTankId}
                   onChange={e => setReceiptForm({ ...receiptForm, lineTankId: e.target.value })}
                   required
-                  className="w-full bg-slate-800 text-white rounded-lg p-2.5 border border-slate-700 focus:outline-none"
+                  className="w-full bg-[#F1F5F9] text-[#17365D] rounded-lg p-2.5 border border-[#D7E0EA] focus:outline-none"
                 >
                   <option value="">Select Tank</option>
                   {tankSnapshots.map(t => (
@@ -2413,7 +2414,7 @@ export const StockOperationsPage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3 font-mono">
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Invoice Qty (L)</label>
+                  <label className="block font-bold text-[#64748B] uppercase mb-1">Invoice Qty (L)</label>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -2421,49 +2422,49 @@ export const StockOperationsPage: React.FC = () => {
                     value={receiptForm.invoiceQuantity}
                     onChange={e => setReceiptForm({ ...receiptForm, invoiceQuantity: e.target.value })}
                     required
-                    className="w-full bg-slate-800 text-white rounded-lg p-2.5 border border-slate-700 focus:outline-none"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] rounded-lg p-2.5 border border-[#D7E0EA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Observed Density</label>
+                  <label className="block font-bold text-[#64748B] uppercase mb-1">Observed Density</label>
                   <input
                     type="text"
                     inputMode="decimal"
                     placeholder="e.g. 745.200"
                     value={receiptForm.density}
                     onChange={e => setReceiptForm({ ...receiptForm, density: e.target.value })}
-                    className="w-full bg-slate-800 text-white rounded-lg p-2.5 border border-slate-700 focus:outline-none"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] rounded-lg p-2.5 border border-[#D7E0EA] focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 font-mono">
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Invoice Density</label>
+                  <label className="block font-bold text-[#64748B] uppercase mb-1">Invoice Density</label>
                   <input
                     type="text"
                     inputMode="decimal"
                     placeholder="e.g. 744.000"
                     value={receiptForm.invoiceDensity}
                     onChange={e => setReceiptForm({ ...receiptForm, invoiceDensity: e.target.value })}
-                    className="w-full bg-slate-800 text-white rounded-lg p-2.5 border border-slate-700 focus:outline-none"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] rounded-lg p-2.5 border border-[#D7E0EA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Temperature (°C)</label>
+                  <label className="block font-bold text-[#64748B] uppercase mb-1">Temperature (°C)</label>
                   <input
                     type="text"
                     inputMode="decimal"
                     placeholder="e.g. 29.500"
                     value={receiptForm.temperature}
                     onChange={e => setReceiptForm({ ...receiptForm, temperature: e.target.value })}
-                    className="w-full bg-slate-800 text-white rounded-lg p-2.5 border border-slate-700 focus:outline-none"
+                    className="w-full bg-[#F1F5F9] text-[#17365D] rounded-lg p-2.5 border border-[#D7E0EA] focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="p-2.5 bg-slate-800/60 border border-slate-700/70 rounded-lg space-y-2">
-                <label className="flex items-center gap-2 text-xs text-slate-200 font-semibold cursor-pointer">
+              <div className="p-2.5 bg-[#F1F5F9] border border-[#D7E0EA]/70 rounded-lg space-y-2">
+                <label className="flex items-center gap-2 text-xs text-[#334155] font-semibold cursor-pointer">
                   <input
                     type="checkbox"
                     checked={receiptForm.sealVerified}
@@ -2481,7 +2482,7 @@ export const StockOperationsPage: React.FC = () => {
 
                 {!receiptForm.sealVerified && (
                   <div>
-                    <label className="block font-bold text-amber-300 uppercase mb-1 text-[10px]">
+                    <label className="block font-bold text-amber-800 uppercase mb-1 text-[10px]">
                       Seal Exception Reason (Required when seal not verified)
                     </label>
                     <input
@@ -2490,13 +2491,13 @@ export const StockOperationsPage: React.FC = () => {
                       value={receiptForm.sealExceptionReason}
                       onChange={e => setReceiptForm({ ...receiptForm, sealExceptionReason: e.target.value })}
                       required={!receiptForm.sealVerified}
-                      className="w-full bg-slate-900 text-white rounded-lg p-2 border border-amber-500/40 focus:outline-none"
+                      className="w-full bg-white text-[#17365D] rounded-lg p-2 border border-amber-500/40 focus:outline-none"
                     />
                   </div>
                 )}
               </div>
 
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+              <div className="pt-3 border-t border-[#E2E8F0] flex justify-end gap-2">
                 <button
                   type="button"
                   disabled={receiptSubmitting}
@@ -2504,7 +2505,7 @@ export const StockOperationsPage: React.FC = () => {
                     setReceiptModalError(null);
                     setShowReceiptModal(false);
                   }}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg disabled:opacity-50"
+                  className="px-4 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#475569] font-bold rounded-lg disabled:opacity-50"
                 >
                   Cancel
                 </button>
