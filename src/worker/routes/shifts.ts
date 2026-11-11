@@ -255,6 +255,73 @@ shifts.post('/shifts/:shiftId/close', requirePermission(PERMISSIONS.SHIFTS_CLOSE
   return c.json({ success: true, data: closeRes.shift, error: null });
 });
 
+// POST /api/v1/shifts/:shiftId/close-empty - Exceptional, audited ADMIN-only close.
+// The normal /close endpoint and financial/stock reconciliation are untouched.
+shifts.post('/shifts/:shiftId/close-empty', async (c: AppContext) => {
+  const userCtx = c.var.user;
+  if (!userCtx?.roles.includes('ADMIN') || !userCtx.isGlobalScope) {
+    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'Global administrator access is required' } }, 403);
+  }
+
+  const shiftId = c.req.param('shiftId');
+  const body = await c.req.json().catch(() => ({}));
+  const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+  if (reason.length < 10 || reason.length > 500 || body.confirm !== true) {
+    return c.json({
+      success: false, data: null,
+      error: { code: 'VALIDATION_ERROR', message: 'A reason (10-500 characters) and explicit confirmation are required' }
+    }, 400);
+  }
+
+  const db = getDb(c.env.DB);
+  const outletRepo = new OutletRepository(db);
+  const pumpRepo = new PumpRepository(db);
+  const auditRepo = new AuditRepository(db);
+  const shift = await pumpRepo.findOperationalShiftById(shiftId);
+  if (!shift) {
+    return c.json({ success: false, data: null, error: { code: 'NOT_FOUND', message: 'Shift not found' } }, 404);
+  }
+  if (!await verifyOutletAuthority(c, shift.outletId, outletRepo)) {
+    return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this outlet' } }, 403);
+  }
+  if (shift.status !== 'OPEN') {
+    return c.json({ success: false, data: null, error: { code: 'SHIFT_NOT_OPEN', message: 'Only OPEN shifts may be closed' } }, 409);
+  }
+
+  // The repository checks all activity tables within the conditional UPDATE itself.
+  // An inserted meter/stock/financial entry makes this operation fail atomically.
+  const closed = await pumpRepo.closeEmptyShiftConditional(shiftId, userCtx.user.id);
+  if (!closed.success || !closed.shift) {
+    return c.json({
+      success: false, data: null,
+      error: { code: 'SHIFT_NOT_EMPTY_OR_CHANGED', message: 'Shift has operational or financial records, or is no longer OPEN. Use the standard closing workflow.' }
+    }, 409);
+  }
+
+  await auditRepo.logAction({
+    id: `aud-${crypto.randomUUID()}`,
+    userId: userCtx.user.id,
+    action: 'SHIFT_CLOSE_EMPTY_ADMIN',
+    entityType: 'OPERATIONAL_SHIFT',
+    entityId: shiftId,
+    oldValue: { status: 'OPEN' },
+    newValue: {
+      status: 'CLOSED',
+      closureType: 'ADMIN_EMPTY_NO_DATA',
+      reason,
+      outletId: shift.outletId,
+      businessDate: shift.businessDate,
+      reconciliationPerformed: false,
+      ...(closed.shift as unknown as Record<string, unknown>),
+    },
+    ipAddress: c.req.header('cf-connecting-ip') || null,
+    userAgent: c.req.header('user-agent') || null,
+    createdAt: new Date().toISOString(),
+  });
+
+  return c.json({ success: true, data: closed.shift, error: null });
+});
+
 // GET /api/v1/shifts/:shiftId/entry-grid - Shift entry workspace helper
 shifts.get('/shifts/:shiftId/entry-grid', requirePermission(PERMISSIONS.SHIFTS_READ) as any, async (c: AppContext) => {
   const shiftId = c.req.param('shiftId');
