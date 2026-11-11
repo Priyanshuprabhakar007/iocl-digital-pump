@@ -166,13 +166,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           <span className="flex items-center gap-3">
             <span className="rounded-xl bg-[#F1F5F9] p-2.5 text-[#17365D]"><ShieldCheck className="h-5 w-5" /></span>
             <span>
-              <span className="block text-sm font-bold text-[#17365D]">Access & security information</span>
-              <span className="mt-0.5 block text-xs text-[#64748B]">Role, assigned scopes and system controls</span>
+              <span className="block text-sm font-bold text-[#17365D]">Access & governance</span>
+              <span className="mt-0.5 block text-xs text-[#64748B]">Access & security information: role, assigned scopes and system controls</span>
             </span>
           </span>
           <ChevronRight className="h-5 w-5 text-[#64748B] transition-transform group-open:rotate-90" />
         </summary>
-        <div className="grid gap-5 border-t border-[#E2E8F0] p-5 lg:grid-cols-2">
+        <div className="grid gap-5 items-start border-t border-[#E2E8F0] p-5 lg:grid-cols-2">
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-[#17365D]">Your scope assignments</h3>
             <p className="text-xs text-[#64748B]">Role: {userCtx.roles.join(', ')} · Employee code: {userCtx.user.empCode}</p>
