@@ -310,7 +310,7 @@ export const UtilitiesOperationsPage: React.FC = () => {
       {/* Top Header & Outlet Selector */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-[#E2E8F0] p-5 rounded-3xl shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-[#17365D] shadow-lg shadow-orange-500/20 shrink-0">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white shadow-lg shadow-orange-500/20 shrink-0">
             <Zap className="w-6 h-6" />
           </div>
           <div>
