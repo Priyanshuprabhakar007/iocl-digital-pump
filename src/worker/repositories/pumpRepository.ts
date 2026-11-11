@@ -1830,6 +1830,41 @@ export class PumpRepository {
     return { success: true, shift, alreadyClosed: false };
   }
 
+  /**
+   * Admin-only empty-shift close. A single conditional UPDATE enforces emptiness
+   * at the exact point of transition, preventing concurrent entry races.
+   * Equipment/tank/price snapshots created on open are intentionally permitted.
+   * This path does not calculate or write reconciliation or sales figures.
+   */
+  async closeEmptyShiftConditional(shiftId: string, closedByUserId: string): Promise<{ success: boolean; shift: OperationalShift | null }> {
+    const nowIso = new Date().toISOString();
+    const result = await this.db.all<{ id: string }>(
+      sql`UPDATE operational_shifts
+          SET status = 'CLOSED',
+              closed_at = ${nowIso},
+              closed_by_user_id = ${closedByUserId},
+              updated_at = ${nowIso}
+          WHERE id = ${shiftId} AND status = 'OPEN'
+            AND NOT EXISTS (SELECT 1 FROM nozzle_meter_readings WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM nozzle_unavailability_records WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM tank_stock_readings WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM fuel_receipts WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM shift_stock_reconciliations WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM shift_collections WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM cash_handover_logs WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM bank_deposits WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM shift_financial_reconciliations WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM cng_shift_logs WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM cng_pressure_readings WHERE operational_shift_id = ${shiftId})
+            AND NOT EXISTS (SELECT 1 FROM lube_shift_sales WHERE operational_shift_id = ${shiftId})
+          RETURNING id`
+    );
+    return {
+      success: result.length > 0,
+      shift: await this.findOperationalShiftById(shiftId),
+    };
+  }
+
   async beginCloseConditional(shiftId: string): Promise<{ success: boolean; shift: OperationalShift | null }> {
     const nowIso = new Date().toISOString();
     const res = await this.db.all<{ id: string }>(
