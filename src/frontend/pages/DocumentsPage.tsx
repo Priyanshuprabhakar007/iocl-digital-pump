@@ -889,7 +889,7 @@ export const DocumentsPage: React.FC = () => {
               type="button"
               onClick={handleGenerateOnePagerPdf}
               disabled={isGeneratingPdf || !selectedOutletId}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-[#17365D] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               {isGeneratingPdf ? 'Generating PDF...' : 'Generate COCO One-Pager PDF'}
@@ -1479,7 +1479,7 @@ export const DocumentsPage: React.FC = () => {
               type="button"
               onClick={handleGenerateOnePagerPdf}
               disabled={isGeneratingPdf || !selectedOutletId}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-[#17365D] text-sm font-semibold rounded-lg shadow transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow transition-colors cursor-pointer"
             >
               <Download className="w-4 h-4" />
               {isGeneratingPdf ? 'Generating PDF...' : 'Generate COCO One-Pager PDF'}
@@ -2200,7 +2200,7 @@ export const DocumentsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSavingRecord}
-                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-[#17365D] text-sm font-semibold rounded-lg cursor-pointer"
+                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg cursor-pointer"
                 >
                   {isSavingRecord ? 'Saving...' : 'Save Compliance Record'}
                 </button>
@@ -2262,7 +2262,7 @@ export const DocumentsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={!vaultFile || isVaultUploading}
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-[#17365D] text-xs font-semibold rounded-lg cursor-pointer"
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg cursor-pointer"
                 >
                   {isVaultUploading ? 'Uploading...' : 'Upload to R2 Vault'}
                 </button>
@@ -2293,7 +2293,7 @@ export const DocumentsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleDownloadAttachment(previewAttachment)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-[#17365D] text-xs font-medium rounded-lg cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   Download
