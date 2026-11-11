@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import './vibrantTheme.css';
 import './option4Saas.css';
+import './premiumIndigoTheme.css';
 
 interface DashboardShellProps {
   activeTab: string;

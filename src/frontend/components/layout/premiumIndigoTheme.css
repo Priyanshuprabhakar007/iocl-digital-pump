@@ -1,0 +1,166 @@
+/*
+ * Premium Indigo × Coral — colour refinement for the approved Option 4 UX.
+ *
+ * Purely visual overrides. Existing component tree, business data, validation,
+ * API calls, permission checks, and operational workflows remain unchanged.
+ * Imported after option4Saas.css to make this palette authoritative.
+ */
+.enterprise-shell.iocl-vibrant {
+  --iocl-canvas: #f6f8fc;
+  --iocl-navy: #192454;
+  --iocl-orange: #fc6941;
+  --iocl-text: #19264f;
+  --iocl-muted: #536481;
+  --iocl-border: #dce3f0;
+  background: #f6f8fc;
+  color: #19264f;
+}
+.enterprise-shell.iocl-vibrant main {
+  background:
+    radial-gradient(ellipse 65% 42% at 100% 0%, rgba(84,116,221,.105), transparent 70%),
+    radial-gradient(ellipse 48% 40% at 0% 0%, rgba(249,115,80,.07), transparent 76%),
+    #f6f8fc;
+}
+/* Calm, rich navigation instead of the overpowering saturated blue rail. */
+.enterprise-shell.iocl-vibrant aside > div {
+  background: linear-gradient(167deg,#1b2755 0%,#18234c 45%,#101b3b 100%);
+  border-color: #313c6b;
+  box-shadow: 8px 0 25px rgba(15,27,62,.11);
+}
+.enterprise-shell.iocl-vibrant aside nav button[aria-current="page"] {
+  background: linear-gradient(105deg,#fff3e9,#fff9f4);
+  color: #172550;
+  border-left-color: #fc6941;
+  box-shadow: 0 5px 13px rgba(10,15,46,.15);
+}
+.enterprise-shell.iocl-vibrant aside nav button[aria-current="page"] svg { color: #e9572f; }
+.enterprise-shell.iocl-vibrant aside nav button:not([aria-current="page"]):hover { background: rgba(255,255,255,.105); }
+.enterprise-shell.iocl-vibrant aside input[aria-label="Find a page"] {
+  background: rgba(255,255,255,.10);
+  border-color: rgba(192,208,255,.26);
+  color: #fff;
+}
+.enterprise-shell.iocl-vibrant aside input[aria-label="Find a page"]::placeholder { color: #c2cce7; }
+.enterprise-shell.iocl-vibrant aside input[aria-label="Find a page"]:focus-visible {
+  border-color: #ff916f;
+  outline: 2px solid #ff916f;
+}
+/* Refined top header. */
+.enterprise-shell.iocl-vibrant > header {
+  border-bottom-color: #fc6941;
+  background: rgba(255,255,255,.97);
+  box-shadow: 0 5px 22px rgba(25,36,84,.055);
+}
+/* Bold hero carries the colour while content cards stay clean and readable. */
+.enterprise-shell.iocl-vibrant .option4-hero {
+  background: linear-gradient(113deg,#18285b 0%,#25439c 53%,#4778d8 100%);
+  border-color: #3555ab;
+  box-shadow: 0 14px 34px rgba(28,47,126,.20);
+}
+.enterprise-shell.iocl-vibrant .option4-hero::before {
+  background: linear-gradient(155deg,rgba(111,167,255,.13),rgba(252,105,65,.20));
+}
+.enterprise-shell.iocl-vibrant .option4-hero::after {
+  opacity: .42;
+  background: linear-gradient(90deg,transparent,#ff996b,#fc6941);
+}
+.enterprise-shell.iocl-vibrant .option4-hero h1,
+.enterprise-shell.iocl-vibrant .option4-hero h1.text-\[\#17365D\] {
+  color: #fff;
+}
+.enterprise-shell.iocl-vibrant .option4-hero h1 span { color: #ffac82; }
+.enterprise-shell.iocl-vibrant .option4-hero p { color: #e4eafd; }
+.enterprise-shell.iocl-vibrant .option4-hero .option4-eyebrow {
+  color: #ffdbcb;
+  background: rgba(252,105,65,.17);
+  border: 1px solid rgba(255,185,155,.45);
+}
+.enterprise-shell.iocl-vibrant .option4-hero .option4-hero-content > div {
+  background: rgba(255,255,255,.12);
+  border-color: rgba(207,226,255,.3);
+  color: #fff;
+  backdrop-filter: blur(6px);
+}
+.enterprise-shell.iocl-vibrant .option4-hero .option4-station-art {
+  opacity: .65;
+  filter: saturate(1.08);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%,rgba(0,0,0,.85) 47%,#000 100%);
+  mask-image: linear-gradient(90deg, transparent 0%,rgba(0,0,0,.85) 47%,#000 100%);
+}
+.enterprise-shell.iocl-vibrant .option4-panel {
+  border-color: #dce4f1;
+  background: #fff;
+  box-shadow: 0 6px 22px rgba(30,46,96,.065);
+}
+/* Strong, distinct tones instead of nearly-white pastel tiles. */
+.enterprise-shell.iocl-vibrant .option4-action {
+  border-color: #d3dff0;
+  background: linear-gradient(135deg,#fff,#eaf2fe);
+  box-shadow: 0 3px 13px rgba(35,67,134,.065);
+}
+.enterprise-shell.iocl-vibrant .option4-action[data-tone="orange"] {
+  border-color: #ffd2bc;
+  background: linear-gradient(135deg,#fff9f5,#ffe9db);
+}
+.enterprise-shell.iocl-vibrant .option4-action[data-tone="blue"] {
+  border-color: #bcd6ff;
+  background: linear-gradient(135deg,#f9fcff,#e0edff);
+}
+.enterprise-shell.iocl-vibrant .option4-action[data-tone="purple"] {
+  border-color: #d8cbff;
+  background: linear-gradient(135deg,#fcfaff,#eee5ff);
+}
+.enterprise-shell.iocl-vibrant .option4-action[data-tone="green"] {
+  border-color: #b3e7d9;
+  background: linear-gradient(135deg,#f9fffd,#dff8ee);
+}
+.enterprise-shell.iocl-vibrant .option4-action:hover {
+  transform: translateY(-3px);
+  border-color: #658be6;
+  box-shadow: 0 13px 24px rgba(30,69,156,.14);
+}
+.enterprise-shell.iocl-vibrant .option4-stat {
+  border-color: #cadcf5;
+  background: linear-gradient(135deg,#f8fbff,#e6f0ff);
+  box-shadow: 0 3px 13px rgba(35,67,134,.055);
+}
+.enterprise-shell.iocl-vibrant .option4-stat[data-tone="orange"] {
+  border-color: #ffcbb4;
+  background: linear-gradient(135deg,#fff9f4,#ffe6d5);
+}
+.enterprise-shell.iocl-vibrant .option4-stat[data-tone="blue"] {
+  border-color: #bcd4ff;
+  background: linear-gradient(135deg,#f7faff,#dceaff);
+}
+.enterprise-shell.iocl-vibrant .option4-stat[data-tone="purple"] {
+  border-color: #d6c5ff;
+  background: linear-gradient(135deg,#fcfaff,#e9e0ff);
+}
+.enterprise-shell.iocl-vibrant .option4-stat[data-tone="green"] {
+  border-color: #a9e5d2;
+  background: linear-gradient(135deg,#f7fffc,#d8f4e8);
+}
+.enterprise-shell.iocl-vibrant .option4-stat p:last-child { color: #172550; }
+.enterprise-shell.iocl-vibrant main .option4-progress {
+  background: linear-gradient(115deg,#edf3ff,#f6efff);
+  border-color: #cbd8f2;
+}
+.enterprise-shell.iocl-vibrant main .option4-step[data-tone="orange"] { background: #ffe9dc; border-color: #ffc6a6; }
+.enterprise-shell.iocl-vibrant main .option4-step[data-tone="blue"] { background: #e0edff; border-color: #bcd6ff; }
+.enterprise-shell.iocl-vibrant main .option4-step[data-tone="purple"] { background: #eee4ff; border-color: #d8c4ff; }
+.enterprise-shell.iocl-vibrant main .option4-step[data-tone="green"] { background: #dbf5e9; border-color: #a9e2c8; }
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.admin-modern,.operations-modern,.finance-modern,.reports-modern) table thead,
+.enterprise-shell.iocl-vibrant main :is(.daily-ops-modern,.admin-modern,.operations-modern,.finance-modern,.reports-modern) table thead th {
+  background: #e7edfa;
+  color: #172550;
+}
+.enterprise-shell.iocl-vibrant main :is(button,a,input,select,textarea):focus-visible {
+  outline-color: #fa6945;
+}
+@media (max-width: 767px) {
+  .enterprise-shell.iocl-vibrant .option4-hero .option4-station-art { opacity: .2; }
+  .enterprise-shell.iocl-vibrant .option4-hero { box-shadow: 0 8px 22px rgba(28,47,126,.17); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .enterprise-shell.iocl-vibrant .option4-action:hover { transform: none; }
+}
