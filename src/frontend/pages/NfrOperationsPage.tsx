@@ -1,3 +1,4 @@
+import './operationsModern.css';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Building2,
@@ -239,10 +240,10 @@ export const NfrOperationsPage: React.FC = () => {
   if (!canReadNfr) {
     return (
       <div className="p-6">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center max-w-lg mx-auto">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-12 text-center max-w-lg mx-auto">
           <ShieldAlert className="w-12 h-12 text-amber-500 mx-auto mb-4" />
-          <h2 className="text-lg font-bold text-slate-100 mb-2">Access Restricted</h2>
-          <p className="text-sm text-slate-400">
+          <h2 className="text-lg font-bold text-[#17365D] mb-2">Access Restricted</h2>
+          <p className="text-sm text-[#64748B]">
             You do not have permission to view Non-Fuel Revenue (NFR) and Lease Management operations. Contact your administrator if you require access.
           </p>
         </div>
@@ -259,19 +260,19 @@ export const NfrOperationsPage: React.FC = () => {
     : undefined;
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="operations-modern p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
       {/* Top Header & Outlet Selector */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 shadow-sm">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-500">
               <Building2 className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-lg sm:text-xl font-bold text-slate-100">
+              <h1 className="text-lg sm:text-xl font-bold text-[#17365D]">
                 NFR & Lease Operations
               </h1>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-[#64748B] mt-0.5">
                 Manage commercial spaces, vendor agreements, and monthly rent ledger collections.
               </p>
             </div>
@@ -284,7 +285,7 @@ export const NfrOperationsPage: React.FC = () => {
                 value={selectedOutletId}
                 onChange={(e) => handleOutletChange(e.target.value)}
                 disabled={isLoadingOutlets || outlets.length === 0}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-medium text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl text-xs font-medium text-[#334155] focus:outline-none focus:ring-2 focus:ring-amber-500/50"
               >
                 {outlets.map((o) => (
                   <option key={o.id} value={o.id}>
@@ -300,10 +301,10 @@ export const NfrOperationsPage: React.FC = () => {
               onClick={handleRefresh}
               disabled={isLoadingSummary || isLoadingList}
               title="Refresh NFR Workspace"
-              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl transition disabled:opacity-50"
+              className="p-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#475569] border border-[#D7E0EA] rounded-xl transition disabled:opacity-50"
             >
               <RefreshCw
-                className={`w-4 h-4 ${isLoadingSummary || isLoadingList ? 'animate-spin text-amber-400' : ''}`}
+                className={`w-4 h-4 ${isLoadingSummary || isLoadingList ? 'animate-spin text-amber-700' : ''}`}
               />
             </button>
           </div>
@@ -314,14 +315,14 @@ export const NfrOperationsPage: React.FC = () => {
           <div
             className={`mt-4 p-3 rounded-xl flex items-center gap-2.5 text-xs border ${
               feedback.type === 'success'
-                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
-                : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800'
+                : 'bg-rose-500/10 border-rose-500/20 text-rose-800'
             }`}
           >
             {feedback.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
             ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-700" />
             )}
             <span>{feedback.message}</span>
           </div>
@@ -332,7 +333,7 @@ export const NfrOperationsPage: React.FC = () => {
       <NfrSummaryPanel summary={summary} loading={isLoadingSummary} />
 
       {/* Tabs Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-1.5 shadow-sm">
+      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-1.5 shadow-sm">
         <div className="flex items-center gap-1 overflow-x-auto">
           <button
             type="button"
@@ -340,7 +341,7 @@ export const NfrOperationsPage: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
               activeTab === 'spaces'
                 ? 'bg-amber-500 text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                : 'text-[#64748B] hover:text-[#334155] hover:bg-[#F1F5F9]'
             }`}
           >
             <Layers className="w-4 h-4" />
@@ -353,7 +354,7 @@ export const NfrOperationsPage: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
               activeTab === 'vendors'
                 ? 'bg-amber-500 text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                : 'text-[#64748B] hover:text-[#334155] hover:bg-[#F1F5F9]'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -366,7 +367,7 @@ export const NfrOperationsPage: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
               activeTab === 'leases'
                 ? 'bg-amber-500 text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                : 'text-[#64748B] hover:text-[#334155] hover:bg-[#F1F5F9]'
             }`}
           >
             <FileText className="w-4 h-4" />
@@ -379,7 +380,7 @@ export const NfrOperationsPage: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
               activeTab === 'rent-dues'
                 ? 'bg-amber-500 text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                : 'text-[#64748B] hover:text-[#334155] hover:bg-[#F1F5F9]'
             }`}
           >
             <CreditCard className="w-4 h-4" />

@@ -1,3 +1,4 @@
+import './operationsModern.css';
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -308,11 +309,11 @@ export const LubeOperationsPage: React.FC = () => {
 
   if (!canRead) {
     return (
-      <div className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl max-w-xl mx-auto my-12 space-y-3">
+      <div className="p-8 text-center bg-white border border-[#E2E8F0] rounded-2xl max-w-xl mx-auto my-12 space-y-3">
         <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
-        <h2 className="text-lg font-bold text-white">Access Restricted</h2>
-        <p className="text-xs text-slate-400">
-          You do not have permission (<code className="font-mono text-orange-400">lube_operations.read</code>) to view Lube Operations.
+        <h2 className="text-lg font-bold text-[#17365D]">Access Restricted</h2>
+        <p className="text-xs text-[#64748B]">
+          You do not have permission (<code className="font-mono text-[#B8530D]">lube_operations.read</code>) to view Lube Operations.
         </p>
       </div>
     );
@@ -320,28 +321,28 @@ export const LubeOperationsPage: React.FC = () => {
 
   if (!hasOutletsRead) {
     return (
-      <div className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl max-w-xl mx-auto my-12 space-y-3">
+      <div className="p-8 text-center bg-white border border-[#E2E8F0] rounded-2xl max-w-xl mx-auto my-12 space-y-3">
         <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
-        <h2 className="text-lg font-bold text-white">Access Restricted</h2>
-        <p className="text-xs text-slate-400">
-          Outlet read permissions (<code className="font-mono text-orange-400">outlets.read</code>) are required to access this workspace.
+        <h2 className="text-lg font-bold text-[#17365D]">Access Restricted</h2>
+        <p className="text-xs text-[#64748B]">
+          Outlet read permissions (<code className="font-mono text-[#B8530D]">outlets.read</code>) are required to access this workspace.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="operations-modern space-y-6">
       {/* Top Header & Context Selectors */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-5 bg-slate-900 border border-slate-800 rounded-2xl">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-5 bg-white border border-[#E2E8F0] rounded-2xl">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 shrink-0">
             <Package className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white tracking-tight">Lube & Auxiliary Inventory</h2>
-            <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
-              <span className="font-semibold text-slate-300">Lube Workspace</span>
+            <h2 className="text-lg font-bold text-[#17365D] tracking-tight">Lube & Auxiliary Inventory</h2>
+            <div className="flex items-center gap-2 mt-0.5 text-xs text-[#64748B]">
+              <span className="font-semibold text-[#475569]">Lube Workspace</span>
               <span aria-hidden="true" className="text-slate-700">·</span>
               <span>Authoritative Shift Reconciliations</span>
             </div>
@@ -351,12 +352,12 @@ export const LubeOperationsPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-3">
           {/* Outlet Selector */}
           <div className="relative">
-            <Building2 className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <Building2 className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-[#64748B] pointer-events-none" />
             <select
               value={selectedOutletId}
               onChange={(e) => setSelectedOutletId(e.target.value)}
               disabled={loadingOutlets || loadingShifts || loadingData}
-              className="pl-8 pr-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-lg text-xs font-semibold focus:outline-none focus:border-orange-500 w-52 disabled:opacity-50"
+              className="pl-8 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] text-[#17365D] rounded-lg text-xs font-semibold focus:outline-none focus:border-orange-500 w-52 disabled:opacity-50"
             >
               {loadingOutlets ? (
                 <option>Loading outlets...</option>
@@ -374,12 +375,12 @@ export const LubeOperationsPage: React.FC = () => {
 
           {/* Shift Selector */}
           <div className="relative">
-            <Clock className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <Clock className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-[#64748B] pointer-events-none" />
             <select
               value={selectedShiftId}
               onChange={(e) => setSelectedShiftId(e.target.value)}
               disabled={loadingOutlets || loadingShifts || loadingData || shiftsList.length === 0 || !hasShiftsRead}
-              className="pl-8 pr-3 py-2 bg-slate-950 border border-slate-800 text-white rounded-lg text-xs font-semibold focus:outline-none focus:border-orange-500 w-56 disabled:opacity-50 font-mono"
+              className="pl-8 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] text-[#17365D] rounded-lg text-xs font-semibold focus:outline-none focus:border-orange-500 w-56 disabled:opacity-50 font-mono"
             >
               {!hasShiftsRead ? (
                 <option>Shift permissions required</option>
@@ -400,7 +401,7 @@ export const LubeOperationsPage: React.FC = () => {
           <button
             onClick={handleRefresh}
             disabled={loadingData}
-            className="p-2 text-slate-400 hover:text-white bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg transition-all disabled:opacity-50"
+            className="p-2 text-[#64748B] hover:text-[#17365D] bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] rounded-lg transition-all disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingData ? 'animate-spin' : ''}`} />
           </button>
@@ -411,14 +412,14 @@ export const LubeOperationsPage: React.FC = () => {
       {hasShiftsRead && selectedShift && (
         <div className={`p-4 rounded-xl flex items-center justify-between border text-xs ${
           selectedShift.status === 'OPEN'
-            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-            : 'bg-slate-950 border-slate-800 text-slate-400'
+            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700'
+            : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#64748B]'
         }`}>
           <div className="flex items-center gap-2.5">
             {selectedShift.status === 'OPEN' ? (
               <Unlock className="w-4 h-4 shrink-0 text-emerald-500" />
             ) : (
-              <Lock className="w-4 h-4 shrink-0 text-slate-500" />
+              <Lock className="w-4 h-4 shrink-0 text-[#64748B]" />
             )}
             <div>
               <span className="font-bold uppercase tracking-wider font-mono mr-1.5">{selectedShift.status}</span>
@@ -429,7 +430,7 @@ export const LubeOperationsPage: React.FC = () => {
               </span>
             </div>
           </div>
-          <div className="hidden sm:block font-mono text-[10px] text-slate-500 uppercase tracking-wide">
+          <div className="hidden sm:block font-mono text-[10px] text-[#64748B] uppercase tracking-wide">
             ID: {selectedShift.id}
           </div>
         </div>
@@ -448,24 +449,24 @@ export const LubeOperationsPage: React.FC = () => {
       )}
 
       {actionSuccess && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl flex items-start gap-3 text-emerald-400 text-xs">
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl flex items-start gap-3 text-emerald-700 text-xs">
           <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
           <div className="flex-1">
             <h4 className="font-bold tracking-tight">Operation Successful</h4>
             <p className="mt-0.5">{actionSuccess}</p>
           </div>
-          <button onClick={() => setActionSuccess(null)} className="text-emerald-400/60 hover:text-emerald-400 font-bold font-mono">Dismiss</button>
+          <button onClick={() => setActionSuccess(null)} className="text-emerald-700/60 hover:text-emerald-700 font-bold font-mono">Dismiss</button>
         </div>
       )}
 
       {/* Segmented Workspace Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-900 rounded-xl overflow-x-auto">
+      <div className="flex items-center gap-1 p-1 bg-[#F8FAFC] border border-slate-900 rounded-xl overflow-x-auto">
         <button
           onClick={() => setActiveTab('sales')}
           className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
             activeTab === 'sales'
-              ? 'bg-slate-900 text-white shadow'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-[#17365D] shadow'
+              : 'text-[#64748B] hover:text-[#334155]'
           }`}
         >
           Shift Sales Log
@@ -474,8 +475,8 @@ export const LubeOperationsPage: React.FC = () => {
           onClick={() => setActiveTab('summary')}
           className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
             activeTab === 'summary'
-              ? 'bg-slate-900 text-white shadow'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-[#17365D] shadow'
+              : 'text-[#64748B] hover:text-[#334155]'
           }`}
         >
           Shift Summary
@@ -484,8 +485,8 @@ export const LubeOperationsPage: React.FC = () => {
           onClick={() => setActiveTab('inventory')}
           className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
             activeTab === 'inventory'
-              ? 'bg-slate-900 text-white shadow'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-[#17365D] shadow'
+              : 'text-[#64748B] hover:text-[#334155]'
           }`}
         >
           Inventory Stock
@@ -494,8 +495,8 @@ export const LubeOperationsPage: React.FC = () => {
           onClick={() => setActiveTab('skus')}
           className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
             activeTab === 'skus'
-              ? 'bg-slate-900 text-white shadow'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-[#17365D] shadow'
+              : 'text-[#64748B] hover:text-[#334155]'
           }`}
         >
           SKU Catalog
@@ -504,8 +505,8 @@ export const LubeOperationsPage: React.FC = () => {
           onClick={() => setActiveTab('prices')}
           className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
             activeTab === 'prices'
-              ? 'bg-slate-900 text-white shadow'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-[#17365D] shadow'
+              : 'text-[#64748B] hover:text-[#334155]'
           }`}
         >
           Selling Prices
@@ -514,8 +515,8 @@ export const LubeOperationsPage: React.FC = () => {
           onClick={() => setActiveTab('transactions')}
           className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
             activeTab === 'transactions'
-              ? 'bg-slate-900 text-white shadow'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-[#17365D] shadow'
+              : 'text-[#64748B] hover:text-[#334155]'
           }`}
         >
           Transaction Ledger
@@ -524,8 +525,8 @@ export const LubeOperationsPage: React.FC = () => {
           onClick={() => setActiveTab('daily')}
           className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
             activeTab === 'daily'
-              ? 'bg-slate-900 text-white shadow'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-[#17365D] shadow'
+              : 'text-[#64748B] hover:text-[#334155]'
           }`}
         >
           Daily Summary
@@ -533,12 +534,12 @@ export const LubeOperationsPage: React.FC = () => {
       </div>
 
       {/* Main Tab Viewports */}
-      <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-2xl">
+      <div className="p-6 bg-white border border-[#E2E8F0] rounded-2xl">
         {(activeTab === 'sales' || activeTab === 'summary') && !hasShiftsRead ? (
-          <div className="p-12 text-center bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
-            <Lock className="w-8 h-8 text-slate-500 mx-auto" />
-            <h4 className="text-sm font-semibold text-white">Shift Permissions Required</h4>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          <div className="p-12 text-center bg-white border border-[#E2E8F0] rounded-2xl space-y-3">
+            <Lock className="w-8 h-8 text-[#64748B] mx-auto" />
+            <h4 className="text-sm font-semibold text-[#17365D]">Shift Permissions Required</h4>
+            <p className="text-xs text-[#64748B] max-w-sm mx-auto">
               Shift operational features are not available because you do not have shift read permissions (shifts.read).
             </p>
           </div>

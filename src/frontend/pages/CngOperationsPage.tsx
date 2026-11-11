@@ -1,3 +1,4 @@
+import './operationsModern.css';
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -213,30 +214,30 @@ export const CngOperationsPage: React.FC = () => {
 
   if (!canRead) {
     return (
-      <div className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl max-w-xl mx-auto my-12 space-y-3">
+      <div className="p-8 text-center bg-white border border-[#E2E8F0] rounded-2xl max-w-xl mx-auto my-12 space-y-3">
         <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
-        <h2 className="text-lg font-bold text-white">Access Restricted</h2>
-        <p className="text-xs text-slate-400">
-          You do not have permission (<code className="font-mono text-orange-400">cng_operations.read</code>) to view CNG Operations.
+        <h2 className="text-lg font-bold text-[#17365D]">Access Restricted</h2>
+        <p className="text-xs text-[#64748B]">
+          You do not have permission (<code className="font-mono text-[#B8530D]">cng_operations.read</code>) to view CNG Operations.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="operations-modern space-y-6">
       {/* Top Header & Selectors */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-xl space-y-4">
+      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 md:p-6 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-orange-500/10 rounded-xl border border-orange-500/20 text-orange-500 shadow-md shadow-orange-500/10">
               <Flame className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-black text-white tracking-tight">
+              <h1 className="text-xl md:text-2xl font-black text-[#17365D] tracking-tight">
                 CNG Operations
               </h1>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-[#64748B]">
                 MFM sales, grid intake and compressor pressure monitoring
               </p>
             </div>
@@ -245,19 +246,19 @@ export const CngOperationsPage: React.FC = () => {
           {/* Top Controls */}
           <div className="flex flex-wrap items-center gap-3">
             {/* Outlet Selector */}
-            <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 min-w-[200px]">
-              <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+            <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-1.5 min-w-[200px]">
+              <Building2 className="w-4 h-4 text-[#64748B] shrink-0" />
               <select
                 value={selectedOutletId}
                 onChange={(e) => setSelectedOutletId(e.target.value)}
                 disabled={loadingOutlets}
-                className="bg-transparent text-xs text-white font-medium focus:outline-none w-full"
+                className="bg-transparent text-xs text-[#17365D] font-medium focus:outline-none w-full"
               >
                 {outlets.length === 0 ? (
                   <option value="">No outlets available</option>
                 ) : (
                   outlets.map((o) => (
-                    <option key={o.id} value={o.id} className="bg-slate-900 text-white">
+                    <option key={o.id} value={o.id} className="bg-white text-[#17365D]">
                       {o.name} ({o.roCode})
                     </option>
                   ))
@@ -266,19 +267,19 @@ export const CngOperationsPage: React.FC = () => {
             </div>
 
             {/* Shift Selector */}
-            <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 min-w-[220px]">
-              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+            <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-1.5 min-w-[220px]">
+              <Clock className="w-4 h-4 text-[#64748B] shrink-0" />
               <select
                 value={selectedShiftId}
                 onChange={(e) => setSelectedShiftId(e.target.value)}
                 disabled={loadingShifts || shiftsList.length === 0}
-                className="bg-transparent text-xs text-white font-medium focus:outline-none w-full"
+                className="bg-transparent text-xs text-[#17365D] font-medium focus:outline-none w-full"
               >
                 {shiftsList.length === 0 ? (
                   <option value="">No shifts available</option>
                 ) : (
                   shiftsList.map((s) => (
-                    <option key={s.id} value={s.id} className="bg-slate-900 text-white">
+                    <option key={s.id} value={s.id} className="bg-white text-[#17365D]">
                       {s.businessDate} • {s.shiftTemplateName || 'Shift'} [{s.status}]
                     </option>
                   ))
@@ -291,7 +292,7 @@ export const CngOperationsPage: React.FC = () => {
               type="button"
               onClick={handleRefresh}
               disabled={loadingShiftData}
-              className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors disabled:opacity-50"
+              className="p-2.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#475569] rounded-xl transition-colors disabled:opacity-50"
               title="Refresh Shift Data"
             >
               <RefreshCw className={`w-4 h-4 ${loadingShiftData ? 'animate-spin' : ''}`} />
@@ -301,18 +302,18 @@ export const CngOperationsPage: React.FC = () => {
 
         {/* Selected Shift Context Card */}
         {selectedShift && (
-          <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-4 text-xs">
+          <div className="pt-3 border-t border-[#E2E8F0]/80 flex flex-wrap items-center justify-between gap-4 text-xs">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="font-semibold text-white">
-                {selectedOutlet?.name} <span className="font-mono text-slate-400">({selectedOutlet?.roCode})</span>
+              <span className="font-semibold text-[#17365D]">
+                {selectedOutlet?.name} <span className="font-mono text-[#64748B]">({selectedOutlet?.roCode})</span>
               </span>
               <span className="text-slate-600 hidden sm:inline">•</span>
-              <span className="flex items-center gap-1 text-slate-300 font-mono">
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              <span className="flex items-center gap-1 text-[#475569] font-mono">
+                <Calendar className="w-3.5 h-3.5 text-[#64748B]" />
                 {selectedShift.businessDate}
               </span>
               <span className="text-slate-600 hidden sm:inline">•</span>
-              <span className="text-slate-300 font-medium">
+              <span className="text-[#475569] font-medium">
                 {selectedShift.shiftTemplateName || 'Shift Template'}
               </span>
             </div>
@@ -321,24 +322,24 @@ export const CngOperationsPage: React.FC = () => {
               <span
                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase font-mono ${
                   selectedShift.status === 'OPEN'
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/30'
                     : selectedShift.status === 'CLOSING'
                     ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
                     : selectedShift.status === 'LOCKED'
                     ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
-                    : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    : 'bg-[#F1F5F9] text-[#64748B] border border-[#D7E0EA]'
                 }`}
               >
                 {selectedShift.status}
               </span>
 
               {selectedShift.status !== 'OPEN' ? (
-                <div className="flex items-center gap-1 text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">
+                <div className="flex items-center gap-1 text-[11px] text-amber-700 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">
                   <Lock className="w-3 h-3" />
                   <span>Historical shift — CNG records are read-only.</span>
                 </div>
               ) : !canWrite ? (
-                <div className="flex items-center gap-1 text-[11px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-lg">
+                <div className="flex items-center gap-1 text-[11px] text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded-lg">
                   <Lock className="w-3 h-3" />
                   <span>Read-only mode — write permission required to modify.</span>
                 </div>
@@ -350,7 +351,7 @@ export const CngOperationsPage: React.FC = () => {
 
       {/* Global Alerts */}
       {actionError && (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center justify-between text-xs text-rose-400 shadow-lg">
+        <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center justify-between text-xs text-rose-700 shadow-lg">
           <div className="flex items-center gap-2.5">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{actionError}</span>
@@ -358,7 +359,7 @@ export const CngOperationsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setActionError(null)}
-            className="text-slate-400 hover:text-white"
+            className="text-[#64748B] hover:text-[#17365D]"
           >
             ✕
           </button>
@@ -366,7 +367,7 @@ export const CngOperationsPage: React.FC = () => {
       )}
 
       {actionSuccess && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center justify-between text-xs text-emerald-400 shadow-lg">
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center justify-between text-xs text-emerald-700 shadow-lg">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{actionSuccess}</span>
@@ -374,7 +375,7 @@ export const CngOperationsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setActionSuccess(null)}
-            className="text-slate-400 hover:text-white"
+            className="text-[#64748B] hover:text-[#17365D]"
           >
             ✕
           </button>
@@ -383,26 +384,26 @@ export const CngOperationsPage: React.FC = () => {
 
       {/* Empty States */}
       {outlets.length === 0 ? (
-        <div className="py-16 text-center bg-slate-900 border border-slate-800 rounded-2xl space-y-2">
+        <div className="py-16 text-center bg-white border border-[#E2E8F0] rounded-2xl space-y-2">
           <Building2 className="w-10 h-10 text-slate-600 mx-auto" />
-          <h3 className="text-base font-bold text-white">No Retail Outlets Available</h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          <h3 className="text-base font-bold text-[#17365D]">No Retail Outlets Available</h3>
+          <p className="text-xs text-[#64748B] max-w-sm mx-auto">
             You do not currently have access to any retail outlets. Check your scope assignments with your administrator.
           </p>
         </div>
       ) : shiftsList.length === 0 ? (
-        <div className="py-16 text-center bg-slate-900 border border-slate-800 rounded-2xl space-y-2">
+        <div className="py-16 text-center bg-white border border-[#E2E8F0] rounded-2xl space-y-2">
           <Clock className="w-10 h-10 text-slate-600 mx-auto" />
-          <h3 className="text-base font-bold text-white">No Operational Shifts</h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          <h3 className="text-base font-bold text-[#17365D]">No Operational Shifts</h3>
+          <p className="text-xs text-[#64748B] max-w-sm mx-auto">
             No operational shifts exist for this outlet. Open a shift in Shift Operations to record CNG dispensing and pressures.
           </p>
         </div>
       ) : !selectedShift ? (
-        <div className="py-16 text-center bg-slate-900 border border-slate-800 rounded-2xl space-y-2">
+        <div className="py-16 text-center bg-white border border-[#E2E8F0] rounded-2xl space-y-2">
           <Clock className="w-10 h-10 text-slate-600 mx-auto" />
-          <h3 className="text-base font-bold text-white">Select a Shift</h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          <h3 className="text-base font-bold text-[#17365D]">Select a Shift</h3>
+          <p className="text-xs text-[#64748B] max-w-sm mx-auto">
             Choose an operational shift from the dropdown above to view and manage CNG operations.
           </p>
         </div>

@@ -1,3 +1,4 @@
+import './operationsModern.css';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Zap,
@@ -289,13 +290,13 @@ export const UtilitiesOperationsPage: React.FC = () => {
   if (!canRead && !loadingOutlets) {
     return (
       <div className="p-8 max-w-7xl mx-auto space-y-6">
-        <div className="p-12 bg-slate-900 border border-slate-800 rounded-3xl text-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mx-auto">
+        <div className="p-12 bg-white border border-[#E2E8F0] rounded-3xl text-center space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-700 mx-auto">
             <ShieldAlert className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold text-white tracking-tight">Access Restricted</h2>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
-            You do not possess the required permissions (<span className="font-mono text-xs text-orange-400">{PERMISSIONS.UTILITIES_READ}</span>) to view utilities and sub-meter records.
+          <h2 className="text-xl font-bold text-[#17365D] tracking-tight">Access Restricted</h2>
+          <p className="text-sm text-[#64748B] max-w-md mx-auto">
+            You do not possess the required permissions (<span className="font-mono text-xs text-[#B8530D]">{PERMISSIONS.UTILITIES_READ}</span>) to view utilities and sub-meter records.
           </p>
         </div>
       </div>
@@ -305,23 +306,23 @@ export const UtilitiesOperationsPage: React.FC = () => {
   const selectedOutlet = outlets.find(o => o.id === selectedOutletId);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="operations-modern p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Top Header & Outlet Selector */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-sm">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-[#E2E8F0] p-5 rounded-3xl shadow-sm">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white shadow-lg shadow-orange-500/20 shrink-0">
             <Zap className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-white tracking-tight">
+              <h1 className="text-xl font-black text-[#17365D] tracking-tight">
                 Utilities & Sub-Meters
               </h1>
-              <span className="px-2 py-0.5 bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[10px] font-bold uppercase tracking-wider rounded-md">
+              <span className="px-2 py-0.5 bg-orange-500/10 border border-orange-500/20 text-[#B8530D] text-[10px] font-bold uppercase tracking-wider rounded-md">
                 Phase 4A
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-[#64748B] mt-0.5">
               Main electricity invoices, settlement workflows, and sub-meter consumption ledgers
             </p>
           </div>
@@ -330,12 +331,12 @@ export const UtilitiesOperationsPage: React.FC = () => {
         {/* Outlet Selector & Refresh */}
         <div className="flex items-center gap-3 self-stretch sm:self-auto">
           <div className="relative flex-1 sm:w-72">
-            <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Building2 className="w-4 h-4 text-[#64748B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <select
               value={selectedOutletId}
               onChange={e => handleOutletChange(e.target.value)}
               disabled={loadingOutlets || outlets.length === 0}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-2xl text-xs font-semibold text-white focus:outline-none focus:border-orange-500/60 transition-all appearance-none cursor-pointer"
+              className="w-full pl-10 pr-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl text-xs font-semibold text-[#17365D] focus:outline-none focus:border-orange-500/60 transition-all appearance-none cursor-pointer"
             >
               {loadingOutlets ? (
                 <option value="">Loading accessible outlets...</option>
@@ -355,23 +356,23 @@ export const UtilitiesOperationsPage: React.FC = () => {
             type="button"
             onClick={() => fetchWorkspaceData(selectedOutletId)}
             disabled={loadingData || !selectedOutletId}
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 rounded-2xl transition-colors shrink-0"
+            className="p-2.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] disabled:opacity-50 text-[#475569] rounded-2xl transition-colors shrink-0"
             title="Refresh Workspace"
           >
-            <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin text-orange-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin text-[#B8530D]' : ''}`} />
           </button>
         </div>
       </div>
 
       {/* Feedback Alerts */}
       {errorMessage && (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-xs text-rose-400 flex items-start gap-3">
-          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-xs text-rose-700 flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
           <div className="flex-1">{errorMessage}</div>
           <button
             type="button"
             onClick={() => setErrorMessage(null)}
-            className="text-rose-400/80 hover:text-rose-400"
+            className="text-rose-700/80 hover:text-rose-700"
           >
             Dismiss
           </button>
@@ -379,13 +380,13 @@ export const UtilitiesOperationsPage: React.FC = () => {
       )}
 
       {successMessage && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-xs text-emerald-400 flex items-start gap-3">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-xs text-emerald-700 flex items-start gap-3">
+          <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
           <div className="flex-1">{successMessage}</div>
           <button
             type="button"
             onClick={() => setSuccessMessage(null)}
-            className="text-emerald-400/80 hover:text-emerald-400"
+            className="text-emerald-700/80 hover:text-emerald-700"
           >
             Dismiss
           </button>
@@ -396,14 +397,14 @@ export const UtilitiesOperationsPage: React.FC = () => {
       <UtilitySummaryPanel summary={electricitySummary} loading={loadingData} />
 
       {/* Workspace Navigation Tabs */}
-      <div className="flex border-b border-slate-800 text-xs font-bold gap-2 overflow-x-auto">
+      <div className="flex border-b border-[#E2E8F0] text-xs font-bold gap-2 overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab('bills')}
           className={`pb-3 px-3 flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
             activeTab === 'bills'
-              ? 'border-orange-500 text-orange-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-orange-500 text-[#B8530D]'
+              : 'border-transparent text-[#64748B] hover:text-[#334155]'
           }`}
         >
           <FileText className="w-4 h-4" />
@@ -415,8 +416,8 @@ export const UtilitiesOperationsPage: React.FC = () => {
           onClick={() => setActiveTab('accounts')}
           className={`pb-3 px-3 flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
             activeTab === 'accounts'
-              ? 'border-orange-500 text-orange-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-orange-500 text-[#B8530D]'
+              : 'border-transparent text-[#64748B] hover:text-[#334155]'
           }`}
         >
           <Zap className="w-4 h-4" />
@@ -428,8 +429,8 @@ export const UtilitiesOperationsPage: React.FC = () => {
           onClick={() => setActiveTab('submeters')}
           className={`pb-3 px-3 flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
             activeTab === 'submeters'
-              ? 'border-orange-500 text-orange-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-orange-500 text-[#B8530D]'
+              : 'border-transparent text-[#64748B] hover:text-[#334155]'
           }`}
         >
           <Gauge className="w-4 h-4" />
@@ -441,8 +442,8 @@ export const UtilitiesOperationsPage: React.FC = () => {
           onClick={() => setActiveTab('charges')}
           className={`pb-3 px-3 flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
             activeTab === 'charges'
-              ? 'border-orange-500 text-orange-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'border-orange-500 text-[#B8530D]'
+              : 'border-transparent text-[#64748B] hover:text-[#334155]'
           }`}
         >
           <CreditCard className="w-4 h-4" />
