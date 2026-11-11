@@ -2558,12 +2558,14 @@ export const DailyOperationsPage: React.FC = () => {
               placeholder="Example: Shift opened by mistake; no operational data was entered."
               className="w-full rounded-lg border border-slate-300 p-3 text-sm text-slate-900"
             />
-            <label className="flex items-start gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={adminEmptyCloseConfirmed}
-                onChange={(event) => setAdminEmptyCloseConfirmed(event.target.checked)}
-                className="mt-1" />
+            <button type="button" role="checkbox" aria-checked={adminEmptyCloseConfirmed}
+              onClick={() => setAdminEmptyCloseConfirmed(value => !value)}
+              className="flex items-start gap-2 text-left text-sm text-slate-700">
+              <span aria-hidden="true" className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-slate-500">
+                {adminEmptyCloseConfirmed ? '✓' : ''}
+              </span>
               I confirm this shift has no recorded activity and authorize closing it without reconciliation.
-            </label>
+            </button>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" disabled={closingShiftBusy}
                 onClick={() => setAdminEmptyCloseOpen(false)}
