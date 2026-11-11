@@ -15,7 +15,7 @@ describe('Sidebar navigation scrolling', () => {
     expect(source.indexOf('Scope: {userCtx.primaryScope}')).toBeLessThan(nav);
     expect(source.indexOf('Sidebar Brand Header')).toBeLessThan(nav);
     expect(source.indexOf('Footer Info')).toBeGreaterThan(nav);
-    expect(source).toContain('flex-col overflow-hidden border-r border-[#142842] bg-gradient-to-b');
+    expect(source).toContain('flex-col overflow-hidden border-r border-[#153F9B] bg-gradient-to-b');
   });
 
   it('works in both desktop and mobile layouts', () => {
