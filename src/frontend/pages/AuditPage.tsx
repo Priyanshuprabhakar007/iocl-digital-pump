@@ -1,3 +1,4 @@
+import './adminModern.css';
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
 import { AuditLog } from '../../shared/types';
@@ -20,26 +21,26 @@ export const AuditPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="pb-4 border-b border-slate-800">
+    <div className="admin-modern space-y-6 pb-10">
+      <div className="pb-4 border-b border-[#E2E8F0]">
         <div className="flex items-center gap-2">
           <Activity className="w-6 h-6 text-purple-400" />
-          <h1 className="text-xl font-extrabold text-white">System Audit Trail</h1>
+          <h1 className="text-xl font-extrabold text-[#17365D]">System Audit Trail</h1>
         </div>
-        <p className="text-xs text-slate-400 mt-1">
+        <p className="text-xs text-[#64748B] mt-1">
           Immutable system log capturing all mutations, user activities, IP addresses, and state changes.
         </p>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-xs text-slate-400 font-mono animate-pulse">
+        <div className="py-12 text-center text-xs text-[#64748B] font-mono animate-pulse">
           Loading audit records...
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-800/80 text-slate-400 font-mono uppercase text-[10px] tracking-wider border-b border-slate-700/80">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden shadow-sm">
+          <div className="admin-table-scroll overflow-x-auto" role="region" aria-label="Scrollable administration table" tabIndex={0}>
+            <table className="admin-data-table w-full text-left text-xs">
+              <thead className="bg-[#F1F5F9]/80 text-[#64748B] font-mono uppercase text-[10px] tracking-wider border-b border-[#D7E0EA]/80">
                 <tr>
                   <th className="p-4">Timestamp</th>
                   <th className="p-4">Action</th>
@@ -49,33 +50,33 @@ export const AuditPage: React.FC = () => {
                   <th className="p-4 text-right">Details</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-200 font-mono">
+              <tbody className="divide-y divide-slate-800 text-[#334155] font-mono">
                 {logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="p-4 text-slate-400 text-[11px]">
+                  <tr key={log.id} className="hover:bg-[#F1F5F9]/40 transition-colors">
+                    <td className="p-4 text-[#64748B] text-[11px]">
                       {new Date(log.createdAt).toLocaleString()}
                     </td>
 
-                    <td className="p-4 font-bold text-orange-400">
+                    <td className="p-4 font-bold text-[#B8530D]">
                       {log.action}
                     </td>
 
-                    <td className="p-4 text-white font-sans font-semibold">
+                    <td className="p-4 text-[#17365D] font-sans font-semibold">
                       {log.userName}
                     </td>
 
-                    <td className="p-4 text-slate-300">
+                    <td className="p-4 text-[#475569]">
                       {log.entityType} ({log.entityId.slice(0, 8)}...)
                     </td>
 
-                    <td className="p-4 text-slate-400">
+                    <td className="p-4 text-[#64748B]">
                       {log.ipAddress || '127.0.0.1'}
                     </td>
 
                     <td className="p-4 text-right">
                       <button
                         onClick={() => setSelectedLog(log)}
-                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded border border-slate-700 text-[11px] font-sans"
+                        className="px-2.5 py-1 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#475569] hover:text-[#17365D] rounded border border-[#D7E0EA] text-[11px] font-sans"
                       >
                         Inspect Payload
                       </button>
@@ -90,22 +91,22 @@ export const AuditPage: React.FC = () => {
 
       {/* Inspect Drawer/Modal */}
       {selectedLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-white">Audit Payload Details</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#F8FAFC]/55 backdrop-blur-sm">
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+            <h2 className="text-lg font-bold text-[#17365D]">Audit Payload Details</h2>
 
             <div className="space-y-3 text-xs font-mono">
-              <div className="p-3 rounded-lg bg-slate-800/80 border border-slate-700">
-                <div className="text-slate-400 text-[10px]">NEW VALUE STATE JSON:</div>
-                <pre className="text-emerald-400 text-[11px] overflow-x-auto mt-1 p-2 bg-slate-950 rounded">
+              <div className="p-3 rounded-lg bg-[#F1F5F9]/80 border border-[#D7E0EA]">
+                <div className="text-[#64748B] text-[10px]">NEW VALUE STATE JSON:</div>
+                <pre className="text-emerald-700 text-[11px] overflow-x-auto mt-1 p-2 bg-[#F8FAFC] rounded">
                   {selectedLog.newValueJson ? JSON.stringify(JSON.parse(selectedLog.newValueJson), null, 2) : 'None'}
                 </pre>
               </div>
 
               {selectedLog.oldValueJson && (
-                <div className="p-3 rounded-lg bg-slate-800/80 border border-slate-700">
-                  <div className="text-slate-400 text-[10px]">OLD VALUE STATE JSON:</div>
-                  <pre className="text-red-400 text-[11px] overflow-x-auto mt-1 p-2 bg-slate-950 rounded">
+                <div className="p-3 rounded-lg bg-[#F1F5F9]/80 border border-[#D7E0EA]">
+                  <div className="text-[#64748B] text-[10px]">OLD VALUE STATE JSON:</div>
+                  <pre className="text-red-700 text-[11px] overflow-x-auto mt-1 p-2 bg-[#F8FAFC] rounded">
                     {JSON.stringify(JSON.parse(selectedLog.oldValueJson), null, 2)}
                   </pre>
                 </div>
@@ -115,7 +116,7 @@ export const AuditPage: React.FC = () => {
             <div className="pt-2 flex justify-end">
               <button
                 onClick={() => setSelectedLog(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-semibold"
+                className="px-4 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] rounded-lg font-semibold"
               >
                 Close
               </button>
