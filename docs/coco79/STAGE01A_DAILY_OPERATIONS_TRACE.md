@@ -134,3 +134,16 @@ These are reference quantities extracted during source review; **this code-trace
 
 **Stage status:** CODE AUDIT IN PROGRESS; no production/data changes.  
 **Pump Infrastructure:** explicitly out of scope.
+
+
+## 8. Release and review checklist
+
+An authorized reviewer should confirm these questions before an implementation PR:
+- When a staff member leaves **water dip** blank, must it mean “not measured” rather than zero?
+- May a user with **stock-reconciliation read access only** trigger a recalculation that persists data?
+- Is using **invoice quantity** as a provisional daily receipt acceptable where actual received quantity is missing, and how must it be labelled?
+- Is a generic **variance reason** acceptable on normal closure, or must an operator provide the actual cause?
+- What should happen if a multi-row reading save succeeds on row 1 but fails on row 2?
+- How should the operator see **ATG offline** versus a valid manually observed zero dip?
+
+**No signed answers were supplied in the reference documents.** These are operational-policy review questions, not new system rules.
