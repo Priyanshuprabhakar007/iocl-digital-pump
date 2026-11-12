@@ -1319,5 +1319,50 @@ describe('IOCL Digital Pump Manager Phase 2B Tank Stock, Fuel Receipt & Reconcil
     expect(count.n).toBe(1);
   });
 
+
+  it('19. A successful mixed batch preserves CREATE/UPDATE response semantics and row identities', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const open = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-19' }),
+      }), env
+    );
+    expect(open.status).toBe(201);
+    const shiftId = ((await open.json()) as any).data.id;
+
+    const request = (readings: any[]) => app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/tank-readings/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ readings }),
+      }), env
+    );
+
+    const opening = { tankId: 'tank-ro1-1', readingType: 'OPENING', source: 'MANUAL', productDipMm: '1000.000', waterDipMm: '0.000' };
+    const initial = await request([opening]);
+    expect(initial.status).toBe(200);
+    const initialBody: any = await initial.json();
+    expect(initialBody.data.results[0].action).toBe('CREATED');
+    const openingId = initialBody.data.readings[0].id;
+
+    const update = await request([
+      { ...opening, productDipMm: '1125.000' },
+      { ...opening, readingType: 'CLOSING', productDipMm: '1250.000' },
+    ]);
+    expect(update.status).toBe(200);
+    const updatedBody: any = await update.json();
+    expect(updatedBody.data.results.map((x: any) => x.action)).toEqual(['UPDATED', 'CREATED']);
+    expect(updatedBody.data.readings[0].id).toBe(openingId);
+    expect(updatedBody.data.readings[0].productDipMmStr).toBe('1125.000');
+    expect(updatedBody.data.readings[1].productDipMmStr).toBe('1250.000');
+
+    const count: any = localD1.getNativeDb()
+      .prepare('SELECT COUNT(*) AS n FROM tank_stock_readings WHERE operational_shift_id = ?')
+      .get(shiftId);
+    expect(count.n).toBe(2);
+  });
+
 });
 
