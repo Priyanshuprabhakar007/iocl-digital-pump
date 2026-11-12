@@ -2301,6 +2301,7 @@ export const DailyOperationsPage: React.FC = () => {
                   </button>
                 </div>
 
+                  <p className="px-4 py-2 text-xs text-amber-800" role="note">“Not recorded” means a source reading is missing, not zero. Check pending readings before final reconciliation.</p>
                 <div className="daily-ops-table-scroll overflow-x-auto" role="region" aria-label="Scrollable operations table" tabIndex={0}>
                   <table className="daily-ops-data-table w-full text-left border-collapse">
                     <thead>
@@ -2327,28 +2328,28 @@ export const DailyOperationsPage: React.FC = () => {
                             </div>
                           </td>
                           <td className="py-2.5 px-3 text-right">
-                            {formatMilliunits(prod.openingStockMilliunits)}
+                            {displayDsrProductMetric(prod, 'opening', prod.openingStockMilliunits)}
                           </td>
                           <td className="py-2.5 px-3 text-right">
-                            {formatMilliunits(prod.receiptsMilliunits)}
+                            {displayDsrProductMetric(prod, 'receipts', prod.receiptsMilliunits)}
                           </td>
                           <td className="py-2.5 px-3 text-right font-semibold">
-                            {formatMilliunits(prod.availableStockMilliunits)}
+                            {displayDsrProductMetric(prod, 'available', prod.availableStockMilliunits)}
                           </td>
                           <td className="py-2.5 px-3 text-right">
-                            {formatMilliunits(prod.grossSalesMilliunits)}
+                            {displayDsrProductMetric(prod, 'gross', prod.grossSalesMilliunits)}
                           </td>
                           <td className="py-2.5 px-3 text-right">
-                            {formatMilliunits(prod.testingMilliunits)}
+                            {displayDsrProductMetric(prod, 'testing', prod.testingMilliunits)}
                           </td>
                           <td className="py-2.5 px-3 text-right font-bold text-[#003366]">
-                            {formatMilliunits(prod.netSalesMilliunits)}
+                            {displayDsrProductMetric(prod, 'net', prod.netSalesMilliunits)}
                           </td>
                           <td className="py-2.5 px-3 text-right">
-                            {formatMilliunits(prod.theoreticalClosingMilliunits)}
+                            {displayDsrProductMetric(prod, 'theoretical', prod.theoreticalClosingMilliunits)}
                           </td>
                           <td className="py-2.5 px-3 text-right">
-                            {formatMilliunits(prod.physicalClosingMilliunits)}
+                            {displayDsrProductMetric(prod, 'physical', prod.physicalClosingMilliunits)}
                           </td>
                           <td
                             className={`py-2.5 px-3 text-right font-bold ${
@@ -2359,8 +2360,8 @@ export const DailyOperationsPage: React.FC = () => {
                                   : 'text-slate-700'
                             }`}
                           >
-                            {prod.varianceMilliunits > 0 ? '+' : ''}
-                            {formatMilliunits(prod.varianceMilliunits)}
+                            {prod.varianceMilliunits > 0 && prod.missingFields.length === 0 ? '+' : ''}
+                            {displayDsrProductMetric(prod, 'variance', prod.varianceMilliunits)}
                           </td>
                         </tr>
                       ))}
@@ -2369,32 +2370,32 @@ export const DailyOperationsPage: React.FC = () => {
                       <tr className="bg-slate-100 font-mono text-xs font-bold text-slate-900 border-t-2 border-slate-300">
                         <td className="py-2.5 px-3 font-sans">DAY TOTAL (L)</td>
                         <td className="py-2.5 px-3 text-right">
-                          {formatMilliunits(summary.totals.openingStockMilliunits)}
+                          {displayDsrTotalMetric(summary, 'opening', summary.totals.openingStockMilliunits)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          {formatMilliunits(summary.totals.receiptsMilliunits)}
+                          {displayDsrTotalMetric(summary, 'receipts', summary.totals.receiptsMilliunits)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          {formatMilliunits(summary.totals.availableStockMilliunits)}
+                          {displayDsrTotalMetric(summary, 'available', summary.totals.availableStockMilliunits)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          {formatMilliunits(summary.totals.grossSalesMilliunits)}
+                          {displayDsrTotalMetric(summary, 'gross', summary.totals.grossSalesMilliunits)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          {formatMilliunits(summary.totals.testingMilliunits)}
+                          {displayDsrTotalMetric(summary, 'testing', summary.totals.testingMilliunits)}
                         </td>
                         <td className="py-2.5 px-3 text-right text-[#003366]">
-                          {formatMilliunits(summary.totals.netSalesMilliunits)}
+                          {displayDsrTotalMetric(summary, 'net', summary.totals.netSalesMilliunits)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          {formatMilliunits(summary.totals.theoreticalClosingMilliunits)}
+                          {displayDsrTotalMetric(summary, 'theoretical', summary.totals.theoreticalClosingMilliunits)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          {formatMilliunits(summary.totals.physicalClosingMilliunits)}
+                          {displayDsrTotalMetric(summary, 'physical', summary.totals.physicalClosingMilliunits)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          {summary.totals.varianceMilliunits > 0 ? '+' : ''}
-                          {formatMilliunits(summary.totals.varianceMilliunits)}
+                          {summary.totals.varianceMilliunits > 0 && summary.byProduct.every(p => p.status === 'COMPLETE') ? '+' : ''}
+                          {displayDsrTotalMetric(summary, 'variance', summary.totals.varianceMilliunits)}
                         </td>
                       </tr>
                     </tfoot>
@@ -2409,6 +2410,12 @@ export const DailyOperationsPage: React.FC = () => {
       {/* VIEW MODE 2: DSR SUMMARY VIEW */}
       {viewMode === 'DSR' && summary && (
         <div className="space-y-6" data-testid="dsr-summary-view">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900" role="note" data-testid="dsr-completeness-note">
+            <strong>Reading status:</strong> “Not recorded” means a required source reading is missing; it is not 0.000 L.
+            A saved zero remains 0.000 L. For partial days, stock and sales totals may be incomplete.
+            Receipt amounts can use invoice quantities where measured receipt is unavailable; verify the source before final reconciliation.
+          </div>
+
           {/* DSR Header Banner */}
           <div className="rounded-2xl border border-[#DDE6EF] bg-[#17365D] p-6 text-white shadow-sm flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -2427,7 +2434,7 @@ export const DailyOperationsPage: React.FC = () => {
               <div className="text-right">
                 <div className="text-xs text-blue-200 uppercase">Total Net Fuel Sales</div>
                 <div className="text-2xl font-bold font-mono">
-                  {formatMilliunits(summary.totals.netSalesMilliunits)} L
+                  {displayDsrTotalMetric(summary, 'net', summary.totals.netSalesMilliunits)} L
                 </div>
               </div>
             </div>
@@ -2463,28 +2470,28 @@ export const DailyOperationsPage: React.FC = () => {
                         {p.productCode} — {p.productName}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        {formatMilliunits(p.openingStockMilliunits)}
+                        {displayDsrProductMetric(p, 'opening', p.openingStockMilliunits)}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        {formatMilliunits(p.receiptsMilliunits)}
+                        {displayDsrProductMetric(p, 'receipts', p.receiptsMilliunits)}
                       </td>
                       <td className="py-3 px-4 text-right font-semibold">
-                        {formatMilliunits(p.availableStockMilliunits)}
+                        {displayDsrProductMetric(p, 'available', p.availableStockMilliunits)}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        {formatMilliunits(p.grossSalesMilliunits)}
+                        {displayDsrProductMetric(p, 'gross', p.grossSalesMilliunits)}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        {formatMilliunits(p.testingMilliunits)}
+                        {displayDsrProductMetric(p, 'testing', p.testingMilliunits)}
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-[#003366]">
-                        {formatMilliunits(p.netSalesMilliunits)}
+                        {displayDsrProductMetric(p, 'net', p.netSalesMilliunits)}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        {formatMilliunits(p.theoreticalClosingMilliunits)}
+                        {displayDsrProductMetric(p, 'theoretical', p.theoreticalClosingMilliunits)}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        {formatMilliunits(p.physicalClosingMilliunits)}
+                        {displayDsrProductMetric(p, 'physical', p.physicalClosingMilliunits)}
                       </td>
                       <td
                         className={`py-3 px-4 text-right font-bold ${
@@ -2495,8 +2502,8 @@ export const DailyOperationsPage: React.FC = () => {
                               : 'text-slate-700'
                         }`}
                       >
-                        {p.varianceMilliunits > 0 ? '+' : ''}
-                        {formatMilliunits(p.varianceMilliunits)}
+                        {p.varianceMilliunits > 0 && p.missingFields.length === 0 ? '+' : ''}
+                        {displayDsrProductMetric(p, 'variance', p.varianceMilliunits)}
                       </td>
                     </tr>
                   ))}
@@ -2553,13 +2560,13 @@ export const DailyOperationsPage: React.FC = () => {
                             : '—'}
                         </td>
                         <td className="py-2.5 px-4 text-right">
-                          {formatMilliunits(n.grossSalesMilliunits)}
+                          {displayNozzleMeterMetric(n.openingTotalizerMilliunits, n.closingTotalizerMilliunits, n.grossSalesMilliunits)}
                         </td>
                         <td className="py-2.5 px-4 text-right">
-                          {formatMilliunits(n.testingQuantityMilliunits)}
+                          {displayNozzleMeterMetric(n.openingTotalizerMilliunits, n.closingTotalizerMilliunits, n.testingQuantityMilliunits)}
                         </td>
                         <td className="py-2.5 px-4 text-right font-bold text-[#003366]">
-                          {formatMilliunits(n.netSalesMilliunits)}
+                          {displayNozzleMeterMetric(n.openingTotalizerMilliunits, n.closingTotalizerMilliunits, n.netSalesMilliunits)}
                         </td>
                       </tr>
                     ))
