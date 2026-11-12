@@ -484,17 +484,26 @@ tankStock.post('/shifts/:shiftId/tank-readings/batch', requirePermission(PERMISS
   try {
     savedRows = await pumpRepo.saveTankReadingsBatchAtomic(writes);
   } catch (err) {
+    // A result/readback failure after a successful D1.batch is not a rollback.
+    // Avoid encouraging a potentially duplicate write until the operator reloads.
+    if (err instanceof Error && err.message === 'BATCH_COMMITTED_UNVERIFIED') {
+      console.error('[TANK_BATCH_READBACK_UNVERIFIED]', err);
+      return c.json({
+        success: false, data: null,
+        error: { code: 'BATCH_SAVE_UNVERIFIED', message: 'Tank readings may have been saved. Refresh the shift before trying again.' },
+      }, 503);
+    }
     const latestShift = await pumpRepo.findOperationalShiftById(shiftId);
     if (!latestShift || latestShift.status !== 'OPEN') {
       return c.json({
         success: false, data: null,
-        error: { code: 'SHIFT_CLOSED', message: 'Shift is no longer OPEN; no tank readings were saved from this batch.' },
+        error: { code: 'SHIFT_CLOSED', message: 'Shift is no longer OPEN. Refresh its readings before continuing.' },
       }, 409);
     }
     console.error('[TANK_BATCH_ATOMIC_SAVE_FAILED]', err);
     return c.json({
       success: false, data: null,
-      error: { code: 'BATCH_SAVE_FAILED', message: 'Tank readings could not be saved together. No readings from this batch were committed.' },
+      error: { code: 'BATCH_SAVE_FAILED', message: 'Tank readings could not be saved together. Refresh the shift to verify before retrying.' },
     }, 409);
   }
 
