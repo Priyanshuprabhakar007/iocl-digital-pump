@@ -69,7 +69,7 @@ describe('Stage 01C: source-aware Daily Operations display (no calculation chang
     expect(getTankSaveErrorGuidance({
       code: 'CALIBRATION_NOT_AVAILABLE',
       message: 'minimum points missing',
-    })).toContain('existing chart');
+    })).toContain('current chart');
     expect(getTankSaveErrorGuidance({
       code: 'DIP_OUT_OF_RANGE',
       message: 'Dip measurement 1500 mm out of range',
