@@ -1,29 +1,38 @@
-# COCO 79 pilot — evidence-led implementation
+# COCO 79 — Reference-led Daily Operations & Calibration Project
 
-**Pilot outlet:** COCO 79, RO code 369460  
-**Status:** Stage 00 **prepared / awaiting independent data verification**  
-**Safety:** Documentation-only changes; no customer records, production data, API or calculations changed.
+**Reference source:** COCO 79, RO code `369460`  
+**Status:** Stage 00 working baseline, not signed off; no live data writes  
+**User scope decision:** **COCO 79 is a reference case. Do not configure, redesign, import or modify Pump Infrastructure at this time.**
 
-Read in order:
+We are studying **how an outlet operates**, not replicating COCO 79's tank/DU/nozzle installation. Our application should work across outlets using their *existing* approved infrastructure and product configuration. The supplied historical COCO 79 records are **examples for mapping, workflow evaluation and isolated tests**, never production entries.
 
-1. [Stage 00 baseline](./STAGE00_BASELINE.md) — source files, discovered code, discrepancies, missing evidence and release safeguards.
-2. [Master data mapping](./MASTER_DATA_MAPPING.md) — exact document fields → existing tables, verification gates and read-only SQL examples.
-3. [Implementation backlog](./IMPLEMENTATION_BACKLOG.md) — P0/P1/P2 priorities, acceptance tests and order of work.
+## In scope now
 
-## Decision log
+1. **Daily Operations & DSR:** shift opening, tank dip readings, nozzle readings, shift closing, DSR presentation and missing-data handling.
+2. **Calibration in daily operations:** how dip readings are converted to volume; chart units, rounding, revision/effective date, checks for absent charts and sample calculations. **No chart upload, replacement or activation.**
+3. **Fuel receipts and decantation:** invoice/TT details, quantity, pre/post readings, density/temperature, safety/quality evidence and traceability.
+4. **Stock and sales:** product/day opening stock, receipts, recorded sales, theoretical/physical closing and explainable differences.
+5. **Finance and reports:** collection modes, cash handover/deposits and report-to-ledger parity when independent evidence is available.
+6. **Maintenance and evidence (secondary):** EFMS and ORPAK examples of equipment outage, repair evidence and safe/manual-operations controls, plus document traceability.
+7. **MDG 2024:** source-backed workflow guidance and evidence checks; company-operated outlet applicability requires confirmation before any automated enforcement.
 
-| Decision | Status |
-| --- | --- |
-| Reuse existing shift, stock, receipt, finance, equipment, HR and document modules | Recommended |
-| COCO 79 as first reference outlet, RO code 369460 | Agreed pilot |
-| No source PDF / personnel record / invoices committed into GitHub | Required |
-| No production D1, R2, chart activation or historical receipt import in Stage 00 | Required |
-| Source scan ≠ certified structured tank calibration data | Verification pending |
-| MDG 2024 dealership procedures do not automatically authorize COCO-specific enforcement | IOCL policy review pending |
-| Only start full UAT after verified master mapping and isolated staging | Required |
+## Deliberately out of scope
 
-## Next operational handoff
+- Pump Infrastructure screens, physical site sketch implementation, adding or changing tanks, DUs, nozzles, tank-to-nozzle mappings, equipment serial numbers or product masters.
+- Migration or activation of scanned 10/20 KL calibration charts; restructuring calibration database tables or changing production conversion formulas.
+- Copying COCO 79 historical stock/receipt transactions or employees into a live outlet.
+- New blocking/penalty rules based on MDG without approved operational policy.
 
-**First task for a person with authorized system access:** export **read-only** COCO 79 outlet/product/tank/DU/nozzle/chart/shift *configuration*, compare to the site sketch and certified records, document missing links, and obtain outlet and engineering sign-off. No direct production update is required to perform that comparison.
+**Boundary:** To test a historical dip example, we may need a *read-only* reference to the tank/product/chart as already configured. That is a testing dependency, **not** authorization to modify Pump Infrastructure.
 
-Do not use this Stage 00 baseline as proof of live system correctness or statutory compliance.
+## Read in order
+
+1. [Stage 00 baseline](./STAGE00_BASELINE.md) — ten documents, current code, evidence limitations and scope exclusions.
+2. [Daily operations source mapping](./MASTER_DATA_MAPPING.md) — source fields to existing shift, calibration, receipt, reconciliation and finance models.
+3. [Implementation backlog](./IMPLEMENTATION_BACKLOG.md) — P0 daily-operations focus, test scenarios and future deferred work.
+
+## What we do next
+
+**Start with an existing daily shift lifecycle and one historical COCO 79 day as a read-only reference.** Inspect the current UI/APIs/services and write tests for opening, readings, missing-versus-zero, receipt matching, reconciliation and closing. Compare outputs to the supplied DSR and invoices only when units, business dates and measurement evidence agree.
+
+Development remains separate from live D1/R2. Stage 00 documentation requires review; code changes must be proposed in separate implementation PRs after test expectations are defined.
