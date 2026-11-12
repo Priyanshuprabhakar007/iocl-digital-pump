@@ -1,7 +1,7 @@
 # Stage 01D — Shift close failure and retry safety: characterization
 
 **Date:** 12 November 2026  
-**Scope:** Existing shift close only; synthetic mock tests, no change to operational rules, APIs, schemas, permissions or live data.
+**Scope:** Existing shift close only; synthetic mock tests and display-only retry guidance. No change to closing logic, operational rules, APIs, schemas, permissions or live data.
 
 ## What the current service does
 
@@ -15,7 +15,7 @@ For known validation failures it attempts to restore OPEN and delete reconcilati
 
 ## Test scope
 
-`tests/stage01dShiftCloseFailurePaths.test.ts` contains nine isolated characterization cases:
+`tests/stage01dShiftCloseFailurePaths.test.ts` contains twelve isolated characterization cases:
 - active/duplicate close claim rejected without side effects;
 - incomplete tank/receipt data aborts and attempts cleanup;
 - missing nozzle data blocks closing;
@@ -24,9 +24,14 @@ For known validation failures it attempts to restore OPEN and delete reconcilati
 - financial variance reason missing aborts before finalization;
 - failed final status transition avoids success audits;
 - successful finalized close writes the expected audit actions;
-- audit failure **after** successful CLOSED transition raises an error without rolling back CLOSED.
+- audit failure **after** successful CLOSED transition raises an error without rolling back CLOSED;
+- restoration to OPEN failing skips later reconciliation cleanup;
+- failed financial cleanup after OPEN restoration skips stock reconciliation cleanup;
+- financial audit failing after a successful shift-close audit produces a partially recorded audit outcome.
 
 All repository/service dependencies are mocked; no production or staging D1 or R2 connections are made.
+
+**Operator feedback (presentation only):** `src/frontend/utils/shiftCloseFeedback.ts` and `tests/stage01dShiftCloseFeedback.test.ts` add six focused checks. For network/server/ambiguous close responses, the UI tells the operator to use Refresh to check OPEN/CLOSING/CLOSED before retrying. It preserves known validation errors (such as missing readings or variance reason) verbatim. No automatic retry or refresh occurs, to avoid replacing unsaved drafts.
 
 ## Identified follow-up risks
 
@@ -42,11 +47,11 @@ All repository/service dependencies are mocked; no production or staging D1 or R
 
 ## Release gates
 
-- [ ] Run TypeScript, full Vitest suite and production build on the branch.
-- [ ] Check nine new tests against installed repository dependency versions.
+- [ ] Run TypeScript, full Vitest suite and production build on **the final commit** (an earlier Stage 01D commit passed GitHub Actions on 12 November 2026).
+- [ ] Verify twelve close-service tests and six UI-guidance tests against installed repository dependencies on the final commit.
 - [ ] Run isolated D1 failure injection and verify persisted shift/reconciliation/audit state.
 - [ ] Review 01D-01 through 01D-05 with finance, audit and operations owners.
 - [ ] Integrate only after Stage 00 / 01A / 01B / 01C dependency review.
 - [ ] Confirm backup, staging UAT and rollback before any production deployment.
 
-**Status:** characterization tests added. No live testing, code fixes or deployment claimed. Pump infrastructure remains deferred.
+**Status:** characterization tests and operator feedback added on a draft branch; no backend recovery fix, live testing, merge or deployment claimed. Pump infrastructure remains deferred.
