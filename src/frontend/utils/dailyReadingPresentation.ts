@@ -45,7 +45,7 @@ export function displayDsrTotalMetric(
   metric: DsrMetric,
   milliunits: number
 ): string {
-  return summary.byProduct.every(product => isDsrMetricRecorded(product, metric))
+  return summary.byProduct.length > 0 && summary.byProduct.every(product => isDsrMetricRecorded(product, metric))
     ? formatMilliunits(milliunits)
     : 'Not recorded';
 }
