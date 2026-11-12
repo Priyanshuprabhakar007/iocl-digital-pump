@@ -3572,15 +3572,22 @@ export class PumpRepository {
     // Drizzle's D1 batch delegates to D1Database.batch, which is
     // transactional, unlike a loop of individual awaited insert/update calls.
     const batchResults = await (this.db as any).batch(statements);
+    // If D1.batch has resolved, the transaction may already be committed.
+    // Report a distinct status instead of claiming that the batch was rolled back.
     if (!Array.isArray(batchResults) || batchResults.length !== rows.length ||
       batchResults.some((result: any, index: number) =>
         !Array.isArray(result) || result.length !== 1 || result[0]?.id !== rows[index].id
       )) {
-      throw new Error('BATCH_RESULT_INCOMPLETE');
+      throw new Error('BATCH_COMMITTED_UNVERIFIED');
     }
 
-    const persisted = await Promise.all(rows.map(row => this.findTankReadingById(row.id)));
-    if (persisted.some(reading => !reading)) throw new Error('BATCH_READBACK_FAILED');
+    let persisted: Array<TankStockReading | null>;
+    try {
+      persisted = await Promise.all(rows.map(row => this.findTankReadingById(row.id)));
+    } catch {
+      throw new Error('BATCH_COMMITTED_UNVERIFIED');
+    }
+    if (persisted.some(reading => !reading)) throw new Error('BATCH_COMMITTED_UNVERIFIED');
     return persisted.map((reading, index) => ({
       action: rows[index].action,
       reading: reading as TankStockReading,
