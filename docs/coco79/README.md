@@ -30,6 +30,7 @@ We are studying **how an outlet operates**, not replicating COCO 79's tank/DU/no
 1. [Stage 00 baseline](./STAGE00_BASELINE.md) — ten documents, current code, evidence limitations and scope exclusions.
 2. [Daily operations source mapping](./MASTER_DATA_MAPPING.md) — source fields to existing shift, calibration, receipt, reconciliation and finance models.
 3. [Implementation backlog](./IMPLEMENTATION_BACKLOG.md) — P0 daily-operations focus, test scenarios and future deferred work.
+4. [Stage 01A Daily Operations trace](./STAGE01A_DAILY_OPERATIONS_TRACE.md) — actual UI/API/service workflow, calibrated calculation behavior, test coverage and priority risk register.
 
 ## What we do next
 
