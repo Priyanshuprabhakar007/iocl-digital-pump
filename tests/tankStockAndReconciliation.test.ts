@@ -1227,5 +1227,97 @@ describe('IOCL Digital Pump Manager Phase 2B Tank Stock, Fuel Receipt & Reconcil
     expect(dipData.readings[0].grossObservedVolumeStr).toBe('15000.000');
     expect(dipData.readings[0].netProductVolumeStr).toBe('15000.000');
   });
+
+  // Stage 01B: a failure in row 2 must roll back row 1 (SQLite/D1 transaction).
+  it('17. Tank batch rolls back all new rows when a later write fails', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const open = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-17' }),
+      }), env
+    );
+    expect(open.status).toBe(201);
+    const shiftId = ((await open.json()) as any).data.id;
+
+    localD1.getNativeDb().exec(`
+      CREATE TRIGGER fail_second_tank_insert BEFORE INSERT ON tank_stock_readings
+      WHEN NEW.operational_shift_id = '${shiftId}' AND NEW.reading_type = 'CLOSING'
+      BEGIN SELECT RAISE(ABORT, 'INJECTED_TANK_ROW_FAILURE'); END;
+    `);
+
+    const save = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/tank-readings/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ readings: [
+          { tankId: 'tank-ro1-1', readingType: 'OPENING', source: 'MANUAL', productDipMm: '1000.000', waterDipMm: '0.000' },
+          { tankId: 'tank-ro1-1', readingType: 'CLOSING', source: 'MANUAL', productDipMm: '1125.000', waterDipMm: '0.000' },
+        ] }),
+      }), env
+    );
+    expect(save.status).toBe(409);
+    const response: any = await save.json();
+    expect(response.error.code).toBe('BATCH_SAVE_FAILED');
+
+    const count: any = localD1.getNativeDb()
+      .prepare('SELECT COUNT(*) AS n FROM tank_stock_readings WHERE operational_shift_id = ?')
+      .get(shiftId);
+    expect(count.n).toBe(0);
+  });
+
+  it('18. Tank batch rolls back an updated opening reading if a later insert fails', async () => {
+    const { cookie } = await loginAs('admin@iocl.in');
+    const open = await app.fetch(
+      new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ shiftTemplateId: 'st-ro1-1', businessDate: '2026-11-18' }),
+      }), env
+    );
+    expect(open.status).toBe(201);
+    const shiftId = ((await open.json()) as any).data.id;
+
+    const initial = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/tank-readings/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ readings: [
+          { tankId: 'tank-ro1-1', readingType: 'OPENING', source: 'MANUAL', productDipMm: '1000.000', waterDipMm: '0.000' },
+        ] }),
+      }), env
+    );
+    expect(initial.status).toBe(200);
+
+    localD1.getNativeDb().exec(`
+      CREATE TRIGGER fail_closing_tank_insert BEFORE INSERT ON tank_stock_readings
+      WHEN NEW.operational_shift_id = '${shiftId}' AND NEW.reading_type = 'CLOSING'
+      BEGIN SELECT RAISE(ABORT, 'INJECTED_TANK_ROW_FAILURE'); END;
+    `);
+
+    const save = await app.fetch(
+      new Request(`http://localhost/api/v1/shifts/${shiftId}/tank-readings/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ readings: [
+          { tankId: 'tank-ro1-1', readingType: 'OPENING', source: 'MANUAL', productDipMm: '1125.000', waterDipMm: '0.000' },
+          { tankId: 'tank-ro1-1', readingType: 'CLOSING', source: 'MANUAL', productDipMm: '1125.000', waterDipMm: '0.000' },
+        ] }),
+      }), env
+    );
+    expect(save.status).toBe(409);
+    expect(((await save.json()) as any).error.code).toBe('BATCH_SAVE_FAILED');
+
+    const saved: any = localD1.getNativeDb().prepare(
+      "SELECT product_dip_mm_milliunits AS dip FROM tank_stock_readings WHERE operational_shift_id = ? AND tank_id = 'tank-ro1-1' AND reading_type = 'OPENING'"
+    ).get(shiftId);
+    expect(saved.dip).toBe(1000000);
+    const count: any = localD1.getNativeDb()
+      .prepare('SELECT COUNT(*) AS n FROM tank_stock_readings WHERE operational_shift_id = ?')
+      .get(shiftId);
+    expect(count.n).toBe(1);
+  });
+
 });
 
