@@ -1,124 +1,103 @@
-# COCO 79 — Source-to-system master-data map
+# COCO 79 — Daily operations source-to-system reference map
 
-**Stage:** 00 (analysis only) · **Outlet:** RO `369460` · **Target system:** current `src/db/schema.ts` at baseline `229925f`  
-**Data classification:** Operational; S05 employee records are restricted personnel data. No source PDFs, employee identities, invoice scans, or credentials are stored here.
+**Stage:** 00 · **Use:** reference/testing only · **Outlet:** COCO 79 / RO `369460`  
+**Exclusion:** **Do not modify Pump Infrastructure, tanks, dispensing units, nozzles, product masters, source calibration charts or chart activation.**  
+The field names below identify **existing** application records, not instructions to import source values. No live data was inspected.
 
-## Mapping convention
+## 1. Reference convention
 
-- **FOUND IN CODE** = target table/field or route exists in source, **not** verified populated remotely.
-- **VERIFY** = value/identity/unit/authority must be checked against signed or independent outlet records.
-- **MISSING EVIDENCE** = no sufficient source document supplied.
-- **DESIGN GAP** = source attribute not represented cleanly by the currently inspected target model; propose only after review.
-- **NO WRITE** = do not load into production D1, apply migrations or activate charts as part of this Stage 00.
+| Status | Meaning |
+| --- | --- |
+| Existing | Field, API or service found in the current repository; not necessarily populated or production-tested |
+| Example | Historical COCO 79 source data suitable for a controlled comparison |
+| Verify | Units, business date, reading source, record identity or evidence are not fully established |
+| Missing | Needed for an independent full-day reconstruction but not provided in the current sources |
+| Deferred | Infrastructure or personnel-master operation excluded by current user direction |
 
-## A. Outlet and pump infrastructure
+Do not convert an unrecorded value to zero. Do not replay old invoices or DSR totals into production or silently equate invoiced quantity with measured receipt.
 
-| Source | Source attribute | Existing target | Transform / match | Gate |
-| --- | --- | --- | --- | --- |
-| S04/S07 | COCO / SAP / RO code `369460` | `retail_outlets.roCode` | Search exact RO code; resolve internal `retail_outlets.id` by read-only query; avoid hard-coded database ID | VERIFY |
-| S01 | Tank label and product annotations | `tanks.tankNumber`, `.name`, `.productId` | Do not infer a tank's durable ID from a sketch position | VERIFY |
-| S01 + certified asset list (not supplied) | Tank capacity | `tanks.capacityLitres`, `.safeFillCapacityLitres` | Confirm tank-wise capacity, installed product, approved safe fill | MISSING EVIDENCE |
-| S01 + certified DU schedule (not supplied) | Dispenser and nozzle connections | `dispensers.dispenserNumber`; `nozzles.nozzleNumber`, `.dispenserId`, `.tankId`, `.productId` | Cross-check physically and with current automation mapping | MISSING EVIDENCE |
-| S03 | MS, HSD, XP95, XG, XP100 | `products`, `outlet_products` | Product-code aliases must match active master IDs; do not create duplicate products | VERIFY |
-| Shift roster / operations register (not supplied) | Shift code, times and sequence | `shift_templates.code`, `.startTime`, `.endTime`, `.sequence` | Match actual COCO shift pattern, including overnight rules | MISSING EVIDENCE |
+## 2. Daily Operations & DSR
 
-**Approval checkpoint:** outlet manager + authorized equipment/operations reviewer sign off tank-to-nozzle topology before shift-entry staging.
-
-## B. Tank calibration and stock readings
-
-| Source | Attribute | Existing target / service | Rule and risk | Gate |
-| --- | --- | --- | --- | --- |
-| S02 p.1 | 10-KL chart identity, header and printed units | `tank_calibration_charts` (`tankId`, `sourceFileName`, chart dimensions and capacity) | Identify which physical tank and valid chart revision it represents | VERIFY |
-| S02 p.2 | 20-KL chart identity, header and printed units | same | Confirm dimensions/units independently, avoid chart capacity assumed from filename alone | VERIFY |
-| S02 both | Dip ↔ volume tabulated pairs | `tank_calibration_points.dipMillimetresMilliunits`, `.volumeMilliunits` | Double-entry/manual QA; monotonicity, range, capacity and rounding; preserve all original points | VERIFY |
-| S02 | Chart approval/effective validity | `tank_calibration_charts.status`, `.revisionNumber`, `.approvedBy`, `.effectiveFrom` | No activation without engineer + outlet sign-off and safe dry-run | MISSING EVIDENCE |
-| Daily tank dip register (not supplied) | Date/shift, opening/closing dip, water dip | `tank_stock_readings` and `operational_shifts` | Distinguish truly missing vs measured 0; record source and timestamp | MISSING EVIDENCE |
-| S03 | Product-day opening/receipts/sales | `fuelDailyOperationsService` aggregate output, `shift_stock_reconciliations` | Use independent cross-check, not as a substitute for measured dips/nozzles | VERIFY |
-| S07/S08 | ATG HSD Tank-2 offline/online history | `equipment_assets`, tickets, events and document links | Distinguish automated reading unavailable from physical zero; no implied manual authorization | VERIFY |
-
-**Existing code:** `src/worker/routes/tankCalibration.ts` includes dry-run, version status and engineering verification routes; `src/worker/services/tankCalibrationService.ts` uses deterministic scaled interpolation. Review/scientifically verify expected points before changing these.
-
-## C. Fuel invoices, receipts and decantation
-
-| Source | Attribute | Existing target | Transformation / verification | Gate |
-| --- | --- | --- | --- | --- |
-| S04 | Invoice number, invoice date and TT vehicle number | `fuel_receipts.invoiceNumber`, `.invoiceDate`, `.ttNumber` | Check uniqueness, invoice/arrival date distinction, vehicle ID | VERIFY |
-| S04 | Product rows and invoiced quantity | `fuel_receipt_tank_lines.productId`, `.invoiceQuantityMilliunits` | 1 KL = 1,000 L; convert with decimal-safe units; validate per-product and per-invoice total | VERIFY |
-| S04 | Invoice density / temperature where documented | `fuel_receipt_tank_lines.invoiceDensityMilliunits`, `.temperatureMilliunits` | Confirm measurement basis/units and 15°C reference before any tolerance decision | VERIFY |
-| Missing site decantation log | Actual tank receiving product | `fuel_receipt_tank_lines.tankId` | Invoice may not show authoritative receiving tank; confirm from staff/automation record | MISSING EVIDENCE |
-| Missing site dip log | Pre/post-decantation dips and measured volume | `.preDecantReadingId`, `.postDecantReadingId`, `.measuredReceivedQuantityMilliunits` | Only valid linked readings from same shift/tank; no invented figures | MISSING EVIDENCE |
-| Missing checklists and sign-off | Seals, compartments, safety, sample retention | `fuel_receipts.sealVerified`, `.sealExceptionReason`; other quality/evidence models to review | Map existing validations; propose supplementary checklist only after MDG applicability approval | VERIFY / POSSIBLE GAP |
-| S03 + S04 | Daily receipt totals by product | `fuelDailyOperationsService` and existing receipt endpoints | Reconcile by business date, not blindly by invoice calendar date | VERIFY |
-| S04 scans | Invoice evidence | `documents` (R2) | Link to receipt with role/scope control and redaction where needed | VERIFY |
-
-**Historical UAT fixture candidates:**
-- 2026-11-09: MS 9,000 L; HSD 9,000 L; XP95 4,000 L (invoice fields; check source and DSR independently).
-- 2026-11-10: MS 13,000 L; HSD 9,000 L (invoice fields; check source and DSR independently).
-
-**Never** create these in the production receipt ledger; replay only into a designated isolated test database with idempotent fixtures.
-
-## D. Daily shift, stock, finance and DSR
-
-| Required business field | Existing source in system | Evidence supplied | Stage 00 state |
+| Reference / evidence | Existing app field or module | What to check | Status |
 | --- | --- | --- | --- |
-| Outlet, business date, shift identity and status | `operational_shifts` / shift routes | S03 product-day dates only | Actual shift ID/closure record missing |
-| Tank opening/closing with chart revision | `tank_stock_readings` + snapshots | S02 calibration; S03 product-day totals | Need measured shift dips |
-| Nozzle opening/closing, testing and unavailability | `nozzle_meter_readings`, `nozzle_unavailability_records` | Not supplied | **BLOCKER** for shift-to-DSR reconciliation |
-| Receipt, pre/post dip and density | `fuel_receipts`, `fuel_receipt_tank_lines` | S04 invoices; S03 daily receipts | Site-side acceptance evidence missing |
-| Stock variance and explanation | `shift_stock_reconciliations` | S03 ideal stock and product sales | Recalculate independently, not overwrite |
-| Collections by mode | `shift_collections` | Not supplied | **BLOCKER** to full daily finance |
-| Cash handover / bank deposit | `cash_handover_logs`, `bank_deposits` | Not supplied | **BLOCKER** to full daily finance |
-| Authorized closure and audit | shift close service, audit repository | Not supplied | Staging tests needed |
-| Daily and monthly reporting | `reportRoutes`, daily/monthly services | S03 historical DSR | Compare output after upstream masters confirmed |
+| COCO 79 product/day DSR (S03) | `FuelDailyOperationsService` / daily summary | Same outlet, product, business date and units; report aggregates correctly | Example |
+| Daily opening and closing stock (S03) | `tank_stock_readings`, `shift_stock_reconciliations` | DSR product totals do not establish each tank's measured shift dip | Verify |
+| Actual shift start/end | `operational_shifts.businessDate`, `.status`, `.startedAt`, `.closedAt` | Opening/closing, permissions, time zone, audit and allowed transitions | Missing source; existing app |
+| Nozzle opening/closing meter counts | `nozzle_meter_readings.openingTotalizerMilliunits`, `.closingTotalizerMilliunits` | Missing vs zero; testing adjustment, gross and net sales, retry behavior | Missing source; existing app |
+| Nozzle temporarily unavailable | `nozzle_unavailability_records` | Outage reason and date; not silently a zero sales reading | Existing app |
+| Shift close | `src/worker/services/shiftCloseService.ts` | Validations, reconciliation, error rollback and audit under retries | Existing app |
+| Historical product-day report | `reportRoutes` and monthly/daily reports | Compare calculated aggregate with independently approved DSR after matching time boundaries | Example |
 
-**Unit guardrails:** fuel volume is stored in scaled milliunits; financial amounts are integer paise. Avoid floats, handwritten conversions or rounded spreadsheet values as authoritative inserts.
+**Test sequence:** select existing test outlet/shift → open → enter readings → save/reload → verify snapshot → receipt → reconciliation → close → DSR → audit. Never create an actual historical COCO 79 shift in production to conduct this test.
 
-## E. Maintenance, staff and documents
+## 3. Calibration used in daily readings — not infrastructure configuration
 
-| Source | Source field | Current model | Status / issue |
+| Reference | Existing software element | Safe task | Out of scope |
 | --- | --- | --- | --- |
-| S06 | External EFMS complaint ID, facility, date and description | `equipment_breakdown_tickets` + equipment assets/events | No dedicated external complaint ID was found in inspected ticket fields; **DESIGN GAP** candidate, pending full schema/API review |
-| S06 | Approval, rejection, vendor closing and remarks | ticket events/notes + source attachment | Must not collapse to a single `CLOSED` state; approval ≠ repair |
-| S07/S08 | Report number, failed/replaced probe, service visit dates | equipment ticket events + Document Vault | Deduplicate shared complaint 4101172143 and link reports |
-| S09 | Maintenance checks, readings and technician sign-off | equipment events + source PDF attachment | Handwriting requires verification, not auto-pass |
-| S05 | Employee ID, name and designation | `hr_staff.employeeCode`, `.fullName`, `.designationId` | Restrict access; verify potential ID collision and employment status before import |
-| S05 | Father's name | **No corresponding required `hr_staff` field** | **DO NOT IMPORT** without an approved purpose and legal basis |
-| Missing | Joining/leaving date, contact/role assignment | `hr_staff.employmentStatus`, roster and user assignments | Verify independently; staff are not automatically login users |
-| S06–S09 | Evidence attachment | `documents` (R2), COCO compliance reference/link model | R2 authorization and retention review required |
-| S10 | MDG receipt/stock/automation/maintenance procedures | Existing operational and compliance modules | Applicability to COCO **not approved**; guidance/evidence only, never auto-penalty |
+| S02 10 KL chart / printed dip-to-volume pairs | `TankCalibrationService.convertDipFromPoints` and `tank_calibration_points` | Use a few independently verified points in isolated unit tests to check exact-match/interpolation, precision and units | Assign scanned chart to a tank or activate it |
+| S02 20 KL chart | Same conversion service | Check independent examples for monotonicity and expected volume at known dip values | Bulk import or edit chart points |
+| Missing or invalid chart | `tankStock` routes / calibration service | Confirm user gets explicit unavailable/out-of-range state, not zero stock | Make unsupported assumptions about tank capacity |
+| Chart version/effective date in existing system | `tank_calibration_charts.revisionNumber`, `.effectiveFrom`, `.status` | Check which *already configured* chart a reading used and whether calculation is reproducible | Set chart status, change revision or approve calibration |
+| Dip and water readings | `tank_stock_readings.productDipMmMilliunits`, `.waterDipMmMilliunits` | Check distinct measured value, recorded source, timestamp, rounding and traceability | Create/change physical tank records |
 
-## F. Read-only queries for a DBA/reviewer (examples, not executed)
+**Key distinction:** Reference calibration-chart images help verify **daily dip calculation behavior**. They do not authorize us to upload them or replace the certified charts already used by an outlet. Handwritten/rotated scans require double-checking before any expected-value fixture is written.
 
-Run against **the authorized staging or read-only snapshot**, using actual D1 schema and approved account. Do not paste personally identifying rows into tickets.
+## 4. Fuel receipt and decantation reference
+
+| Source / attribute | Existing target | Verification rule | Status |
+| --- | --- | --- | --- |
+| S04 invoice number and date | `fuel_receipts.invoiceNumber`, `.invoiceDate` | Invoice date vs shift business date / receipt date | Example |
+| S04 vehicle details | `fuel_receipts.ttNumber` | Match original source, allow no invented TT number | Example / verify |
+| S04 product and invoiced KL/L | `fuel_receipt_tank_lines.productId`, `.invoiceQuantityMilliunits` | Unit conversion 1 KL = 1,000 L; decimal-safe precision | Example |
+| S04 density/temperature | `.invoiceDensityMilliunits`, `.densityMilliunits`, `.temperatureMilliunits` | Verify basis (e.g., 15°C) and authoritative measured density separately | Verify |
+| Site-side seal and receipt verification | `fuel_receipts.sealVerified`, `.sealExceptionReason`, status | Do not assume seal check was done because the invoice exists | Missing evidence |
+| Actual decanted tank/pre/post dips | `fuel_receipt_tank_lines.tankId`, `.preDecantReadingId`, `.postDecantReadingId` | Examine links to *existing* configured test data; do not build or remap tanks | Missing evidence |
+| Measured received volume | `.measuredReceivedQuantityMilliunits`, `.receiptVarianceMilliunits` | Invoiced vs physically accepted; preserve independent evidence | Missing evidence |
+| MDG 2024 receipt checklist | Existing validation and document attachment routes | Identify existing checks before suggesting any new checklist or mandatory gate | Policy applicability unconfirmed |
+
+**Comparison examples:** S04 includes 09-Nov-2026 MS 9,000 L, HSD 9,000 L, XP95 4,000 L, and 10-Nov-2026 MS 13,000 L, HSD 9,000 L. Use only as source quantities in staging tests; first check dates, invoice grouping and corresponding S03 DSR values.
+
+## 5. Stock reconciliation, sales and finance
+
+| Reference | Existing code/data | Check | Status |
+| --- | --- | --- | --- |
+| DSR opening, receipt, sales, closing stock | `shift_stock_reconciliations`, `FuelDailyOperationsService` | Product/date aggregation and reconciliation arithmetic; do not assume book equals physical stock | Example |
+| Nozzle gross/net sales | `nozzle_meter_readings` | Difference, testing quantities, missing/unavailable readings | Missing independent nozzle source |
+| Product price snapshots | `operational_shift_product_prices` | Historic price precision and correct business date | Not supplied in documents |
+| Cash, digital, credit collections | `shift_collections` | Per-mode amount in integer paise, reference and authorized edits | Missing |
+| Cash handover and bank deposits | `cash_handover_logs`, `bank_deposits` | Status, date, verification and no duplicate records | Missing |
+| Shift financial reconciliation | `shift_financial_reconciliations`, `financialRoutes` | Sales vs collections, variance reasons, retries | Existing app; unverified against COCO 79 |
+| MDG stock variation | Existing reconciliation output | Show evidence, expected vs actual and reviewer explanation | Do not introduce unapproved numerical tolerance |
+
+The user can start a workflow audit **without** a signed complete-day bundle. Independent full-day parity and production sign-off remain pending until missing source readings and collection evidence are available.
+
+## 6. Maintenance evidence and operational exceptions
+
+| Source | Existing target | Safe usage |
+| --- | --- | --- |
+| S06 EFMS 10-row complaint register | `equipment_breakdown_tickets` and events | Sample complaint lifecycles and distinct approval/vendor/repair statuses |
+| S07/S08 ORPAK ATG Tank-2 incident | Equipment events and Document Vault | Test unavailable ATG, service visit, replacement and verification timelines; no implied authorized manual operation |
+| S09 preventive-maintenance form | Equipment event and document evidence | Review whether checklist/notes can be linked; no automatic pass/fail from handwriting |
+| S10 MDG 2024 | Workflow guidance | No COCO-specific mandatory enforcement or penalty without IOCL approval |
+
+No changes to physical equipment inventory are included. If an operational flow needs a test fault, use an **isolated test ticket** and existing equipment references rather than adding asset masters.
+
+## 7. Identity and privacy
+
+S05 Employee Details can help us understand operator roles, but it is **not** a mandate to import 43 employees or assign logins. Workforce/HR master setup is deferred. Only role-level functional testing with authorized staging users is in scope.
+
+## 8. Read-only technical queries (optional; not executed)
+
+Only use an authorized **staging or read-only** environment. Actual SQL identifiers must be confirmed against the applied schema; no credentials or personal-data rows should be shared in GitHub.
 
 ```sql
--- Resolve outlet ID safely from the public-facing RO code.
-SELECT id, ro_code, name, status FROM retail_outlets WHERE ro_code = '369460';
+-- Resolve an outlet only when needed for a read-only comparison.
+SELECT id, ro_code, name FROM retail_outlets WHERE ro_code = '369460';
 
--- Authorized reviewer replaces :outlet_id with the verified database ID.
-SELECT id, tank_number, name, product_id, capacity_litres, status
-  FROM tanks WHERE outlet_id = :outlet_id ORDER BY tank_number;
-SELECT id, dispenser_id, nozzle_number, tank_id, product_id, status
-  FROM nozzles WHERE outlet_id = :outlet_id ORDER BY dispenser_id, nozzle_number;
-SELECT id, tank_id, revision_number, status, effective_from, approved_at
-  FROM tank_calibration_charts WHERE tank_id IN
-  (SELECT id FROM tanks WHERE outlet_id = :outlet_id);
-SELECT id, code, start_time, end_time, sequence, status
-  FROM shift_templates WHERE outlet_id = :outlet_id ORDER BY sequence;
+-- Inspect existing shift status and chronology; no new shift is created.
+SELECT id, outlet_id, business_date, status, started_at, closed_at
+FROM operational_shifts WHERE outlet_id = :outlet_id
+ORDER BY business_date DESC;
 ```
 
-**Caution:** Verify all SQL identifiers against the *live applied schema* first. These queries intentionally do not use personal employee fields or mutate data.
-
-## G. Approval matrix for future import proposals
-
-| Material | Required reviewer(s) | Approved action |
-| --- | --- | --- |
-| Site equipment topology | Site manager + designated IOCL engineering/operations official | Staging master import preview |
-| Calibration scan/transcription | Authorized technical/engineering approver | Dry-run and approved chart-version activation |
-| Historical DSR/receipts | Finance/retail operations owner | Redacted staging fixtures and independent comparison |
-| EFMS/ORPAK service history | Facilities/service owner | Evidence link and verified operational state |
-| Employee IDs and access | Authorized HR officer + security administrator | Minimum-necessary staging staff import |
-| MDG controls / exceptions | Designated IOCL policy owner | Approved configuration, not automatic enforcement |
-| Production deployment | Release + data owner | Change window, backup, CI and role UAT gates |
-
-**Next:** [IMPLEMENTATION_BACKLOG.md](./IMPLEMENTATION_BACKLOG.md) gives the ordered tasks and acceptance tests.
+**Next:** [IMPLEMENTATION_BACKLOG.md](./IMPLEMENTATION_BACKLOG.md) begins with daily operations behavior, calibration calculation tests, receipt/DSR parity and missing-data handling—not Pump Infrastructure.
