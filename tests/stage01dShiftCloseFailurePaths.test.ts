@@ -152,7 +152,7 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     expect(res.success).toBe(true);
     expect(res.shift?.status).toBe('CLOSED');
     expect(s.audit.logAction).toHaveBeenCalledTimes(2);
-    expect(s.audit.logAction.mock.calls.map(([entry]) => entry.action)).toEqual([
+    expect((s.audit.logAction.mock.calls as unknown as Array<[{ action: string }]>).map(([entry]) => entry.action)).toEqual([
       'SHIFT_CLOSE', 'FINANCIAL_RECONCILIATION',
     ]);
     expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
@@ -170,4 +170,61 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     // This is a known API/outcome ambiguity, not proof of rolled-back closure.
     // Requires a separate audited design decision before a behavior change.
   });
+
+  it('characterizes restore-OPEN failure: later cleanup steps are skipped', async () => {
+    const s = setup();
+    s.pump.validateShiftCompleteness.mockResolvedValue({
+      valid: false,
+      error: 'INCOMPLETE_TANK_STOCK_DATA',
+      message: 'Missing closing dip',
+    });
+    s.pump.restoreOpenFromClosing.mockRejectedValue(new Error('SYNTHETIC_RESTORE_FAILURE'));
+    await expect(s.service.closeShift(s.shiftId, 'user-1')).rejects.toThrow('SYNTHETIC_RESTORE_FAILURE');
+    expect(s.finance.deleteFinancialReconciliation).not.toHaveBeenCalled();
+    expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
+    expect(s.pump.finalizeCloseConditional).not.toHaveBeenCalled();
+  });
+
+  it('characterizes financial cleanup failure: stock cleanup is skipped after OPEN restore', async () => {
+    const s = setup();
+    s.pump.validateShiftCompleteness.mockResolvedValue({
+      valid: false,
+      error: 'INCOMPLETE_TANK_STOCK_DATA',
+      message: 'Missing closing dip',
+    });
+    s.finance.deleteFinancialReconciliation.mockRejectedValue(
+      new Error('SYNTHETIC_FINANCIAL_CLEANUP_FAILURE'),
+    );
+    await expect(s.service.closeShift(s.shiftId, 'user-1')).rejects.toThrow(
+      'SYNTHETIC_FINANCIAL_CLEANUP_FAILURE',
+    );
+    expect(s.pump.restoreOpenFromClosing).toHaveBeenCalledWith(s.shiftId);
+    expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
+    expect(s.pump.finalizeCloseConditional).not.toHaveBeenCalled();
+  });
+
+  it('characterizes partial auditing when the financial audit fails after SHIFT_CLOSE audit', async () => {
+    const s = setup();
+    s.finance.findShiftFinancialReconciliation.mockResolvedValue({
+      fuelSalesRevenuePaise: 10000,
+      cngSalesRevenuePaise: 0,
+      lubeSalesRevenuePaise: 0,
+      authoritativeSalesRevenuePaise: 10000,
+      totalCollectionsPaise: 10000,
+      salesCollectionVariancePaise: 0,
+      varianceStatus: 'MATCHED',
+      varianceReason: null,
+    });
+    s.audit.logAction
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('SYNTHETIC_SECOND_AUDIT_FAILURE'));
+    await expect(s.service.closeShift(s.shiftId, 'user-1')).rejects.toThrow(
+      'SYNTHETIC_SECOND_AUDIT_FAILURE',
+    );
+    expect(s.pump.finalizeCloseConditional).toHaveBeenCalledTimes(1);
+    expect(s.audit.logAction).toHaveBeenCalledTimes(2);
+    expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
+    expect(s.finance.deleteFinancialReconciliation).not.toHaveBeenCalled();
+  });
+
 });
