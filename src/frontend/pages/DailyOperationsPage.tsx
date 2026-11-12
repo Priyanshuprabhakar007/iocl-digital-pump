@@ -21,6 +21,7 @@ import { PERMISSIONS } from '../../shared/constants';
 import { DailyOperationsTestDataResetPanel } from '../components/pump/DailyOperationsTestDataResetPanel';
 import './dailyOperationsModern.css';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
+import { displayDsrProductMetric, displayDsrTotalMetric, displayNozzleMeterMetric, getTankSaveErrorGuidance } from '../utils/dailyReadingPresentation';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -575,7 +576,7 @@ export const DailyOperationsPage: React.FC = () => {
         [key]: {
           ...prev[key],
           saveStatus: 'ERROR',
-          errorMessage: res.error?.message || 'Failed to save tank dip reading',
+          errorMessage: getTankSaveErrorGuidance(res.error),
         },
       }));
       return;
@@ -638,7 +639,7 @@ export const DailyOperationsPage: React.FC = () => {
     setSavingAllTanks(false);
 
     if (!res.success || !res.data) {
-      setPageError(res.error?.message || 'Failed to batch save tank readings');
+      setPageError(getTankSaveErrorGuidance(res.error));
       return;
     }
 
@@ -1572,6 +1573,7 @@ export const DailyOperationsPage: React.FC = () => {
                       1. Tank Dip Entry Grid ({activeWorkspace.tanks.length} Active Tanks)
                     </h2>
                     <p className="text-xs text-slate-600 mt-0.5">Enter opening and closing dip readings in millimetres. Stock volumes are calculated automatically.</p>
+                    <p className="mt-1.5 text-xs font-medium text-amber-800">Water dip defaults to 0.000 mm in a new draft. Check the actual water measurement before saving; a draft default is not a saved reading.</p>
                     <details className="mt-2 text-xs text-slate-600">
                       <summary className="cursor-pointer font-medium text-[#17365D]">How are volumes calculated?</summary>
                       <p className="mt-1">The server uses the existing TankCalibrationService to calculate gross, water and net stock volumes.</p>
@@ -1641,8 +1643,7 @@ export const DailyOperationsPage: React.FC = () => {
                               <td colSpan={6} className="py-2.5 px-3">
                                 <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-50 border border-red-300 text-red-800 text-xs font-bold">
                                   <ShieldAlert className="w-4 h-4 text-red-600" />
-                                  TANK CALIBRATION REQUIRED — Upload calibration chart before
-                                  recording dips
+                                  Calibration unavailable for this tank. Ask an authorized supervisor to verify the existing chart before saving dips.
                                 </div>
                               </td>
                             ) : (
@@ -1718,7 +1719,7 @@ export const DailyOperationsPage: React.FC = () => {
                                       </div>
                                     </div>
                                   ) : (
-                                    <span className="text-xs text-slate-400">Pending Save</span>
+                                    <span className="text-xs font-medium text-amber-700">Not recorded</span>
                                   )}
                                 </td>
 
@@ -1792,7 +1793,7 @@ export const DailyOperationsPage: React.FC = () => {
                                       </div>
                                     </div>
                                   ) : (
-                                    <span className="text-xs text-slate-400">Pending Save</span>
+                                    <span className="text-xs font-medium text-amber-700">Not recorded</span>
                                   )}
                                 </td>
                               </>
