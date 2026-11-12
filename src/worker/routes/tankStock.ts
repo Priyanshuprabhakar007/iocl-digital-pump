@@ -448,100 +448,72 @@ tankStock.post('/shifts/:shiftId/tank-readings/batch', requirePermission(PERMISS
 
   const existingReadings = await pumpRepo.listShiftTankReadings(shiftId);
   const nowIso = new Date().toISOString();
-  const savedReadings = [];
-  const results = [];
 
-  for (const prep of preparedRows) {
+  // Preserve existing CREATE/UPDATE semantics and response order, but commit
+  // every row together. A later failed row must never leave earlier writes.
+  const writes = preparedRows.map(prep => {
     const existing = existingReadings.find(
-      r => r.tankId === prep.tankId && r.readingType === prep.readingType && (prep.readingType === 'OPENING' || prep.readingType === 'CLOSING')
+      r => r.tankId === prep.tankId && r.readingType === prep.readingType &&
+        (prep.readingType === 'OPENING' || prep.readingType === 'CLOSING')
     );
+    return {
+      id: existing?.id || `tsr-${crypto.randomUUID()}`,
+      operationalShiftId: shiftId,
+      outletId: shift.outletId,
+      tankId: prep.tankId,
+      productId: prep.productId,
+      readingType: prep.readingType,
+      source: prep.source,
+      productDipMmMilliunits: prep.productDipMilli,
+      waterDipMmMilliunits: prep.waterDipMilli,
+      grossObservedVolumeMilliunits: prep.grossObservedVolumeMilliunits,
+      waterVolumeMilliunits: prep.waterVolumeMilliunits,
+      netProductVolumeMilliunits: prep.netProductVolumeMilliunits,
+      calibrationChartId: prep.calibrationChartId,
+      calibrationRevision: prep.calibrationRevision,
+      recordedAt: nowIso,
+      recordedByUserId: c.var.user!.user.id,
+      notes: prep.notes,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      action: existing ? 'UPDATED' as const : 'CREATED' as const,
+    };
+  });
 
-    if (existing) {
-      const updRes = await pumpRepo.updateTankReadingConditional(existing.id, shiftId, {
-        source: prep.source,
-        productDipMmMilliunits: prep.productDipMilli,
-        waterDipMmMilliunits: prep.waterDipMilli,
-        grossObservedVolumeMilliunits: prep.grossObservedVolumeMilliunits,
-        waterVolumeMilliunits: prep.waterVolumeMilliunits,
-        netProductVolumeMilliunits: prep.netProductVolumeMilliunits,
-        calibrationChartId: prep.calibrationChartId,
-        calibrationRevision: prep.calibrationRevision,
-        recordedAt: nowIso,
-        recordedByUserId: c.var.user!.user.id,
-        notes: prep.notes,
-        updatedAt: nowIso,
-      });
-
-      if (!updRes.success || !updRes.reading) {
-        if (updRes.shiftClosed) {
-          return c.json({
-            success: false,
-            data: null,
-            error: { code: 'SHIFT_CLOSED', message: 'Operational shift is CLOSED.' },
-          }, 409);
-        }
-        return c.json({
-          success: false,
-          data: null,
-          error: { code: 'CONFLICT', message: `Failed to update tank reading for ${prep.tankId}` },
-        }, 409);
-      }
-
-      savedReadings.push(updRes.reading);
-      results.push({
-        tankId: prep.tankId,
-        readingType: prep.readingType,
-        action: 'UPDATED' as const,
-        reading: updRes.reading,
-      });
-    } else {
-      const readingId = `tsr-${crypto.randomUUID()}`;
-      const createRes = await pumpRepo.createTankReadingConditional({
-        id: readingId,
-        operationalShiftId: shiftId,
-        outletId: shift.outletId,
-        tankId: prep.tankId,
-        productId: prep.productId,
-        readingType: prep.readingType,
-        source: prep.source,
-        productDipMmMilliunits: prep.productDipMilli,
-        waterDipMmMilliunits: prep.waterDipMilli,
-        grossObservedVolumeMilliunits: prep.grossObservedVolumeMilliunits,
-        waterVolumeMilliunits: prep.waterVolumeMilliunits,
-        netProductVolumeMilliunits: prep.netProductVolumeMilliunits,
-        calibrationChartId: prep.calibrationChartId,
-        calibrationRevision: prep.calibrationRevision,
-        recordedAt: nowIso,
-        recordedByUserId: c.var.user!.user.id,
-        notes: prep.notes,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      });
-
-      if (!createRes.success || !createRes.reading) {
-        if (createRes.shiftClosed) {
-          return c.json({
-            success: false,
-            data: null,
-            error: { code: 'SHIFT_CLOSED', message: 'Operational shift is CLOSED.' },
-          }, 409);
-        }
-        return c.json({
-          success: false,
-          data: null,
-          error: { code: 'CONFLICT', message: `Failed to create tank reading for ${prep.tankId}` },
-        }, 409);
-      }
-
-      savedReadings.push(createRes.reading);
-      results.push({
-        tankId: prep.tankId,
-        readingType: prep.readingType,
-        action: 'CREATED' as const,
-        reading: createRes.reading,
-      });
+  let savedRows: Awaited<ReturnType<PumpRepository['saveTankReadingsBatchAtomic']>>;
+  try {
+    savedRows = await pumpRepo.saveTankReadingsBatchAtomic(writes);
+  } catch (err) {
+    // A result/readback failure after a successful D1.batch is not a rollback.
+    // Avoid encouraging a potentially duplicate write until the operator reloads.
+    if (err instanceof Error && err.message === 'BATCH_COMMITTED_UNVERIFIED') {
+      console.error('[TANK_BATCH_READBACK_UNVERIFIED]', err);
+      return c.json({
+        success: false, data: null,
+        error: { code: 'BATCH_SAVE_UNVERIFIED', message: 'Tank readings may have been saved. Refresh the shift before trying again.' },
+      }, 503);
     }
+    const latestShift = await pumpRepo.findOperationalShiftById(shiftId);
+    if (!latestShift || latestShift.status !== 'OPEN') {
+      return c.json({
+        success: false, data: null,
+        error: { code: 'SHIFT_CLOSED', message: 'Shift is no longer OPEN. Refresh its readings before continuing.' },
+      }, 409);
+    }
+    console.error('[TANK_BATCH_ATOMIC_SAVE_FAILED]', err);
+    return c.json({
+      success: false, data: null,
+      error: { code: 'BATCH_SAVE_FAILED', message: 'Tank readings could not be saved together. Refresh the shift to verify before retrying.' },
+    }, 409);
   }
+
+  const savedReadings = savedRows.map(row => row.reading);
+  const results = savedRows.map((row, index) => ({
+    tankId: writes[index].tankId,
+    readingType: writes[index].readingType,
+    action: row.action,
+    reading: row.reading,
+  }));
 
   await auditRepo.logAction({
     id: `aud-${crypto.randomUUID()}`,

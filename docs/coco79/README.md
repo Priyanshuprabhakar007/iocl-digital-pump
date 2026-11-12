@@ -31,6 +31,7 @@ We are studying **how an outlet operates**, not replicating COCO 79's tank/DU/no
 2. [Daily operations source mapping](./MASTER_DATA_MAPPING.md) — source fields to existing shift, calibration, receipt, reconciliation and finance models.
 3. [Implementation backlog](./IMPLEMENTATION_BACKLOG.md) — P0 daily-operations focus, test scenarios and future deferred work.
 4. [Stage 01A Daily Operations trace](./STAGE01A_DAILY_OPERATIONS_TRACE.md) — actual UI/API/service workflow, calibrated calculation behavior, test coverage and priority risk register.
+5. [Stage 01B Atomic Tank Batch Save](./STAGE01B_ATOMIC_TANK_BATCH.md) — transactional tank reading persistence, rollback regression tests and remaining release gates.
 
 ## What we do next
 
