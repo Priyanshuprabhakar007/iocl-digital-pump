@@ -22,6 +22,7 @@ import { DailyOperationsTestDataResetPanel } from '../components/pump/DailyOpera
 import './dailyOperationsModern.css';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
 import { displayDsrProductMetric, displayDsrTotalMetric, displayNozzleMeterMetric, getTankSaveErrorGuidance } from '../utils/dailyReadingPresentation';
+import { getShiftCloseErrorGuidance } from '../utils/shiftCloseFeedback';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -1020,7 +1021,7 @@ export const DailyOperationsPage: React.FC = () => {
 
     setClosingShiftBusy(false);
     if (!res.success) {
-      setPageError(res.error?.message || 'Failed to close shift');
+      setPageError(getShiftCloseErrorGuidance(res.error));
       return;
     }
 
