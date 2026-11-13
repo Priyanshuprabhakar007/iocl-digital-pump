@@ -21,6 +21,7 @@ import { LubeRepository } from '../repositories/lubeRepository';
 import { FinancialService } from '../services/financialService';
 import { ShiftCloseService } from '../services/shiftCloseService';
 import { AtomicShiftCloseFinalizer } from '../services/atomicShiftCloseFinalizer';
+import { ShiftCloseAttemptJournal } from '../services/shiftCloseAttemptJournal';
 import { FuelDailyOperationsService } from '../services/fuelDailyOperationsService';
 
 export const shifts = new Hono<{ Bindings: EnvBindings }>();
@@ -225,7 +226,16 @@ shifts.post('/shifts/:shiftId/close', requirePermission(PERMISSIONS.SHIFTS_CLOSE
   const cngRepo = new CngRepository(db);
   const lubeRepo = new LubeRepository(db);
   const financialService = new FinancialService(financialRepo, pumpRepo, cngRepo, lubeRepo);
-  const shiftCloseService = new ShiftCloseService(pumpRepo, financialRepo, financialService, new AtomicShiftCloseFinalizer(c.env.DB));
+  // Stage 01P is an opt-in development/staging candidate. Its SQL schema
+  // is deliberately outside the frozen production migration sequence.
+  // Without explicit approval + schema installation, use Stage 01O behavior.
+  const journalEnabled = (c.env as unknown as Record<string, unknown>)
+    .STAGE01P_ENABLE_DURABLE_JOURNAL === 'true';
+  const shiftCloseService = new ShiftCloseService(
+    pumpRepo, financialRepo, financialService,
+    new AtomicShiftCloseFinalizer(c.env.DB),
+    journalEnabled ? new ShiftCloseAttemptJournal(c.env.DB) : undefined,
+  );
 
   const closeRes = await shiftCloseService.closeShift(
     shiftId,
