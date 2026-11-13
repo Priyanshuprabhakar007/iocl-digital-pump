@@ -170,8 +170,9 @@ export class ShiftCloseService {
         'theoreticalClosingStockMilliunits', 'physicalClosingStockMilliunits',
         'varianceMilliunits', 'varianceStatus',
       ] as const;
-      const currentByTank = new Map(preview.map(row => [row.tankId, row]));
-      const exactMatch = preview.length > 0 && priorStock.length === preview.length &&
+      const currentByTank = new Map((preview ?? []).map(row => [row.tankId, row]));
+      const exactMatch = Array.isArray(preview) && preview.length > 0 &&
+        priorStock.length === preview.length &&
         priorStock.every(stored => {
           const current = currentByTank.get(stored.tankId);
           return current && stored.outletId === shift.outletId &&
