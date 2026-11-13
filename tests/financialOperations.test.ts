@@ -14,7 +14,6 @@ import { parseMoneyToPaise, parseSignedMoneyToPaise, formatPaiseToMoney } from '
 import { ShiftCloseService } from '../src/worker/services/shiftCloseService';
 import { FinancialService } from '../src/worker/services/financialService';
 import { AtomicShiftCloseFinalizer } from '../src/worker/services/atomicShiftCloseFinalizer';
-import { ShiftCloseAttemptJournal } from '../src/worker/services/shiftCloseAttemptJournal';
 
 const TEST_DB_PATH = './.sqlite/test_financial_integration.db';
 
@@ -1113,7 +1112,7 @@ describe('Phase 2C Comprehensive Integration Suite', () => {
     const cngRepo = new CngRepository(db);
     const lubeRepo = new LubeRepository(db);
     const finService = new FinancialService(finRepo, pumpRepo, cngRepo, lubeRepo);
-    const closeService = new ShiftCloseService(pumpRepo, finRepo, finService, atomicFinalizer, new ShiftCloseAttemptJournal(localD1));
+    const closeService = new ShiftCloseService(pumpRepo, finRepo, finService, atomicFinalizer);
 
     // Setup readings to pass validation
     const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
