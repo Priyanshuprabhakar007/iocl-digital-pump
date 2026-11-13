@@ -351,6 +351,16 @@ export class FinancialRepository {
     return (await this.findShiftFinancialReconciliation(data.operationalShiftId))!;
   }
 
+  /**
+   * Close-only persistence: never update/replace an existing financial
+   * reconciliation. A unique conflict must be escalated for supervised review.
+   */
+  async insertFinancialReconciliationWithoutOverwrite(
+    data: ShiftFinancialReconciliation,
+  ): Promise<void> {
+    await this.db.insert(schema.shiftFinancialReconciliations).values(data);
+  }
+
   async deleteFinancialReconciliation(shiftId: string): Promise<void> {
     await this.db.delete(schema.shiftFinancialReconciliations).where(eq(schema.shiftFinancialReconciliations.operationalShiftId, shiftId));
   }
