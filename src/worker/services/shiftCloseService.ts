@@ -79,14 +79,14 @@ export class ShiftCloseService {
       };
     };
 
-    // Once a stock/financial write has been attempted, it is impossible to
-    // tell from an exception whether earlier rows persisted. Leave CLOSING,
+    // Once an atomic preparation batch is attempted, do not guess whether
+    // it rolled back or committed after a lost response. Leave CLOSING,
     // retain every row, and require supervised investigation.
     const holdAfterWrite = async () => ({
       success: false,
       shift: await this.pumpRepo.findOperationalShiftById(shiftId),
       error: 'SHIFT_CLOSE_REVIEW_REQUIRED',
-      message: 'Reconciliation persistence was incomplete or uncertain. Shift and existing evidence are held for authorized review; do not retry automatically.',
+      message: 'Atomic reconciliation preparation failed or its outcome is uncertain. Shift is held for authorized review; do not retry automatically.',
     });
 
     // 2. Validate tank/receipt completeness
@@ -149,15 +149,13 @@ export class ShiftCloseService {
       return rejectBeforeWrites('FINANCIAL_RECONCILIATION_FAILED', typeof msg === 'string' ? msg : 'Financial reconciliation failed');
     }
 
-    // 5. Preserve intentional, precomputed stock reconciliation evidence if
-    //    a read-only recalculation matches EVERY stored per-tank quantity.
-    //    This supports the existing "compute stock, then close" workflow without
-    //    silently overwriting historical rows. A discrepancy requires review.
-    if (priorStock.length > 0) {
-      let preview;
-      try {
-        preview = await this.pumpRepo.calculateAndSaveShiftStockReconciliation(shiftId, { persist: false });
-      } catch {
+    // 5. Calculate stock WITHOUT writing. If the preview itself fails
+    //    before any reconciliation write, a clean attempt may restore OPEN.
+    let stockPreview;
+    try {
+      stockPreview = await this.pumpRepo.calculateAndSaveShiftStockReconciliation(shiftId, { persist: false });
+    } catch (err: any) {
+      if (priorStock.length > 0) {
         return {
           success: false,
           shift: await this.pumpRepo.findOperationalShiftById(shiftId),
@@ -165,14 +163,32 @@ export class ShiftCloseService {
           message: 'Existing stock reconciliation could not be independently recalculated. Shift is held for authorized review.',
         };
       }
+      return rejectBeforeWrites(
+        err?.code || 'RECONCILIATION_FAILED',
+        err?.message || 'Failed to calculate stock reconciliation without persistence',
+      );
+    }
+
+    if (!Array.isArray(stockPreview) || stockPreview.length === 0) {
+      return {
+        success: false,
+        shift: await this.pumpRepo.findOperationalShiftById(shiftId),
+        error: 'SHIFT_CLOSE_REVIEW_REQUIRED',
+        message: 'Stock reconciliation preview has no expected tank rows. Authorized review required.',
+      };
+    }
+
+    // 6. An operator's previously calculated stock reconciliation can be
+    //    reused without UPDATE only if every saved per-tank amount matches a
+    //    fresh read-only calculation. Otherwise retain CLOSING for review.
+    if (priorStock.length > 0) {
       const fields = [
         'openingStockMilliunits', 'receiptQuantityMilliunits', 'salesQuantityMilliunits',
         'theoreticalClosingStockMilliunits', 'physicalClosingStockMilliunits',
         'varianceMilliunits', 'varianceStatus',
       ] as const;
-      const currentByTank = new Map((preview ?? []).map(row => [row.tankId, row]));
-      const exactMatch = Array.isArray(preview) && preview.length > 0 &&
-        priorStock.length === preview.length &&
+      const currentByTank = new Map(stockPreview.map(row => [row.tankId, row]));
+      const exactMatch = priorStock.length === stockPreview.length &&
         priorStock.every(stored => {
           const current = currentByTank.get(stored.tankId);
           return current && stored.outletId === shift.outletId &&
@@ -189,19 +205,25 @@ export class ShiftCloseService {
       }
     }
 
-    // 6. Persist new stock only when none existed; never use UPSERT for
-    //    shift closing. Finance is INSERT-only. A partial write is held for
-    //    review, never deleted or followed by an automatic reopen.
+    // 7. New stock + finance rows are inserted in ONE D1 transaction. If
+    //    finance or any stock INSERT fails, all of this batch rolls back.
+    //    Precomputed stock is reused only after the verified exact match.
+    //    No evidence is overwritten, deleted or automatically retried.
     try {
-      if (priorStock.length === 0) {
-        await this.pumpRepo.calculateAndSaveShiftStockReconciliation(shiftId, { failOnExisting: true });
+      const prepared = await this.atomicFinalizer.prepare(
+        shiftId, shift.outletId, stockPreview, financialPreview,
+        priorStock.length > 0,
+      );
+      if (!prepared) {
+        return holdAfterWrite();
       }
-      await this.financialRepo.insertFinancialReconciliationWithoutOverwrite(financialPreview);
     } catch {
+      // Includes database failures and post-commit network uncertainty.
+      // Never assume rollback on an ambiguous response.
       return holdAfterWrite();
     }
 
-    // 6. The precomputed finance row must exist BEFORE the atomic finalization
+    // 8. The persisted finance row must exist BEFORE the atomic finalization
     //    batch. A missing row is an integrity/uncertain state, never success.
     const recon = await this.financialRepo.findShiftFinancialReconciliation(shiftId);
     if (!recon) {
@@ -213,7 +235,7 @@ export class ShiftCloseService {
       };
     }
 
-    // 7. CLOSING -> CLOSED and both mandatory audits are ONE D1 batch. If
+    // 9. CLOSING -> CLOSED and both mandatory audits are ONE D1 batch. If
     //    any audit fails, the update must roll back. If the provider throws,
     //    a network-after-commit ambiguity cannot be ruled out: do not reopen
     //    or delete any evidence; require a fresh read and authorized review.
