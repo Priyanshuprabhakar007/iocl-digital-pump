@@ -20,6 +20,7 @@ import { CngRepository } from '../repositories/cngRepository';
 import { LubeRepository } from '../repositories/lubeRepository';
 import { FinancialService } from '../services/financialService';
 import { ShiftCloseService } from '../services/shiftCloseService';
+import { AtomicShiftCloseFinalizer } from '../services/atomicShiftCloseFinalizer';
 import { FuelDailyOperationsService } from '../services/fuelDailyOperationsService';
 
 export const shifts = new Hono<{ Bindings: EnvBindings }>();
@@ -224,7 +225,7 @@ shifts.post('/shifts/:shiftId/close', requirePermission(PERMISSIONS.SHIFTS_CLOSE
   const cngRepo = new CngRepository(db);
   const lubeRepo = new LubeRepository(db);
   const financialService = new FinancialService(financialRepo, pumpRepo, cngRepo, lubeRepo);
-  const shiftCloseService = new ShiftCloseService(pumpRepo, financialRepo, financialService, auditRepo);
+  const shiftCloseService = new ShiftCloseService(pumpRepo, financialRepo, financialService, new AtomicShiftCloseFinalizer(c.env.DB));
 
   const closeRes = await shiftCloseService.closeShift(
     shiftId,
@@ -238,6 +239,7 @@ shifts.post('/shifts/:shiftId/close', requirePermission(PERMISSIONS.SHIFTS_CLOSE
     const errCode = closeRes.error || 'CLOSE_FAILED';
     let statusCode = 400;
     if (errCode === 'SHIFT_CLOSED_OR_CLOSING') statusCode = 409;
+    if (errCode === 'SHIFT_CLOSE_REVIEW_REQUIRED' || errCode === 'SHIFT_CLOSE_COMMIT_UNCERTAIN') statusCode = 409;
     if (errCode === 'VARIANCE_REASON_REQUIRED') statusCode = 400;
     if (errCode === 'PRICE_SNAPSHOT_MISSING') statusCode = 400;
     if (errCode === 'FINANCIAL_AMOUNT_OVERFLOW') statusCode = 400;
