@@ -93,6 +93,7 @@ export class AtomicShiftCloseFinalizer {
         FROM operational_shifts AS s
         WHERE s.id = ? AND s.status = 'CLOSED'
           AND s.closed_at = ? AND s.closed_by_user_id = ?
+        RETURNING id
       `).bind(
         closeAuditId, closedByUserId, JSON.stringify({ status: 'CLOSING' }),
         ipAddress ?? null, userAgent ?? null, closedAt,
@@ -109,6 +110,7 @@ export class AtomicShiftCloseFinalizer {
         FROM operational_shifts AS s
         WHERE s.id = ? AND s.status = 'CLOSED'
           AND s.closed_at = ? AND s.closed_by_user_id = ?
+        RETURNING id
       `).bind(
         financialAuditId, closedByUserId, financialAuditValue,
         ipAddress ?? null, userAgent ?? null, closedAt,
@@ -117,8 +119,10 @@ export class AtomicShiftCloseFinalizer {
     ]);
 
     const updated = results[0]?.results?.length === 1;
-    const closeAuditInserted = Number(results[1]?.meta?.changes ?? 0) === 1;
-    const financeAuditInserted = Number(results[2]?.meta?.changes ?? 0) === 1;
+    // RETURNING is reliable for Bun's LocalD1 as well as hosted D1;
+    // some local adapters do not populate meta.changes for INSERT ... SELECT.
+    const closeAuditInserted = results[1]?.results?.length === 1;
+    const financeAuditInserted = results[2]?.results?.length === 1;
 
     if (!updated) {
       // No CLOSING->CLOSED transition happened. Neither audit may be inserted.
