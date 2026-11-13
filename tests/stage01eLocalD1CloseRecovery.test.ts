@@ -5,6 +5,8 @@ import { createLocalD1Database } from '../src/db/localD1';
 import { getDb } from '../src/db';
 import { seedDatabase } from '../src/db/seed';
 import { PumpRepository } from '../src/worker/repositories/pumpRepository';
+import { readShiftCloseEvidenceSnapshot } from '../src/worker/services/shiftCloseEvidenceReader';
+import { assessShiftCloseEvidence } from '../src/worker/services/shiftCloseRecoveryAssessment';
 
 /**
  * Stage 01E: persisted failure-injection tests on disposable local SQLite D1.
@@ -39,6 +41,14 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
 
   async function dbRow(query: string, ...params: unknown[]): Promise<any> {
     return localD1.prepare(query).bind(...params).first();
+  }
+
+  async function assessPersisted(shiftId: string, independentlyVerifiedUncertainty: boolean) {
+    const evidence = await readShiftCloseEvidenceSnapshot(
+      getDb(localD1), shiftId, independentlyVerifiedUncertainty,
+    );
+    expect(evidence).not.toBeNull();
+    return assessShiftCloseEvidence(evidence!);
   }
 
   async function count(tableName: 'shift_stock_reconciliations' | 'shift_financial_reconciliations' | 'audit_logs',
@@ -130,6 +140,7 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect((await pumpRepo.beginCloseConditional(shiftId)).success).toBe(true);
     expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
     expect((await pumpRepo.beginCloseConditional(shiftId)).success).toBe(false);
+    expect((await assessPersisted(shiftId, false)).disposition).toBe('CLOSE_IN_PROGRESS_REVIEW');
 
     await pumpRepo.restoreOpenFromClosing(shiftId);
     expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('OPEN');
@@ -147,6 +158,7 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect(await count('shift_stock_reconciliations', shiftId)).toBe(0);
     expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
     expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect((await assessPersisted(shiftId, false)).disposition).toBe('READY_FOR_NORMAL_WORKFLOW');
   });
 
   it('demonstrates a failed persisted CLOSING->OPEN recovery, then manual test-only restoration', async () => {
@@ -161,6 +173,7 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
       BEGIN SELECT RAISE(ABORT, 'STAGE01E_INJECT_RESTORE_FAILURE'); END;`);
     await expect(pumpRepo.restoreOpenFromClosing(shiftId)).rejects.toThrow();
     expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect((await assessPersisted(shiftId, true)).reasons).toContain('CLOSING_STATE_REQUIRES_REVIEW');
 
     // Test-database cleanup only; this never runs against a real outlet.
     await localD1.exec('DROP TRIGGER stage01e_block_restore;');
@@ -182,6 +195,10 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect(await count('shift_stock_reconciliations', shiftId)).toBeGreaterThan(0);
     expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
     expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    const incident = await assessPersisted(shiftId, true);
+    expect(incident.disposition).toBe('INTEGRITY_REVIEW_REQUIRED');
+    expect(incident.reasons).toContain('SHIFT_CLOSE_AUDIT_COUNT_MISMATCH');
+    expect(incident.holdFurtherClose).toBe(true);
 
     const stockCount = await count('shift_stock_reconciliations', shiftId);
     const second = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
@@ -207,6 +224,9 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('OPEN');
     // Existing service cleanup deletes by shift ID, including a reconciliation that
     // was present before this close attempt. This is a finding, not desired policy.
+    // Counts alone CANNOT detect erased prior evidence: the classifier considers
+    // this OPEN/empty state ready. Never use this triage to authorize an auto-close.
+    expect((await assessPersisted(shiftId, false)).disposition).toBe('READY_FOR_NORMAL_WORKFLOW');
     expect(await count('shift_stock_reconciliations', shiftId)).toBe(0);
     expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
     expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
@@ -233,5 +253,51 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
     expect(await count('shift_stock_reconciliations', shiftId)).toBe(preCount);
     expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    const triage = await assessPersisted(shiftId, true);
+    expect(triage.disposition).toBe('INTEGRITY_REVIEW_REQUIRED');
+    expect(triage.reasons).toContain('OPEN_SHIFT_HAS_CLOSE_EVIDENCE');
+    expect(triage.holdFurtherClose).toBe(true);
   });
+
+  it('reads a real OPEN shift without confusing SHIFT_OPEN audit with SHIFT_CLOSE audit', async () => {
+    const cookie = await login();
+    const shiftId = await openShift(cookie);
+    const snapshot = await readShiftCloseEvidenceSnapshot(getDb(localD1), shiftId, false);
+    expect(snapshot).toEqual({
+      status: 'OPEN',
+      stockReconciliationCount: 0,
+      financialReconciliationCount: 0,
+      shiftCloseAuditCount: 0,
+      uncertainAttempt: false,
+    });
+    expect((await assessPersisted(shiftId, false)).holdFurtherClose).toBe(false);
+  });
+
+  it('classifies a successfully CLOSED shift from persisted reconciliation and audit evidence', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(200);
+    const snapshot = await readShiftCloseEvidenceSnapshot(getDb(localD1), shiftId, false);
+    expect(snapshot?.status).toBe('CLOSED');
+    expect(snapshot?.stockReconciliationCount).toBeGreaterThan(0);
+    expect(snapshot?.financialReconciliationCount).toBe(1);
+    expect(snapshot?.shiftCloseAuditCount).toBe(1);
+    const assessment = assessShiftCloseEvidence(snapshot!);
+    expect(assessment.disposition).toBe('CLOSED_EVIDENCE_COMPLETE');
+    expect(assessment.holdFurtherClose).toBe(true);
+  });
+
+  it('returns null for a shift that does not exist without inserting evidence', async () => {
+    const snapshot = await readShiftCloseEvidenceSnapshot(getDb(localD1), 'not-a-shift', true);
+    expect(snapshot).toBeNull();
+  });
+
+  it('requires an explicit, independently verified uncertain-attempt flag', async () => {
+    await expect(readShiftCloseEvidenceSnapshot(getDb(localD1), 'shift-id', undefined as any))
+      .rejects.toThrow('SHIFT_CLOSE_EVIDENCE_ATTEMPT_VERIFICATION_REQUIRED');
+    await expect(readShiftCloseEvidenceSnapshot(getDb(localD1), ' ', false))
+      .rejects.toThrow('SHIFT_CLOSE_EVIDENCE_SHIFT_ID_REQUIRED');
+  });
+
 });
