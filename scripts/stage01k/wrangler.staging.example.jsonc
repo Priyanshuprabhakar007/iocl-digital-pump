@@ -1,0 +1,12 @@
+{
+  "name": "stage01k-d1-disposable-probe",
+  "main": "scripts/stage01k/standaloneWorker.ts",
+  "compatibility_date": "2026-11-13",
+  "d1_databases": [
+    {
+      "binding": "STAGING_DB",
+      "database_name": "stage01k-REPLACE-WITH-DEDICATED-NAME",
+      "database_id": "REPLACE-WITH-FRESH-STAGING-D1-UUID"
+    }
+  ]
+}
