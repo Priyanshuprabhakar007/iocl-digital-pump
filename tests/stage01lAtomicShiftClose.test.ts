@@ -33,9 +33,11 @@ describe('Stage 01L: real-schema atomic close contract in disposable local D1', 
       : table === 'stage01j_close_attempt_events'
         ? 'SELECT count(*) AS n FROM stage01j_close_attempt_events WHERE attempt_id = ? AND event_type = ?'
         : `SELECT count(*) AS n FROM ${table} WHERE operational_shift_id = ?`;
-    const row = await db.prepare(statement)
-      .bind(shiftId ?? fixture.shiftId, action ?? (table === 'audit_logs' ? 'SHIFT_CLOSE' : 'COMMITTED'))
-      .first<{ n: number }>();
+    const params = table === 'audit_logs' || table === 'stage01j_close_attempt_events'
+      ? [shiftId ?? (table === 'stage01j_close_attempt_events' ? fixture.attemptId : fixture.shiftId),
+        action ?? (table === 'audit_logs' ? 'SHIFT_CLOSE' : 'COMMITTED')]
+      : [shiftId ?? fixture.shiftId];
+    const row = await db.prepare(statement).bind(...params).first<{ n: number }>();
     return Number(row?.n ?? -1);
   };
 
