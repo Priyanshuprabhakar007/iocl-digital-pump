@@ -1,4 +1,4 @@
-import type { ShiftFinancialReconciliation } from '../../shared/types';
+import type { ShiftStockReconciliation, ShiftFinancialReconciliation } from '../../shared/types';
 
 /**
  * Stage 01N candidate: narrow atomic final status + mandatory audit boundary.
@@ -7,12 +7,99 @@ import type { ShiftFinancialReconciliation } from '../../shared/types';
  * sequential ORM calls (or interactive BEGIN/COMMIT, which D1 does not support).
  * All SQL values are bound parameters.
  *
- * OUT OF SCOPE: stock/financial reconciliation are still persisted before
- * this batch by ShiftCloseService. This does not claim a full source-to-close
- * transaction, durable attempt journal, or final production release readiness.
+ * Stock+financial PREPARATION is now a separate atomic batch. PREPARATION and
+ * CLOSED+audit FINALIZATION are NOT one transaction; this does not claim a
+ * full source-to-close transaction, durable attempt journal, immutable input
+ * snapshot, or production release readiness.
  */
 export class AtomicShiftCloseFinalizer {
   constructor(private readonly d1: D1Database) {}
+
+  /**
+   * Atomic PREPARATION only: stock + financial rows are persisted together,
+   * and no existing evidence is overwritten. This separate D1 batch is
+   * intentionally NOT claimed to be atomic with the later CLOSED/audit batch.
+   *
+   * A previously operator-computed stock reconciliation is only reusable
+   * after ShiftCloseService compares every persisted per-tank value to a
+   * read-only calculation. In that case this batch inserts finance only.
+   */
+  async prepare(
+    shiftId: string,
+    outletId: string,
+    stock: ShiftStockReconciliation[],
+    financial: ShiftFinancialReconciliation,
+    reuseExistingStock: boolean,
+  ): Promise<boolean> {
+    if (!shiftId || !outletId || !Array.isArray(stock) || stock.length === 0 ||
+        financial?.operationalShiftId !== shiftId || financial?.outletId !== outletId ||
+        stock.some(r => r.operationalShiftId !== shiftId || r.outletId !== outletId)) {
+      throw new Error('SHIFT_CLOSE_PREPARATION_INPUT_INVALID');
+    }
+
+    // A unique stock conflict or finance constraint failure aborts and rolls
+    // back this entire D1 batch, including preceding successful stock inserts.
+    // The CLOSING guard prevents a late, stale request from inserting rows.
+    const statements: D1PreparedStatement[] = [];
+    if (!reuseExistingStock) {
+      for (const row of stock) {
+        statements.push(this.d1.prepare(`
+          INSERT INTO shift_stock_reconciliations (
+            id, operational_shift_id, outlet_id, tank_id, product_id,
+            opening_stock_milliunits, receipt_quantity_milliunits,
+            sales_quantity_milliunits, theoretical_closing_stock_milliunits,
+            physical_closing_stock_milliunits, variance_milliunits,
+            variance_status, calculated_at, created_at, updated_at
+          )
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          FROM operational_shifts AS s
+          WHERE s.id = ? AND s.outlet_id = ? AND s.status = 'CLOSING'
+          RETURNING id
+        `).bind(
+          row.id, shiftId, outletId, row.tankId, row.productId,
+          row.openingStockMilliunits, row.receiptQuantityMilliunits,
+          row.salesQuantityMilliunits, row.theoreticalClosingStockMilliunits,
+          row.physicalClosingStockMilliunits, row.varianceMilliunits,
+          row.varianceStatus, row.calculatedAt, row.createdAt, row.updatedAt,
+          shiftId, outletId,
+        ));
+      }
+    }
+
+    statements.push(this.d1.prepare(`
+      INSERT INTO shift_financial_reconciliations (
+        id, operational_shift_id, outlet_id, fuel_sales_revenue_paise,
+        cng_sales_revenue_paise, lube_sales_revenue_paise,
+        authoritative_sales_revenue_paise, cash_collection_paise,
+        pos_collection_paise, upi_collection_paise, fleet_card_collection_paise,
+        credit_sales_paise, direct_bank_drop_paise, total_collections_paise,
+        sales_collection_variance_paise, variance_status, variance_reason,
+        calculated_at, created_at, updated_at
+      )
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      FROM operational_shifts AS s
+      WHERE s.id = ? AND s.outlet_id = ? AND s.status = 'CLOSING'
+      RETURNING id
+    `).bind(
+      financial.id, shiftId, outletId, financial.fuelSalesRevenuePaise,
+      financial.cngSalesRevenuePaise ?? null, financial.lubeSalesRevenuePaise ?? null,
+      financial.authoritativeSalesRevenuePaise, financial.cashCollectionPaise,
+      financial.posCollectionPaise, financial.upiCollectionPaise,
+      financial.fleetCardCollectionPaise, financial.creditSalesPaise,
+      financial.directBankDropPaise, financial.totalCollectionsPaise,
+      financial.salesCollectionVariancePaise, financial.varianceStatus,
+      financial.varianceReason ?? null, financial.calculatedAt,
+      financial.createdAt, financial.updatedAt,
+      shiftId, outletId,
+    ));
+
+    const results = await this.d1.batch(statements);
+    // INSERT ... RETURNING is supported by both Cloudflare D1 and LocalD1.
+    // This is verification, not post-commit cleanup: a contradictory result
+    // must be held for manual review rather than automatically rolled back.
+    return results.length === statements.length &&
+      results.every(result => result?.results?.length === 1);
+  }
 
   async finalize(
     shiftId: string,
