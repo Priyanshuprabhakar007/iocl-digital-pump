@@ -229,7 +229,7 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
   });
 
-  it('preserves a pre-existing stock reconciliation rather than deleting or overwriting it', async () => {
+  it('reuses a matching precomputed stock reconciliation without altering any row', async () => {
     const cookie = await login();
     const shiftId = await readyShift(cookie);
     const pumpRepo = new PumpRepository(getDb(localD1));
@@ -242,9 +242,9 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect(original.results.length).toBeGreaterThan(0);
 
     const res = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
-    expect(res.status).toBe(409);
-    expect(((await res.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
-    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as any).data.status).toBe('CLOSED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSED');
 
     const after = await localD1.prepare(`
       SELECT id, opening_stock_milliunits AS openingStock, created_at AS createdAt
@@ -252,13 +252,13 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
       ORDER BY id
     `).bind(shiftId).all<{ id: string; openingStock: number; createdAt: string }>();
     expect(after.results).toEqual(original.results);
-    expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
-    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
-    const triage = await assessPersisted(shiftId, true);
-    expect(triage.holdFurtherClose).toBe(true);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(1);
+    const triage = await assessPersisted(shiftId, false);
+    expect(triage.disposition).toBe('CLOSED_EVIDENCE_COMPLETE');
   });
 
-  it('does not attempt a destructive stock DELETE even if a database DELETE trigger rejects it', async () => {
+  it('never runs a stock DELETE when reusing valid precomputed evidence', async () => {
     const cookie = await login();
     const shiftId = await readyShift(cookie);
     const pumpRepo = new PumpRepository(getDb(localD1));
@@ -269,13 +269,31 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
       BEGIN SELECT RAISE(ABORT, 'STAGE01E_INJECT_STOCK_DELETE_FAILURE'); END;`);
 
     const res = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(res.status).toBe(200);
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSED');
+    expect(await count('shift_stock_reconciliations', shiftId)).toBe(originalCount);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    const triage = await assessPersisted(shiftId, false);
+    expect(triage.disposition).toBe('CLOSED_EVIDENCE_COMPLETE');
+  });
+
+  it('holds mismatched precomputed stock evidence without overwriting it', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const repo = new PumpRepository(getDb(localD1));
+    await repo.calculateAndSaveShiftStockReconciliation(shiftId);
+    const prior = await dbRow('SELECT id, opening_stock_milliunits AS openingStock FROM shift_stock_reconciliations WHERE operational_shift_id = ? ORDER BY id LIMIT 1', shiftId);
+    await localD1.prepare('UPDATE shift_stock_reconciliations SET opening_stock_milliunits = opening_stock_milliunits + 1 WHERE id = ?')
+      .bind(prior.id).run();
+
+    const res = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
     expect(res.status).toBe(409);
     expect(((await res.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
     expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
-    expect(await count('shift_stock_reconciliations', shiftId)).toBe(originalCount);
+    const after = await dbRow('SELECT id, opening_stock_milliunits AS openingStock FROM shift_stock_reconciliations WHERE id = ?', prior.id);
+    expect(after.openingStock).toBe(prior.openingStock + 1);
     expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
-    const triage = await assessPersisted(shiftId, true);
-    expect(triage.reasons).toContain('CLOSING_STATE_REQUIRES_REVIEW');
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
   });
 
   it('preserves newly written stock evidence after an injected finance INSERT failure', async () => {
