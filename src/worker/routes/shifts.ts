@@ -226,10 +226,15 @@ shifts.post('/shifts/:shiftId/close', requirePermission(PERMISSIONS.SHIFTS_CLOSE
   const cngRepo = new CngRepository(db);
   const lubeRepo = new LubeRepository(db);
   const financialService = new FinancialService(financialRepo, pumpRepo, cngRepo, lubeRepo);
+  // Stage 01P is an opt-in development/staging candidate. Its SQL schema
+  // is deliberately outside the frozen production migration sequence.
+  // Without explicit approval + schema installation, use Stage 01O behavior.
+  const journalEnabled = (c.env as unknown as Record<string, unknown>)
+    .STAGE01P_ENABLE_DURABLE_JOURNAL === 'true';
   const shiftCloseService = new ShiftCloseService(
     pumpRepo, financialRepo, financialService,
     new AtomicShiftCloseFinalizer(c.env.DB),
-    new ShiftCloseAttemptJournal(c.env.DB),
+    journalEnabled ? new ShiftCloseAttemptJournal(c.env.DB) : undefined,
   );
 
   const closeRes = await shiftCloseService.closeShift(
