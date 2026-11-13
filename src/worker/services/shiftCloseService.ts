@@ -11,7 +11,7 @@ export class ShiftCloseService {
     private financialRepo: FinancialRepository,
     private financialService: FinancialService,
     private atomicFinalizer: AtomicShiftCloseFinalizer,
-    private attemptJournal: ShiftCloseAttemptJournal,
+    private attemptJournal?: ShiftCloseAttemptJournal,
   ) {}
 
   async closeShift(
@@ -34,25 +34,39 @@ export class ShiftCloseService {
       };
     }
     let attemptId: string | null = null;
-    try {
-      attemptId = await this.attemptJournal.claim(
-        shiftId, candidate.outletId, closedByUserId,
-      );
-    } catch {
-      return {
-        success: false,
-        shift: await this.pumpRepo.findOperationalShiftById(shiftId),
-        error: 'SHIFT_CLOSE_COMMIT_UNCERTAIN',
-        message: 'Close-attempt reservation outcome requires authorized verification; do not retry automatically.',
-      };
-    }
-    if (!attemptId) {
-      return {
-        success: false,
-        shift: await this.pumpRepo.findOperationalShiftById(shiftId),
-        error: 'SHIFT_CLOSED_OR_CLOSING',
-        message: 'Shift was already claimed or modified concurrently',
-      };
+    if (this.attemptJournal) {
+      try {
+        attemptId = await this.attemptJournal.claim(
+          shiftId, candidate.outletId, closedByUserId,
+        );
+      } catch {
+        return {
+          success: false,
+          shift: await this.pumpRepo.findOperationalShiftById(shiftId),
+          error: 'SHIFT_CLOSE_COMMIT_UNCERTAIN',
+          message: 'Close-attempt reservation outcome requires authorized verification; do not retry automatically.',
+        };
+      }
+      if (!attemptId) {
+        return {
+          success: false,
+          shift: await this.pumpRepo.findOperationalShiftById(shiftId),
+          error: 'SHIFT_CLOSED_OR_CLOSING',
+          message: 'Shift was already claimed or modified concurrently',
+        };
+      }
+    } else {
+      // Preserve the release-frozen Stage 01O implementation unless a
+      // separate schema migration and flag are explicitly activated.
+      const existingClaim = await this.pumpRepo.beginCloseConditional(shiftId);
+      if (!existingClaim.success) {
+        return {
+          success: false,
+          shift: existingClaim.shift,
+          error: 'SHIFT_CLOSED_OR_CLOSING',
+          message: 'Shift was already claimed or modified concurrently',
+        };
+      }
     }
 
     const shift = await this.pumpRepo.findOperationalShiftById(shiftId);
@@ -66,10 +80,11 @@ export class ShiftCloseService {
     }
 
     const holdAttempt = async () => {
+      if (!this.attemptJournal || !attemptId) return;
       // Best-effort REVIEW_REQUIRED event. A lost response is not proof of
       // rollback; the previous CLAIMED/PREPARED entry remains durable.
       try {
-        await this.attemptJournal.markReviewRequired(attemptId!, closedByUserId);
+        await this.attemptJournal.markReviewRequired(attemptId, closedByUserId);
       } catch { /* preserve original error/outcome for supervised review */ }
     };
 
@@ -106,9 +121,14 @@ export class ShiftCloseService {
         };
       }
       try {
-        const restored = await this.attemptJournal.rejectValidation(
-          shiftId, attemptId!, closedByUserId,
-        );
+        let restored = true;
+        if (this.attemptJournal && attemptId) {
+          restored = await this.attemptJournal.rejectValidation(
+            shiftId, attemptId, closedByUserId,
+          );
+        } else {
+          await this.pumpRepo.restoreOpenFromClosing(shiftId);
+        }
         const current = await this.pumpRepo.findOperationalShiftById(shiftId);
         if (restored && current?.status === 'OPEN') {
           return { success: false, shift: current, error: errorCode, message, details };
@@ -265,7 +285,7 @@ export class ShiftCloseService {
       const prepared = await this.atomicFinalizer.prepare(
         shiftId, shift.outletId, stockPreview, financialPreview,
         priorStock.length > 0,
-        attemptId,
+        attemptId ?? undefined,
       );
       if (!prepared) {
         return holdAfterWrite();
@@ -296,7 +316,7 @@ export class ShiftCloseService {
     let finalized: boolean;
     try {
       finalized = await this.atomicFinalizer.finalize(
-        shiftId, closedByUserId, recon, ipAddress, userAgent, attemptId,
+        shiftId, closedByUserId, recon, ipAddress, userAgent, attemptId ?? undefined,
       );
     } catch {
       await holdAttempt();
