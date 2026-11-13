@@ -21,6 +21,7 @@ import { LubeRepository } from '../repositories/lubeRepository';
 import { FinancialService } from '../services/financialService';
 import { ShiftCloseService } from '../services/shiftCloseService';
 import { AtomicShiftCloseFinalizer } from '../services/atomicShiftCloseFinalizer';
+import { ShiftCloseAttemptJournal } from '../services/shiftCloseAttemptJournal';
 import { FuelDailyOperationsService } from '../services/fuelDailyOperationsService';
 
 export const shifts = new Hono<{ Bindings: EnvBindings }>();
@@ -225,7 +226,11 @@ shifts.post('/shifts/:shiftId/close', requirePermission(PERMISSIONS.SHIFTS_CLOSE
   const cngRepo = new CngRepository(db);
   const lubeRepo = new LubeRepository(db);
   const financialService = new FinancialService(financialRepo, pumpRepo, cngRepo, lubeRepo);
-  const shiftCloseService = new ShiftCloseService(pumpRepo, financialRepo, financialService, new AtomicShiftCloseFinalizer(c.env.DB));
+  const shiftCloseService = new ShiftCloseService(
+    pumpRepo, financialRepo, financialService,
+    new AtomicShiftCloseFinalizer(c.env.DB),
+    new ShiftCloseAttemptJournal(c.env.DB),
+  );
 
   const closeRes = await shiftCloseService.closeShift(
     shiftId,
