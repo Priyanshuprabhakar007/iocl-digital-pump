@@ -4421,7 +4421,7 @@ export class PumpRepository {
 
   async calculateAndSaveShiftStockReconciliation(
     shiftId: string,
-    options: { failOnExisting?: boolean } = {},
+    options: { failOnExisting?: boolean; persist?: boolean } = {},
   ): Promise<ShiftStockReconciliation[]> {
     const shift = await this.findOperationalShiftById(shiftId);
     if (!shift) throw new Error('Shift not found');
@@ -4497,13 +4497,15 @@ export class PumpRepository {
         updatedAt: nowIso,
       };
 
-      // During shift closure, never overwrite an existing reconciliation:
-      // a conflict must surface for manual review, not silently rewrite history.
-      const insert = this.db.insert(schema.shiftStockReconciliations).values(reconData);
-      if (options.failOnExisting) {
-        await insert;
-      } else {
-        await insert.onConflictDoUpdate({
+      // Read-only preview recomputes the same exact stock figures for
+      // comparison with an earlier explicitly computed reconciliation.
+      // It must not rewrite any pre-existing DB evidence.
+      if (options.persist !== false) {
+        const insert = this.db.insert(schema.shiftStockReconciliations).values(reconData);
+        if (options.failOnExisting) {
+          await insert;
+        } else {
+          await insert.onConflictDoUpdate({
           target: [schema.shiftStockReconciliations.operationalShiftId, schema.shiftStockReconciliations.tankId],
           set: {
             openingStockMilliunits: openingStockMilli,
@@ -4517,6 +4519,7 @@ export class PumpRepository {
             updatedAt: nowIso,
           },
         });
+        }
       }
 
       reconResults.push({
