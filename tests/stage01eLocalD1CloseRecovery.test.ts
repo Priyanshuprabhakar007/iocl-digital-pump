@@ -24,11 +24,17 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     testPath = `./.sqlite/test_stage01e_close_${Date.now()}_${Math.random().toString(16).slice(2)}.db`;
     localD1 = createLocalD1Database(testPath);
     await seedDatabase(getDb(localD1));
+    // The journal migration is PROPOSED, not part of frozen migrations/.
+    // Install it only on this test's isolated disposable local D1 fixture.
+    await localD1.exec(fs.readFileSync(
+      'scripts/stage01p/PROPOSED_shift_close_attempt_journal.sql', 'utf8',
+    ));
     env = {
       DB: localD1,
       SESSION_SECRET: 'stage01e-local-synthetic-key-123456789012345',
       ENVIRONMENT: 'development',
       ALLOWED_ORIGINS: 'http://localhost:3000',
+      STAGE01P_ENABLE_DURABLE_JOURNAL: 'true',
     };
   });
 
