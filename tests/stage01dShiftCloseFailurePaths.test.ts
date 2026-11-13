@@ -15,6 +15,7 @@ function setup() {
   const pump = {
     beginCloseConditional: vi.fn().mockResolvedValue({ success: true, shift: closing }),
     restoreOpenFromClosing: vi.fn().mockResolvedValue(undefined),
+    listShiftStockReconciliations: vi.fn().mockResolvedValue([]),
     validateShiftCompleteness: vi.fn().mockResolvedValue({ valid: true }),
     listShiftNozzleSnapshots: vi.fn().mockResolvedValue([
       { nozzleId: 'nozzle-1', dispenserNumber: 1, nozzleNumber: 1, productName: 'MS' },
@@ -23,20 +24,22 @@ function setup() {
     listUnavailabilityForShift: vi.fn().mockResolvedValue([]),
     calculateAndSaveShiftStockReconciliation: vi.fn().mockResolvedValue(undefined),
     finalizeCloseConditional: vi.fn().mockResolvedValue({ success: true, shift: closed }),
-    findOperationalShiftById: vi.fn().mockResolvedValue(closed),
+    findOperationalShiftById: vi.fn(),
     deleteStockReconciliation: vi.fn().mockResolvedValue(undefined),
   };
   const finance = {
-    findShiftFinancialReconciliation: vi.fn().mockResolvedValue({ operationalShiftId: shiftId, outletId: 'synthetic-outlet' }),
+    findShiftFinancialReconciliation: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ operationalShiftId: shiftId, outletId: 'synthetic-outlet' }),
+    insertFinancialReconciliationWithoutOverwrite: vi.fn().mockResolvedValue(undefined),
     deleteFinancialReconciliation: vi.fn().mockResolvedValue(undefined),
   };
   const financialService = {
-    performFinancialReconciliation: vi.fn().mockResolvedValue(undefined),
+    performFinancialReconciliation: vi.fn().mockResolvedValue({ operationalShiftId: shiftId, outletId: 'synthetic-outlet' }),
   };
   const audit = {
     logAction: vi.fn().mockResolvedValue(undefined),
     finalize: vi.fn().mockResolvedValue(true),
   };
+  pump.findOperationalShiftById.mockImplementation(async () => pump.restoreOpenFromClosing.mock.calls.length > 0 ? opened : closed);
   const service = new ShiftCloseService(
     pump as unknown as ConstructorParameters<typeof ShiftCloseService>[0],
     finance as unknown as ConstructorParameters<typeof ShiftCloseService>[1],
@@ -68,8 +71,8 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     expect(res.success).toBe(false);
     expect(res.error).toBe('INCOMPLETE_TANK_STOCK_DATA');
     expect(s.pump.restoreOpenFromClosing).toHaveBeenCalledWith(s.shiftId);
-    expect(s.pump.deleteStockReconciliation).toHaveBeenCalledWith(s.shiftId);
-    expect(s.finance.deleteFinancialReconciliation).toHaveBeenCalledWith(s.shiftId);
+    expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
+    expect(s.finance.deleteFinancialReconciliation).not.toHaveBeenCalled();
     expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
@@ -107,9 +110,10 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     );
     const res = await s.service.closeShift(s.shiftId, 'user-1');
     expect(res.success).toBe(false);
-    expect(res.error).toBe('STOCK_EVIDENCE_MISSING');
-    expect(s.financialService.performFinancialReconciliation).not.toHaveBeenCalled();
-    expect(s.pump.restoreOpenFromClosing).toHaveBeenCalled();
+    expect(res.error).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect(s.financialService.performFinancialReconciliation).toHaveBeenCalledWith(s.shiftId, undefined, false);
+    expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
+    expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
     expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
@@ -122,7 +126,8 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     expect(res.success).toBe(false);
     expect(res.error).toBe('VARIANCE_REASON_REQUIRED');
     expect(s.pump.restoreOpenFromClosing).toHaveBeenCalled();
-    expect(s.finance.deleteFinancialReconciliation).toHaveBeenCalled();
+    expect(s.finance.deleteFinancialReconciliation).not.toHaveBeenCalled();
+    expect(s.pump.calculateAndSaveShiftStockReconciliation).not.toHaveBeenCalled();
     expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
@@ -139,7 +144,7 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
 
   it('commits the shift and both audits through the same finalizer', async () => {
     const s = setup();
-    s.finance.findShiftFinancialReconciliation.mockResolvedValue({
+    s.finance.findShiftFinancialReconciliation.mockReset().mockResolvedValueOnce(null).mockResolvedValue({
       fuelSalesRevenuePaise: 50000,
       cngSalesRevenuePaise: 0,
       lubeSalesRevenuePaise: 0,
@@ -170,41 +175,50 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     // The caller is held for review, not given permission to retry or reopen.
   });
 
-  it('characterizes restore-OPEN failure: later cleanup steps are skipped', async () => {
+  it('holds validation failures for review if restoring OPEN fails, without deleting records', async () => {
     const s = setup();
     s.pump.validateShiftCompleteness.mockResolvedValue({
-      valid: false,
-      error: 'INCOMPLETE_TANK_STOCK_DATA',
-      message: 'Missing closing dip',
+      valid: false, error: 'INCOMPLETE_TANK_STOCK_DATA', message: 'Missing closing dip',
     });
     s.pump.restoreOpenFromClosing.mockRejectedValue(new Error('SYNTHETIC_RESTORE_FAILURE'));
-    await expect(s.service.closeShift(s.shiftId, 'user-1')).rejects.toThrow('SYNTHETIC_RESTORE_FAILURE');
+    const result = await s.service.closeShift(s.shiftId, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
     expect(s.finance.deleteFinancialReconciliation).not.toHaveBeenCalled();
     expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
     expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
-  it('characterizes financial cleanup failure: stock cleanup is skipped after OPEN restore', async () => {
+  it('refuses to overwrite pre-existing stock reconciliation, leaving CLOSING for review', async () => {
     const s = setup();
-    s.pump.validateShiftCompleteness.mockResolvedValue({
-      valid: false,
-      error: 'INCOMPLETE_TANK_STOCK_DATA',
-      message: 'Missing closing dip',
-    });
-    s.finance.deleteFinancialReconciliation.mockRejectedValue(
-      new Error('SYNTHETIC_FINANCIAL_CLEANUP_FAILURE'),
-    );
-    await expect(s.service.closeShift(s.shiftId, 'user-1')).rejects.toThrow(
-      'SYNTHETIC_FINANCIAL_CLEANUP_FAILURE',
-    );
-    expect(s.pump.restoreOpenFromClosing).toHaveBeenCalledWith(s.shiftId);
+    s.pump.listShiftStockReconciliations.mockResolvedValue([{ id: 'prior-stock-evidence' }]);
+    const result = await s.service.closeShift(s.shiftId, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect(s.pump.calculateAndSaveShiftStockReconciliation).not.toHaveBeenCalled();
+    expect(s.finance.insertFinancialReconciliationWithoutOverwrite).not.toHaveBeenCalled();
+    expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
     expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
+    expect(s.finance.deleteFinancialReconciliation).not.toHaveBeenCalled();
+  });
+
+  it('holds after financial persistence failure without destructive cleanup', async () => {
+    const s = setup();
+    s.finance.insertFinancialReconciliationWithoutOverwrite.mockRejectedValue(
+      new Error('SYNTHETIC_FINANCE_INSERT_FAILURE'),
+    );
+    const result = await s.service.closeShift(s.shiftId, 'user-1');
+    expect(result.error).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect(s.pump.calculateAndSaveShiftStockReconciliation).toHaveBeenCalled();
+    expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
+    expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
+    expect(s.finance.deleteFinancialReconciliation).not.toHaveBeenCalled();
     expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
   it('holds a failed financial audit batch for review without destructive cleanup', async () => {
     const s = setup();
-    s.finance.findShiftFinancialReconciliation.mockResolvedValue({
+    s.finance.findShiftFinancialReconciliation.mockReset().mockResolvedValueOnce(null).mockResolvedValue({
       fuelSalesRevenuePaise: 10000,
       cngSalesRevenuePaise: 0,
       lubeSalesRevenuePaise: 0,
