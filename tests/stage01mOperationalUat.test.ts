@@ -228,21 +228,41 @@ describe('Stage 01M: real-route daily operations and shift-close UAT contract (l
     expect(await count('audit_logs')).toBe(previous.audit);
   });
 
-  it('M-09: existing API can close without mandatory audit when audit insert fails (KNOWN BLOCKER)', async () => {
+  it('M-09: mandatory audit failure keeps shift CLOSING without orphan success audit', async () => {
     await prepareReadings();
     await db.exec(`CREATE TRIGGER stage01m_force_shift_audit_failure
       BEFORE INSERT ON audit_logs
       WHEN NEW.action = 'SHIFT_CLOSE'
       BEGIN SELECT RAISE(ABORT, 'STAGE01M_INJECT_AUDIT_FAILURE'); END;`);
     const response = await close();
-    expect(response.status).toBeGreaterThanOrEqual(400);
-    expect(await status()).toBe('CLOSED');
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    expect(await status()).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations')).toBe(1);
+    expect(await count('shift_stock_reconciliations')).toBeGreaterThan(0);
     expect(await count('audit_logs')).toBe(0);
+    expect(await count('audit_logs', 'FINANCIAL_RECONCILIATION')).toBe(0);
     const snapshot = await readShiftCloseEvidenceSnapshot(getDb(db), shiftId, true);
     const review = assessShiftCloseEvidence(snapshot!);
     expect(review.holdFurtherClose).toBe(true);
-    expect(review.reasons).toContain('SHIFT_CLOSE_AUDIT_COUNT_MISMATCH');
-    // This characterizes the EXISTING failure, not acceptable UAT behavior.
-    // Release is blocked until an audited replacement close implementation passes.
+    expect(review.reasons).toContain('CLOSING_STATE_REQUIRES_REVIEW');
+    // This passes the narrow atomic audit boundary; it does not authorize
+    // automatic recovery or prove that previous cleanup bugs are fixed.
   });
+
+  it('M-10: second mandatory audit failure also rolls back the CLOSED status', async () => {
+    await prepareReadings();
+    await db.exec(`CREATE TRIGGER stage01m_force_financial_audit_failure
+      BEFORE INSERT ON audit_logs
+      WHEN NEW.action = 'FINANCIAL_RECONCILIATION'
+      BEGIN SELECT RAISE(ABORT, 'STAGE01M_INJECT_FINANCE_AUDIT_FAILURE'); END;`);
+    const response = await close();
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    expect(await status()).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations')).toBe(1);
+    expect(await count('audit_logs')).toBe(0);
+    expect(await count('audit_logs', 'FINANCIAL_RECONCILIATION')).toBe(0);
+  });
+
 });
