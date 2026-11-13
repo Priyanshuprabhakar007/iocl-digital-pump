@@ -1,15 +1,15 @@
 import { PumpRepository } from '../repositories/pumpRepository';
 import { FinancialRepository } from '../repositories/financialRepository';
 import { FinancialService } from './financialService';
-import { AuditRepository } from '../repositories/auditRepository';
-import { OperationalShift, ShiftFinancialReconciliation } from '../../shared/types';
+import { AtomicShiftCloseFinalizer } from './atomicShiftCloseFinalizer';
+import { OperationalShift } from '../../shared/types';
 
 export class ShiftCloseService {
   constructor(
     private pumpRepo: PumpRepository,
     private financialRepo: FinancialRepository,
     private financialService: FinancialService,
-    private auditRepo: AuditRepository
+    private atomicFinalizer: AtomicShiftCloseFinalizer
   ) {}
 
   async closeShift(
@@ -19,8 +19,6 @@ export class ShiftCloseService {
     ipAddress?: string | null,
     userAgent?: string | null
   ): Promise<{ success: boolean; shift: OperationalShift | null; error?: string; message?: string; details?: any }> {
-    const nowIso = new Date().toISOString();
-
     // 1. Atomically claim shift: OPEN -> CLOSING
     const beginRes = await this.pumpRepo.beginCloseConditional(shiftId);
     if (!beginRes.success || !beginRes.shift) {
@@ -116,61 +114,53 @@ export class ShiftCloseService {
       return abortAndRestore('FINANCIAL_RECONCILIATION_FAILED', typeof msg === 'string' ? msg : 'Financial reconciliation failed');
     }
 
-    // 6. Final transition: CLOSING -> CLOSED
-    const finalizeRes = await this.pumpRepo.finalizeCloseConditional(shiftId, closedByUserId);
-    if (!finalizeRes.success || !finalizeRes.shift) {
-      await this.pumpRepo.restoreOpenFromClosing(shiftId);
-      await this.financialRepo.deleteFinancialReconciliation(shiftId);
-      await this.pumpRepo.deleteStockReconciliation(shiftId);
+    // 6. The precomputed finance row must exist BEFORE the atomic finalization
+    //    batch. A missing row is an integrity/uncertain state, never success.
+    const recon = await this.financialRepo.findShiftFinancialReconciliation(shiftId);
+    if (!recon) {
       return {
         success: false,
         shift: await this.pumpRepo.findOperationalShiftById(shiftId),
-        error: 'SHIFT_CLOSED_OR_CLOSING',
-        message: 'Shift was closed or modified concurrently',
+        error: 'SHIFT_CLOSE_REVIEW_REQUIRED',
+        message: 'Financial reconciliation evidence missing. Shift is held for authorized review; do not retry automatically.',
       };
     }
 
-    const closed = finalizeRes.shift;
-
-    // Audit successful close and financial reconciliation
-    const recon = await this.financialRepo.findShiftFinancialReconciliation(shiftId);
-
-    await this.auditRepo.logAction({
-      id: `aud-${crypto.randomUUID()}`,
-      userId: closedByUserId,
-      action: 'SHIFT_CLOSE',
-      entityType: 'OPERATIONAL_SHIFT',
-      entityId: shiftId,
-      oldValue: { status: shift.status },
-      newValue: closed as unknown as Record<string, unknown>,
-      ipAddress: ipAddress || null,
-      userAgent: userAgent || null,
-      createdAt: nowIso,
-    });
-
-    if (recon) {
-      await this.auditRepo.logAction({
-        id: `aud-${crypto.randomUUID()}`,
-        userId: closedByUserId,
-        action: 'FINANCIAL_RECONCILIATION',
-        entityType: 'OPERATIONAL_SHIFT',
-        entityId: shiftId,
-        newValue: {
-          fuelRevenuePaise: recon.fuelSalesRevenuePaise,
-          cngRevenuePaise: recon.cngSalesRevenuePaise,
-          lubeRevenuePaise: recon.lubeSalesRevenuePaise,
-          authoritativeSalesRevenuePaise: recon.authoritativeSalesRevenuePaise,
-          totalCollectionsPaise: recon.totalCollectionsPaise,
-          variancePaise: recon.salesCollectionVariancePaise,
-          varianceStatus: recon.varianceStatus,
-          varianceReason: recon.varianceReason,
-        } as unknown as Record<string, unknown>,
-        ipAddress: ipAddress || null,
-        userAgent: userAgent || null,
-        createdAt: nowIso,
-      });
+    // 7. CLOSING -> CLOSED and both mandatory audits are ONE D1 batch. If
+    //    any audit fails, the update must roll back. If the provider throws,
+    //    a network-after-commit ambiguity cannot be ruled out: do not reopen
+    //    or delete any evidence; require a fresh read and authorized review.
+    let finalized: boolean;
+    try {
+      finalized = await this.atomicFinalizer.finalize(
+        shiftId, closedByUserId, recon, ipAddress, userAgent,
+      );
+    } catch {
+      return {
+        success: false,
+        shift: await this.pumpRepo.findOperationalShiftById(shiftId),
+        error: 'SHIFT_CLOSE_COMMIT_UNCERTAIN',
+        message: 'Shift-close transaction outcome requires verification. Refresh and contact an authorized reviewer; do not retry automatically.',
+      };
+    }
+    if (!finalized) {
+      return {
+        success: false,
+        shift: await this.pumpRepo.findOperationalShiftById(shiftId),
+        error: 'SHIFT_CLOSE_REVIEW_REQUIRED',
+        message: 'Shift-close preconditions changed. Shift is held for authorized review; do not retry automatically.',
+      };
     }
 
+    const closed = await this.pumpRepo.findOperationalShiftById(shiftId);
+    if (!closed || closed.status !== 'CLOSED') {
+      return {
+        success: false,
+        shift: closed,
+        error: 'SHIFT_CLOSE_COMMIT_UNCERTAIN',
+        message: 'Shift-close confirmation was not readable. Refresh and obtain an authorized status review.',
+      };
+    }
     return { success: true, shift: closed };
   }
 }
