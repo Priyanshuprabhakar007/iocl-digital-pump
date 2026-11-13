@@ -13,10 +13,10 @@ export function verifyStage01KStagingConfig(
 ): void {
   const staging = candidate?.d1_databases;
   const live = production?.d1_databases;
-  if (!candidate || !production || !Array.isArray(staging) || staging.length !== 1 ||
-      !Array.isArray(live) || live.length === 0) {
+  if (!candidate || !production || !Array.isArray(staging) || !Array.isArray(live) || live.length === 0) {
     throw new Error('STAGE01K_INVALID_CONFIG');
   }
+  if (staging.length !== 1) throw new Error('STAGE01K_STAGING_CONFIG_UNSAFE');
   const db = staging[0];
   const liveIds = new Set(live.map(x => x.database_id));
   const liveNames = new Set(live.map(x => x.database_name));
