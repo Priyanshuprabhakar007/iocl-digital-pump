@@ -181,7 +181,7 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('OPEN');
   });
 
-  it('persists CLOSED + both reconciliations despite an injected SHIFT_CLOSE audit failure', async () => {
+  it('rolls back CLOSED when SHIFT_CLOSE audit insert fails in the atomic batch', async () => {
     const cookie = await login();
     const shiftId = await readyShift(cookie);
     await localD1.exec(`CREATE TRIGGER stage01e_audit_abort
@@ -190,23 +190,43 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
       BEGIN SELECT RAISE(ABORT, 'STAGE01E_INJECT_AUDIT_FAILURE'); END;`);
 
     const first = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
-    expect(first.status).toBeGreaterThanOrEqual(400);
-    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSED');
+    expect(first.status).toBe(409);
+    expect(((await first.json()) as any).error.code).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    // D1's atomic batch rolls back the CLOSED update and both audit rows.
+    // The already-persisted reconcilations remain available for review.
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
     expect(await count('shift_stock_reconciliations', shiftId)).toBeGreaterThan(0);
     expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
     expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
     const incident = await assessPersisted(shiftId, true);
-    expect(incident.disposition).toBe('INTEGRITY_REVIEW_REQUIRED');
-    expect(incident.reasons).toContain('SHIFT_CLOSE_AUDIT_COUNT_MISMATCH');
     expect(incident.holdFurtherClose).toBe(true);
+    expect(incident.reasons).toContain('CLOSING_STATE_REQUIRES_REVIEW');
 
     const stockCount = await count('shift_stock_reconciliations', shiftId);
     const second = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
     expect(second.status).toBe(409);
-    expect((await second.json() as any).error.code).toBe('SHIFT_CLOSED');
+    expect(((await second.json()) as any).error.code).toBe('SHIFT_CLOSED_OR_CLOSING');
     expect(await count('shift_stock_reconciliations', shiftId)).toBe(stockCount);
     expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
     expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+  });
+
+  it('rolls back CLOSED and SHIFT_CLOSE audit when FINANCIAL_RECONCILIATION audit fails', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    await localD1.exec(`CREATE TRIGGER stage01e_finance_audit_abort
+      BEFORE INSERT ON audit_logs
+      WHEN NEW.action = 'FINANCIAL_RECONCILIATION'
+      BEGIN SELECT RAISE(ABORT, 'STAGE01E_INJECT_FINANCIAL_AUDIT_FAILURE'); END;`);
+
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
   });
 
   it('characterizes removal of an existing stock reconciliation when financial persistence fails', async () => {
