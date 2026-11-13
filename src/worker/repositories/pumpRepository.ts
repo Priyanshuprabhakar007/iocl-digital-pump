@@ -4419,7 +4419,10 @@ export class PumpRepository {
   // PHASE 2B: STOCK RECONCILIATION
   // ==========================================
 
-  async calculateAndSaveShiftStockReconciliation(shiftId: string): Promise<ShiftStockReconciliation[]> {
+  async calculateAndSaveShiftStockReconciliation(
+    shiftId: string,
+    options: { failOnExisting?: boolean } = {},
+  ): Promise<ShiftStockReconciliation[]> {
     const shift = await this.findOperationalShiftById(shiftId);
     if (!shift) throw new Error('Shift not found');
 
@@ -4494,10 +4497,13 @@ export class PumpRepository {
         updatedAt: nowIso,
       };
 
-      await this.db
-        .insert(schema.shiftStockReconciliations)
-        .values(reconData)
-        .onConflictDoUpdate({
+      // During shift closure, never overwrite an existing reconciliation:
+      // a conflict must surface for manual review, not silently rewrite history.
+      const insert = this.db.insert(schema.shiftStockReconciliations).values(reconData);
+      if (options.failOnExisting) {
+        await insert;
+      } else {
+        await insert.onConflictDoUpdate({
           target: [schema.shiftStockReconciliations.operationalShiftId, schema.shiftStockReconciliations.tankId],
           set: {
             openingStockMilliunits: openingStockMilli,
@@ -4511,6 +4517,7 @@ export class PumpRepository {
             updatedAt: nowIso,
           },
         });
+      }
 
       reconResults.push({
         ...reconData,
