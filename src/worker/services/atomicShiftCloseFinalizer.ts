@@ -31,9 +31,9 @@ export class AtomicShiftCloseFinalizer {
     stock: ShiftStockReconciliation[],
     financial: ShiftFinancialReconciliation,
     reuseExistingStock: boolean,
-    attemptId: string,
+    attemptId?: string,
   ): Promise<boolean> {
-    if (!shiftId || !outletId || !attemptId || !Array.isArray(stock) || stock.length === 0 ||
+    if (!shiftId || !outletId || !Array.isArray(stock) || stock.length === 0 ||
         financial?.operationalShiftId !== shiftId || financial?.outletId !== outletId ||
         stock.some(r => r.operationalShiftId !== shiftId || r.outletId !== outletId)) {
       throw new Error('SHIFT_CLOSE_PREPARATION_INPUT_INVALID');
@@ -95,6 +95,7 @@ export class AtomicShiftCloseFinalizer {
       shiftId, outletId,
     ));
 
+    if (attemptId) {
     // Journal PREPARED evidence is part of this SAME preparation batch.
     // A failed journal event rolls back every newly inserted reconciliation.
     const preparedAt = new Date().toISOString();
@@ -119,6 +120,7 @@ export class AtomicShiftCloseFinalizer {
       FROM shift_close_attempts WHERE id = ? AND state = 'PREPARED'
       RETURNING id
     `).bind(`sce-${crypto.randomUUID()}`, preparedAt, attemptId));
+    }
 
     const results = await this.d1.batch(statements);
     // INSERT ... RETURNING is supported by both Cloudflare D1 and LocalD1.
@@ -136,7 +138,7 @@ export class AtomicShiftCloseFinalizer {
     userAgent?: string | null,
     attemptId?: string,
   ): Promise<boolean> {
-    if (!recon || recon.operationalShiftId !== shiftId || !attemptId) {
+    if (!recon || recon.operationalShiftId !== shiftId) {
       throw new Error('SHIFT_CLOSE_FINANCIAL_EVIDENCE_MISSING');
     }
 
@@ -162,11 +164,11 @@ export class AtomicShiftCloseFinalizer {
         UPDATE operational_shifts
         SET status = 'CLOSED', closed_at = ?, closed_by_user_id = ?, updated_at = ?
         WHERE id = ? AND status = 'CLOSING'
-          AND EXISTS (
+          ${attemptId ? `AND EXISTS (
             SELECT 1 FROM shift_close_attempts AS attempt
             WHERE attempt.id = ? AND attempt.shift_id = operational_shifts.id
               AND attempt.actor_id = ? AND attempt.state = 'PREPARED'
-          )
+          )` : ''}
           AND EXISTS (
             SELECT 1 FROM shift_financial_reconciliations AS f
             WHERE f.operational_shift_id = operational_shifts.id
@@ -194,7 +196,8 @@ export class AtomicShiftCloseFinalizer {
               AND a.action = 'SHIFT_CLOSE'
           )
         RETURNING id
-      `).bind(closedAt, closedByUserId, closedAt, shiftId, attemptId, closedByUserId),
+      `).bind(closedAt, closedByUserId, closedAt, shiftId,
+              ...(attemptId ? [attemptId, closedByUserId] : [])),
 
       // The audit is conditional on the exact transition above. If the
       // update matched no shift, BOTH audit inserts also match nothing.
@@ -237,8 +240,8 @@ export class AtomicShiftCloseFinalizer {
         shiftId, closedAt, closedByUserId,
       ),
       // The COMMITTED state and event are protected by the SAME batch as
-      // CLOSED plus the two mandatory audit inserts.
-      this.d1.prepare(`
+      // CLOSED plus the two mandatory audit inserts, when opt-in enabled.
+      ...(attemptId ? [this.d1.prepare(`
         UPDATE shift_close_attempts
         SET state = 'COMMITTED', updated_at = ?
         WHERE id = ? AND shift_id = ? AND actor_id = ? AND state = 'PREPARED'
@@ -255,7 +258,7 @@ export class AtomicShiftCloseFinalizer {
         SELECT ?, id, 'COMMITTED', actor_id, ?
         FROM shift_close_attempts WHERE id = ? AND state = 'COMMITTED'
         RETURNING id
-      `).bind(`sce-${crypto.randomUUID()}`, closedAt, attemptId),
+      `).bind(`sce-${crypto.randomUUID()}`, closedAt, attemptId)] : []),
     ]);
 
     const updated = results[0]?.results?.length === 1;
@@ -263,8 +266,8 @@ export class AtomicShiftCloseFinalizer {
     // some local adapters do not populate meta.changes for INSERT ... SELECT.
     const closeAuditInserted = results[1]?.results?.length === 1;
     const financeAuditInserted = results[2]?.results?.length === 1;
-    const committedRecorded = results[3]?.results?.length === 1;
-    const committedEvent = results[4]?.results?.length === 1;
+    const committedRecorded = attemptId ? results[3]?.results?.length === 1 : false;
+    const committedEvent = attemptId ? results[4]?.results?.length === 1 : false;
 
     if (!updated) {
       // No CLOSING->CLOSED transition happened. Neither audit may be inserted.
@@ -276,7 +279,8 @@ export class AtomicShiftCloseFinalizer {
 
     // These two guarded inserts should always accompany an updated shift.
     // Never claim success if the provider reports an inconsistent result.
-    if (!closeAuditInserted || !financeAuditInserted || !committedRecorded || !committedEvent) {
+    if (!closeAuditInserted || !financeAuditInserted ||
+        (attemptId && (!committedRecorded || !committedEvent))) {
       throw new Error('SHIFT_CLOSE_ATOMIC_EVIDENCE_UNCERTAIN');
     }
     return true;
