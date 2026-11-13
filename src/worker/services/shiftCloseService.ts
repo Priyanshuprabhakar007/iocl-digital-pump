@@ -32,25 +32,67 @@ export class ShiftCloseService {
 
     const shift = beginRes.shift;
 
-    // Helper to abort and restore OPEN, ensuring no stale reconciliation
-    const abortAndRestore = async (errorCode: string, message: string, details?: any) => {
-      await this.pumpRepo.restoreOpenFromClosing(shiftId);
-      // Clean up any authoritative reconciliation created during the failed attempt
-      await this.financialRepo.deleteFinancialReconciliation(shiftId);
-      await this.pumpRepo.deleteStockReconciliation(shiftId);
+    // Prior financial evidence requires review; an already computed stock
+    // reconciliation may be reused only if the exact current inputs reproduce
+    // every stored quantity. Never overwrite a prior reconciliation.
+    const [priorStock, priorFinancial] = await Promise.all([
+      this.pumpRepo.listShiftStockReconciliations(shiftId),
+      this.financialRepo.findShiftFinancialReconciliation(shiftId),
+    ]);
+    if (priorFinancial) {
       return {
         success: false,
         shift: await this.pumpRepo.findOperationalShiftById(shiftId),
-        error: errorCode,
-        message,
-        details,
+        error: 'SHIFT_CLOSE_REVIEW_REQUIRED',
+        message: 'This shift already contains financial reconciliation evidence. Closing is held for authorized review; no records were overwritten or deleted.',
+      };
+    }
+
+    // Only use this path BEFORE the first stock/finance write. Validations
+    // must not erase a reconciliation, and a failed restore requires review.
+    const rejectBeforeWrites = async (errorCode: string, message: string, details?: any) => {
+      // Even if this attempt has written nothing, previously persisted stock
+      // evidence means reopening is not automatically safe.
+      if (priorStock.length > 0) {
+        return {
+          success: false,
+          shift: await this.pumpRepo.findOperationalShiftById(shiftId),
+          error: 'SHIFT_CLOSE_REVIEW_REQUIRED',
+          message: 'Validation failed with existing stock reconciliation evidence. Shift is held for authorized review; no records were changed.',
+          details,
+        };
+      }
+      try {
+        await this.pumpRepo.restoreOpenFromClosing(shiftId);
+        const current = await this.pumpRepo.findOperationalShiftById(shiftId);
+        if (current?.status === 'OPEN') {
+          return { success: false, shift: current, error: errorCode, message, details };
+        }
+      } catch {
+        // CLOSING may remain in place. Never delete or reset evidence.
+      }
+      return {
+        success: false,
+        shift: await this.pumpRepo.findOperationalShiftById(shiftId),
+        error: 'SHIFT_CLOSE_REVIEW_REQUIRED',
+        message: 'Shift could not be safely reopened after validation. Check its persisted status and evidence with an authorized reviewer.',
       };
     };
+
+    // Once a stock/financial write has been attempted, it is impossible to
+    // tell from an exception whether earlier rows persisted. Leave CLOSING,
+    // retain every row, and require supervised investigation.
+    const holdAfterWrite = async () => ({
+      success: false,
+      shift: await this.pumpRepo.findOperationalShiftById(shiftId),
+      error: 'SHIFT_CLOSE_REVIEW_REQUIRED',
+      message: 'Reconciliation persistence was incomplete or uncertain. Shift and existing evidence are held for authorized review; do not retry automatically.',
+    });
 
     // 2. Validate tank/receipt completeness
     const tankCheck = await this.pumpRepo.validateShiftCompleteness(shiftId);
     if (!tankCheck.valid) {
-      return abortAndRestore(
+      return rejectBeforeWrites(
         tankCheck.error || 'INCOMPLETE_TANK_STOCK_DATA',
         tankCheck.message || 'Tank stock data is incomplete',
         tankCheck.details || null
@@ -71,47 +113,92 @@ export class ShiftCloseService {
       const missingDescriptions = missingSnapshots.map(
         s => `Dispenser #${s.dispenserNumber} - Nozzle #${s.nozzleNumber} (${s.productName || s.productCode})`
       );
-      return abortAndRestore(
+      return rejectBeforeWrites(
         'INCOMPLETE_SHIFT_READINGS',
         `Cannot close shift. ${missingSnapshots.length} active nozzle(s) have neither a meter reading nor an approved unavailability record.`,
         { missingCount: missingSnapshots.length, missingNozzles: missingDescriptions }
       );
     }
 
-    // 4. Calculate/persist stock reconciliation
+    // 4. Validate ALL financial/price/variance inputs without persistence.
+    //    Validation errors can safely restore OPEN only because no stock or
+    //    financial reconciliation rows have been written yet.
+    let financialPreview;
     try {
-      await this.pumpRepo.calculateAndSaveShiftStockReconciliation(shiftId);
-    } catch (err: any) {
-      return abortAndRestore(
-        err?.code || 'RECONCILIATION_FAILED',
-        err?.message || 'Failed to compute stock reconciliation'
-      );
-    }
-
-    // 5. Calculate/persist financial reconciliation (enforcing variance reason & price snapshots & overflow)
-    try {
-      await this.financialService.performFinancialReconciliation(shiftId, varianceReason, true);
+      financialPreview = await this.financialService.performFinancialReconciliation(shiftId, varianceReason, false);
     } catch (err: any) {
       const msg = err?.message || err;
       if (msg === 'INCOMPLETE_CNG_DATA') {
-        return abortAndRestore('INCOMPLETE_CNG_DATA', 'CNG MFM shift data must be completed before closing this shift.');
+        return rejectBeforeWrites('INCOMPLETE_CNG_DATA', 'CNG MFM shift data must be completed before closing this shift.');
       }
       if (msg === 'CNG_PRICE_SNAPSHOT_UNAVAILABLE') {
-        return abortAndRestore('CNG_PRICE_SNAPSHOT_UNAVAILABLE', 'CNG historical price snapshot unavailable');
+        return rejectBeforeWrites('CNG_PRICE_SNAPSHOT_UNAVAILABLE', 'CNG historical price snapshot unavailable');
       }
       if (msg === 'CNG_PRICE_SNAPSHOT_AMBIGUOUS') {
-        return abortAndRestore('CNG_PRICE_SNAPSHOT_AMBIGUOUS', 'Multiple CNG historical price snapshots found');
+        return rejectBeforeWrites('CNG_PRICE_SNAPSHOT_AMBIGUOUS', 'Multiple CNG historical price snapshots found');
       }
       if (msg === 'VARIANCE_REASON_REQUIRED') {
-        return abortAndRestore('VARIANCE_REASON_REQUIRED', 'Non-zero variance requires a reason');
+        return rejectBeforeWrites('VARIANCE_REASON_REQUIRED', 'Non-zero variance requires a reason');
       }
       if (msg === 'FINANCIAL_PRICE_SNAPSHOT_UNAVAILABLE') {
-        return abortAndRestore('PRICE_SNAPSHOT_MISSING', 'Historical price snapshot unavailable');
+        return rejectBeforeWrites('PRICE_SNAPSHOT_MISSING', 'Historical price snapshot unavailable');
       }
       if (msg === 'FINANCIAL_AMOUNT_OVERFLOW') {
-        return abortAndRestore('FINANCIAL_AMOUNT_OVERFLOW', 'Financial amount overflow');
+        return rejectBeforeWrites('FINANCIAL_AMOUNT_OVERFLOW', 'Financial amount overflow');
       }
-      return abortAndRestore('FINANCIAL_RECONCILIATION_FAILED', typeof msg === 'string' ? msg : 'Financial reconciliation failed');
+      return rejectBeforeWrites('FINANCIAL_RECONCILIATION_FAILED', typeof msg === 'string' ? msg : 'Financial reconciliation failed');
+    }
+
+    // 5. Preserve intentional, precomputed stock reconciliation evidence if
+    //    a read-only recalculation matches EVERY stored per-tank quantity.
+    //    This supports the existing "compute stock, then close" workflow without
+    //    silently overwriting historical rows. A discrepancy requires review.
+    if (priorStock.length > 0) {
+      let preview;
+      try {
+        preview = await this.pumpRepo.calculateAndSaveShiftStockReconciliation(shiftId, { persist: false });
+      } catch {
+        return {
+          success: false,
+          shift: await this.pumpRepo.findOperationalShiftById(shiftId),
+          error: 'SHIFT_CLOSE_REVIEW_REQUIRED',
+          message: 'Existing stock reconciliation could not be independently recalculated. Shift is held for authorized review.',
+        };
+      }
+      const fields = [
+        'openingStockMilliunits', 'receiptQuantityMilliunits', 'salesQuantityMilliunits',
+        'theoreticalClosingStockMilliunits', 'physicalClosingStockMilliunits',
+        'varianceMilliunits', 'varianceStatus',
+      ] as const;
+      const currentByTank = new Map((preview ?? []).map(row => [row.tankId, row]));
+      const exactMatch = Array.isArray(preview) && preview.length > 0 &&
+        priorStock.length === preview.length &&
+        priorStock.every(stored => {
+          const current = currentByTank.get(stored.tankId);
+          return current && stored.outletId === shift.outletId &&
+            stored.productId === current.productId &&
+            fields.every(field => stored[field] === current[field]);
+        });
+      if (!exactMatch) {
+        return {
+          success: false,
+          shift: await this.pumpRepo.findOperationalShiftById(shiftId),
+          error: 'SHIFT_CLOSE_REVIEW_REQUIRED',
+          message: 'Saved stock reconciliation differs from current source inputs or has missing tanks. No evidence was modified; authorized review is required.',
+        };
+      }
+    }
+
+    // 6. Persist new stock only when none existed; never use UPSERT for
+    //    shift closing. Finance is INSERT-only. A partial write is held for
+    //    review, never deleted or followed by an automatic reopen.
+    try {
+      if (priorStock.length === 0) {
+        await this.pumpRepo.calculateAndSaveShiftStockReconciliation(shiftId, { failOnExisting: true });
+      }
+      await this.financialRepo.insertFinancialReconciliationWithoutOverwrite(financialPreview);
+    } catch {
+      return holdAfterWrite();
     }
 
     // 6. The precomputed finance row must exist BEFORE the atomic finalization
