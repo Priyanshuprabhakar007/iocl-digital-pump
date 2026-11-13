@@ -273,6 +273,21 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect((await assessPersisted(shiftId, false)).holdFurtherClose).toBe(false);
   });
 
+  it('classifies a successfully CLOSED shift from persisted reconciliation and audit evidence', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(200);
+    const snapshot = await readShiftCloseEvidenceSnapshot(getDb(localD1), shiftId, false);
+    expect(snapshot?.status).toBe('CLOSED');
+    expect(snapshot?.stockReconciliationCount).toBeGreaterThan(0);
+    expect(snapshot?.financialReconciliationCount).toBe(1);
+    expect(snapshot?.shiftCloseAuditCount).toBe(1);
+    const assessment = assessShiftCloseEvidence(snapshot!);
+    expect(assessment.disposition).toBe('CLOSED_EVIDENCE_COMPLETE');
+    expect(assessment.holdFurtherClose).toBe(true);
+  });
+
   it('returns null for a shift that does not exist without inserting evidence', async () => {
     const snapshot = await readShiftCloseEvidenceSnapshot(getDb(localD1), 'not-a-shift', true);
     expect(snapshot).toBeNull();
