@@ -192,10 +192,13 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
   it('refuses to overwrite pre-existing stock reconciliation, leaving CLOSING for review', async () => {
     const s = setup();
     s.pump.listShiftStockReconciliations.mockResolvedValue([{ id: 'prior-stock-evidence' }]);
+    s.pump.calculateAndSaveShiftStockReconciliation.mockResolvedValueOnce([]);
     const result = await s.service.closeShift(s.shiftId, 'user-1');
     expect(result.success).toBe(false);
     expect(result.error).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
-    expect(s.pump.calculateAndSaveShiftStockReconciliation).not.toHaveBeenCalled();
+    expect(s.pump.calculateAndSaveShiftStockReconciliation).toHaveBeenCalledWith(
+      s.shiftId, { persist: false },
+    );
     expect(s.finance.insertFinancialReconciliationWithoutOverwrite).not.toHaveBeenCalled();
     expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
     expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
