@@ -23,11 +23,11 @@ function setup() {
     listUnavailabilityForShift: vi.fn().mockResolvedValue([]),
     calculateAndSaveShiftStockReconciliation: vi.fn().mockResolvedValue(undefined),
     finalizeCloseConditional: vi.fn().mockResolvedValue({ success: true, shift: closed }),
-    findOperationalShiftById: vi.fn().mockResolvedValue(opened),
+    findOperationalShiftById: vi.fn().mockResolvedValue(closed),
     deleteStockReconciliation: vi.fn().mockResolvedValue(undefined),
   };
   const finance = {
-    findShiftFinancialReconciliation: vi.fn().mockResolvedValue(null),
+    findShiftFinancialReconciliation: vi.fn().mockResolvedValue({ operationalShiftId: shiftId, outletId: 'synthetic-outlet' }),
     deleteFinancialReconciliation: vi.fn().mockResolvedValue(undefined),
   };
   const financialService = {
@@ -35,6 +35,7 @@ function setup() {
   };
   const audit = {
     logAction: vi.fn().mockResolvedValue(undefined),
+    finalize: vi.fn().mockResolvedValue(true),
   };
   const service = new ShiftCloseService(
     pump as unknown as ConstructorParameters<typeof ShiftCloseService>[0],
@@ -69,7 +70,7 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     expect(s.pump.restoreOpenFromClosing).toHaveBeenCalledWith(s.shiftId);
     expect(s.pump.deleteStockReconciliation).toHaveBeenCalledWith(s.shiftId);
     expect(s.finance.deleteFinancialReconciliation).toHaveBeenCalledWith(s.shiftId);
-    expect(s.pump.finalizeCloseConditional).not.toHaveBeenCalled();
+    expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
   it('requires every nozzle to have a reading or recorded unavailability', async () => {
@@ -83,7 +84,7 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     expect(res.error).toBe('INCOMPLETE_SHIFT_READINGS');
     expect(res.details?.missingCount).toBe(1);
     expect(s.pump.restoreOpenFromClosing).toHaveBeenCalled();
-    expect(s.pump.finalizeCloseConditional).not.toHaveBeenCalled();
+    expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
   it('allows an unavailable nozzle to be covered without inserting a false zero sale', async () => {
@@ -95,7 +96,7 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     s.pump.listUnavailabilityForShift.mockResolvedValue([{ nozzleId: 'nozzle-2' }]);
     const res = await s.service.closeShift(s.shiftId, 'user-1', 'Checked variance');
     expect(res.success).toBe(true);
-    expect(s.pump.finalizeCloseConditional).toHaveBeenCalledWith(s.shiftId, 'user-1');
+    expect(s.audit.finalize).toHaveBeenCalledWith(s.shiftId, 'user-1', expect.any(Object), undefined, undefined);
     expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
   });
 
@@ -109,7 +110,7 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     expect(res.error).toBe('STOCK_EVIDENCE_MISSING');
     expect(s.financialService.performFinancialReconciliation).not.toHaveBeenCalled();
     expect(s.pump.restoreOpenFromClosing).toHaveBeenCalled();
-    expect(s.pump.finalizeCloseConditional).not.toHaveBeenCalled();
+    expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
   it('surfaces a required variance reason without accidentally finalizing the shift', async () => {
@@ -122,21 +123,21 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     expect(res.error).toBe('VARIANCE_REASON_REQUIRED');
     expect(s.pump.restoreOpenFromClosing).toHaveBeenCalled();
     expect(s.finance.deleteFinancialReconciliation).toHaveBeenCalled();
-    expect(s.pump.finalizeCloseConditional).not.toHaveBeenCalled();
+    expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
   it('does not write success audits if final transition loses a concurrent race', async () => {
     const s = setup();
-    s.pump.finalizeCloseConditional.mockResolvedValue({ success: false, shift: null });
+    s.audit.finalize.mockResolvedValue(false);
     const res = await s.service.closeShift(s.shiftId, 'user-1');
     expect(res.success).toBe(false);
-    expect(res.error).toBe('SHIFT_CLOSED_OR_CLOSING');
-    expect(s.pump.restoreOpenFromClosing).toHaveBeenCalled();
-    expect(s.finance.deleteFinancialReconciliation).toHaveBeenCalled();
-    expect(s.audit.logAction).not.toHaveBeenCalled();
+    expect(res.error).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
+    expect(s.finance.deleteFinancialReconciliation).not.toHaveBeenCalled();
+    expect(s.audit.finalize).toHaveBeenCalledTimes(1);
   });
 
-  it('records shift-close and financial audits after successful finalization', async () => {
+  it('commits the shift and both audits through the same finalizer', async () => {
     const s = setup();
     s.finance.findShiftFinancialReconciliation.mockResolvedValue({
       fuelSalesRevenuePaise: 50000,
@@ -151,24 +152,22 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     const res = await s.service.closeShift(s.shiftId, 'user-1');
     expect(res.success).toBe(true);
     expect(res.shift?.status).toBe('CLOSED');
-    expect(s.audit.logAction).toHaveBeenCalledTimes(2);
-    expect((s.audit.logAction.mock.calls as unknown as Array<[{ action: string }]>).map(([entry]) => entry.action)).toEqual([
-      'SHIFT_CLOSE', 'FINANCIAL_RECONCILIATION',
-    ]);
+    expect(s.audit.finalize).toHaveBeenCalledTimes(1);
+    expect(s.audit.finalize.mock.calls[0][2].fuelSalesRevenuePaise).toBe(50000);
+    expect(s.audit.logAction).not.toHaveBeenCalled();
     expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
   });
 
-  it('characterizes audit failure AFTER CLOSED: no destructive rollback, but caller receives an exception', async () => {
+  it('does not report successful closing if the atomic audit batch fails', async () => {
     const s = setup();
-    s.audit.logAction.mockRejectedValue(new Error('SYNTHETIC_AUDIT_WRITE_FAILURE'));
-    await expect(s.service.closeShift(s.shiftId, 'user-1')).rejects.toThrow(
-      'SYNTHETIC_AUDIT_WRITE_FAILURE',
-    );
-    expect(s.pump.finalizeCloseConditional).toHaveBeenCalled();
+    s.audit.finalize.mockRejectedValue(new Error('SYNTHETIC_AUDIT_WRITE_FAILURE'));
+    const result = await s.service.closeShift(s.shiftId, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    expect(s.audit.finalize).toHaveBeenCalled();
     expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
     expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
-    // This is a known API/outcome ambiguity, not proof of rolled-back closure.
-    // Requires a separate audited design decision before a behavior change.
+    // The caller is held for review, not given permission to retry or reopen.
   });
 
   it('characterizes restore-OPEN failure: later cleanup steps are skipped', async () => {
@@ -182,7 +181,7 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     await expect(s.service.closeShift(s.shiftId, 'user-1')).rejects.toThrow('SYNTHETIC_RESTORE_FAILURE');
     expect(s.finance.deleteFinancialReconciliation).not.toHaveBeenCalled();
     expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
-    expect(s.pump.finalizeCloseConditional).not.toHaveBeenCalled();
+    expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
   it('characterizes financial cleanup failure: stock cleanup is skipped after OPEN restore', async () => {
@@ -200,10 +199,10 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
     );
     expect(s.pump.restoreOpenFromClosing).toHaveBeenCalledWith(s.shiftId);
     expect(s.pump.deleteStockReconciliation).not.toHaveBeenCalled();
-    expect(s.pump.finalizeCloseConditional).not.toHaveBeenCalled();
+    expect(s.audit.finalize).not.toHaveBeenCalled();
   });
 
-  it('characterizes partial auditing when the financial audit fails after SHIFT_CLOSE audit', async () => {
+  it('holds a failed financial audit batch for review without destructive cleanup', async () => {
     const s = setup();
     s.finance.findShiftFinancialReconciliation.mockResolvedValue({
       fuelSalesRevenuePaise: 10000,
@@ -215,14 +214,11 @@ describe('Stage 01D: shift close failure and retry characterization (mock-only)'
       varianceStatus: 'MATCHED',
       varianceReason: null,
     });
-    s.audit.logAction
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error('SYNTHETIC_SECOND_AUDIT_FAILURE'));
-    await expect(s.service.closeShift(s.shiftId, 'user-1')).rejects.toThrow(
-      'SYNTHETIC_SECOND_AUDIT_FAILURE',
-    );
-    expect(s.pump.finalizeCloseConditional).toHaveBeenCalledTimes(1);
-    expect(s.audit.logAction).toHaveBeenCalledTimes(2);
+    s.audit.finalize.mockRejectedValueOnce(new Error('SYNTHETIC_SECOND_AUDIT_FAILURE'));
+    const result = await s.service.closeShift(s.shiftId, 'user-1');
+    expect(result.error).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    expect(s.audit.finalize).toHaveBeenCalledTimes(1);
+    expect(s.audit.logAction).not.toHaveBeenCalled();
     expect(s.pump.restoreOpenFromClosing).not.toHaveBeenCalled();
     expect(s.finance.deleteFinancialReconciliation).not.toHaveBeenCalled();
   });
