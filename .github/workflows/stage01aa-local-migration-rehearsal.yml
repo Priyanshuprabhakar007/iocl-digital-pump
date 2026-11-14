@@ -1,0 +1,70 @@
+name: Stage 01AA Wrangler local-only migration rehearsal
+
+on:
+  push:
+    branches:
+      - test/stage01aa-wrangler-local-migration-rehearsal-20261114
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-migrations:
+    name: Fresh disposable Wrangler D1 baseline rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+      - name: Create isolated synthetic local Wrangler target
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .stage01aa-tmp
+          cat > .stage01aa-tmp/wrangler.local.jsonc <<'JSON'
+          {
+            "name": "stage01aa-offline-migrations-only",
+            "main": "../src/worker/index.ts",
+            "compatibility_date": "2024-11-01",
+            "compatibility_flags": ["nodejs_compat"],
+            "vars": {"ENVIRONMENT":"local-test"},
+            "d1_databases": [{
+              "binding": "DB",
+              "database_name": "stage01aa-disposable-local-only",
+              "database_id": "00000000-0000-4000-8000-0000000000aa",
+              "migrations_dir": "../migrations"
+            }]
+          }
+          JSON
+          bun -e 'const fs=require("fs");const c=JSON.parse(fs.readFileSync(".stage01aa-tmp/wrangler.local.jsonc","utf8")); if(c.d1_databases.length!==1||c.d1_databases[0].database_name!=="stage01aa-disposable-local-only"||c.d1_databases[0].database_id!=="00000000-0000-4000-8000-0000000000aa"||c.vars.ENVIRONMENT!=="local-test") process.exit(3);'
+          echo "PASS: disposable local target configured with synthetic ID and no Cloudflare secrets."
+      - name: Apply baseline migrations to disposable local D1 only
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_STAGING_D1_ID
+          bunx wrangler d1 migrations apply stage01aa-disposable-local-only \
+            --config .stage01aa-tmp/wrangler.local.jsonc \
+            --local --persist-to .stage01aa-tmp/local-state
+      - name: Verify all 35 were applied locally and foreign keys are valid
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_STAGING_D1_ID
+          bunx wrangler d1 execute stage01aa-disposable-local-only \
+            --config .stage01aa-tmp/wrangler.local.jsonc \
+            --local --persist-to .stage01aa-tmp/local-state \
+            --command "SELECT name FROM d1_migrations ORDER BY id;" --json > .stage01aa-tmp/applied.json
+          bun -e 'const fs=require("fs");const x=JSON.parse(fs.readFileSync(".stage01aa-tmp/applied.json","utf8"));const rows=Array.isArray(x)?x.flatMap(z=>z.results||[]):[];if(rows.length!==35){console.error("Expected 35 applied migrations, got",rows.length);process.exit(4);} console.log("PASS: 35 baseline migrations applied in isolated local engine.");'
+          bunx wrangler d1 execute stage01aa-disposable-local-only \
+            --config .stage01aa-tmp/wrangler.local.jsonc \
+            --local --persist-to .stage01aa-tmp/local-state \
+            --command "PRAGMA foreign_key_check;" --json > .stage01aa-tmp/fk.json
+          bun -e 'const fs=require("fs");const x=JSON.parse(fs.readFileSync(".stage01aa-tmp/fk.json","utf8"));const rows=Array.isArray(x)?x.flatMap(z=>z.results||[]):[];if(rows.length){console.error("Foreign-key violations reported:",rows.length);process.exit(5);}console.log("PASS: no local D1 foreign key violations.");'
