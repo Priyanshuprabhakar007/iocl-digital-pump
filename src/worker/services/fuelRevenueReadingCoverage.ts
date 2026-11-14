@@ -23,7 +23,7 @@ export function assessFuelRevenueReadingCoverage(
 
   for (const nozzle of included) {
     const reading = readingMap.get(nozzle.nozzleId);
-    if (reading && Number.isSafeInteger(reading.netSalesQuantityMilliunits) && reading.netSalesQuantityMilliunits! >= 0) {
+    if (reading && typeof reading.netSalesQuantityMilliunits === 'number' && Number.isSafeInteger(reading.netSalesQuantityMilliunits) && reading.netSalesQuantityMilliunits >= 0) {
       recordedNozzles++;
     } else if (unavailable.has(nozzle.nozzleId) && !reading) {
       unavailableNozzles++;
