@@ -82,6 +82,50 @@ describe('Admin close empty shift', () => {
     expect(second.status).toBe(409);
   });
 
+  it('rolls back CLOSED when the mandatory admin close audit insert fails', async () => {
+    const cookie = await login();
+    const id = await openShift(cookie, '2026-11-26');
+    await localD1.exec(`CREATE TRIGGER stage01u_force_admin_audit_failure
+      BEFORE INSERT ON audit_logs
+      WHEN NEW.action = 'SHIFT_CLOSE_EMPTY_ADMIN'
+      BEGIN SELECT RAISE(ABORT, 'STAGE01U_INJECT_ADMIN_AUDIT_FAILURE'); END;`);
+    const res = await closeEmpty(cookie, id, {
+      reason: 'Synthetic forced admin audit failure during empty close',
+      confirm: true,
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as any).error.code).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    const shift = await new PumpRepository(getDb(localD1)).findOperationalShiftById(id);
+    expect(shift?.status).toBe('OPEN');
+    const audits = await getDb(localD1).select().from(schema.auditLogs)
+      .where(eq(schema.auditLogs.entityId, id));
+    expect(audits.filter(a => a.action === 'SHIFT_CLOSE_EMPTY_ADMIN')).toHaveLength(0);
+  });
+
+  it('rejects conditional no-data close without writing a success audit', async () => {
+    const cookie = await login();
+    const id = await openShift(cookie, '2026-11-27');
+    await getDb(localD1).run((await import('drizzle-orm')).sql`INSERT INTO tank_stock_readings
+      (id, operational_shift_id, outlet_id, tank_id, reading_type, source,
+       product_id, product_dip_mm_milliunits, water_dip_mm_milliunits,
+       gross_observed_volume_milliunits, water_volume_milliunits, net_product_volume_milliunits,
+       recorded_at, recorded_by_user_id, created_at, updated_at)
+      VALUES ('stage01u-blocking-reading', ${id}, 'ro-1001',
+        (SELECT tank_id FROM operational_shift_tanks WHERE operational_shift_id = ${id} LIMIT 1),
+        'OPENING', 'MANUAL',
+        (SELECT product_id FROM operational_shift_tanks WHERE operational_shift_id = ${id} LIMIT 1),
+        0, 0, 0, 0, 0, '2026-11-27', 'user-admin', '2026-11-27', '2026-11-27')`);
+    const res = await closeEmpty(cookie, id, {
+      reason: 'Attempting unauthorized empty close with source evidence',
+      confirm: true,
+    });
+    expect(res.status).toBe(409);
+    expect((await new PumpRepository(getDb(localD1)).findOperationalShiftById(id))?.status).toBe('OPEN');
+    const logs = await getDb(localD1).select().from(schema.auditLogs)
+      .where(eq(schema.auditLogs.entityId, id));
+    expect(logs.filter(l => l.action === 'SHIFT_CLOSE_EMPTY_ADMIN')).toHaveLength(0);
+  });
+
   it('requires reason and explicit confirmation', async () => {
     const cookie = await login();
     const id = await openShift(cookie, '2026-11-23');
