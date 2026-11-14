@@ -2,7 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: ["main", "master", "test/stage01h-recovery-ci-validation-20261112"]
+    branches: ["main", "master", "test/stage01h-recovery-ci-validation-20261112", "test/stage01q-idempotency-contract-20261114"]
   pull_request:
     branches: ["main", "master", "test/stage01g-recovery-classifier-20261112"]
 
