@@ -6,6 +6,7 @@ on:
       - test/priority-daily-calibration-finance-20261114
       - fix/p0-finance-safe-paise-format-20261114
       - fix/p0-finance-checked-aggregations-20261114
+      - fix/p0-finance-provisional-reading-status-20261114
     paths:
       - .github/workflows/priority-daily-calibration-finance.yml
       - src/**
@@ -43,7 +44,7 @@ jobs:
       - name: Tank Calibration — chart versions and dip conversions
         run: bun test tests/endToEndTankCalibration.test.ts tests/tankCalibrationVersioningAndEnhancements.test.ts tests/excelCalibrationImport.test.ts tests/globalTankCalibrationTemplates.test.ts
       - name: Finances — collections and atomic shift closing
-        run: bun test tests/financialOperations.test.ts tests/idempotencyAndDuplicateHardening.test.ts tests/adminEmptyShiftClose.test.ts tests/p0FinanceSafeMoneyBoundary.test.ts tests/p0FinanceAggregationPrecision.test.ts
+        run: bun test tests/financialOperations.test.ts tests/idempotencyAndDuplicateHardening.test.ts tests/adminEmptyShiftClose.test.ts tests/p0FinanceSafeMoneyBoundary.test.ts tests/p0FinanceAggregationPrecision.test.ts tests/p0FuelRevenueReadingCoverage.test.ts tests/p0FinanceCollectionRetrySafety.test.ts
       - name: Daily Operations to Finance — stock and reporting
         run: bun test tests/tankStockAndReconciliation.test.ts tests/monthlyOperationsAggregation.test.ts tests/dailyOperationsTestDataReset.test.ts
       - name: Production build compatibility

@@ -10,6 +10,7 @@ function serviceFor(readings: { nozzleId: string; netSalesQuantityMilliunits: nu
     findOperationalShiftById: async () => ({ id: 's1', outletId: 'o1', businessDate: '2026-11-14' }),
     listShiftNozzleSnapshots: async () => nozzles,
     listReadingsForShift: async () => readings,
+    listUnavailabilityForShift: async () => [],
   };
   const financialRepo = {
     listShiftProductPrices: async () => [{
@@ -30,6 +31,14 @@ describe('P0 fuel revenue aggregation precision', () => {
     expect(result.byProduct[0].quantityMilliunits).toBe(4000);
     expect(result.fuelTotalPaise).toBe(40000);
     expect(result.fuelTotalStr).toBe('400.00');
+  });
+
+  it('exposes missing nozzle input as INCOMPLETE without inventing sales', async () => {
+    const service = serviceFor([{ nozzleId: 'n1', netSalesQuantityMilliunits: 1000 }]);
+    const result = await service.calculateShiftFuelRevenue('s1');
+    expect(result.readingCoverage.status).toBe('INCOMPLETE');
+    expect(result.readingCoverage.missingNozzleIds).toEqual(['n2']);
+    expect(result.fuelTotalPaise).toBe(10000);
   });
 
   it('rejects quantity aggregates beyond safe integer range', async () => {
