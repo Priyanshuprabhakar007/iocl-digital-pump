@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - test/priority-daily-calibration-finance-20261114
+      - fix/p0-finance-safe-paise-format-20261114
     paths:
       - .github/workflows/priority-daily-calibration-finance.yml
       - src/**
