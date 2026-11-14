@@ -404,8 +404,8 @@ shifts.post('/shifts/:shiftId/readings', requirePermission(PERMISSIONS.METER_REA
     return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this shift outlet' } }, 403);
   }
 
-  // Immutability: Prohibit modifications to closed/locked shifts
-  if (shift.status === 'CLOSED' || shift.status === 'LOCKED') {
+  // Stage 01R-2: Only OPEN shifts accept source mutations; CLOSING is frozen for recovery review.
+  if (shift.status !== 'OPEN') {
     return c.json({
       success: false,
       data: null,
@@ -624,8 +624,8 @@ shifts.post('/shifts/:shiftId/nozzle-unavailability', requirePermission(PERMISSI
     return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this shift outlet' } }, 403);
   }
 
-  // Immutability: Prohibit modifications to closed/locked shifts
-  if (shift.status === 'CLOSED' || shift.status === 'LOCKED') {
+  // Stage 01R-2: Only OPEN shifts accept source mutations; CLOSING is frozen for recovery review.
+  if (shift.status !== 'OPEN') {
     return c.json({
       success: false,
       data: null,
@@ -709,7 +709,7 @@ shifts.delete('/shifts/:shiftId/nozzle-unavailability/:nozzleId', requirePermiss
     return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this shift outlet' } }, 403);
   }
 
-  if (shift.status === 'CLOSED' || shift.status === 'LOCKED') {
+  if (shift.status !== 'OPEN') {
     return c.json({
       success: false,
       data: null,
@@ -794,7 +794,7 @@ shifts.post('/shifts/:shiftId/readings/batch', requirePermission(PERMISSIONS.MET
     return c.json({ success: false, data: null, error: { code: 'FORBIDDEN', message: 'No authority over this shift outlet' } }, 403);
   }
 
-  if (shift.status === 'CLOSED' || shift.status === 'LOCKED') {
+  if (shift.status !== 'OPEN') {
     return c.json({
       success: false,
       data: null,
