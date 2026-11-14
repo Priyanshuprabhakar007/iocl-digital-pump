@@ -10,6 +10,7 @@ function serviceFor(readings: { nozzleId: string; netSalesQuantityMilliunits: nu
     findOperationalShiftById: async () => ({ id: 's1', outletId: 'o1', businessDate: '2026-11-14' }),
     listShiftNozzleSnapshots: async () => nozzles,
     listReadingsForShift: async () => readings,
+    listUnavailabilityForShift: async () => [],
   };
   const financialRepo = {
     listShiftProductPrices: async () => [{
