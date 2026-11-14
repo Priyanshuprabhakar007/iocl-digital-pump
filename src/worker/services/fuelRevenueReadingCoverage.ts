@@ -5,7 +5,7 @@
  */
 export function assessFuelRevenueReadingCoverage(
   nozzleSnapshots: ReadonlyArray<{ nozzleId: string; productCategory: string }>,
-  readings: ReadonlyArray<{ nozzleId: string; netSalesQuantityMilliunits: number | null | undefined }>,
+  readings: ReadonlyArray<{ nozzleId: string; netSalesQuantityMilliunits?: number | null }>,
   unavailabilityRecords: ReadonlyArray<{ nozzleId: string }>,
 ): {
   status: 'COMPLETE' | 'INCOMPLETE';
