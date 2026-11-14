@@ -1,0 +1,48 @@
+name: Priority P0 — Daily Operations, Calibration & Finance
+
+on:
+  push:
+    branches:
+      - test/priority-daily-calibration-finance-20261114
+    paths:
+      - .github/workflows/priority-daily-calibration-finance.yml
+      - src/**
+      - tests/**
+      - migrations/**
+      - package.json
+      - bun.lock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: priority-p0-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  three-module-integration:
+    name: Daily + Calibration + Finance — local integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout exact draft branch
+        uses: actions/checkout@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: TypeScript compile gate
+        run: bun run typecheck
+      - name: Daily Operations — actual API and shift flow
+        run: bun test tests/dailyFuelOperations.test.ts tests/openShiftIntegration.test.ts tests/fuelReceiptCompletionAndShiftClose.test.ts
+      - name: Tank Calibration — chart versions and dip conversions
+        run: bun test tests/endToEndTankCalibration.test.ts tests/tankCalibrationVersioningAndEnhancements.test.ts tests/excelCalibrationImport.test.ts tests/globalTankCalibrationTemplates.test.ts
+      - name: Finances — collections and atomic shift closing
+        run: bun test tests/financialOperations.test.ts tests/idempotencyAndDuplicateHardening.test.ts tests/adminEmptyShiftClose.test.ts
+      - name: Daily Operations to Finance — stock and reporting
+        run: bun test tests/tankStockAndReconciliation.test.ts tests/monthlyOperationsAggregation.test.ts tests/dailyOperationsTestDataReset.test.ts
+      - name: Production build compatibility
+        run: bun run build
