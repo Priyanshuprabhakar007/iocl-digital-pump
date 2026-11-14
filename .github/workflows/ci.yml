@@ -2,7 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: ["main", "master", "test/stage01h-recovery-ci-validation-20261112", "test/stage01q-idempotency-contract-20261114", "test/stage01r-source-snapshot-fence-20261114", "fix/stage01r2-close-input-route-lock-20261114", "test/stage01s-proposed-d1-source-triggers-20261114", "test/stage01s2-financial-source-triggers-20261114", "test/stage01t-combined-guards-full-close-20261114", "fix/stage01u-atomic-admin-empty-audit-20261114"]
+    branches: ["main", "master", "test/stage01h-recovery-ci-validation-20261112", "test/stage01q-idempotency-contract-20261114", "test/stage01r-source-snapshot-fence-20261114", "fix/stage01r2-close-input-route-lock-20261114", "test/stage01s-proposed-d1-source-triggers-20261114", "test/stage01s2-financial-source-triggers-20261114", "test/stage01t-combined-guards-full-close-20261114", "fix/stage01u-atomic-admin-empty-audit-20261114", "test/stage01v-final-release-gate-20261114"]
   pull_request:
     branches: ["main", "master", "test/stage01g-recovery-classifier-20261112"]
 
