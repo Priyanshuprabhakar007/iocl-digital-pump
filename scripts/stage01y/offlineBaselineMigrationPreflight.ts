@@ -60,8 +60,7 @@ export function assessOfflineBaselineMigrations(
     return failure('Expected exactly baseline 0001–0035 with sequential file names');
   }
   const findings = migrations.map(name => {
-    const raw = fs.readFileSync(path.join(migrationsPath, name));
-    const body = raw.toString('utf8');
+    const body = fs.readFileSync(path.join(migrationsPath, name), 'utf8');
     const checks: Array<[string, RegExp]> = [
       ['TABLE_DROP', /\bDROP\s+TABLE\b/i],
       ['TABLE_ALTER', /\bALTER\s+TABLE\b/i],
@@ -73,8 +72,8 @@ export function assessOfflineBaselineMigrations(
     ];
     return {
       name,
-      bytes: raw.length,
-      sha256: createHash('sha256').update(raw).digest('hex'),
+      bytes: Buffer.byteLength(body, 'utf8'),
+      sha256: createHash('sha256').update(body, 'utf8').digest('hex'),
       flags: checks.filter(([, regex]) => regex.test(body)).map(([flag]) => flag),
     };
   });
