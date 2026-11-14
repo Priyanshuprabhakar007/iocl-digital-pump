@@ -21,6 +21,7 @@ import { LubeRepository } from '../repositories/lubeRepository';
 import { FinancialService } from '../services/financialService';
 import { ShiftCloseService } from '../services/shiftCloseService';
 import { AtomicShiftCloseFinalizer } from '../services/atomicShiftCloseFinalizer';
+import { AtomicAdminEmptyShiftCloser } from '../services/atomicAdminEmptyShiftCloser';
 import { ShiftCloseAttemptJournal } from '../services/shiftCloseAttemptJournal';
 import { FuelDailyOperationsService } from '../services/fuelDailyOperationsService';
 
@@ -303,38 +304,46 @@ shifts.post('/shifts/:shiftId/close-empty', async (c: AppContext) => {
     return c.json({ success: false, data: null, error: { code: 'SHIFT_NOT_OPEN', message: 'Only OPEN shifts may be closed' } }, 409);
   }
 
-  // The repository checks all activity tables within the conditional UPDATE itself.
-  // An inserted meter/stock/financial entry makes this operation fail atomically.
-  const closed = await pumpRepo.closeEmptyShiftConditional(shiftId, userCtx.user.id);
-  if (!closed.success || !closed.shift) {
+  // Stage 01U: close status and mandatory admin audit now commit together.
+  // A failed audit must roll back CLOSED; a lost response is held for review.
+  let closedSuccessfully: boolean;
+  try {
+    closedSuccessfully = await new AtomicAdminEmptyShiftCloser(c.env.DB).close({
+      shiftId, outletId: shift.outletId, businessDate: shift.businessDate,
+      actorId: userCtx.user.id, reason,
+      ipAddress: c.req.header('cf-connecting-ip'),
+      userAgent: c.req.header('user-agent'),
+    });
+  } catch {
     return c.json({
       success: false, data: null,
-      error: { code: 'SHIFT_NOT_EMPTY_OR_CHANGED', message: 'Shift has operational or financial records, or is no longer OPEN. Use the standard closing workflow.' }
+      error: {
+        code: 'SHIFT_CLOSE_COMMIT_UNCERTAIN',
+        message: 'Administrative shift-close outcome requires independent verification. Do not retry automatically.',
+      },
+    }, 409);
+  }
+  if (!closedSuccessfully) {
+    return c.json({
+      success: false, data: null,
+      error: {
+        code: 'SHIFT_NOT_EMPTY_OR_CHANGED',
+        message: 'Shift has operational or financial records, or is no longer OPEN. Use standard close.',
+      },
     }, 409);
   }
 
-  await auditRepo.logAction({
-    id: `aud-${crypto.randomUUID()}`,
-    userId: userCtx.user.id,
-    action: 'SHIFT_CLOSE_EMPTY_ADMIN',
-    entityType: 'OPERATIONAL_SHIFT',
-    entityId: shiftId,
-    oldValue: { status: 'OPEN' },
-    newValue: {
-      status: 'CLOSED',
-      closureType: 'ADMIN_EMPTY_NO_DATA',
-      reason,
-      outletId: shift.outletId,
-      businessDate: shift.businessDate,
-      reconciliationPerformed: false,
-      ...(closed.shift as unknown as Record<string, unknown>),
-    },
-    ipAddress: c.req.header('cf-connecting-ip') || null,
-    userAgent: c.req.header('user-agent') || null,
-    createdAt: new Date().toISOString(),
-  });
-
-  return c.json({ success: true, data: closed.shift, error: null });
+  const confirmed = await pumpRepo.findOperationalShiftById(shiftId);
+  if (!confirmed || confirmed.status !== 'CLOSED') {
+    return c.json({
+      success: false, data: null,
+      error: {
+        code: 'SHIFT_CLOSE_COMMIT_UNCERTAIN',
+        message: 'Administrative close was not readable after commit. Obtain authorized review.',
+      },
+    }, 409);
+  }
+  return c.json({ success: true, data: confirmed, error: null });
 });
 
 // GET /api/v1/shifts/:shiftId/entry-grid - Shift entry workspace helper
