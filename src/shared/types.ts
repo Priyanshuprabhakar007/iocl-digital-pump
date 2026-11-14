@@ -1229,12 +1229,20 @@ export interface CreditSalesPartySummary {
 }
 
 export interface ShiftFinancialSummary {
+  // Financial preview input coverage; zero is a valid recorded value.
   operationalShiftId: string;
   outletId: string;
   salesRevenue: {
     byProduct: FinancialRevenueProduct[];
     fuelTotalPaise: number;
     fuelTotalStr: string;
+    readingCoverage?: {
+      status: 'COMPLETE' | 'INCOMPLETE';
+      expectedNozzles: number;
+      recordedNozzles: number;
+      unavailableNozzles: number;
+      missingNozzleIds: string[];
+    };
     cngTotalPaise: number | null;
     cngTotalStr: string | null;
     lubeTotalPaise: number;
