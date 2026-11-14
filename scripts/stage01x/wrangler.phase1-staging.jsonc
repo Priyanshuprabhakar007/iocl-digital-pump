@@ -1,0 +1,19 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "iocl-phase1-full-staging-worker",
+  "main": "../../src/worker/index.ts",
+  "compatibility_date": "2024-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "staging",
+    "ALLOWED_ORIGINS": "https://staging.invalid"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "iocl-phase1-full-staging",
+      "database_id": "daf55190-af65-4b72-b5f6-8c87b70c4d35",
+      "migrations_dir": "../../migrations"
+    }
+  ]
+}
