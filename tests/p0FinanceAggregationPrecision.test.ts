@@ -33,6 +33,14 @@ describe('P0 fuel revenue aggregation precision', () => {
     expect(result.fuelTotalStr).toBe('400.00');
   });
 
+  it('exposes missing nozzle input as INCOMPLETE without inventing sales', async () => {
+    const service = serviceFor([{ nozzleId: 'n1', netSalesQuantityMilliunits: 1000 }]);
+    const result = await service.calculateShiftFuelRevenue('s1');
+    expect(result.readingCoverage.status).toBe('INCOMPLETE');
+    expect(result.readingCoverage.missingNozzleIds).toEqual(['n2']);
+    expect(result.fuelTotalPaise).toBe(10000);
+  });
+
   it('rejects quantity aggregates beyond safe integer range', async () => {
     const service = serviceFor([
       { nozzleId: 'n1', netSalesQuantityMilliunits: Number.MAX_SAFE_INTEGER },
