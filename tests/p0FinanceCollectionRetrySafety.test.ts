@@ -77,6 +77,20 @@ describe('P0 finance collections — retry and historical shift safety', () => {
     expect(await collectionCount()).toBe(1);
   });
 
+  it('failed validation writes nothing and the corrected retry is accepted', async () => {
+    const key = `p0-failed-${crypto.randomUUID()}`;
+    const bad = await post('0', key);
+    expect(bad.status).toBe(400);
+    expect(await collectionCount()).toBe(0);
+
+    const corrected = await post('225.50', key);
+    expect(corrected.status).toBe(201);
+    expect(corrected.headers.get('X-Idempotent-Replay')).not.toBe('true');
+    expect(await collectionCount()).toBe(1);
+    const row = await db.prepare('SELECT amount_paise FROM shift_collections WHERE operational_shift_id = ?').bind(shiftId).first<{amount_paise:number}>();
+    expect(row?.amount_paise).toBe(22550);
+  });
+
   it('cannot append collections after shift has entered CLOSED historical state', async () => {
     const closed = await db.prepare("UPDATE operational_shifts SET status = 'CLOSED' WHERE id = ?").bind(shiftId).run();
     expect(closed.success).toBe(true);
