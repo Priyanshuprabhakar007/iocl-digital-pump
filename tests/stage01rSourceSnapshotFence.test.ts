@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { COLLECTIONS, compareCloseSourceSnapshots, type SourceSnapshot } from '../src/worker/services/shiftCloseSourceSnapshotFence';
+import { compareCloseSourceSnapshots, type SourceSnapshot } from '../src/worker/services/shiftCloseSourceSnapshotFence';
 
-const snapshot = (): SourceSnapshot => Object.fromEntries(
-  COLLECTIONS.map(name => [name, []]),
-) as SourceSnapshot;
+const snapshot = (): SourceSnapshot => ({
+  meter_readings: [],
+  tank_stock_readings: [],
+  fuel_receipts: [],
+  fuel_receipt_lines: [],
+  financial_inputs: [],
+  price_snapshots: [],
+  shift_nozzle_snapshots: [],
+  shift_tank_snapshots: [],
+  calibration_references: [],
+});
 
 describe('Stage 01R: read-only source snapshot fence contract', () => {
   it('accepts identical complete source snapshots as candidate only', () => {
