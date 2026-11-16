@@ -124,7 +124,7 @@ describe('P0 risky migration dependent-data rehearsal — disposable SQLite only
         expect(lostDuringRebuild).toBe(true);
         expect((db.prepare('SELECT COUNT(*) AS n FROM dependent_record').get() as {n:number}).n).toBe(1);
         expect((db.prepare(`SELECT COUNT(*) AS n FROM "${item.parent}"`).get() as {n:number}).n).toBe(1);
-        expect((db.pragma('foreign_key_check') as unknown[]).toHaveLength(0);
+        expect(db.pragma('foreign_key_check') as unknown[]).toHaveLength(0);
       } finally {
         db.close();
       }
