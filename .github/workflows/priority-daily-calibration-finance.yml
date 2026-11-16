@@ -61,5 +61,7 @@ jobs:
         run: bun test tests/stage01xIsolatedStagingConfig.test.ts tests/stage01yOfflineMigrationPreflight.test.ts tests/stage01zHostedD1MigrationCompatibility.test.ts
       - name: P0 staging migration release decision (read-only NO-GO)
         run: bun test tests/p0StagingMigrationReadiness.test.ts
+      - name: Offline backup integrity and tamper-safety checks (synthetic only)
+        run: bun test tests/p0OfflineBackupVerification.test.ts
       - name: Production build compatibility
         run: bun run build
