@@ -73,7 +73,7 @@ describe('P0 one-day fuel, calibrated stock and financial reconciliation', () =>
       const dayRes = await req(`/api/v1/outlets/ro-1001/fuel/daily-summary?businessDate=${businessDate}`);
       expect(dayRes.status).toBe(200);
       const day = (await dayRes.json() as any).data;
-      expect(day.status).toBe('COMPLETE');
+      expect(day.status, JSON.stringify({ missingFields: day.missingFields, completion: day.completion, byProduct: day.byProduct.map((p: any) => ({ code: p.productCode, missingFields: p.missingFields })) })).toBe('COMPLETE');
       expect(day.completion.reconciliationComplete).toBe(true);
 
       const financeRes = await req(`/api/v1/shifts/${shiftId}/financial-summary`);
