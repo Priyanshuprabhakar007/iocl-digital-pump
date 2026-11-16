@@ -287,7 +287,7 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     await localD1.prepare(`INSERT INTO fuel_receipts
       (id,outlet_id,operational_shift_id,tt_number,invoice_number,invoice_date,arrival_at,
        seal_verified,status,recorded_by_user_id,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,1,'COMPLETED',?,?,?)`)
+      VALUES (?,?,?,?,?,?,?,1,'CANCELLED',?,?,?)`)
       .bind('p0-receipt','ro-1001',shiftId,'P0-TT','P0-INV',
         '2026-11-02','2026-11-02T08:00:00Z','user-admin',
         '2026-11-02T08:00:00Z','2026-11-02T08:00:00Z').run();
@@ -303,6 +303,7 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     await localD1.exec(`CREATE TRIGGER p0_receipt_mutation
       AFTER INSERT ON shift_financial_reconciliations
       BEGIN
+        UPDATE fuel_receipts SET status = 'COMPLETED' WHERE id = 'p0-receipt';
         UPDATE fuel_receipt_tank_lines
         SET measured_received_quantity_milliunits = measured_received_quantity_milliunits + 1
         WHERE id = 'p0-line';
@@ -314,7 +315,7 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     const row = await dbRow('SELECT measured_received_quantity_milliunits AS qty FROM fuel_receipt_tank_lines WHERE id = ?', 'p0-line');
     expect(row.qty).toBe(1000001);
     const recon = await dbRow('SELECT receipt_quantity_milliunits AS qty FROM shift_stock_reconciliations WHERE operational_shift_id = ? AND tank_id = ?', shiftId, 'tank-ro1-1');
-    expect(recon.qty).toBe(1000000);
+    expect(recon.qty).toBe(0);
     expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
     expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
     expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
