@@ -184,6 +184,45 @@ export class AtomicShiftCloseFinalizer {
                 COALESCE(f.lube_sales_revenue_paise, 0)
               AND f.sales_collection_variance_paise =
                 f.authoritative_sales_revenue_paise - f.total_collections_paise
+              -- Compare the live financial source rows INSIDE the same D1
+              -- transaction as CLOSED + audits. The preview may have been
+              -- correct before a collection was edited/inserted/deleted.
+              AND f.cash_collection_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'CASH'
+              ), 0)
+              AND f.pos_collection_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'POS_CARD'
+              ), 0)
+              AND f.upi_collection_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'UPI'
+              ), 0)
+              AND f.fleet_card_collection_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'FLEET_CARD'
+              ), 0)
+              AND f.credit_sales_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'CREDIT_SALE'
+              ), 0)
+              AND f.direct_bank_drop_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'DIRECT_BANK_DROP'
+              ), 0)
           )
           AND EXISTS (
             SELECT 1 FROM operational_shift_tanks AS t
