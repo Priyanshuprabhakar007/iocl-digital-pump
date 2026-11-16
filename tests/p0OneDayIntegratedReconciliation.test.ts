@@ -4,6 +4,7 @@ import app from '../src/worker/app';
 import { createLocalD1Database } from '../src/db/localD1';
 import { getDb } from '../src/db';
 import { seedDatabase } from '../src/db/seed';
+import * as schema from '../src/db/schema';
 
 /** Isolated seeded local D1 end-to-end day; never imports or activates real calibration charts. */
 describe('P0 one-day fuel, calibrated stock and financial reconciliation', () => {
@@ -12,6 +13,14 @@ describe('P0 one-day fuel, calibrated stock and financial reconciliation', () =>
     const d1 = createLocalD1Database(dbPath);
     try {
       await seedDatabase(getDb(d1));
+      // The seed has an XP95 tank but no participating XP95 nozzle; register
+      // a disposable test nozzle BEFORE opening so its price snapshot is captured.
+      const now = new Date().toISOString();
+      await getDb(d1).insert(schema.nozzles).values({
+        id: 'p0-xp95-nozzle', outletId: 'ro-1001', dispenserId: 'disp-ro1-1',
+        nozzleNumber: 3, productId: 'prod-xp95', tankId: 'tank-ro1-3',
+        status: 'ACTIVE', createdAt: now, updatedAt: now, createdBy: 'user-admin',
+      });
       const env: any = { DB: d1, ENVIRONMENT: 'development', ALLOWED_ORIGINS: 'http://localhost:3000' };
       const login = await app.fetch(new Request('http://localhost/api/v1/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:3000' },
