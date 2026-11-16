@@ -250,6 +250,19 @@ export class AtomicShiftCloseFinalizer {
                     WHERE r.operational_shift_id = t.operational_shift_id
                       AND r.tank_id = t.tank_id AND r.reading_type = 'CLOSING'
                   )
+                  -- Only COMPLETED receipts count towards stock. Re-check
+                  -- the actual receipt lines inside the final D1 batch, not
+                  -- a pre-close preview (which can become stale).
+                  AND sr.receipt_quantity_milliunits = COALESCE((
+                    SELECT SUM(l.measured_received_quantity_milliunits)
+                    FROM fuel_receipts AS receipt
+                    JOIN fuel_receipt_tank_lines AS l ON l.fuel_receipt_id = receipt.id
+                    WHERE receipt.operational_shift_id = t.operational_shift_id
+                      AND receipt.outlet_id = t.outlet_id
+                      AND receipt.status = 'COMPLETED'
+                      AND l.tank_id = t.tank_id
+                      AND l.measured_received_quantity_milliunits IS NOT NULL
+                  ), 0)
                   -- Same per-tank nozzle allocation as PumpRepository.
                   AND sr.sales_quantity_milliunits = COALESCE((
                     SELECT SUM(m.net_sales_quantity_milliunits)
