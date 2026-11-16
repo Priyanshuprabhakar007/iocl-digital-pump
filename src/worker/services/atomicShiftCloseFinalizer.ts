@@ -173,6 +173,17 @@ export class AtomicShiftCloseFinalizer {
             SELECT 1 FROM shift_financial_reconciliations AS f
             WHERE f.operational_shift_id = operational_shifts.id
               AND f.outlet_id = operational_shifts.outlet_id
+              -- An internally inconsistent persisted financial row must NEVER
+              -- be committed or stamped with a success audit.
+              AND f.total_collections_paise =
+                f.cash_collection_paise + f.pos_collection_paise +
+                f.upi_collection_paise + f.fleet_card_collection_paise +
+                f.credit_sales_paise + f.direct_bank_drop_paise
+              AND f.authoritative_sales_revenue_paise =
+                f.fuel_sales_revenue_paise + COALESCE(f.cng_sales_revenue_paise, 0) +
+                COALESCE(f.lube_sales_revenue_paise, 0)
+              AND f.sales_collection_variance_paise =
+                f.authoritative_sales_revenue_paise - f.total_collections_paise
           )
           AND EXISTS (
             SELECT 1 FROM operational_shift_tanks AS t
