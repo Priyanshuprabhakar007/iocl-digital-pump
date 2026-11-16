@@ -63,5 +63,7 @@ jobs:
         run: bun test tests/p0StagingMigrationReadiness.test.ts
       - name: Offline backup integrity and tamper-safety checks (synthetic only)
         run: bun test tests/p0OfflineBackupVerification.test.ts
+      - name: Migration 0007 FK table-drop hazard — disposable rollback rehearsal
+        run: bun test tests/p0Migration0007ForeignKeyRehearsal.test.ts
       - name: Production build compatibility
         run: bun run build
