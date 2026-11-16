@@ -253,6 +253,33 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
   });
 
+  it.each([
+    ['tank', `UPDATE tank_stock_readings
+        SET net_product_volume_milliunits = net_product_volume_milliunits + 1
+        WHERE operational_shift_id = NEW.operational_shift_id AND reading_type = 'CLOSING'`],
+    ['nozzle', `UPDATE nozzle_meter_readings
+        SET net_sales_quantity_milliunits = net_sales_quantity_milliunits + 1
+        WHERE operational_shift_id = NEW.operational_shift_id`],
+  ])('holds stale %s source after preparation without CLOSED or success audits', async (_kind, mutation) => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    // Fault injection runs only in the disposable local test database, after
+    // reconciliation insertion but before the final database-atomic check.
+    await localD1.exec(`CREATE TRIGGER p0_mutate_measurement_after_prepare
+      AFTER INSERT ON shift_financial_reconciliations
+      BEGIN
+        ${mutation};
+      END;`);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
+  });
+
   it('rolls back CLOSED when SHIFT_CLOSE audit insert fails in the atomic batch', async () => {
     const cookie = await login();
     const shiftId = await readyShift(cookie);
