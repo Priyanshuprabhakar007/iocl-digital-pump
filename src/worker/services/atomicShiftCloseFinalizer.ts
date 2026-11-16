@@ -250,6 +250,27 @@ export class AtomicShiftCloseFinalizer {
                     WHERE r.operational_shift_id = t.operational_shift_id
                       AND r.tank_id = t.tank_id AND r.reading_type = 'CLOSING'
                   )
+                  -- Keep both measurements bound to the shift's chosen
+                  -- tank-specific chart/revision (NULL legacy references
+                  -- must match NULL; superseded historical charts are valid).
+                  AND NOT EXISTS (
+                    SELECT 1 FROM tank_stock_readings AS reading
+                    WHERE reading.operational_shift_id = t.operational_shift_id
+                      AND reading.tank_id = t.tank_id
+                      AND reading.reading_type IN ('OPENING', 'CLOSING')
+                      AND (
+                        NOT (reading.calibration_chart_id IS t.calibration_chart_id)
+                        OR NOT (reading.calibration_revision IS t.calibration_revision)
+                      )
+                  )
+                  AND (
+                    t.calibration_chart_id IS NULL OR EXISTS (
+                      SELECT 1 FROM tank_calibration_charts AS chart
+                      WHERE chart.id = t.calibration_chart_id
+                        AND chart.tank_id = t.tank_id
+                        AND chart.revision_number = t.calibration_revision
+                    )
+                  )
                   -- Only COMPLETED receipts count towards stock. Re-check
                   -- the actual receipt lines inside the final D1 batch, not
                   -- a pre-close preview (which can become stale).
