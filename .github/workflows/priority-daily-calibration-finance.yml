@@ -47,5 +47,7 @@ jobs:
         run: bun test tests/financialOperations.test.ts tests/idempotencyAndDuplicateHardening.test.ts tests/adminEmptyShiftClose.test.ts tests/p0FinanceSafeMoneyBoundary.test.ts tests/p0FinanceAggregationPrecision.test.ts tests/p0FuelRevenueReadingCoverage.test.ts tests/p0FinanceCollectionRetrySafety.test.ts
       - name: Daily Operations to Finance — stock and reporting
         run: bun test tests/tankStockAndReconciliation.test.ts tests/monthlyOperationsAggregation.test.ts tests/dailyOperationsTestDataReset.test.ts
+      - name: One-day calibrated tank, nozzle, DSR and finance reconciliation
+        run: bun test tests/p0OneDayIntegratedReconciliation.test.ts
       - name: Production build compatibility
         run: bun run build
