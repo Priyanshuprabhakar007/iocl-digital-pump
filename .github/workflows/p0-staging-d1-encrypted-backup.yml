@@ -1,0 +1,129 @@
+name: P0 staging D1 encrypted backup (manual approval only)
+
+# Manual execution only. This workflow must first be reviewed and merged to
+# default branch for GitHub to expose the Run workflow UI. Then choose the
+# explicitly allowlisted staging branch as the run ref.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_export:
+        description: "Type EXPORT_STAGING_BACKUP to request staging-only export"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p0-staging-encrypted-export-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Confirm authorized staging branch and manual intent
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Fail closed unless intended staging branch and confirmation
+        env:
+          CONFIRM_EXPORT: ${{ inputs.confirm_export }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ] ||
+             [ "$GITHUB_REF" != "refs/heads/test/stage01x-isolated-full-staging-config-20261114" ] ||
+             [ "$CONFIRM_EXPORT" != "EXPORT_STAGING_BACKUP" ]; then
+            echo "::error::Only approved manual export from the allowlisted staging branch is permitted."
+            exit 1
+          fi
+
+  encrypted-export:
+    name: Reviewer-approved, encrypted staging D1 export only
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # GitHub protection rules and staging-only secrets apply before this job.
+    environment: iocl-phase1-staging
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_STAGING_D1_ID: ${{ vars.CLOUDFLARE_STAGING_D1_ID }}
+      STAGING_BACKUP_PASSPHRASE: ${{ secrets.STAGING_BACKUP_PASSPHRASE }}
+    steps:
+      - name: Checkout authorized staging branch
+        uses: actions/checkout@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Verify identity, encryption secret and staging-only Wrangler config
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/test/stage01x-isolated-full-staging-config-20261114"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "93888554ef9d9e0b8c18b322683a9652"
+          test "$CLOUDFLARE_STAGING_D1_ID" = "daf55190-af65-4b72-b5f6-8c87b70c4d35"
+          test "$CLOUDFLARE_STAGING_D1_ID" != "305f76c6-c940-443f-86a9-33c309a55578"
+          test "$CLOUDFLARE_STAGING_D1_ID" != "9025eb32-4ea8-4bb9-a6e1-ab8ba55bf782"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          if [ "${#STAGING_BACKUP_PASSPHRASE}" -lt 24 ]; then
+            echo "::error::Missing or weak STAGING_BACKUP_PASSPHRASE environment secret. No export performed."
+            exit 1
+          fi
+          jq -e --arg db "$CLOUDFLARE_STAGING_D1_ID" '
+            .d1_databases | length == 1 and
+            .[0].binding == "DB" and
+            .[0].database_id == $db and
+            .[0].database_name == "iocl-phase1-full-staging"
+          ' scripts/stage01x/wrangler.phase1-staging.jsonc > /dev/null
+      - name: Validate exact remote Cloudflare D1 identity (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 30 \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --header "Accept: application/json" \
+            --output "$RUNNER_TEMP/staging-d1-metadata.json" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$CLOUDFLARE_STAGING_D1_ID"
+          jq -e --arg db "$CLOUDFLARE_STAGING_D1_ID" '
+            .success == true and .result.uuid == $db and
+            .result.name == "iocl-phase1-full-staging"
+          ' "$RUNNER_TEMP/staging-d1-metadata.json" > /dev/null
+      - name: Install lockfile dependencies
+        run: bun install --frozen-lockfile
+      - name: Export exact staging D1 schema and data (NO migrations or deployment)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bunx wrangler d1 export iocl-phase1-full-staging \
+            --remote --skip-confirmation \
+            --config scripts/stage01x/wrangler.phase1-staging.jsonc \
+            --output "$RUNNER_TEMP/staging-d1-export.sql"
+          test -s "$RUNNER_TEMP/staging-d1-export.sql"
+      - name: Encrypt before any artifact upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v gpg >/dev/null
+          printf '%s' "$STAGING_BACKUP_PASSPHRASE" | gpg \
+            --batch --yes --quiet --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 \
+            --output "$RUNNER_TEMP/staging-d1-export.sql.gpg" \
+            "$RUNNER_TEMP/staging-d1-export.sql"
+          test -s "$RUNNER_TEMP/staging-d1-export.sql.gpg"
+          cd "$RUNNER_TEMP"
+          sha256sum staging-d1-export.sql.gpg > staging-d1-export.sql.gpg.sha256
+          # The runner is ephemeral, but never include plaintext SQL in artifact.
+          shred -u staging-d1-export.sql || rm -f staging-d1-export.sql
+      - name: Upload encrypted-only artifact (1 day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-d1-encrypted-export-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/staging-d1-export.sql.gpg
+            ${{ runner.temp }}/staging-d1-export.sql.gpg.sha256
+          if-no-files-found: error
+          retention-days: 1
+      - name: Remove temporary plaintext on failure as well
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/staging-d1-export.sql" "$RUNNER_TEMP/staging-d1-metadata.json"
