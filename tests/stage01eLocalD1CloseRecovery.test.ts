@@ -321,6 +321,40 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
   });
 
+  it('refuses CLOSED if a tank dip calibration revision changes after financial preparation', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const snapshot = await dbRow(
+      "SELECT calibration_chart_id AS chartId, calibration_revision AS revision FROM operational_shift_tanks WHERE operational_shift_id = ? AND tank_id = 'tank-ro1-1'",
+      shiftId,
+    );
+    const original = await dbRow(
+      "SELECT calibration_chart_id AS chartId, calibration_revision AS revision FROM tank_stock_readings WHERE operational_shift_id = ? AND tank_id = 'tank-ro1-1' AND reading_type = 'CLOSING'",
+      shiftId,
+    );
+    expect(original?.chartId ?? null).toBe(snapshot?.chartId ?? null);
+    expect(original?.revision ?? null).toBe(snapshot?.revision ?? null);
+
+    // Simulate an unauthorized post-preview rewrite. Never use this trigger on
+    // staging or production. The actual closing logic must fail atomically.
+    await localD1.exec(`CREATE TRIGGER p0_change_calibration_ref_after_prepare
+      AFTER INSERT ON shift_financial_reconciliations
+      BEGIN
+        UPDATE tank_stock_readings
+        SET calibration_revision = COALESCE(calibration_revision, 0) + 1
+        WHERE operational_shift_id = NEW.operational_shift_id
+          AND tank_id = 'tank-ro1-1' AND reading_type = 'CLOSING';
+      END;`);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
+  });
+
   it('rolls back CLOSED when SHIFT_CLOSE audit insert fails in the atomic batch', async () => {
     const cookie = await login();
     const shiftId = await readyShift(cookie);
