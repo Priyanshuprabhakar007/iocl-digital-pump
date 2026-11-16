@@ -280,6 +280,46 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
   });
 
+  it('holds a completed receipt-line volume changed after reconciliation preparation', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    // Synthetic receipt is inserted solely in disposable local D1.
+    await localD1.prepare(`INSERT INTO fuel_receipts
+      (id,outlet_id,operational_shift_id,tt_number,invoice_number,invoice_date,arrival_at,
+       seal_verified,status,recorded_by_user_id,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,1,'COMPLETED',?,?,?)`)
+      .bind('p0-receipt','ro-1001',shiftId,'P0-TT','P0-INV',
+        '2026-11-02','2026-11-02T08:00:00Z','user-admin',
+        '2026-11-02T08:00:00Z','2026-11-02T08:00:00Z').run();
+    await localD1.prepare(`INSERT INTO fuel_receipt_tank_lines
+      (id,fuel_receipt_id,tank_id,product_id,invoice_quantity_milliunits,
+       measured_received_quantity_milliunits,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?)`)
+      .bind('p0-line','p0-receipt','tank-ro1-1','prod-ms',1000000,1000000,
+        '2026-11-02T08:00:00Z','2026-11-02T08:00:00Z').run();
+
+    // Emulate a disallowed late source change after stock preview + financial
+    // evidence were prepared but before the CLOSED transaction.
+    await localD1.exec(`CREATE TRIGGER p0_receipt_mutation
+      AFTER INSERT ON shift_financial_reconciliations
+      BEGIN
+        UPDATE fuel_receipt_tank_lines
+        SET measured_received_quantity_milliunits = measured_received_quantity_milliunits + 1
+        WHERE id = 'p0-line';
+      END;`);
+    const result = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(result.status).toBe(409);
+    expect(((await result.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    const row = await dbRow('SELECT measured_received_quantity_milliunits AS qty FROM fuel_receipt_tank_lines WHERE id = ?', 'p0-line');
+    expect(row.qty).toBe(1000001);
+    const recon = await dbRow('SELECT receipt_quantity_milliunits AS qty FROM shift_stock_reconciliations WHERE operational_shift_id = ? AND tank_id = ?', shiftId, 'tank-ro1-1');
+    expect(recon.qty).toBe(1000000);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
+  });
+
   it('rolls back CLOSED when SHIFT_CLOSE audit insert fails in the atomic batch', async () => {
     const cookie = await login();
     const shiftId = await readyShift(cookie);
