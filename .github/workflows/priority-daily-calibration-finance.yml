@@ -51,5 +51,7 @@ jobs:
         run: bun test tests/p0OneDayIntegratedReconciliation.test.ts
       - name: Shift close — real local D1 failure recovery and audit integrity
         run: bun test tests/stage01eLocalD1CloseRecovery.test.ts
+      - name: Calibration chart point DB immutability — proposed local guard
+        run: bun test tests/p0CalibrationPointImmutability.test.ts
       - name: Production build compatibility
         run: bun run build
