@@ -187,6 +187,30 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('OPEN');
   });
 
+  it('refuses CLOSED and both success audits if persisted finance totals are internally corrupted', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    // Fault injection is strictly limited to the disposable LocalD1 fixture.
+    // This runs AFTER the atomic prepare INSERT but BEFORE the close batch.
+    await localD1.exec(`CREATE TRIGGER p0_corrupt_finance_evidence
+      AFTER INSERT ON shift_financial_reconciliations
+      BEGIN
+        UPDATE shift_financial_reconciliations
+          SET total_collections_paise = total_collections_paise + 1
+          WHERE id = NEW.id;
+      END;`);
+
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    const review = await assessPersisted(shiftId, true);
+    expect(review.holdFurtherClose).toBe(true);
+  });
+
   it('rolls back CLOSED when SHIFT_CLOSE audit insert fails in the atomic batch', async () => {
     const cookie = await login();
     const shiftId = await readyShift(cookie);
