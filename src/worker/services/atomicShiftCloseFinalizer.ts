@@ -237,6 +237,29 @@ export class AtomicShiftCloseFinalizer {
                   AND sr.outlet_id = t.outlet_id
                   AND sr.tank_id = t.tank_id
                   AND sr.product_id = t.product_id
+                  -- Validate live tank measurements before CLOSED is committed.
+                  AND sr.opening_stock_milliunits = (
+                    SELECT r.net_product_volume_milliunits
+                    FROM tank_stock_readings AS r
+                    WHERE r.operational_shift_id = t.operational_shift_id
+                      AND r.tank_id = t.tank_id AND r.reading_type = 'OPENING'
+                  )
+                  AND sr.physical_closing_stock_milliunits = (
+                    SELECT r.net_product_volume_milliunits
+                    FROM tank_stock_readings AS r
+                    WHERE r.operational_shift_id = t.operational_shift_id
+                      AND r.tank_id = t.tank_id AND r.reading_type = 'CLOSING'
+                  )
+                  -- Same per-tank nozzle allocation as PumpRepository.
+                  AND sr.sales_quantity_milliunits = COALESCE((
+                    SELECT SUM(m.net_sales_quantity_milliunits)
+                    FROM operational_shift_nozzles AS n
+                    JOIN nozzle_meter_readings AS m
+                      ON m.operational_shift_id = n.operational_shift_id
+                     AND m.nozzle_id = n.nozzle_id
+                    WHERE n.operational_shift_id = t.operational_shift_id
+                      AND n.tank_id = t.tank_id
+                  ), 0)
               )
           )
           AND NOT EXISTS (
