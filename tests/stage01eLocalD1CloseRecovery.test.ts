@@ -211,6 +211,48 @@ describe('Stage 01E: local-D1 shift close persistence and failure recovery', () 
     expect(review.holdFurtherClose).toBe(true);
   });
 
+  it('detects a collection mutation after finance preparation and withholds CLOSED audits', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const collection = await request(cookie, `/shifts/${shiftId}/collections`, {
+      collectionType: 'CASH', amount: '100.00',
+      collectedAt: '2026-11-02T09:00:00Z',
+    });
+    expect(collection.status).toBe(201);
+    const before = await dbRow(
+      "SELECT amount_paise AS amount FROM shift_collections WHERE operational_shift_id = ? AND collection_type = 'CASH'",
+      shiftId,
+    );
+    expect(before.amount).toBe(10000);
+
+    // Deterministically model a prohibited out-of-band financial source write
+    // between persisted finance preparation and finalization.
+    await localD1.exec(`CREATE TRIGGER p0_change_collection_after_finance_prepare
+      AFTER INSERT ON shift_financial_reconciliations
+      BEGIN
+        UPDATE shift_collections SET amount_paise = amount_paise + 1
+          WHERE operational_shift_id = NEW.operational_shift_id AND collection_type = 'CASH';
+      END;`);
+    const res = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    const changed = await dbRow(
+      "SELECT amount_paise AS amount FROM shift_collections WHERE operational_shift_id = ? AND collection_type = 'CASH'",
+      shiftId,
+    );
+    expect(changed.amount).toBe(10001);
+    const persisted = await dbRow(
+      'SELECT cash_collection_paise AS cash FROM shift_financial_reconciliations WHERE operational_shift_id = ?',
+      shiftId,
+    );
+    expect(persisted.cash).toBe(10000);
+    expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
+  });
+
   it('rolls back CLOSED when SHIFT_CLOSE audit insert fails in the atomic batch', async () => {
     const cookie = await login();
     const shiftId = await readyShift(cookie);
