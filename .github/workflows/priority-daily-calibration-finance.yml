@@ -45,6 +45,8 @@ jobs:
         run: bun run typecheck
       - name: Migration 0007 FK table-drop hazard — disposable rollback rehearsal
         run: bun test tests/p0Migration0007ForeignKeyRehearsal.test.ts
+      - name: Migration 0004 / 0011 / 0032 FK rebuild hazard rehearsal
+        run: bun test tests/p0MigrationRebuildChildDataRehearsal.test.ts
       - name: Daily Operations — actual API and shift flow
         run: bun test --timeout 15000 tests/dailyFuelOperations.test.ts tests/openShiftIntegration.test.ts tests/fuelReceiptCompletionAndShiftClose.test.ts
       - name: Tank Calibration — chart versions and dip conversions
