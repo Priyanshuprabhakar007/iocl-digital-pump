@@ -1,0 +1,60 @@
+name: Phase 1 staging D1 identity (read-only)
+
+# Runs only for this isolated draft branch, not on PRs or production.
+on:
+  push:
+    branches:
+      - test/stage01x-isolated-full-staging-config-20261114
+    paths:
+      - .github/workflows/stage01x-readonly-d1-verify.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-staging-identity:
+    name: Read-only staging database identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: iocl-phase1-staging
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_STAGING_D1_ID: ${{ vars.CLOUDFLARE_STAGING_D1_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Verify exact target and read-only credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${CLOUDFLARE_ACCOUNT_ID}" = "93888554ef9d9e0b8c18b322683a9652"
+          test "${CLOUDFLARE_STAGING_D1_ID}" = "daf55190-af65-4b72-b5f6-8c87b70c4d35"
+          test "${CLOUDFLARE_STAGING_D1_ID}" != "305f76c6-c940-443f-86a9-33c309a55578"
+          test "${CLOUDFLARE_STAGING_D1_ID}" != "9025eb32-4ea8-4bb9-a6e1-ab8ba55bf782"
+          test -n "${CLOUDFLARE_API_TOKEN}"
+          echo "Staging identity preflight passed; requesting GET metadata only."
+
+      - name: Get staging D1 metadata (no SQL; no writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          http_code="$(curl --silent --show-error --location --max-time 20 \
+            --output "$response_file" --write-out '%{http_code}' \
+            --request GET \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Accept: application/json" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${CLOUDFLARE_STAGING_D1_ID}")"
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Cloudflare metadata request failed (HTTP $http_code). Token and account permissions require review."
+            exit 1
+          fi
+          jq -e --arg uuid "$CLOUDFLARE_STAGING_D1_ID" \
+            '.success == true and .result.uuid == $uuid and .result.name == "iocl-phase1-full-staging"' \
+            "$response_file" >/dev/null || {
+              echo "::error::Staging D1 name/UUID mismatch; no action taken."
+              exit 1
+            }
+          echo "PASS: verified Cloudflare staging D1 name and UUID by read-only GET."
+          echo "No SQL executed, no migrations applied, no Worker deployed."
