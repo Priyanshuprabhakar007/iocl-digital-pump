@@ -49,5 +49,7 @@ jobs:
         run: bun test tests/tankStockAndReconciliation.test.ts tests/monthlyOperationsAggregation.test.ts tests/dailyOperationsTestDataReset.test.ts
       - name: One-day calibrated tank, nozzle, DSR and finance reconciliation
         run: bun test tests/p0OneDayIntegratedReconciliation.test.ts
+      - name: Shift close — real local D1 failure recovery and audit integrity
+        run: bun test tests/stage01eLocalD1CloseRecovery.test.ts
       - name: Production build compatibility
         run: bun run build
