@@ -21,7 +21,7 @@ describe('P0 empty staging schema — transactional local baseline rehearsal', (
     expect(offline.authorizedToDeploy).toBe(false);
 
     const migrations = fs.readdirSync(path.join(root, 'migrations'))
-      .filter(name => /^\\d{4}_[\\w-]+\\.sql$/.test(name))
+      .filter(name => /^\d{4}_[\w-]+\.sql$/.test(name))
       .sort();
     expect(migrations).toHaveLength(35);
 
