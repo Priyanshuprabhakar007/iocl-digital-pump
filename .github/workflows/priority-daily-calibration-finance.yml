@@ -59,5 +59,7 @@ jobs:
         run: bun test tests/p0CalibrationPointImmutability.test.ts
       - name: Offline staging identity and migration compatibility (NO remote writes)
         run: bun test tests/stage01xIsolatedStagingConfig.test.ts tests/stage01yOfflineMigrationPreflight.test.ts tests/stage01zHostedD1MigrationCompatibility.test.ts
+      - name: P0 staging migration release decision (read-only NO-GO)
+        run: bun test tests/p0StagingMigrationReadiness.test.ts
       - name: Production build compatibility
         run: bun run build
