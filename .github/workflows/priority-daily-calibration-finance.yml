@@ -12,6 +12,10 @@ on:
       - src/**
       - tests/**
       - migrations/**
+      - scripts/stage01x/**
+      - scripts/stage01y/**
+      - scripts/stage01z/**
+      - scripts/p0/**
       - package.json
       - bun.lock
   workflow_dispatch:
@@ -53,5 +57,7 @@ jobs:
         run: bun test tests/stage01eLocalD1CloseRecovery.test.ts
       - name: Calibration chart point DB immutability — proposed local guard
         run: bun test tests/p0CalibrationPointImmutability.test.ts
+      - name: Offline staging identity and migration compatibility (NO remote writes)
+        run: bun test tests/stage01xIsolatedStagingConfig.test.ts tests/stage01yOfflineMigrationPreflight.test.ts tests/stage01zHostedD1MigrationCompatibility.test.ts
       - name: Production build compatibility
         run: bun run build
