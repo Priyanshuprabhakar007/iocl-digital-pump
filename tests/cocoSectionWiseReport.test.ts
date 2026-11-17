@@ -55,6 +55,17 @@ describe('Section-wise COCO report: source mapping and five-page PDF', () => {
     expect(generatorRow[4]).toBe('Test Make');
   });
 
+  it('marks an expired NFR agreement expired even when its lifecycle flag is ACTIVE', () => {
+    const sections = buildSectionWiseSections({
+      items: [], assets: [], outletType: 'COCO', reportDate: '2026-11-17',
+      leases: [{
+        agreementNumber: 'NFR-EXPIRED', from: '2022-01-01',
+        to: '2026-10-01', vendorName: 'Former Vendor', status: 'ACTIVE',
+      }],
+    });
+    expect(sections[0].tables[0].rows[2][2]).toBe('Expired');
+  });
+
   it('generates the expected A4 portrait section pages without requiring production records', async () => {
     const report = {
       outletId: 'test-outlet', outletName: 'Synthetic COCO Outlet',
