@@ -7,7 +7,7 @@
 
   "vars": {
     "ENVIRONMENT": "production",
-    "ALLOWED_ORIGINS": "https://iocl-digital-pump.vercel.app"
+    "ALLOWED_ORIGINS": "https://iocl-digital-pump.vercel.app,https://iocl-digital-pump-xi.vercel.app"
   },
 
   "d1_databases": [
