@@ -11,6 +11,8 @@ describe('COCO documentation master API / evidence protections', () => {
   it('enforces outlet scoping, claim maker-checker, exact settlement and inspection-to-PDF sync', async () => {
     const path = './.sqlite/test_doc_master_api_' + crypto.randomUUID() + '.db';
     const local = createLocalD1Database(path);
+    // Staging-only rehearsal: apply the proposed additive SQL exclusively to disposable local D1.
+    await local.exec(fs.readFileSync('docs/proposed-migrations/0036_coco_agreements_claims_inspections.sql', 'utf8'));
     const db = getDb(local);
     const env = { DB: local, ENVIRONMENT: 'development', ALLOWED_ORIGINS: 'http://localhost:3000' } as any;
     const base = 'http://localhost/api/v1/documents';
