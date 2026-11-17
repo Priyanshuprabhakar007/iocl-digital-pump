@@ -87,6 +87,8 @@ export interface SectionWiseInspection {
 
 const NR = 'Not Recorded';
 const EMPTY = '-';
+const printable = (value: string, maxLength = 180) =>
+  value.length > maxLength ? value.slice(0, maxLength - 25) + '... See source record' : value;
 const date = (v: string | null | undefined) => formatComplianceDateDisplay(v, NR);
 const fromItem = (item?: CocoComplianceMergedItem): string =>
   item && item.complianceStatus !== 'NOT_RECORDED'
@@ -111,7 +113,7 @@ const notes = (item?: CocoComplianceMergedItem): string => {
     item.actionRequired ? 'Action: ' + item.actionRequired : '',
     item.hasDiscrepancy && item.discrepancyNote ? 'DISCREPANCY: ' + item.discrepancyNote : '',
   ].filter(Boolean);
-  return parts.length ? parts.join(' | ') : EMPTY;
+  return parts.length ? printable(parts.join(' | ')) : EMPTY;
 };
 const years = (start: string | null | undefined, end: string | null | undefined) => {
   if (!start || !end) return EMPTY;
@@ -162,8 +164,8 @@ export function buildSectionWiseSections(args: {
     with: a.counterpartyName || NR, duration: years(a.startDate, a.endDate),
     vendorCode: a.vendorCode || NR, customerCode: a.customerCode || NR,
     siteClass: a.siteClass || NR, outletType,
-    remarks: [a.agreementNumber ? 'Agreement: ' + a.agreementNumber : '', a.remarks || '']
-      .filter(Boolean).join(' | ') || EMPTY,
+    remarks: printable([a.agreementNumber ? 'Agreement: ' + a.agreementNumber : '', a.remarks || '']
+      .filter(Boolean).join(' | ') || EMPTY),
   });
   const manuals = (type: string) => agreementMasters.filter((a) => a.agreementType === type);
   const land = manuals('LAND_LEASE');
@@ -181,7 +183,7 @@ export function buildSectionWiseSections(args: {
         with: lease.vendorName || NR, duration: years(lease.from, lease.to),
         vendorCode: meta?.vendorCode || NR, customerCode: meta?.customerCode || NR,
         siteClass: meta?.siteClass || NR, outletType,
-        remarks: ['Agreement: ' + lease.agreementNumber, meta?.remarks || ''].filter(Boolean).join(' | '),
+        remarks: printable(['Agreement: ' + lease.agreementNumber, meta?.remarks || ''].filter(Boolean).join(' | ')),
       });
     }
   } else {
@@ -257,7 +259,7 @@ export function buildSectionWiseSections(args: {
     const last = inspected.length
       ? inspected.reduce((a, b) => a.inspectedOn >= b.inspectedOn ? a : b).inspectedOn : null;
     const remarks = inspected.length
-      ? inspected.map((i) => i.remarks || (i.condition === 'NOT_WORKING' ? 'Repair required' : i.condition === 'SCRAPPED' ? 'Replacement required' : 'Checked')).join(' | ')
+      ? printable(inspected.map((i) => [i.remarks || (i.condition === 'NOT_WORKING' ? 'Repair required' : i.condition === 'SCRAPPED' ? 'Replacement required' : 'Checked'), i.nextServiceDate ? 'Next Service: ' + date(i.nextServiceDate) : ''].filter(Boolean).join('; ')).join(' | '))
       : list.length ? 'Registered in Equipment; operational inspection required' : NR;
     return [String(index + 1), label, condition, list.length ? String(list.length) : NR,
       manufacturers.length ? manufacturers.join(', ') : NR, date(last), remarks];
@@ -327,7 +329,7 @@ export function buildSectionWiseSections(args: {
       formatIndianCurrencyFromPaise(claim.amountPaise, { asciiPrefix: true })
         + ' | Paid: ' + formatIndianCurrencyFromPaise(claim.paidPaise, { asciiPrefix: true }),
       claim.approvalStatus === 'APPROVED' ? claim.paidPaise === claim.amountPaise ? 'Yes' : 'No' : NR,
-      claim.remarks || EMPTY]);
+      printable(claim.remarks || EMPTY)]);
   }
 
   return [
