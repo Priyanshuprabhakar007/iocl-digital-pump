@@ -826,10 +826,10 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-p-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-p-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-p-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-p-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -899,10 +899,10 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-b-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-b-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-b-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-b-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -980,10 +980,10 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-sh-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-sh-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-sh-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-sh-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -1074,10 +1074,10 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-ex-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-ex-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-ex-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-ex-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -1167,10 +1167,10 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-inc-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-inc-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-inc-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-inc-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -1225,10 +1225,10 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-unav-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-unav-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-unav-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-unav-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -1291,10 +1291,10 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-amb-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-amb-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-amb-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-amb-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -1380,10 +1380,10 @@ describe('Phase 3A-2 CNG Financial Integration & Migration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-aud-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-aud-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-aud-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-aud-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
