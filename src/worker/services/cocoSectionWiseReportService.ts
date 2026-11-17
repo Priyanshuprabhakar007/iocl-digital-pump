@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { DrizzleD1Database } from 'drizzle-orm/d1';
 import * as schema from '../../db/schema';
-import { equipmentAssets, nfrLeases, nfrVendors, users } from '../../db/schema';
+import { equipmentAssets, nfrLeases, nfrVendors, users, cocoAgreementDetails, cocoExpenseClaims, cocoClaimSettlements, cocoAssetInspections } from '../../db/schema';
 import {
   CocoComplianceMergedItem,
   formatComplianceDateDisplay,
@@ -33,6 +33,7 @@ export interface CocoSectionWiseReport {
   sections: SectionWiseSection[];
 }
 export interface SectionWiseLease {
+  id?: string;
   agreementNumber: string;
   from: string;
   to: string;
@@ -40,14 +41,54 @@ export interface SectionWiseLease {
   status: string;
 }
 export interface SectionWiseAsset {
+  id?: string;
   equipmentType: string;
   name: string;
   manufacturer: string | null;
   status: string;
 }
 
+
+export interface SectionWiseAgreement {
+  id: string;
+  agreementType: 'LAND_LEASE' | 'SERVICE_PROVIDER' | 'OTHER' | 'NFR_METADATA';
+  agreementName: string;
+  agreementNumber: string | null;
+  linkedNfrLeaseId: string | null;
+  counterpartyName: string | null;
+  vendorCode: string | null;
+  customerCode: string | null;
+  siteClass: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  remarks: string | null;
+}
+export interface SectionWiseClaim {
+  id: string;
+  claimCategory: string;
+  title: string;
+  invoiceNumber: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  dueDate: string | null;
+  amountPaise: number;
+  approvalStatus: 'DRAFT' | 'APPROVED' | 'REJECTED';
+  paidPaise: number;
+  remarks: string | null;
+}
+export interface SectionWiseInspection {
+  equipmentAssetId: string;
+  inspectedOn: string;
+  condition: 'WORKING' | 'NOT_WORKING' | 'SCRAPPED';
+  remarks: string | null;
+  nextServiceDate: string | null;
+  createdAt: string;
+}
+
 const NR = 'Not Recorded';
 const EMPTY = '-';
+const printable = (value: string, maxLength = 180) =>
+  value.length > maxLength ? value.slice(0, maxLength - 25) + '... See source record' : value;
 const date = (v: string | null | undefined) => formatComplianceDateDisplay(v, NR);
 const fromItem = (item?: CocoComplianceMergedItem): string =>
   item && item.complianceStatus !== 'NOT_RECORDED'
@@ -72,7 +113,7 @@ const notes = (item?: CocoComplianceMergedItem): string => {
     item.actionRequired ? 'Action: ' + item.actionRequired : '',
     item.hasDiscrepancy && item.discrepancyNote ? 'DISCREPANCY: ' + item.discrepancyNote : '',
   ].filter(Boolean);
-  return parts.length ? parts.join(' | ') : EMPTY;
+  return parts.length ? printable(parts.join(' | ')) : EMPTY;
 };
 const years = (start: string | null | undefined, end: string | null | undefined) => {
   if (!start || !end) return EMPTY;
@@ -90,53 +131,80 @@ export function buildSectionWiseSections(args: {
   items: CocoComplianceMergedItem[];
   leases: SectionWiseLease[];
   assets: SectionWiseAsset[];
+  agreements?: SectionWiseAgreement[];
+  claims?: SectionWiseClaim[];
+  inspections?: SectionWiseInspection[];
   outletType: string;
   reportDate?: string;
 }): SectionWiseSection[] {
   const { items, leases, assets, outletType } = args;
+  const agreementMasters = args.agreements || [];
+  const expenseClaims = args.claims || [];
+  const assetInspections = args.inspections || [];
   const asOf = args.reportDate || new Date().toISOString().slice(0, 10);
   const renewalWindowEnd = new Date(Date.parse(asOf + 'T00:00:00Z') + 30 * 86400000).toISOString().slice(0, 10);
   const byCode = new Map(items.map((item) => [item.categoryCode, item]));
   const item = (code: string) => byCode.get(code);
   const allAgreements: Array<{
     label: string; status: string; from: string; to: string; with: string; duration: string; remarks: string;
+    vendorCode?: string; customerCode?: string; siteClass?: string; outletType?: string;
   }> = [];
   const leaseLine = (label: string, i?: CocoComplianceMergedItem) => ({
     label, status: fromItem(i), from: i ? date(i.issueDate) : NR,
     to: i ? date(i.validityDueDate) : NR, with: NR,
     duration: years(i?.issueDate, i?.validityDueDate), remarks: notes(i),
   });
-  allAgreements.push(leaseLine('Land Lease', item('LAND_LEASE')));
-  allAgreements.push(leaseLine('Service Provider Contract Agreement', item('SERVICE_PROVIDER_CONTRACT')));
+  const agreementStatus = (start: string | null, end: string | null): string =>
+    !end ? NR : end < asOf ? 'Expired' : end <= renewalWindowEnd ? 'Expiring Soon'
+      : start && start > asOf ? 'Upcoming' : 'Valid';
+  const masterLine = (a: SectionWiseAgreement) => ({
+    label: a.agreementName,
+    status: agreementStatus(a.startDate, a.endDate),
+    from: date(a.startDate), to: date(a.endDate),
+    with: a.counterpartyName || NR, duration: years(a.startDate, a.endDate),
+    vendorCode: a.vendorCode || NR, customerCode: a.customerCode || NR,
+    siteClass: a.siteClass || NR, outletType,
+    remarks: printable([a.agreementNumber ? 'Agreement: ' + a.agreementNumber : '', a.remarks || '']
+      .filter(Boolean).join(' | ') || EMPTY),
+  });
+  const manuals = (type: string) => agreementMasters.filter((a) => a.agreementType === type);
+  const land = manuals('LAND_LEASE');
+  allAgreements.push(...(land.length ? land.map(masterLine) : [leaseLine('Land Lease', item('LAND_LEASE'))]));
+  const service = manuals('SERVICE_PROVIDER');
+  allAgreements.push(...(service.length ? service.map(masterLine) : [leaseLine('Service Provider Contract Agreement', item('SERVICE_PROVIDER_CONTRACT'))]));
   if (leases.length) {
     for (const lease of leases) {
+      const meta = agreementMasters.find((a) => a.agreementType === 'NFR_METADATA' && a.linkedNfrLeaseId === lease.id);
       allAgreements.push({
-        label: 'NFR Lease',
-        status: lease.status !== 'ACTIVE' ? 'Terminated'
+        label: 'NFR Lease', status: lease.status !== 'ACTIVE' ? 'Terminated'
           : lease.to < asOf ? 'Expired'
           : lease.to <= renewalWindowEnd ? 'Expiring Soon' : 'Valid',
         from: date(lease.from), to: date(lease.to),
         with: lease.vendorName || NR, duration: years(lease.from, lease.to),
-        remarks: 'Agreement: ' + lease.agreementNumber,
+        vendorCode: meta?.vendorCode || NR, customerCode: meta?.customerCode || NR,
+        siteClass: meta?.siteClass || NR, outletType,
+        remarks: printable(['Agreement: ' + lease.agreementNumber, meta?.remarks || ''].filter(Boolean).join(' | ')),
       });
     }
   } else {
     allAgreements.push(leaseLine('NFR Lease'));
   }
-  const extraAgreements = items.filter((i) =>
-    i.isCustomCategory && i.categoryCode !== 'LAND_LEASE' &&
-    /(agreement|lease|contract)/i.test(i.categoryName)
-  );
-  if (extraAgreements.length) {
-    allAgreements.push(...extraAgreements.map((i) => leaseLine(i.categoryName, i)));
+  const others = manuals('OTHER');
+  if (others.length) {
+    allAgreements.push(...others.map(masterLine));
   } else {
-    allAgreements.push(leaseLine('Other / Custom Agreement'));
+    const extra = items.filter((i) => i.isCustomCategory && i.categoryCode !== 'LAND_LEASE'
+      && /(agreement|lease|contract)/i.test(i.categoryName));
+    allAgreements.push(...(extra.length
+      ? extra.map((i) => leaseLine(i.categoryName, i))
+      : [leaseLine('Other / Custom Agreement')]));
   }
   const agreementRows = allAgreements.map((r, index) => [
     String(index + 1), r.label, r.status, r.from, r.to, r.with, r.duration,
   ]);
   const classificationRows = allAgreements.map((r, index) => [
-    String(index + 1), r.label, NR, NR, NR, outletType || NR, r.remarks,
+    String(index + 1), r.label, r.vendorCode || NR,
+    r.customerCode || NR, r.siteClass || NR, r.outletType || outletType || NR, r.remarks,
   ]);
 
   const billDefs = [
@@ -173,14 +241,28 @@ export function buildSectionWiseSections(args: {
     ['Generator / DG Set', (a) => a.equipmentType === 'DG_SET' || /\b(generator|dg set)\b/i.test(a.name)],
     ['CCTV', (a) => /\b(cctv|camera|dvr|nvr)\b/i.test(a.name)],
   ];
+  const inspectionsByAsset = new Map<string, SectionWiseInspection>();
+  for (const inspection of [...assetInspections]
+    .filter((row) => row.inspectedOn <= asOf)
+    .sort((a, b) => b.inspectedOn.localeCompare(a.inspectedOn) || b.createdAt.localeCompare(a.createdAt))) {
+    if (!inspectionsByAsset.has(inspection.equipmentAssetId)) inspectionsByAsset.set(inspection.equipmentAssetId, inspection);
+  }
   const assetRows = equipmentDefs.map(([label, match], index) => {
     const list = assets.filter(match);
     const manufacturers = Array.from(new Set(list.map((a) => a.manufacturer).filter((x): x is string => Boolean(x))));
-    // ACTIVE / MAINTENANCE / DECOMMISSIONED is an asset lifecycle status, NOT a verified working condition.
-    return [String(index + 1), label, NR,
-      list.length ? String(list.length) : NR,
-      manufacturers.length ? manufacturers.join(', ') : NR,
-      NR, list.length ? 'Equipment registered; working condition not independently recorded' : NR];
+    const inspected = list.map((a) => inspectionsByAsset.get(a.id || '')).filter((x): x is SectionWiseInspection => Boolean(x));
+    const categories = Array.from(new Set(inspected.map((i) => i.condition)));
+    const condition = !list.length || !inspected.length ? NR
+      : inspected.length !== list.length ? 'Partially Inspected'
+      : categories.length > 1 ? 'Mixed'
+      : categories[0].replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
+    const last = inspected.length
+      ? inspected.reduce((a, b) => a.inspectedOn >= b.inspectedOn ? a : b).inspectedOn : null;
+    const remarks = inspected.length
+      ? printable(inspected.map((i) => [i.remarks || (i.condition === 'NOT_WORKING' ? 'Repair required' : i.condition === 'SCRAPPED' ? 'Replacement required' : 'Checked'), i.nextServiceDate ? 'Next Service: ' + date(i.nextServiceDate) : ''].filter(Boolean).join('; ')).join(' | '))
+      : list.length ? 'Registered in Equipment; operational inspection required' : NR;
+    return [String(index + 1), label, condition, list.length ? String(list.length) : NR,
+      manufacturers.length ? manufacturers.join(', ') : NR, date(last), remarks];
   });
   const maintenanceDefs = [
     ['WATER_COOLER_MAINTENANCE', 'Water Cooler Maintenance'],
@@ -202,17 +284,53 @@ export function buildSectionWiseSections(args: {
     ['UNIFORM_CHARGES', 'Uniform Charges'],
     ['WAGES_INCENTIVES_MISC', 'Wages, Incentives & Miscellaneous Bills'],
   ];
-  const claimRows = claimDefs.map(([code, label], index) => {
+  const claimRows: string[][] = [];
+  for (const [code, label] of claimDefs) {
+    if (code !== 'LEASE_RENT') {
+      const records = expenseClaims.filter((i) => i.claimCategory === code);
+      if (records.length) {
+        for (const claim of records) {
+          const settled = claim.approvalStatus !== 'APPROVED' ? NR
+            : claim.paidPaise === claim.amountPaise ? 'Yes' : claim.paidPaise > 0 ? 'Partial' : 'No';
+          const status = claim.approvalStatus === 'DRAFT' ? 'Pending Approval'
+            : claim.approvalStatus === 'REJECTED' ? 'Rejected'
+            : settled === 'Yes' ? 'Paid' : settled === 'Partial' ? 'Partially Paid'
+            : claim.dueDate && claim.dueDate < asOf ? 'Overdue' : 'Pending';
+          claimRows.push([
+            String(claimRows.length + 1), claim.title || label, status,
+            claim.periodStart && claim.periodEnd ? date(claim.periodStart) + ' - ' + date(claim.periodEnd)
+              : date(claim.periodStart || claim.periodEnd),
+            formatIndianCurrencyFromPaise(claim.amountPaise, { asciiPrefix: true })
+              + ' | Paid: ' + formatIndianCurrencyFromPaise(claim.paidPaise, { asciiPrefix: true }),
+            settled,
+            [claim.invoiceNumber ? 'Invoice: ' + claim.invoiceNumber : '',
+              claim.remarks || '', claim.dueDate ? 'Due: ' + date(claim.dueDate) : '']
+              .filter(Boolean).join(' | ') || EMPTY,
+          ]);
+        }
+        continue;
+      }
+    }
     let i = item(code);
-    // A land-lease or manually entered rent must not be mislabeled as NFR rental payment.
     if (code === 'LEASE_RENT' && i?.authoritativeSource !== 'NFR_LEASE_RENT_MODULE') i = undefined;
     const status = !i || i.paymentStatus === 'NOT_RECORDED' ? NR
       : i.paymentStatus === 'PAID' ? 'Paid'
       : i.paymentStatus === 'OVERDUE' ? 'Overdue' : 'Pending';
     const settled = i?.paymentStatus === 'PAID' ? 'Yes'
       : i?.paymentStatus === 'PENDING' || i?.paymentStatus === 'OVERDUE' ? 'No' : NR;
-    return [String(index + 1), label, status, i?.frequency || NR, money(i), settled, notes(i)];
-  });
+    claimRows.push([String(claimRows.length + 1), label, status,
+      i?.frequency || NR, money(i), settled, notes(i)]);
+  }
+  for (const claim of expenseClaims.filter((i) => i.claimCategory === 'OTHER_CLAIM')) {
+    claimRows.push([String(claimRows.length + 1), claim.title,
+      claim.approvalStatus === 'APPROVED'
+        ? claim.paidPaise === claim.amountPaise ? 'Paid' : claim.paidPaise > 0 ? 'Partially Paid' : 'Pending'
+        : claim.approvalStatus, date(claim.periodStart),
+      formatIndianCurrencyFromPaise(claim.amountPaise, { asciiPrefix: true })
+        + ' | Paid: ' + formatIndianCurrencyFromPaise(claim.paidPaise, { asciiPrefix: true }),
+      claim.approvalStatus === 'APPROVED' ? claim.paidPaise === claim.amountPaise ? 'Yes' : 'No' : NR,
+      printable(claim.remarks || EMPTY)]);
+  }
 
   return [
     {
@@ -227,7 +345,7 @@ export function buildSectionWiseSections(args: {
           widths: [25, 143, 66, 78, 59, 62, 76], rows: classificationRows },
       ],
       noteTitle: 'Source / Missing Data',
-      note: 'NFR agreements are read from NFR Management; other agreements use the compliance register. V Code, Customer Code, Site and counterparty are not inferred where dedicated fields are absent.',
+      note: 'NFR lease dates/vendor are sourced from NFR Management. Land, service-provider and other agreements use the Agreements register. Extra NFR identification is linked by source lease ID; missing fields are not invented.',
     },
     {
       title: 'Bills, Taxes & Charges',
@@ -279,7 +397,7 @@ export function buildSectionWiseSections(args: {
           widths: [25, 162, 78, 72, 73, 99], rows: maintenanceRows },
       ],
       noteTitle: 'Operational Condition',
-      note: 'Equipment lifecycle status is not evidence that an item is Working / Not Working / Scrapped. Condition and last inspection stay Not Recorded until documented separately.',
+      note: 'Operational condition is based only on recorded asset inspections as of the selected report date. Asset lifecycle status alone is never treated as proof of working condition.',
     },
     {
       title: 'Claims & Payments',
@@ -298,7 +416,7 @@ export function buildSectionWiseSections(args: {
           ] },
       ],
       noteTitle: 'No Duplication With Daily Operations',
-      note: 'Fuel-sales collections, shift handovers and bank deposits remain in Financial Operations. Claim entries require their own sourced record; the PDF does not invent expense payments.',
+      note: 'Audited claims and approved payments are sourced from the dedicated Claims register. Fuel sales, shift handovers and bank deposits remain separate and are never counted as expense settlements.',
     },
   ];
 }
@@ -312,14 +430,30 @@ export class CocoSectionWiseReportService {
       outletId: args.outletId,
       reportDate: args.reportDate,
     });
-    const [leases, vendors, equipment, actor] = await Promise.all([
+    // Optional additive schema: legacy environments continue serving existing compliance data
+    // until the reviewed migration 0036 is applied. Do not mutate a hosted database on read.
+    const legacySafe = async <T>(promise: Promise<T>, fallback: T): Promise<T> => {
+      try { return await promise; } catch (err) {
+        const underlying = err instanceof Error && 'cause' in err
+          ? String((err as Error & { cause?: unknown }).cause)
+          : '';
+        if (/no such table/i.test(String(err) + ' ' + underlying)) return fallback;
+        throw err;
+      }
+    };
+    const [leases, vendors, equipment, actor, agreementRecords, claimRecords, settlements, inspections] = await Promise.all([
       this.db.select().from(nfrLeases).where(eq(nfrLeases.outletId, args.outletId)).all(),
       this.db.select().from(nfrVendors).where(eq(nfrVendors.outletId, args.outletId)).all(),
       this.db.select().from(equipmentAssets).where(eq(equipmentAssets.outletId, args.outletId)).all(),
       this.db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, args.actorUserId)).get(),
+      legacySafe(this.db.select().from(cocoAgreementDetails).where(eq(cocoAgreementDetails.outletId, args.outletId)).all(), []),
+      legacySafe(this.db.select().from(cocoExpenseClaims).where(eq(cocoExpenseClaims.outletId, args.outletId)).all(), []),
+      legacySafe(this.db.select().from(cocoClaimSettlements).where(eq(cocoClaimSettlements.outletId, args.outletId)).all(), []),
+      legacySafe(this.db.select().from(cocoAssetInspections).where(eq(cocoAssetInspections.outletId, args.outletId)).all(), []),
     ]);
     const vendorById = new Map(vendors.map((v) => [v.id, v]));
     const leaseInfo: SectionWiseLease[] = leases.map((l) => ({
+      id: l.id,
       agreementNumber: l.agreementNumber,
       from: l.leaseStartDate,
       to: l.leaseEndDate,
@@ -336,11 +470,31 @@ export class CocoSectionWiseReportService {
       sections: buildSectionWiseSections({
         items: register.items,
         leases: leaseInfo,
+        agreements: agreementRecords.map((a) => ({
+          id: a.id, agreementType: a.agreementType, agreementName: a.agreementName,
+          agreementNumber: a.agreementNumber, linkedNfrLeaseId: a.linkedNfrLeaseId,
+          counterpartyName: a.counterpartyName, vendorCode: a.vendorCode,
+          customerCode: a.customerCode, siteClass: a.siteClass,
+          startDate: a.startDate, endDate: a.endDate, remarks: a.remarks,
+        })),
+        claims: claimRecords.map((claim) => ({
+          id: claim.id, claimCategory: claim.claimCategory, title: claim.title,
+          invoiceNumber: claim.invoiceNumber,
+          periodStart: claim.periodStart, periodEnd: claim.periodEnd, dueDate: claim.dueDate,
+          amountPaise: claim.amountPaise, approvalStatus: claim.approvalStatus,
+          paidPaise: settlements.filter((payment) => payment.claimId === claim.id &&
+            payment.paymentDate <= register.reportDate)
+            .reduce((sum, payment) => sum + payment.amountPaise, 0),
+          remarks: claim.remarks,
+        })),
+        inspections: inspections.map((i) => ({
+          equipmentAssetId: i.equipmentAssetId, inspectedOn: i.inspectedOn,
+          condition: i.condition, nextServiceDate: i.nextServiceDate,
+          remarks: i.remarks, createdAt: i.createdAt,
+        })),
         assets: equipment.map((e) => ({
-          equipmentType: e.equipmentType,
-          name: e.name,
-          manufacturer: e.manufacturer,
-          status: e.status,
+          id: e.id, equipmentType: e.equipmentType, name: e.name,
+          manufacturer: e.manufacturer, status: e.status,
         })),
         outletType: register.outlet.outletType,
         reportDate: register.reportDate,
