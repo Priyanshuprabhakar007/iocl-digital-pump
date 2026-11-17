@@ -1,4 +1,5 @@
 import './adminModern.css';
+import { CocoDocumentationMastersPanel } from '../components/CocoDocumentationMastersPanel';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, apiFetchBlob } from '../services/api';
@@ -80,7 +81,7 @@ interface SectionWisePreview {
   }>;
 }
 
-type ActiveTab = 'REGISTER' | 'ONE_PAGER' | 'DUE_DATES' | 'SECTION_WISE';
+type ActiveTab = 'REGISTER' | 'ONE_PAGER' | 'DUE_DATES' | 'SECTION_WISE' | 'MASTERS';
 type ExpiryHorizon = 30 | 60 | 90;
 
 const STATUS_BADGE_STYLES: Record<
@@ -1124,6 +1125,14 @@ export const DocumentsPage: React.FC = () => {
           <FileText className="w-4 h-4" />
           Tab 4 — Section-wise PDF
         </button>
+        <button type="button" onClick={() => setActiveTab('MASTERS')}
+          className={'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ' +
+            (activeTab === 'MASTERS'
+              ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
+              : 'border-transparent text-[#64748B] hover:text-[#334155]')}>
+          <ShieldCheck className="w-4 h-4" />
+          Tab 5 — Masters &amp; Evidence
+        </button>
       </div>
 
       {/* ===================================================================== */}
@@ -1675,6 +1684,15 @@ export const DocumentsPage: React.FC = () => {
         </div>
       )}
 
+
+      {/* TAB 5 — AGREEMENTS, EXPENSE EVIDENCE & EQUIPMENT INSPECTIONS */}
+      {activeTab === 'MASTERS' && selectedOutletId && (
+        <CocoDocumentationMastersPanel
+          outletId={selectedOutletId}
+          vaultDocs={vaultDocs}
+          onSaved={() => setSectionWiseReport(null)}
+        />
+      )}
 
       {/* TAB 4 — SECTION-WISE REPORT & PDF EXPORT */}
       {activeTab === 'SECTION_WISE' && (
