@@ -1862,3 +1862,83 @@ export const cocoComplianceRecords = sqliteTable(
 );
 
 
+
+export const cocoAgreementDetails = sqliteTable('coco_agreement_details', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  agreementType: text('agreement_type', { enum: ['LAND_LEASE', 'SERVICE_PROVIDER', 'OTHER', 'NFR_METADATA'] }).notNull(),
+  agreementName: text('agreement_name').notNull(),
+  agreementNumber: text('agreement_number'),
+  linkedNfrLeaseId: text('linked_nfr_lease_id').references(() => nfrLeases.id),
+  counterpartyName: text('counterparty_name'),
+  vendorCode: text('vendor_code'),
+  customerCode: text('customer_code'),
+  siteClass: text('site_class', { enum: ['A', 'B', 'C'] }),
+  startDate: text('start_date'),
+  endDate: text('end_date'),
+  agreementDocumentId: text('agreement_document_id').references(() => documents.id),
+  remarks: text('remarks'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  updatedBy: text('updated_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_coco_agreements_outlet').on(table.outletId, table.agreementType),
+  uniqueIndex('uq_coco_agreements_nfr_metadata').on(table.linkedNfrLeaseId),
+]);
+
+export const cocoExpenseClaims = sqliteTable('coco_expense_claims', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  claimCategory: text('claim_category').notNull(),
+  title: text('title').notNull(),
+  invoiceNumber: text('invoice_number'),
+  periodStart: text('period_start'),
+  periodEnd: text('period_end'),
+  dueDate: text('due_date'),
+  amountPaise: integer('amount_paise').notNull(),
+  invoiceDocumentId: text('invoice_document_id').references(() => documents.id),
+  approvalStatus: text('approval_status', { enum: ['DRAFT', 'APPROVED', 'REJECTED'] }).notNull().default('DRAFT'),
+  approvedBy: text('approved_by').references(() => users.id),
+  approvedAt: text('approved_at'),
+  remarks: text('remarks'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_coco_claims_outlet_category').on(table.outletId, table.claimCategory),
+  index('idx_coco_claims_outlet_due').on(table.outletId, table.dueDate),
+]);
+
+export const cocoClaimSettlements = sqliteTable('coco_claim_settlements', {
+  id: text('id').primaryKey(),
+  claimId: text('claim_id').notNull().references(() => cocoExpenseClaims.id, { onDelete: 'restrict' }),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  amountPaise: integer('amount_paise').notNull(),
+  paymentDate: text('payment_date').notNull(),
+  paymentMethod: text('payment_method', { enum: ['BANK_TRANSFER','UPI','CHEQUE','CASH','OTHER'] }).notNull(),
+  referenceNumber: text('reference_number').notNull(),
+  receiptDocumentId: text('receipt_document_id').notNull().references(() => documents.id),
+  remarks: text('remarks'),
+  recordedBy: text('recorded_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  index('idx_coco_settlements_claim').on(table.claimId),
+  uniqueIndex('uq_coco_settlements_claim_reference').on(table.claimId, table.referenceNumber),
+]);
+
+export const cocoAssetInspections = sqliteTable('coco_asset_inspections', {
+  id: text('id').primaryKey(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  equipmentAssetId: text('equipment_asset_id').notNull().references(() => equipmentAssets.id, { onDelete: 'restrict' }),
+  inspectedOn: text('inspected_on').notNull(),
+  condition: text('condition', { enum: ['WORKING','NOT_WORKING','SCRAPPED'] }).notNull(),
+  nextServiceDate: text('next_service_date'),
+  remarks: text('remarks'),
+  evidenceDocumentId: text('evidence_document_id').references(() => documents.id),
+  recordedBy: text('recorded_by').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  index('idx_coco_inspections_outlet_date').on(table.outletId, table.inspectedOn),
+  index('idx_coco_inspections_asset_date').on(table.equipmentAssetId, table.inspectedOn, table.createdAt),
+]);
