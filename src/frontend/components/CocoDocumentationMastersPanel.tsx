@@ -183,8 +183,8 @@ export const CocoDocumentationMastersPanel: React.FC<{
       decision === 'APPROVED' ? 'Claim approved.' : 'Claim rejected.');
   };
   const docs = vaultDocs.filter((d) => d.outletId === outletId);
-  const docOptions = (name: string, required = false) => (
-    <select name={name} required={required} className={inputStyle}>
+  const docOptions = (name: string, required = false, selectedId = '') => (
+    <select name={name} required={required} className={inputStyle} defaultValue={selectedId}>
       <option value="">{required ? 'Select uploaded receipt' : 'No document linked'}</option>
       {docs.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
     </select>
@@ -320,7 +320,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
                 <Field label="Period From"><input name="periodStart" type="date" className={inputStyle} defaultValue={dateValue(claimEdit?.periodStart)}/></Field>
                 <Field label="Period To"><input name="periodEnd" type="date" className={inputStyle} defaultValue={dateValue(claimEdit?.periodEnd)}/></Field>
                 <Field label="Due Date"><input name="dueDate" type="date" className={inputStyle} defaultValue={dateValue(claimEdit?.dueDate)}/></Field>
-                <Field label="Invoice Attachment">{docOptions('invoiceDocumentId')}</Field>
+                <Field label="Invoice Attachment">{docOptions('invoiceDocumentId', false, claimEdit?.invoiceDocumentId || '')}</Field>
               </div>
               <Field label="Remarks"><textarea name="remarks" className={inputStyle} defaultValue={claimEdit?.remarks || ''} rows={2}/></Field>
               <p className="text-xs text-[#64748B]">Every new claim starts as Draft. A different global administrator must approve it before recording payment.</p>
