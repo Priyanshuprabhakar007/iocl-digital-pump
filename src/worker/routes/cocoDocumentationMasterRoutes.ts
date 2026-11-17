@@ -199,7 +199,7 @@ cocoDocumentationMasterRoutes.put('/compliance/masters/agreements/:id', requireP
   if (!parsed.success) return validation(c, parsed.error.issues[0]?.message || 'Invalid agreement.');
   const i = parsed.data;
   const db = getDb(c.env.DB);
-  const old = await db.select().from(cocoAgreementDetails).where(eq(cocoAgreementDetails.id, c.req.param('id'))).get();
+  const old = await db.select().from(cocoAgreementDetails).where(eq(cocoAgreementDetails.id, (c.req.param('id') || ''))).get();
   if (!old || old.outletId !== i.outletId) return failed(c, 'AGREEMENT_NOT_FOUND', 'Agreement not found in selected outlet.', 404);
   if (!await scope(c, old.outletId)) return failed(c, 'FORBIDDEN_SCOPE', 'Outlet access denied.', 403);
   if (!await checkDocument(c, old.outletId, i.agreementDocumentId)) return failed(c, 'DOCUMENT_OUTLET_MISMATCH', 'Document belongs to another outlet.', 403);
@@ -256,7 +256,7 @@ cocoDocumentationMasterRoutes.put('/compliance/masters/claims/:id', requirePermi
   if (!parsed.success) return validation(c, parsed.error.issues[0]?.message || 'Invalid claim.');
   const i = parsed.data;
   const db = getDb(c.env.DB);
-  const old = await db.select().from(cocoExpenseClaims).where(eq(cocoExpenseClaims.id, c.req.param('id'))).get();
+  const old = await db.select().from(cocoExpenseClaims).where(eq(cocoExpenseClaims.id, (c.req.param('id') || ''))).get();
   if (!old || old.outletId !== i.outletId) return failed(c, 'CLAIM_NOT_FOUND', 'Claim not found in selected outlet.', 404);
   if (!await scope(c, old.outletId)) return failed(c, 'FORBIDDEN_SCOPE', 'Outlet access denied.', 403);
   if (old.approvalStatus !== 'DRAFT') return failed(c, 'CLAIM_LOCKED', 'Only draft claims may be edited.', 409);
@@ -282,7 +282,7 @@ cocoDocumentationMasterRoutes.post('/compliance/masters/claims/:id/decision', re
   // Only a globally scoped administrator can approve spending. Separate maker/checker.
   if (!c.var.user.isGlobalAdmin) return failed(c, 'APPROVAL_FORBIDDEN', 'A global administrator must approve or reject claims.', 403);
   const db = getDb(c.env.DB);
-  const claim = await db.select().from(cocoExpenseClaims).where(eq(cocoExpenseClaims.id, c.req.param('id'))).get();
+  const claim = await db.select().from(cocoExpenseClaims).where(eq(cocoExpenseClaims.id, (c.req.param('id') || ''))).get();
   if (!claim) return failed(c, 'CLAIM_NOT_FOUND', 'Claim not found.', 404);
   if (!await scope(c, claim.outletId)) return failed(c, 'FORBIDDEN_SCOPE', 'Outlet access denied.', 403);
   if (claim.approvalStatus !== 'DRAFT') return failed(c, 'CLAIM_LOCKED', 'Only draft claims may be decided.', 409);
@@ -305,7 +305,7 @@ cocoDocumentationMasterRoutes.post('/compliance/masters/claims/:id/settlements',
   const parsed = settlementInput.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return validation(c, parsed.error.issues[0]?.message || 'Invalid settlement.');
   const db = getDb(c.env.DB);
-  const claim = await db.select().from(cocoExpenseClaims).where(eq(cocoExpenseClaims.id, c.req.param('id'))).get();
+  const claim = await db.select().from(cocoExpenseClaims).where(eq(cocoExpenseClaims.id, (c.req.param('id') || ''))).get();
   if (!claim) return failed(c, 'CLAIM_NOT_FOUND', 'Claim not found.', 404);
   if (!await scope(c, claim.outletId)) return failed(c, 'FORBIDDEN_SCOPE', 'Outlet access denied.', 403);
   if (claim.approvalStatus !== 'APPROVED') return failed(c, 'CLAIM_NOT_APPROVED', 'Claim must be approved before payment.', 409);
