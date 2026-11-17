@@ -30,6 +30,20 @@ describe('COCO documentation master API / evidence protections', () => {
         body: body === undefined ? undefined : JSON.stringify(body),
       }), env);
       const now = new Date().toISOString();
+      const firstAdmin = await db.select().from(schema.users)
+        .where(eq(schema.users.id, 'user-admin')).get();
+      expect(firstAdmin).toBeTruthy();
+      await db.insert(schema.users).values({
+        id: 'qa-admin-approver', empCode: 'QA-ADM-02', name: 'QA Approver',
+        email: 'qa-approver@iocl.in', phone: '9999999998', passwordHash: firstAdmin!.passwordHash,
+        status: 'ACTIVE', createdAt: now, updatedAt: now,
+      });
+      await db.insert(schema.userRoles).values({ userId: 'qa-admin-approver', roleId: 'role-admin' });
+      await db.insert(schema.userScopeAssignments).values({
+        id: 'qa-approver-scope', userId: 'qa-admin-approver', scopeLevel: 'GLOBAL',
+        stateId: null, divisionId: null, salesAreaId: null, outletId: null,
+        createdAt: now, createdBy: 'SYSTEM',
+      });
       await db.insert(schema.documents).values([
         { id: 'evidence-one', outletId: 'ro-1001', name: 'Saved document', mimeType: 'application/pdf',
           r2Key: 'test/doc1', sizeBytes: 128, uploadedByUserId: 'user-admin', createdAt: now },
@@ -57,10 +71,20 @@ describe('COCO documentation master API / evidence protections', () => {
         'POST', { amountPaise: 10000, paymentDate: '2026-11-17', paymentMethod: 'UPI',
           referenceNumber: 'UTR-1', receiptDocumentId: 'evidence-one' })).status).toBe(409);
 
-      // Fixture approval by another user is set directly to isolate database settlement guard.
-      await db.update(schema.cocoExpenseClaims).set({
-        approvalStatus: 'APPROVED', approvedBy: 'user-so', approvedAt: now,
-      }).where(eq(schema.cocoExpenseClaims.id, claimId));
+      // A separate globally scoped admin approves, preserving maker/checker boundaries.
+      const approverLogin = await app.fetch(new Request('http://localhost/api/v1/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ email: 'qa-approver@iocl.in', password: 'Password@123' }),
+      }), env);
+      expect(approverLogin.status).toBe(200);
+      const approverCookie = approverLogin.headers.get('set-cookie')?.split(';')[0] || '';
+      const approval = await app.fetch(new Request(
+        base + '/compliance/masters/claims/' + claimId + '/decision', {
+          method: 'POST',
+          headers: { Cookie: approverCookie, Origin: 'http://localhost:3000', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision: 'APPROVED' }),
+        }), env);
+      expect(approval.status).toBe(200);
 
       const pay = (amountPaise: number, referenceNumber: string, documentId = 'evidence-one') =>
         call('/compliance/masters/claims/' + claimId + '/settlements', 'POST',
