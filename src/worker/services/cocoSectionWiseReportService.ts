@@ -91,8 +91,11 @@ export function buildSectionWiseSections(args: {
   leases: SectionWiseLease[];
   assets: SectionWiseAsset[];
   outletType: string;
+  reportDate?: string;
 }): SectionWiseSection[] {
   const { items, leases, assets, outletType } = args;
+  const asOf = args.reportDate || new Date().toISOString().slice(0, 10);
+  const renewalWindowEnd = new Date(Date.parse(asOf + 'T00:00:00Z') + 30 * 86400000).toISOString().slice(0, 10);
   const byCode = new Map(items.map((item) => [item.categoryCode, item]));
   const item = (code: string) => byCode.get(code);
   const allAgreements: Array<{
@@ -108,7 +111,10 @@ export function buildSectionWiseSections(args: {
   if (leases.length) {
     for (const lease of leases) {
       allAgreements.push({
-        label: 'NFR Lease', status: lease.status === 'ACTIVE' ? 'Valid' : lease.status,
+        label: 'NFR Lease',
+        status: lease.status !== 'ACTIVE' ? 'Terminated'
+          : lease.to < asOf ? 'Expired'
+          : lease.to <= renewalWindowEnd ? 'Expiring Soon' : 'Valid',
         from: date(lease.from), to: date(lease.to),
         with: lease.vendorName || NR, duration: years(lease.from, lease.to),
         remarks: 'Agreement: ' + lease.agreementNumber,
@@ -337,6 +343,7 @@ export class CocoSectionWiseReportService {
           status: e.status,
         })),
         outletType: register.outlet.outletType,
+        reportDate: register.reportDate,
       }),
     };
   }
