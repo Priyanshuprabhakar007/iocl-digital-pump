@@ -2605,9 +2605,24 @@ export class PumpRepository {
         )
       );
 
-    const shiftIds = new Set(readings.map(r => r.operationalShiftId));
+    // A shift captures a chart revision BEFORE its first tank dip is entered.
+    // Once captured, chart point edits must already be blocked, otherwise the
+    // same revision could silently yield different volumes during that shift.
+    const snapshots = await this.db
+      .select({ operationalShiftId: schema.operationalShiftTanks.operationalShiftId })
+      .from(schema.operationalShiftTanks)
+      .where(
+        and(
+          eq(schema.operationalShiftTanks.tankId, tankId),
+          eq(schema.operationalShiftTanks.calibrationChartId, chartId)
+        )
+      );
+    const shiftIds = new Set([
+      ...readings.map(r => r.operationalShiftId),
+      ...snapshots.map(s => s.operationalShiftId),
+    ]);
     return {
-      isReferenced: readings.length > 0,
+      isReferenced: readings.length > 0 || snapshots.length > 0,
       referencedReadingsCount: readings.length,
       referencedShiftsCount: shiftIds.size,
     };

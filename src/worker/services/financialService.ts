@@ -11,6 +11,7 @@ import {
 } from '../../shared/types';
 import { formatPaiseToMoney, calculateRevenuePaise, checkedMoneyAdd } from '../../shared/financialUtils';
 import { formatMilliunits } from '../../shared/precision';
+import { assessFuelRevenueReadingCoverage } from './fuelRevenueReadingCoverage';
 
 export class FinancialService {
   constructor(
@@ -42,10 +43,13 @@ export class FinancialService {
 
     const nozzleSnapshots = await this.pumpRepo.listShiftNozzleSnapshots(shiftId);
     const meterReadings = await this.pumpRepo.listReadingsForShift(shiftId);
+    const unavailabilityRecords = await this.pumpRepo.listUnavailabilityForShift(shiftId);
     const priceSnapshots = await this.financialRepo.listShiftProductPrices(shiftId);
 
     const priceMap = new Map<string, number>();
     priceSnapshots.filter(p => p.productCategory !== 'CNG').forEach(p => priceMap.set(p.productId, p.pricePaisePerUnit));
+
+    const readingCoverage = assessFuelRevenueReadingCoverage(nozzleSnapshots, meterReadings, unavailabilityRecords);
 
     const readingMap = new Map<string, typeof meterReadings[0]>();
     meterReadings.forEach(r => readingMap.set(r.nozzleId, r));
@@ -82,7 +86,7 @@ export class FinancialService {
         };
         productTotals.set(productId, pData);
       }
-      pData.quantityMilliunits += netQuantity;
+      pData.quantityMilliunits = checkedMoneyAdd(pData.quantityMilliunits, netQuantity);
     }
 
     const byProduct: FinancialRevenueProduct[] = [];
@@ -104,13 +108,14 @@ export class FinancialService {
         revenueStr: formatPaiseToMoney(revenuePaise)
       });
 
-      fuelTotalPaise += revenuePaise;
+      fuelTotalPaise = checkedMoneyAdd(fuelTotalPaise, revenuePaise);
     }
 
     return {
       byProduct,
       fuelTotalPaise,
-      fuelTotalStr: formatPaiseToMoney(fuelTotalPaise)
+      fuelTotalStr: formatPaiseToMoney(fuelTotalPaise),
+      readingCoverage
     };
   }
 
@@ -195,11 +200,11 @@ export class FinancialService {
     }>();
 
     collections.forEach(c => {
-      totals[c.collectionType] += c.amountPaise;
+      totals[c.collectionType] = checkedMoneyAdd(totals[c.collectionType], c.amountPaise);
       if (c.collectionType === 'CREDIT_SALE' && c.creditPartyId) {
         const existing = creditSalesByPartyMap.get(c.creditPartyId);
         if (existing) {
-          existing.amountPaise += c.amountPaise;
+          existing.amountPaise = checkedMoneyAdd(existing.amountPaise, c.amountPaise);
         } else {
           creditSalesByPartyMap.set(c.creditPartyId, {
             partyCode: c.creditPartyCodeSnapshot || '',
@@ -210,7 +215,7 @@ export class FinancialService {
       }
     });
 
-    const totalCollectionsPaise = Object.values(totals).reduce((a, b) => a + b, 0);
+    const totalCollectionsPaise = checkedMoneyAdd(...Object.values(totals));
 
     const includedComponents = ['FUEL', 'LUBE'];
     const pendingComponents: string[] = [];
@@ -227,16 +232,16 @@ export class FinancialService {
 
     const authoritativeTotalPaise = checkedMoneyAdd(...componentsToAdd);
 
-    const variancePaise = authoritativeTotalPaise - totalCollectionsPaise;
+    const variancePaise = checkedMoneyAdd(authoritativeTotalPaise, -totalCollectionsPaise);
     let varianceStatus: FinancialVarianceStatus = 'BALANCED';
     if (variancePaise > 0) varianceStatus = 'SHORTAGE';
     if (variancePaise < 0) varianceStatus = 'EXCESS';
 
     const verifiedDepositsPaise = deposits
       .filter(d => d.status === 'VERIFIED')
-      .reduce((sum, d) => sum + d.amountPaise, 0);
+      .reduce((sum, d) => checkedMoneyAdd(sum, d.amountPaise), 0);
 
-    const pendingCashDepositPaise = totals.CASH - verifiedDepositsPaise;
+    const pendingCashDepositPaise = checkedMoneyAdd(totals.CASH, -verifiedDepositsPaise);
 
     return {
       operationalShiftId: shiftId,
@@ -245,6 +250,7 @@ export class FinancialService {
         byProduct: revenue.byProduct,
         fuelTotalPaise: revenue.fuelTotalPaise,
         fuelTotalStr: revenue.fuelTotalStr,
+        readingCoverage: revenue.readingCoverage,
         cngTotalPaise: cngRevenue.cngTotalPaise,
         cngTotalStr: cngRevenue.cngTotalStr,
         lubeTotalPaise: lubeRevenue.lubeTotalPaise,
@@ -286,18 +292,18 @@ export class FinancialService {
       varianceStatus,
       varianceReason: reconciliation?.varianceReason || null,
       cashHandoverSummary: {
-        totalPendingPaise: handovers.filter(h => h.status === 'PENDING').reduce((s, h) => s + h.amountPaise, 0),
-        totalPendingStr: formatPaiseToMoney(handovers.filter(h => h.status === 'PENDING').reduce((s, h) => s + h.amountPaise, 0)),
-        totalAcknowledgedPaise: handovers.filter(h => h.status === 'ACKNOWLEDGED').reduce((s, h) => s + h.amountPaise, 0),
-        totalAcknowledgedStr: formatPaiseToMoney(handovers.filter(h => h.status === 'ACKNOWLEDGED').reduce((s, h) => s + h.amountPaise, 0))
+        totalPendingPaise: handovers.filter(h => h.status === 'PENDING').reduce((s, h) => checkedMoneyAdd(s, h.amountPaise), 0),
+        totalPendingStr: formatPaiseToMoney(handovers.filter(h => h.status === 'PENDING').reduce((s, h) => checkedMoneyAdd(s, h.amountPaise), 0)),
+        totalAcknowledgedPaise: handovers.filter(h => h.status === 'ACKNOWLEDGED').reduce((s, h) => checkedMoneyAdd(s, h.amountPaise), 0),
+        totalAcknowledgedStr: formatPaiseToMoney(handovers.filter(h => h.status === 'ACKNOWLEDGED').reduce((s, h) => checkedMoneyAdd(s, h.amountPaise), 0))
       },
       bankDepositSummary: {
-        totalSubmittedPaise: deposits.filter(d => d.status === 'SUBMITTED').reduce((s, d) => s + d.amountPaise, 0),
-        totalSubmittedStr: formatPaiseToMoney(deposits.filter(d => d.status === 'SUBMITTED').reduce((s, d) => s + d.amountPaise, 0)),
-        totalVerifiedPaise: deposits.filter(d => d.status === 'VERIFIED').reduce((s, d) => s + d.amountPaise, 0),
-        totalVerifiedStr: formatPaiseToMoney(deposits.filter(d => d.status === 'VERIFIED').reduce((s, d) => s + d.amountPaise, 0)),
-        totalRejectedPaise: deposits.filter(d => d.status === 'REJECTED').reduce((s, d) => s + d.amountPaise, 0),
-        totalRejectedStr: formatPaiseToMoney(deposits.filter(d => d.status === 'REJECTED').reduce((s, d) => s + d.amountPaise, 0))
+        totalSubmittedPaise: deposits.filter(d => d.status === 'SUBMITTED').reduce((s, d) => checkedMoneyAdd(s, d.amountPaise), 0),
+        totalSubmittedStr: formatPaiseToMoney(deposits.filter(d => d.status === 'SUBMITTED').reduce((s, d) => checkedMoneyAdd(s, d.amountPaise), 0)),
+        totalVerifiedPaise: deposits.filter(d => d.status === 'VERIFIED').reduce((s, d) => checkedMoneyAdd(s, d.amountPaise), 0),
+        totalVerifiedStr: formatPaiseToMoney(deposits.filter(d => d.status === 'VERIFIED').reduce((s, d) => checkedMoneyAdd(s, d.amountPaise), 0)),
+        totalRejectedPaise: deposits.filter(d => d.status === 'REJECTED').reduce((s, d) => checkedMoneyAdd(s, d.amountPaise), 0),
+        totalRejectedStr: formatPaiseToMoney(deposits.filter(d => d.status === 'REJECTED').reduce((s, d) => checkedMoneyAdd(s, d.amountPaise), 0))
       },
       cashDepositControl: {
         cashCollectedPaise: totals.CASH,

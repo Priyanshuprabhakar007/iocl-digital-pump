@@ -1,0 +1,50 @@
+name: P0 — Wrangler disposable local D1 migration rehearsal
+
+on:
+  push:
+    branches:
+      - fix/p0-finance-provisional-reading-status-20261114
+    paths:
+      - .github/workflows/p0-wrangler-local-d1-rehearsal.yml
+      - scripts/p0/wrangler.disposable-local-d1.jsonc
+      - tests/p0WranglerLocalRehearsalIsolation.test.ts
+      - migrations/**
+      - bun.lock
+      - package.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p0-local-d1-rehearsal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migrate-disposable-local-d1:
+    name: Wrangler local-only baseline compatibility — not staging approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout exact draft branch
+        uses: actions/checkout@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Prove isolated configuration and local-only command
+        run: bun test tests/p0WranglerLocalRehearsalIsolation.test.ts
+      - name: Run original 0001–0035 baseline against disposable Wrangler local D1
+        run: |
+          bunx wrangler d1 migrations apply p0-disposable-local-d1 \
+            --local \
+            --persist-to "$RUNNER_TEMP/p0-disposable-local-d1-${{ github.run_id }}" \
+            --config scripts/p0/wrangler.disposable-local-d1.jsonc
+      - name: Inspect local migration history without remote access
+        run: |
+          bunx wrangler d1 migrations list p0-disposable-local-d1 \
+            --local \
+            --persist-to "$RUNNER_TEMP/p0-disposable-local-d1-${{ github.run_id }}" \
+            --config scripts/p0/wrangler.disposable-local-d1.jsonc
