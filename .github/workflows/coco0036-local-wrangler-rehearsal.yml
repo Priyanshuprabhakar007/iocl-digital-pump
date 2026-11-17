@@ -1,0 +1,64 @@
+name: COCO 0036 local-only Wrangler migration rehearsal
+
+on:
+  push:
+    branches:
+      - feature/coco0036-local-wrangler-rehearsal-20261117
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-d1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Verify baseline freeze and create a synthetic local-only target
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_STAGING_D1_ID
+          mkdir -p .coco36-local
+          cat > .coco36-local/wrangler.local.jsonc <<'JSON'
+          {
+            "name": "coco36-disposable-local-only",
+            "main": "../src/worker/index.ts",
+            "compatibility_date": "2024-11-01",
+            "compatibility_flags": ["nodejs_compat"],
+            "vars": {"ENVIRONMENT":"local-test"},
+            "d1_databases": [{
+              "binding": "DB",
+              "database_name": "coco36-disposable-local-only",
+              "database_id": "00000000-0000-4000-8000-000000000036",
+              "migrations_dir": "../migrations"
+            }]
+          }
+          JSON
+          bun -e 'const fs=require("fs");const f=fs.readdirSync("migrations").filter(n=>n.endsWith(".sql")).sort();if(f.length!==35||!f[34].startsWith("0035_"))throw new Error("Baseline freeze mismatch");'
+      - name: Apply unchanged 0001–0035 to local engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_STAGING_D1_ID
+          bunx wrangler d1 migrations apply coco36-disposable-local-only --config .coco36-local/wrangler.local.jsonc --local --persist-to .coco36-local/state
+      - name: Rehearse proposed 0036 in local engine only
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_STAGING_D1_ID
+          bunx wrangler d1 execute coco36-disposable-local-only --config .coco36-local/wrangler.local.jsonc --local --persist-to .coco36-local/state --file docs/proposed-migrations/0036_coco_agreements_claims_inspections.sql
+      - name: Validate the new schema and foreign keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_STAGING_D1_ID
+          bunx wrangler d1 execute coco36-disposable-local-only --config .coco36-local/wrangler.local.jsonc --local --persist-to .coco36-local/state --command "SELECT name FROM sqlite_master WHERE name LIKE 'coco_%' ORDER BY name;" --json > .coco36-local/objects.json
+          bunx wrangler d1 execute coco36-disposable-local-only --config .coco36-local/wrangler.local.jsonc --local --persist-to .coco36-local/state --command "PRAGMA foreign_key_check;" --json > .coco36-local/fk.json
+          bun -e 'const fs=require("fs");const rows=(p)=>JSON.parse(fs.readFileSync(p,"utf8")).flatMap(x=>x.results||[]);const objects=new Set(rows(".coco36-local/objects.json").map(x=>x.name));for(const name of ["coco_agreement_details","coco_expense_claims","coco_claim_settlements","coco_asset_inspections","trg_coco_settlement_approved_amount_guard","trg_coco_inspection_outlet_guard"])if(!objects.has(name))throw new Error("Missing: "+name);if(rows(".coco36-local/fk.json").length)throw new Error("Foreign key violations");console.log("PASS: COCO 0036 D1 objects and foreign keys");'
+      - name: Test application integration
+        run: bun test --timeout 15000 tests/cocoDocumentationMastersApi.test.ts tests/cocoDocumentationReportSync.test.ts tests/cocoSectionWiseReport.test.ts
+      - run: echo "Local rehearsal only — no hosted D1 migration or deployment performed"
