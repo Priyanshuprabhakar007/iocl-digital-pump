@@ -91,7 +91,7 @@ jobs:
             tail -60 "$RUNNER_TEMP/p0-client-demo.log"
             exit 1
           fi
-          response="$(curl --fail --silent --show-error --max-time 20 -H 'Origin: http://localhost:3000' -H 'Content-Type: application/json' -d '{\"email\":\"admin@iocl.in\",\"password\":\"Password@123\"}' http://127.0.0.1:3000/api/v1/auth/login)"
+          response="$(curl --fail --silent --show-error --max-time 20 -H 'Origin: http://localhost:3000' -H 'Content-Type: application/json' -d '{"email":"admin@iocl.in","password":"Password@123"}' http://127.0.0.1:3000/api/v1/auth/login)"
           echo "$response" | jq -e '.success == true and (.data != null)' > /dev/null
           echo "PASS: isolated local UI and sample admin login accessible"
       - name: Production build compatibility
