@@ -91,7 +91,8 @@ describe('COCO documentation master API / evidence protections', () => {
       expect(preview.status).toBe(200);
       const report = (await preview.json() as any).data;
       expect(report.sections[0].tables[1].rows[0][2]).toBe('V-77');
-      expect(report.sections[3].tables[0].rows[2][2]).toBe('Not Working');
+      expect(report.sections[3].tables[0].rows[2][2]).toBe('Partially Inspected');
+      expect(report.sections[3].tables[0].rows[2][6]).toContain('Needs repair');
       expect(report.sections[4].tables[0].rows.some((row: string[]) =>
         row[1] === 'Uniform Expense' && row[5] === 'Yes')).toBe(true);
       const journal = await db.select().from(schema.auditLogs).all();
