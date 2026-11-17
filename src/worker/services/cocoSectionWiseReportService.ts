@@ -434,7 +434,10 @@ export class CocoSectionWiseReportService {
     // until the reviewed migration 0036 is applied. Do not mutate a hosted database on read.
     const legacySafe = async <T>(promise: Promise<T>, fallback: T): Promise<T> => {
       try { return await promise; } catch (err) {
-        if (/no such table|SQLITE_ERROR.*no such table/i.test(String(err))) return fallback;
+        const underlying = err instanceof Error && 'cause' in err
+          ? String((err as Error & { cause?: unknown }).cause)
+          : '';
+        if (/no such table/i.test(String(err) + ' ' + underlying)) return fallback;
         throw err;
       }
     };
