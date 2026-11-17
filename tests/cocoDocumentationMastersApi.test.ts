@@ -128,4 +128,33 @@ describe('COCO documentation master API / evidence protections', () => {
       }
     }
   });
+  it('keeps the frozen migration baseline functional while showing an explicit setup state', async () => {
+    const path = './.sqlite/test_doc_master_legacy_' + crypto.randomUUID() + '.db';
+    const local = createLocalD1Database(path);
+    const env = { DB: local, ENVIRONMENT: 'development', ALLOWED_ORIGINS: 'http://localhost:3000' } as any;
+    try {
+      await seedDatabase(getDb(local));
+      const login = await app.fetch(new Request('http://localhost/api/v1/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ email: 'admin@iocl.in', password: 'Password@123' }),
+      }), env);
+      const cookie = login.headers.get('set-cookie')?.split(';')[0] || '';
+      const masterRes = await app.fetch(new Request('http://localhost/api/v1/documents/compliance/masters?outletId=ro-1001', {
+        headers: { Cookie: cookie },
+      }), env);
+      expect(masterRes.status).toBe(503);
+      expect((await masterRes.json() as any).error.code).toBe('SCHEMA_MIGRATION_REQUIRED');
+      const reportRes = await app.fetch(new Request('http://localhost/api/v1/documents/compliance/section-wise?outletId=ro-1001', {
+        headers: { Cookie: cookie },
+      }), env);
+      expect(reportRes.status).toBe(200);
+      expect((await reportRes.json() as any).data.sections).toHaveLength(5);
+    } finally {
+      local.close();
+      for (const suffix of ['', '-wal', '-shm']) {
+        try { fs.unlinkSync(path + suffix); } catch {}
+      }
+    }
+  });
+
 });
