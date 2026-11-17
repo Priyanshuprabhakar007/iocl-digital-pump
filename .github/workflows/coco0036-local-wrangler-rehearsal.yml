@@ -64,7 +64,7 @@ jobs:
         run: |
           set -euo pipefail
           unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_STAGING_D1_ID
-          bunx wrangler d1 execute coco36-disposable-local-only --config .coco36-local/wrangler.local.jsonc --local --persist-to .coco36-local/state --command "SELECT name FROM sqlite_master WHERE name LIKE 'coco_%' ORDER BY name;" --json > .coco36-local/objects.json
+          bunx wrangler d1 execute coco36-disposable-local-only --config .coco36-local/wrangler.local.jsonc --local --persist-to .coco36-local/state --command "SELECT name FROM sqlite_master WHERE name LIKE 'coco_%' OR name LIKE 'trg_coco_%' ORDER BY name;" --json > .coco36-local/objects.json
           bunx wrangler d1 execute coco36-disposable-local-only --config .coco36-local/wrangler.local.jsonc --local --persist-to .coco36-local/state --command "PRAGMA foreign_key_check;" --json > .coco36-local/fk.json
           bun -e 'const fs=require("fs");const rows=(p)=>JSON.parse(fs.readFileSync(p,"utf8")).flatMap(x=>x.results||[]);const objects=new Set(rows(".coco36-local/objects.json").map(x=>x.name));for(const name of ["coco_agreement_details","coco_expense_claims","coco_claim_settlements","coco_asset_inspections","trg_coco_settlement_approved_amount_guard","trg_coco_inspection_outlet_guard"])if(!objects.has(name))throw new Error("Missing: "+name);if(rows(".coco36-local/fk.json").length)throw new Error("Foreign key violations");console.log("PASS: COCO 0036 D1 objects and foreign keys");'
       - name: Test application integration
