@@ -60,7 +60,27 @@ interface VaultDocumentRecord {
   createdAt: string;
 }
 
-type ActiveTab = 'REGISTER' | 'ONE_PAGER' | 'DUE_DATES';
+
+interface SectionWisePreview {
+  outletId: string;
+  outletName: string;
+  roCode: string;
+  reportDate: string;
+  sections: Array<{
+    title: string;
+    subtitle: string;
+    noteTitle: string;
+    note: string;
+    tables: Array<{
+      title: string;
+      source: string;
+      headers: string[];
+      rows: string[][];
+    }>;
+  }>;
+}
+
+type ActiveTab = 'REGISTER' | 'ONE_PAGER' | 'DUE_DATES' | 'SECTION_WISE';
 type ExpiryHorizon = 30 | 60 | 90;
 
 const STATUS_BADGE_STYLES: Record<
@@ -170,6 +190,9 @@ export const DocumentsPage: React.FC = () => {
   const [summary, setSummary] = useState<CocoOnePagerReport['summary']>(EMPTY_SUMMARY);
   const [outletLoadError, setOutletLoadError] = useState<string | null>(null);
   const [onePagerReport, setOnePagerReport] = useState<CocoOnePagerReport | null>(null);
+  const [sectionWiseReport, setSectionWiseReport] = useState<SectionWisePreview | null>(null);
+  const [isSectionWiseLoading, setIsSectionWiseLoading] = useState(false);
+  const [isGeneratingSectionPdf, setIsGeneratingSectionPdf] = useState(false);
   const [vaultDocs, setVaultDocs] = useState<VaultDocumentRecord[]>([]);
 
   // Filters
@@ -364,6 +387,29 @@ export const DocumentsPage: React.FC = () => {
       fetchOutletComplianceData(selectedOutletId, reportDate);
     }
   }, [selectedOutletId, reportDate]);
+
+
+  // The section-wise preview and PDF are projections of the same saved source records.
+  useEffect(() => {
+    if (activeTab !== 'SECTION_WISE' || !selectedOutletId || !canRead) return;
+    let cancelled = false;
+    setIsSectionWiseLoading(true);
+    setSectionWiseReport(null);
+    apiFetch<SectionWisePreview>(
+      '/api/v1/documents/compliance/section-wise?outletId='
+        + encodeURIComponent(selectedOutletId)
+        + '&reportDate=' + encodeURIComponent(reportDate)
+    ).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data) setSectionWiseReport(res.data);
+      else setBannerError(res.error?.message || 'Unable to load section-wise report.');
+    }).catch((err: any) => {
+      if (!cancelled) setBannerError(err?.message || 'Network error loading section-wise report.');
+    }).finally(() => {
+      if (!cancelled) setIsSectionWiseLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [activeTab, selectedOutletId, reportDate, canRead]);
 
   // Clean up blob URL when closing attachment preview modal
   useEffect(() => {
@@ -730,6 +776,39 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
+
+  const handleGenerateSectionWisePdf = async () => {
+    if (!selectedOutletId) return;
+    setIsGeneratingSectionPdf(true);
+    setBannerError(null);
+    setBannerSuccess(null);
+    try {
+      const res = await apiFetchBlob(
+        '/api/v1/documents/compliance/section-wise/pdf?outletId='
+          + encodeURIComponent(selectedOutletId)
+          + '&reportDate=' + encodeURIComponent(reportDate)
+      );
+      if (!res.success || !res.blob) {
+        setBannerError(res.error?.message || 'Unable to generate section-wise PDF.');
+        return;
+      }
+      const url = URL.createObjectURL(res.blob);
+      const safeRo = (selectedOutlet?.roCode || 'COCO').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = res.filename || ('COCO_Section_Wise_' + safeRo + '_' + reportDate + '.pdf');
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      setBannerSuccess('Generated section-wise compliance PDF for the selected outlet.');
+    } catch (err: any) {
+      setBannerError(err?.message || 'Network error while generating section-wise PDF.');
+    } finally {
+      setIsGeneratingSectionPdf(false);
+    }
+  };
+
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -1032,6 +1111,18 @@ export const DocumentsPage: React.FC = () => {
               {summary.expiredCount + summary.paymentPendingCount + summary.actionRequiredCount}
             </span>
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('SECTION_WISE')}
+          className={'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ' +
+            (activeTab === 'SECTION_WISE'
+              ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
+              : 'border-transparent text-[#64748B] hover:text-[#334155]')}
+        >
+          <FileText className="w-4 h-4" />
+          Tab 4 — Section-wise PDF
         </button>
       </div>
 
@@ -1581,6 +1672,87 @@ export const DocumentsPage: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+
+      {/* TAB 4 — SECTION-WISE REPORT & PDF EXPORT */}
+      {activeTab === 'SECTION_WISE' && (
+        <div className="space-y-5">
+          <div className="bg-white border border-[#E2E8F0] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#B8530D]">
+                A4 Portrait · Separate Report Sections
+              </p>
+              <h3 className="text-xl font-bold text-[#17365D] mt-1">Section-wise Operations &amp; Compliance Report</h3>
+              <p className="text-xs text-[#64748B] mt-1">
+                Agreements, Bills, Licences, Maintenance and Claims each begin on a separate printable page.
+                Source records remain read-only here.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleGenerateSectionWisePdf}
+              disabled={!selectedOutletId || isGeneratingSectionPdf || isSectionWiseLoading}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg"
+            >
+              <Download className="w-4 h-4" />
+              {isGeneratingSectionPdf ? 'Generating PDF...' : 'Download Section-wise PDF'}
+            </button>
+          </div>
+          {isSectionWiseLoading && (
+            <div className="p-6 text-sm text-[#64748B] bg-white border border-[#E2E8F0] rounded-xl">
+              Loading saved documents and linked operational records...
+            </div>
+          )}
+          {!isSectionWiseLoading && !sectionWiseReport && (
+            <div className="p-5 text-sm text-[#64748B] border border-dashed border-[#CBD5E1] bg-white rounded-xl">
+              No section-wise report is available. Select an outlet and refresh to load the report.
+            </div>
+          )}
+          {!isSectionWiseLoading && sectionWiseReport?.sections.map((section, sectionIndex) => (
+            <section key={sectionIndex} className="bg-white border border-[#D7E0EA] rounded-xl overflow-hidden">
+              <div className="p-4 bg-[#F1F5F9] border-b border-[#D7E0EA]">
+                <h4 className="text-base font-bold text-[#17365D]">
+                  {sectionIndex + 1}. {section.title}
+                </h4>
+                <p className="text-xs text-[#64748B] mt-1">{section.subtitle}</p>
+              </div>
+              {section.tables.map((table, tableIndex) => (
+                <div key={tableIndex} className="p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <h5 className="text-sm font-semibold text-[#17365D]">{table.title}</h5>
+                    <span className="text-xs text-[#64748B]">Source: {table.source}</span>
+                  </div>
+                  <div className="admin-table-scroll overflow-x-auto border border-[#D7E0EA] rounded-lg"
+                    role="region" aria-label={table.title} tabIndex={0}>
+                    <table className="w-full min-w-[850px] text-xs text-left border-collapse">
+                      <thead className="bg-[#E8EBEF] text-[#17365D]">
+                        <tr>{table.headers.map((header, i) => (
+                          <th key={i} className="px-3 py-2 border border-[#D7E0EA] font-semibold">{header}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody>
+                        {table.rows.map((row, rowIndex) => (
+                          <tr key={rowIndex} className={rowIndex % 2 ? 'bg-[#F8FAFC]' : 'bg-white'}>
+                            {row.map((value, cellIndex) => (
+                              <td key={cellIndex} className="px-3 py-2 border border-[#D7E0EA] align-top text-[#334155]">
+                                {value}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+              <div className="mx-4 mb-4 p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg">
+                <p className="font-semibold text-xs text-[#17365D]">{section.noteTitle}</p>
+                <p className="text-xs text-[#64748B] mt-1">{section.note}</p>
+              </div>
+            </section>
+          ))}
         </div>
       )}
 

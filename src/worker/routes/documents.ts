@@ -10,6 +10,8 @@ import { OutletRepository } from '../repositories/outletRepository';
 import { AuditRepository } from '../repositories/auditRepository';
 import { CocoComplianceError, CocoComplianceService } from '../services/cocoComplianceService';
 import { CocoCompliancePdfService } from '../services/cocoCompliancePdfService';
+import { CocoSectionWiseReportService } from '../services/cocoSectionWiseReportService';
+import { CocoSectionWisePdfService } from '../services/cocoSectionWisePdfService';
 import { STANDARD_COCO_CATEGORIES } from '../../shared/cocoComplianceUtils';
 
 const documentRoutes = new Hono<{ Bindings: EnvBindings }>();
@@ -391,6 +393,77 @@ documentRoutes.get('/compliance/one-pager/pdf', requirePermission(PERMISSIONS.DO
     if (err instanceof CocoComplianceError) {
       return errorResponse(c, err.code, err.message, err.status);
     }
+    throw err;
+  }
+});
+
+
+/**
+ * Section-wise compliance report (five dedicated sections/pages).
+ * Read-only projections from saved operational modules; no D1/R2 writes.
+ */
+documentRoutes.get('/compliance/section-wise', requirePermission(PERMISSIONS.DOCUMENTS_READ), async (c: AppContext) => {
+  const user = c.var.user!;
+  const outletId = c.req.query('outletId')?.trim();
+  if (!outletId) return errorResponse(c, 'VALIDATION_ERROR', 'outletId query parameter is required.', 400);
+  const db = getDb(c.env.DB);
+  if (!await ScopeService.canAccessOutlet(user, outletId, new OutletRepository(db))) {
+    return errorResponse(c, 'FORBIDDEN_SCOPE', 'You do not have access to this retail outlet.', 403);
+  }
+  try {
+    const report = await new CocoSectionWiseReportService(db).getReport({
+      outletId, reportDate: c.req.query('reportDate')?.trim(), actorUserId: user.user.id,
+    });
+    return successResponse(c, report);
+  } catch (err) {
+    if (err instanceof CocoComplianceError) return errorResponse(c, err.code, err.message, err.status);
+    throw err;
+  }
+});
+
+documentRoutes.get('/compliance/section-wise/pdf', requirePermission(PERMISSIONS.DOCUMENTS_READ), async (c: AppContext) => {
+  const user = c.var.user!;
+  const outletId = c.req.query('outletId')?.trim();
+  if (!outletId) return errorResponse(c, 'VALIDATION_ERROR', 'outletId query parameter is required.', 400);
+  const db = getDb(c.env.DB);
+  if (!await ScopeService.canAccessOutlet(user, outletId, new OutletRepository(db))) {
+    return errorResponse(c, 'FORBIDDEN_SCOPE', 'You do not have access to this retail outlet.', 403);
+  }
+  try {
+    const report = await new CocoSectionWiseReportService(db).getReport({
+      outletId, reportDate: c.req.query('reportDate')?.trim(), actorUserId: user.user.id,
+    });
+    const pdfBytes = await CocoSectionWisePdfService.generatePdf(report);
+    await new AuditRepository(db).logAction({
+      id: crypto.randomUUID(),
+      userId: user.user.id,
+      action: 'GENERATE_COCO_SECTION_WISE_PDF',
+      entityType: 'coco_compliance_report',
+      entityId: report.outletId + ':' + report.reportDate,
+      oldValue: null,
+      newValue: {
+        outletId: report.outletId, roCode: report.roCode,
+        reportDate: report.reportDate, byteSize: pdfBytes.byteLength,
+        sectionCount: report.sections.length,
+      },
+      ipAddress: c.req.header('cf-connecting-ip') || null,
+      userAgent: c.req.header('user-agent') || null,
+      createdAt: new Date().toISOString(),
+    });
+    const safeRoCode = report.roCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = 'COCO_Section_Wise_' + safeRoCode + '_' + report.reportDate + '.pdf';
+    return new Response(pdfBytes as unknown as BodyInit, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'attachment; filename="' + filename + '"',
+        'Content-Length': String(pdfBytes.byteLength),
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch (err) {
+    if (err instanceof CocoComplianceError) return errorResponse(c, err.code, err.message, err.status);
     throw err;
   }
 });
