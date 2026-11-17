@@ -150,7 +150,8 @@ cocoDocumentationMasterRoutes.get('/compliance/masters', requirePermission(PERMI
     }));
     return ok(c, { agreements, claims: claimsWithTotals, settlements, inspections, assets, nfrLeases: leases });
   } catch (e) {
-    if (/no such table|SQLITE_ERROR.*no such table/i.test(String(e))) {
+    const underlying = e instanceof Error && 'cause' in e ? String((e as Error & { cause?: unknown }).cause) : '';
+    if (/no such table/i.test(String(e) + ' ' + underlying)) {
       return failed(c, 'SCHEMA_MIGRATION_REQUIRED', 'Documentation master migration 0036 has not been applied to this environment.', 503);
     }
     return safeError(c, e);
