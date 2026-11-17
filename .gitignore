@@ -17,3 +17,6 @@ coverage/
 demo-seed.sql
 package-lock.json
 .aistudio/
+
+# Stage 01K: never commit a live staging D1 target configuration
+scripts/stage01k/wrangler.staging.local.jsonc

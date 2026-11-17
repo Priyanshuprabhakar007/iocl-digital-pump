@@ -2605,9 +2605,24 @@ export class PumpRepository {
         )
       );
 
-    const shiftIds = new Set(readings.map(r => r.operationalShiftId));
+    // A shift captures a chart revision BEFORE its first tank dip is entered.
+    // Once captured, chart point edits must already be blocked, otherwise the
+    // same revision could silently yield different volumes during that shift.
+    const snapshots = await this.db
+      .select({ operationalShiftId: schema.operationalShiftTanks.operationalShiftId })
+      .from(schema.operationalShiftTanks)
+      .where(
+        and(
+          eq(schema.operationalShiftTanks.tankId, tankId),
+          eq(schema.operationalShiftTanks.calibrationChartId, chartId)
+        )
+      );
+    const shiftIds = new Set([
+      ...readings.map(r => r.operationalShiftId),
+      ...snapshots.map(s => s.operationalShiftId),
+    ]);
     return {
-      isReferenced: readings.length > 0,
+      isReferenced: readings.length > 0 || snapshots.length > 0,
       referencedReadingsCount: readings.length,
       referencedShiftsCount: shiftIds.size,
     };
@@ -3482,6 +3497,118 @@ export class PumpRepository {
     };
   }
 
+  /**
+   * Persist all prepared tank readings in a single D1 batch transaction.
+   * Any constraint or shift-status failure rolls back the entire batch,
+   * including updates to existing OPENING/CLOSING readings.
+   *
+   * Accepts already-calibrated values; deliberately does not change
+   * conversion, chart assignment, or pump infrastructure.
+   */
+  async saveTankReadingsBatchAtomic(
+    rows: Array<{
+      id: string;
+      operationalShiftId: string;
+      outletId: string;
+      tankId: string;
+      productId: string;
+      readingType: TankReadingType;
+      source: TankReadingSource;
+      productDipMmMilliunits: number;
+      waterDipMmMilliunits: number;
+      grossObservedVolumeMilliunits: number;
+      waterVolumeMilliunits: number;
+      netProductVolumeMilliunits: number;
+      calibrationChartId: string | null;
+      calibrationRevision: number | null;
+      recordedAt: string;
+      recordedByUserId: string;
+      notes: string | null;
+      createdAt: string;
+      updatedAt: string;
+      action: 'CREATED' | 'UPDATED';
+    }>
+  ): Promise<Array<{ action: 'CREATED' | 'UPDATED'; reading: TankStockReading }>> {
+    if (rows.length === 0) return [];
+    const shiftId = rows[0].operationalShiftId;
+    if (rows.some(row => row.operationalShiftId !== shiftId)) {
+      throw new Error('BATCH_SHIFT_MISMATCH');
+    }
+
+    const statements = rows.map(row => {
+      // A NOT NULL constraint is deliberately used to abort the entire D1
+      // transaction if the shift is not OPEN at statement execution time.
+      // A WHERE status=OPEN alone would silently affect 0 rows and let a
+      // preceding successful statement commit.
+      const guardedDip = sql<number>`CASE WHEN EXISTS (
+        SELECT 1 FROM operational_shifts
+        WHERE id = ${row.operationalShiftId} AND status = 'OPEN'
+      ) THEN ${row.productDipMmMilliunits} ELSE NULL END`;
+
+      return this.db.insert(schema.tankStockReadings).values({
+        id: row.id,
+        operationalShiftId: row.operationalShiftId,
+        outletId: row.outletId,
+        tankId: row.tankId,
+        productId: row.productId,
+        readingType: row.readingType,
+        source: row.source,
+        productDipMmMilliunits: guardedDip,
+        waterDipMmMilliunits: row.waterDipMmMilliunits,
+        grossObservedVolumeMilliunits: row.grossObservedVolumeMilliunits,
+        waterVolumeMilliunits: row.waterVolumeMilliunits,
+        netProductVolumeMilliunits: row.netProductVolumeMilliunits,
+        calibrationChartId: row.calibrationChartId,
+        calibrationRevision: row.calibrationRevision,
+        recordedAt: row.recordedAt,
+        recordedByUserId: row.recordedByUserId,
+        notes: row.notes,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      }).onConflictDoUpdate({
+        target: schema.tankStockReadings.id,
+        set: {
+          source: row.source,
+          productDipMmMilliunits: guardedDip,
+          waterDipMmMilliunits: row.waterDipMmMilliunits,
+          grossObservedVolumeMilliunits: row.grossObservedVolumeMilliunits,
+          waterVolumeMilliunits: row.waterVolumeMilliunits,
+          netProductVolumeMilliunits: row.netProductVolumeMilliunits,
+          calibrationChartId: row.calibrationChartId ?? sql`calibration_chart_id`,
+          calibrationRevision: row.calibrationRevision ?? sql`calibration_revision`,
+          recordedAt: row.recordedAt,
+          recordedByUserId: row.recordedByUserId,
+          notes: row.notes,
+          updatedAt: row.updatedAt,
+        },
+      }).returning({ id: schema.tankStockReadings.id });
+    });
+
+    // Drizzle's D1 batch delegates to D1Database.batch, which is
+    // transactional, unlike a loop of individual awaited insert/update calls.
+    const batchResults = await (this.db as any).batch(statements);
+    // If D1.batch has resolved, the transaction may already be committed.
+    // Report a distinct status instead of claiming that the batch was rolled back.
+    if (!Array.isArray(batchResults) || batchResults.length !== rows.length ||
+      batchResults.some((result: any, index: number) =>
+        !Array.isArray(result) || result.length !== 1 || result[0]?.id !== rows[index].id
+      )) {
+      throw new Error('BATCH_COMMITTED_UNVERIFIED');
+    }
+
+    let persisted: Array<TankStockReading | null>;
+    try {
+      persisted = await Promise.all(rows.map(row => this.findTankReadingById(row.id)));
+    } catch {
+      throw new Error('BATCH_COMMITTED_UNVERIFIED');
+    }
+    if (persisted.some(reading => !reading)) throw new Error('BATCH_COMMITTED_UNVERIFIED');
+    return persisted.map((reading, index) => ({
+      action: rows[index].action,
+      reading: reading as TankStockReading,
+    }));
+  }
+
   async createTankReadingConditional(data: {
     id: string;
     operationalShiftId: string;
@@ -4307,7 +4434,10 @@ export class PumpRepository {
   // PHASE 2B: STOCK RECONCILIATION
   // ==========================================
 
-  async calculateAndSaveShiftStockReconciliation(shiftId: string): Promise<ShiftStockReconciliation[]> {
+  async calculateAndSaveShiftStockReconciliation(
+    shiftId: string,
+    options: { failOnExisting?: boolean; persist?: boolean } = {},
+  ): Promise<ShiftStockReconciliation[]> {
     const shift = await this.findOperationalShiftById(shiftId);
     if (!shift) throw new Error('Shift not found');
 
@@ -4382,10 +4512,15 @@ export class PumpRepository {
         updatedAt: nowIso,
       };
 
-      await this.db
-        .insert(schema.shiftStockReconciliations)
-        .values(reconData)
-        .onConflictDoUpdate({
+      // Read-only preview recomputes the same exact stock figures for
+      // comparison with an earlier explicitly computed reconciliation.
+      // It must not rewrite any pre-existing DB evidence.
+      if (options.persist !== false) {
+        const insert = this.db.insert(schema.shiftStockReconciliations).values(reconData);
+        if (options.failOnExisting) {
+          await insert;
+        } else {
+          await insert.onConflictDoUpdate({
           target: [schema.shiftStockReconciliations.operationalShiftId, schema.shiftStockReconciliations.tankId],
           set: {
             openingStockMilliunits: openingStockMilli,
@@ -4399,6 +4534,8 @@ export class PumpRepository {
             updatedAt: nowIso,
           },
         });
+        }
+      }
 
       reconResults.push({
         ...reconData,

@@ -1,0 +1,733 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import { app } from '../src/worker/app';
+import { createLocalD1Database } from '../src/db/localD1';
+import { getDb } from '../src/db';
+import { seedDatabase } from '../src/db/seed';
+import { PumpRepository } from '../src/worker/repositories/pumpRepository';
+import { readShiftCloseEvidenceSnapshot } from '../src/worker/services/shiftCloseEvidenceReader';
+import { assessShiftCloseEvidence } from '../src/worker/services/shiftCloseRecoveryAssessment';
+
+/**
+ * Stage 01E: persisted failure-injection tests on disposable local SQLite D1.
+ * Uses the app's real shift, reading, reconciliation, finance and audit routes.
+ *
+ * This is NOT Cloudflare hosted D1 or a production/staging database. It
+ * characterizes current behavior; it does not authorize operational fixes.
+ */
+describe('Stage 01E: local-D1 shift close persistence and failure recovery', () => {
+  let localD1: ReturnType<typeof createLocalD1Database>;
+  let testPath: string;
+  let env: any;
+
+  beforeEach(async () => {
+    testPath = `./.sqlite/test_stage01e_close_${Date.now()}_${Math.random().toString(16).slice(2)}.db`;
+    localD1 = createLocalD1Database(testPath);
+    await seedDatabase(getDb(localD1));
+    // The journal migration is PROPOSED, not part of frozen migrations/.
+    // Install it only on this test's isolated disposable local D1 fixture.
+    await localD1.exec(fs.readFileSync(
+      'scripts/stage01p/PROPOSED_shift_close_attempt_journal.sql', 'utf8',
+    ));
+    env = {
+      DB: localD1,
+      SESSION_SECRET: 'stage01e-local-synthetic-key-123456789012345',
+      ENVIRONMENT: 'development',
+      ALLOWED_ORIGINS: 'http://localhost:3000',
+      STAGE01P_ENABLE_DURABLE_JOURNAL: 'true',
+    };
+  });
+
+  afterEach(() => {
+    if (localD1) localD1.close();
+    for (const suffix of ['', '-wal', '-shm']) {
+      try { fs.unlinkSync(testPath + suffix); } catch { /* file may not exist */ }
+    }
+  });
+
+  async function dbRow(query: string, ...params: unknown[]): Promise<any> {
+    return localD1.prepare(query).bind(...params).first();
+  }
+
+  async function assessPersisted(shiftId: string, independentlyVerifiedUncertainty: boolean) {
+    const evidence = await readShiftCloseEvidenceSnapshot(
+      getDb(localD1), shiftId, independentlyVerifiedUncertainty,
+    );
+    expect(evidence).not.toBeNull();
+    return assessShiftCloseEvidence(evidence!);
+  }
+
+  async function count(tableName: 'shift_stock_reconciliations' | 'shift_financial_reconciliations' | 'audit_logs',
+    shiftId: string, auditAction?: string): Promise<number> {
+    const query = tableName === 'audit_logs'
+      ? 'SELECT count(*) AS count FROM audit_logs WHERE entity_id = ? AND action = ?'
+      : `SELECT count(*) AS count FROM ${tableName} WHERE operational_shift_id = ?`;
+    const row = await dbRow(query, ...(tableName === 'audit_logs' ? [shiftId, auditAction] : [shiftId]));
+    return Number(row?.count || 0);
+  }
+
+  async function login(): Promise<string> {
+    const response = await app.fetch(new Request('http://localhost/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:3000' },
+      body: JSON.stringify({ email: 'admin@iocl.in', password: 'Password@123' }),
+    }), env);
+    expect(response.status).toBe(200);
+    return response.headers.get('set-cookie') || '';
+  }
+
+  async function request(cookie: string, endpoint: string, payload?: unknown): Promise<Response> {
+    return app.fetch(new Request(`http://localhost/api/v1${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: cookie,
+        Origin: 'http://localhost:3000',
+      },
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+    }), env);
+  }
+
+  async function openShift(cookie: string): Promise<string> {
+    const res = await request(cookie, '/outlets/ro-1001/shifts/open', {
+      shiftTemplateId: 'st-ro1-1',
+      businessDate: '2026-11-02',
+    });
+    expect(res.status).toBe(201);
+    const body: any = await res.json();
+    expect(body.success).toBe(true);
+    return body.data.id as string;
+  }
+
+  async function readyShift(cookie: string): Promise<string> {
+    const id = await openShift(cookie);
+    for (const tankId of ['tank-ro1-1', 'tank-ro1-2', 'tank-ro1-3']) {
+      const res = await request(cookie, `/shifts/${id}/tank-readings`, {
+        tankId, readingType: 'OPENING', source: 'MANUAL',
+        productDipMm: '1000.000', waterDipMm: '0.000',
+      });
+      expect(res.status).toBe(201);
+    }
+
+    const nozzles = [
+      ['nozz-ro1-1-1', '1000.000', '1500.000'],
+      ['nozz-ro1-1-2', '2000.000', '2800.000'],
+      ['nozz-ro1-2-1', '3000.000', '3300.000'],
+      ['nozz-ro1-2-2', '4000.000', '4200.000'],
+    ];
+    for (const [nozzleId, openingTotalizer, closingTotalizer] of nozzles) {
+      const res = await request(cookie, `/shifts/${id}/readings`, {
+        nozzleId, openingTotalizer, closingTotalizer, testingQuantity: '0.000',
+      });
+      expect(res.status).toBe(201);
+    }
+
+    for (const [tankId, dip] of [
+      ['tank-ro1-1', '1250.000'],
+      ['tank-ro1-2', '1000.000'],
+      ['tank-ro1-3', '1000.000'],
+    ]) {
+      const res = await request(cookie, `/shifts/${id}/tank-readings`, {
+        tankId, readingType: 'CLOSING', source: 'MANUAL',
+        productDipMm: dip, waterDipMm: '0.000',
+      });
+      expect(res.status).toBe(201);
+    }
+    return id;
+  }
+
+  const closePayload = { varianceReason: 'Synthetic measured variance review' };
+
+  it('persists an exclusive CLOSING claim, rejects a second claimant, and allows restoring OPEN', async () => {
+    const cookie = await login();
+    const shiftId = await openShift(cookie);
+    const pumpRepo = new PumpRepository(getDb(localD1));
+
+    expect((await pumpRepo.beginCloseConditional(shiftId)).success).toBe(true);
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect((await pumpRepo.beginCloseConditional(shiftId)).success).toBe(false);
+    expect((await assessPersisted(shiftId, false)).disposition).toBe('CLOSE_IN_PROGRESS_REVIEW');
+
+    await pumpRepo.restoreOpenFromClosing(shiftId);
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('OPEN');
+    expect((await pumpRepo.beginCloseConditional(shiftId)).success).toBe(true);
+  });
+
+  it('restores OPEN and leaves no reconciliation on an actual incomplete shift close', async () => {
+    const cookie = await login();
+    const shiftId = await openShift(cookie);
+    const res = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(res.status).toBe(400);
+    const body: any = await res.json();
+    expect(body.error.code).toBe('INCOMPLETE_TANK_STOCK_DATA');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('OPEN');
+    expect(await count('shift_stock_reconciliations', shiftId)).toBe(0);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect((await assessPersisted(shiftId, false)).disposition).toBe('READY_FOR_NORMAL_WORKFLOW');
+  });
+
+  it('demonstrates a failed persisted CLOSING->OPEN recovery, then manual test-only restoration', async () => {
+    const cookie = await login();
+    const shiftId = await openShift(cookie);
+    const pumpRepo = new PumpRepository(getDb(localD1));
+    expect((await pumpRepo.beginCloseConditional(shiftId)).success).toBe(true);
+
+    await localD1.exec(`CREATE TRIGGER stage01e_block_restore
+      BEFORE UPDATE OF status ON operational_shifts
+      WHEN OLD.status = 'CLOSING' AND NEW.status = 'OPEN'
+      BEGIN SELECT RAISE(ABORT, 'STAGE01E_INJECT_RESTORE_FAILURE'); END;`);
+    await expect(pumpRepo.restoreOpenFromClosing(shiftId)).rejects.toThrow();
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect((await assessPersisted(shiftId, true)).reasons).toContain('CLOSING_STATE_REQUIRES_REVIEW');
+
+    // Test-database cleanup only; this never runs against a real outlet.
+    await localD1.exec('DROP TRIGGER stage01e_block_restore;');
+    await pumpRepo.restoreOpenFromClosing(shiftId);
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('OPEN');
+  });
+
+  it('refuses CLOSED and both success audits if persisted finance totals are internally corrupted', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    // Fault injection is strictly limited to the disposable LocalD1 fixture.
+    // This runs AFTER the atomic prepare INSERT but BEFORE the close batch.
+    await localD1.exec(`CREATE TRIGGER p0_corrupt_finance_evidence
+      AFTER INSERT ON shift_financial_reconciliations
+      BEGIN
+        UPDATE shift_financial_reconciliations
+          SET total_collections_paise = total_collections_paise + 1
+          WHERE id = NEW.id;
+      END;`);
+
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    const review = await assessPersisted(shiftId, true);
+    expect(review.holdFurtherClose).toBe(true);
+  });
+
+  it('detects a collection mutation after finance preparation and withholds CLOSED audits', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const collection = await request(cookie, `/shifts/${shiftId}/collections`, {
+      collectionType: 'CASH', amount: '100.00',
+      collectedAt: '2026-11-02T09:00:00Z',
+    });
+    expect(collection.status).toBe(201);
+    const before = await dbRow(
+      "SELECT amount_paise AS amount FROM shift_collections WHERE operational_shift_id = ? AND collection_type = 'CASH'",
+      shiftId,
+    );
+    expect(before.amount).toBe(10000);
+
+    // Deterministically model a prohibited out-of-band financial source write
+    // between persisted finance preparation and finalization.
+    await localD1.exec(`CREATE TRIGGER p0_change_collection_after_finance_prepare
+      AFTER INSERT ON shift_financial_reconciliations
+      BEGIN
+        UPDATE shift_collections SET amount_paise = amount_paise + 1
+          WHERE operational_shift_id = NEW.operational_shift_id AND collection_type = 'CASH';
+      END;`);
+    const res = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    const changed = await dbRow(
+      "SELECT amount_paise AS amount FROM shift_collections WHERE operational_shift_id = ? AND collection_type = 'CASH'",
+      shiftId,
+    );
+    expect(changed.amount).toBe(10001);
+    const persisted = await dbRow(
+      'SELECT cash_collection_paise AS cash FROM shift_financial_reconciliations WHERE operational_shift_id = ?',
+      shiftId,
+    );
+    expect(persisted.cash).toBe(10000);
+    expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
+  });
+
+  it.each([
+    ['tank', `UPDATE tank_stock_readings
+        SET net_product_volume_milliunits = net_product_volume_milliunits + 1
+        WHERE operational_shift_id = NEW.operational_shift_id AND reading_type = 'CLOSING'`],
+    ['nozzle', `UPDATE nozzle_meter_readings
+        SET net_sales_quantity_milliunits = net_sales_quantity_milliunits + 1
+        WHERE operational_shift_id = NEW.operational_shift_id`],
+  ])('holds stale %s source after preparation without CLOSED or success audits', async (_kind, mutation) => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    // Fault injection runs only in the disposable local test database, after
+    // reconciliation insertion but before the final database-atomic check.
+    await localD1.exec(`CREATE TRIGGER p0_mutate_measurement_after_prepare
+      AFTER INSERT ON shift_financial_reconciliations
+      BEGIN
+        ${mutation};
+      END;`);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
+  });
+
+  it('holds a completed receipt-line volume changed after reconciliation preparation', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    // Synthetic receipt is inserted solely in disposable local D1.
+    await localD1.prepare(`INSERT INTO fuel_receipts
+      (id,outlet_id,operational_shift_id,tt_number,invoice_number,invoice_date,arrival_at,
+       seal_verified,status,recorded_by_user_id,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,1,'CANCELLED',?,?,?)`)
+      .bind('p0-receipt','ro-1001',shiftId,'P0-TT','P0-INV',
+        '2026-11-02','2026-11-02T08:00:00Z','user-admin',
+        '2026-11-02T08:00:00Z','2026-11-02T08:00:00Z').run();
+    await localD1.prepare(`INSERT INTO fuel_receipt_tank_lines
+      (id,fuel_receipt_id,tank_id,product_id,invoice_quantity_milliunits,
+       measured_received_quantity_milliunits,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?)`)
+      .bind('p0-line','p0-receipt','tank-ro1-1','prod-ms',1000000,1000000,
+        '2026-11-02T08:00:00Z','2026-11-02T08:00:00Z').run();
+
+    // Emulate a disallowed late source change after stock preview + financial
+    // evidence were prepared but before the CLOSED transaction.
+    await localD1.exec(`CREATE TRIGGER p0_receipt_mutation
+      AFTER INSERT ON shift_financial_reconciliations
+      BEGIN
+        UPDATE fuel_receipts SET status = 'COMPLETED' WHERE id = 'p0-receipt';
+        UPDATE fuel_receipt_tank_lines
+        SET measured_received_quantity_milliunits = measured_received_quantity_milliunits + 1
+        WHERE id = 'p0-line';
+      END;`);
+    const result = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(result.status).toBe(409);
+    expect(((await result.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    const row = await dbRow('SELECT measured_received_quantity_milliunits AS qty FROM fuel_receipt_tank_lines WHERE id = ?', 'p0-line');
+    expect(row.qty).toBe(1000001);
+    const recon = await dbRow('SELECT receipt_quantity_milliunits AS qty FROM shift_stock_reconciliations WHERE operational_shift_id = ? AND tank_id = ?', shiftId, 'tank-ro1-1');
+    expect(recon.qty).toBe(0);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
+  });
+
+  it('refuses CLOSED if a tank dip calibration revision changes after financial preparation', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const snapshot = await dbRow(
+      "SELECT calibration_chart_id AS chartId, calibration_revision AS revision FROM operational_shift_tanks WHERE operational_shift_id = ? AND tank_id = 'tank-ro1-1'",
+      shiftId,
+    );
+    const original = await dbRow(
+      "SELECT calibration_chart_id AS chartId, calibration_revision AS revision FROM tank_stock_readings WHERE operational_shift_id = ? AND tank_id = 'tank-ro1-1' AND reading_type = 'CLOSING'",
+      shiftId,
+    );
+    expect(original?.chartId ?? null).toBe(snapshot?.chartId ?? null);
+    expect(original?.revision ?? null).toBe(snapshot?.revision ?? null);
+
+    // Simulate an unauthorized post-preview rewrite. Never use this trigger on
+    // staging or production. The actual closing logic must fail atomically.
+    await localD1.exec(`CREATE TRIGGER p0_change_calibration_ref_after_prepare
+      AFTER INSERT ON shift_financial_reconciliations
+      BEGIN
+        UPDATE tank_stock_readings
+        SET calibration_revision = COALESCE(calibration_revision, 0) + 1
+        WHERE operational_shift_id = NEW.operational_shift_id
+          AND tank_id = 'tank-ro1-1' AND reading_type = 'CLOSING';
+      END;`);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    expect((await assessPersisted(shiftId, true)).holdFurtherClose).toBe(true);
+  });
+
+  it('rolls back CLOSED when SHIFT_CLOSE audit insert fails in the atomic batch', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    await localD1.exec(`CREATE TRIGGER stage01e_audit_abort
+      BEFORE INSERT ON audit_logs
+      WHEN NEW.action = 'SHIFT_CLOSE'
+      BEGIN SELECT RAISE(ABORT, 'STAGE01E_INJECT_AUDIT_FAILURE'); END;`);
+
+    const first = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(first.status).toBe(409);
+    expect(((await first.json()) as any).error.code).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    // D1's atomic batch rolls back the CLOSED update and both audit rows.
+    // The already-persisted reconcilations remain available for review.
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_stock_reconciliations', shiftId)).toBeGreaterThan(0);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    const incident = await assessPersisted(shiftId, true);
+    expect(incident.holdFurtherClose).toBe(true);
+    expect(incident.reasons).toContain('CLOSING_STATE_REQUIRES_REVIEW');
+
+    const stockCount = await count('shift_stock_reconciliations', shiftId);
+    const second = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(second.status).toBe(409);
+    expect(((await second.json()) as any).error.code).toBe('SHIFT_CLOSED_OR_CLOSING');
+    expect(await count('shift_stock_reconciliations', shiftId)).toBe(stockCount);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+  });
+
+  it('rolls back CLOSED and SHIFT_CLOSE audit when FINANCIAL_RECONCILIATION audit fails', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    await localD1.exec(`CREATE TRIGGER stage01e_finance_audit_abort
+      BEFORE INSERT ON audit_logs
+      WHEN NEW.action = 'FINANCIAL_RECONCILIATION'
+      BEGIN SELECT RAISE(ABORT, 'STAGE01E_INJECT_FINANCIAL_AUDIT_FAILURE'); END;`);
+
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+  });
+
+  it('reuses a matching precomputed stock reconciliation without altering any row', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const pumpRepo = new PumpRepository(getDb(localD1));
+    await pumpRepo.calculateAndSaveShiftStockReconciliation(shiftId);
+    const original = await localD1.prepare(`
+      SELECT id, opening_stock_milliunits AS openingStock, created_at AS createdAt
+      FROM shift_stock_reconciliations WHERE operational_shift_id = ?
+      ORDER BY id
+    `).bind(shiftId).all<{ id: string; openingStock: number; createdAt: string }>();
+    expect(original.results.length).toBeGreaterThan(0);
+
+    const res = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as any).data.status).toBe('CLOSED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSED');
+
+    const after = await localD1.prepare(`
+      SELECT id, opening_stock_milliunits AS openingStock, created_at AS createdAt
+      FROM shift_stock_reconciliations WHERE operational_shift_id = ?
+      ORDER BY id
+    `).bind(shiftId).all<{ id: string; openingStock: number; createdAt: string }>();
+    expect(after.results).toEqual(original.results);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(1);
+    const triage = await assessPersisted(shiftId, false);
+    expect(triage.disposition).toBe('CLOSED_EVIDENCE_COMPLETE');
+  });
+
+  it('never runs a stock DELETE when reusing valid precomputed evidence', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const pumpRepo = new PumpRepository(getDb(localD1));
+    await pumpRepo.calculateAndSaveShiftStockReconciliation(shiftId);
+    const originalCount = await count('shift_stock_reconciliations', shiftId);
+    await localD1.exec(`CREATE TRIGGER stage01e_stock_cleanup_abort
+      BEFORE DELETE ON shift_stock_reconciliations
+      BEGIN SELECT RAISE(ABORT, 'STAGE01E_INJECT_STOCK_DELETE_FAILURE'); END;`);
+
+    const res = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(res.status).toBe(200);
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSED');
+    expect(await count('shift_stock_reconciliations', shiftId)).toBe(originalCount);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    const triage = await assessPersisted(shiftId, false);
+    expect(triage.disposition).toBe('CLOSED_EVIDENCE_COMPLETE');
+  });
+
+  it('holds mismatched precomputed stock evidence without overwriting it', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const repo = new PumpRepository(getDb(localD1));
+    await repo.calculateAndSaveShiftStockReconciliation(shiftId);
+    const prior = await dbRow('SELECT id, opening_stock_milliunits AS openingStock FROM shift_stock_reconciliations WHERE operational_shift_id = ? ORDER BY id LIMIT 1', shiftId);
+    await localD1.prepare('UPDATE shift_stock_reconciliations SET opening_stock_milliunits = opening_stock_milliunits + 1 WHERE id = ?')
+      .bind(prior.id).run();
+
+    const res = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    const after = await dbRow('SELECT id, opening_stock_milliunits AS openingStock FROM shift_stock_reconciliations WHERE id = ?', prior.id);
+    expect(after.openingStock).toBe(prior.openingStock + 1);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+  });
+
+  it('rolls back ALL new stock rows when the finance INSERT fails in atomic preparation', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    await localD1.exec(`CREATE TRIGGER stage01e_finance_insert_abort
+      BEFORE INSERT ON shift_financial_reconciliations
+      BEGIN SELECT RAISE(ABORT, 'STAGE01E_INJECT_FINANCE_FAILURE'); END;`);
+    const res = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_stock_reconciliations', shiftId)).toBe(0);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    const triage = await assessPersisted(shiftId, true);
+    expect(triage.holdFurtherClose).toBe(true);
+  });
+
+  it('rolls back earlier stock INSERTs when a later stock tank INSERT fails', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    await localD1.exec(`CREATE TRIGGER stage01o_reject_second_stock
+      BEFORE INSERT ON shift_stock_reconciliations
+      WHEN NEW.tank_id = 'tank-ro1-2'
+      BEGIN SELECT RAISE(ABORT, 'STAGE01O_INJECT_STOCK_INSERT_FAILURE'); END;`);
+
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_stock_reconciliations', shiftId)).toBe(0);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+  });
+
+  it('keeps precomputed stock intact when the atomic finance-only preparation fails', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const repo = new PumpRepository(getDb(localD1));
+    await repo.calculateAndSaveShiftStockReconciliation(shiftId);
+    const oldRows = await localD1.prepare(`
+      SELECT id, tank_id, opening_stock_milliunits, created_at
+      FROM shift_stock_reconciliations WHERE operational_shift_id = ? ORDER BY id
+    `).bind(shiftId).all();
+
+    await localD1.exec(`CREATE TRIGGER stage01o_reject_finance
+      BEFORE INSERT ON shift_financial_reconciliations
+      BEGIN SELECT RAISE(ABORT, 'STAGE01O_INJECT_FINANCE_INSERT_FAILURE'); END;`);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    const after = await localD1.prepare(`
+      SELECT id, tank_id, opening_stock_milliunits, created_at
+      FROM shift_stock_reconciliations WHERE operational_shift_id = ? ORDER BY id
+    `).bind(shiftId).all();
+    expect(after.results).toEqual(oldRows.results);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+  });
+
+  it('holds an existing financial reconciliation unchanged without overwriting it', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const now = '2026-11-13T08:00:00.000Z';
+    await localD1.prepare(`
+      INSERT INTO shift_financial_reconciliations (
+        id, operational_shift_id, outlet_id,
+        fuel_sales_revenue_paise, cng_sales_revenue_paise, lube_sales_revenue_paise,
+        authoritative_sales_revenue_paise, cash_collection_paise, pos_collection_paise,
+        upi_collection_paise, fleet_card_collection_paise, credit_sales_paise,
+        direct_bank_drop_paise, total_collections_paise,
+        sales_collection_variance_paise, variance_status, variance_reason,
+        calculated_at, created_at, updated_at
+      ) VALUES (?, ?, ?, 10000, NULL, 0, 10000, 10000, 0, 0, 0, 0, 0, 10000, 0, 'BALANCED', NULL, ?, ?, ?)
+    `).bind('stage01n2-prior-financial', shiftId, 'ro-1001', now, now, now).run();
+    const original = await dbRow(`
+      SELECT id, authoritative_sales_revenue_paise AS amount, created_at AS createdAt
+      FROM shift_financial_reconciliations WHERE operational_shift_id = ?
+    `, shiftId);
+
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await dbRow(`
+      SELECT id, authoritative_sales_revenue_paise AS amount, created_at AS createdAt
+      FROM shift_financial_reconciliations WHERE operational_shift_id = ?
+    `, shiftId)).toEqual(original);
+    expect(await count('shift_stock_reconciliations', shiftId)).toBe(0);
+  });
+
+  it('reads a real OPEN shift without confusing SHIFT_OPEN audit with SHIFT_CLOSE audit', async () => {
+    const cookie = await login();
+    const shiftId = await openShift(cookie);
+    const snapshot = await readShiftCloseEvidenceSnapshot(getDb(localD1), shiftId, false);
+    expect(snapshot).toEqual({
+      status: 'OPEN',
+      stockReconciliationCount: 0,
+      financialReconciliationCount: 0,
+      shiftCloseAuditCount: 0,
+      uncertainAttempt: false,
+    });
+    expect((await assessPersisted(shiftId, false)).holdFurtherClose).toBe(false);
+  });
+
+  it('classifies a successfully CLOSED shift from persisted reconciliation and audit evidence', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(200);
+    const snapshot = await readShiftCloseEvidenceSnapshot(getDb(localD1), shiftId, false);
+    expect(snapshot?.status).toBe('CLOSED');
+    expect(snapshot?.stockReconciliationCount).toBeGreaterThan(0);
+    expect(snapshot?.financialReconciliationCount).toBe(1);
+    expect(snapshot?.shiftCloseAuditCount).toBe(1);
+    const assessment = assessShiftCloseEvidence(snapshot!);
+    expect(assessment.disposition).toBe('CLOSED_EVIDENCE_COMPLETE');
+    expect(assessment.holdFurtherClose).toBe(true);
+  });
+
+  it('records real CLOSED, audited success and a single durable COMMITTED journal', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(200);
+    const attempt = await dbRow(
+      'SELECT id, state, outlet_id AS outletId FROM shift_close_attempts WHERE shift_id = ?',
+      shiftId,
+    );
+    expect(attempt?.outletId).toBe('ro-1001');
+    expect(attempt?.state).toBe('COMMITTED');
+    const events = await localD1.prepare(`
+      SELECT event_type FROM shift_close_attempt_events
+      WHERE attempt_id = ? ORDER BY created_at, rowid
+    `).bind(attempt.id).all<{ event_type: string }>();
+    expect(events.results.map(r => r.event_type)).toEqual([
+      'CLAIMED', 'PREPARED', 'COMMITTED',
+    ]);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(1);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(1);
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSED');
+  });
+
+  it('keeps OPEN on journal reservation event failure with no orphan attempt', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    await localD1.exec(`CREATE TRIGGER stage01p_reject_claimed_event
+      BEFORE INSERT ON shift_close_attempt_events
+      WHEN NEW.event_type = 'CLAIMED'
+      BEGIN SELECT RAISE(ABORT, 'STAGE01P_CLAIMED_EVENT_FAILURE'); END;`);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('OPEN');
+    expect((await dbRow('SELECT count(*) AS n FROM shift_close_attempts WHERE shift_id = ?', shiftId)).n).toBe(0);
+    expect(await count('shift_stock_reconciliations', shiftId)).toBe(0);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
+  });
+
+  it('atomically rejects incomplete shift and records a durable VALIDATION_REJECTED event', async () => {
+    const cookie = await login();
+    const shiftId = await openShift(cookie);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(400);
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('OPEN');
+    const attempt = await dbRow(
+      'SELECT id, state FROM shift_close_attempts WHERE shift_id = ?', shiftId,
+    );
+    expect(attempt?.state).toBe('VALIDATION_REJECTED');
+    const journalEvents = await localD1.prepare(
+      'SELECT event_type FROM shift_close_attempt_events WHERE attempt_id = ? ORDER BY created_at, rowid',
+    ).bind(attempt.id).all<{ event_type: string }>();
+    expect(journalEvents.results.map(r => r.event_type)).toEqual(['CLAIMED', 'VALIDATION_REJECTED']);
+
+    // A clean refusal may be retried after edits; it produces a distinct
+    // durable attempt instead of overwriting or reusing the old attempt.
+    const retry = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(retry.status).toBe(400);
+    expect((await dbRow('SELECT count(*) AS n FROM shift_close_attempts WHERE shift_id = ?', shiftId)).n).toBe(2);
+  });
+
+  it('rolls back entire preparation when PREPARED journal event is rejected', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    await localD1.exec(`CREATE TRIGGER stage01p_reject_prepared_event
+      BEFORE INSERT ON shift_close_attempt_events
+      WHEN NEW.event_type = 'PREPARED'
+      BEGIN SELECT RAISE(ABORT, 'STAGE01P_PREPARED_EVENT_FAILURE'); END;`);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_stock_reconciliations', shiftId)).toBe(0);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(0);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    const attempt = await dbRow('SELECT id, state FROM shift_close_attempts WHERE shift_id = ?', shiftId);
+    expect(attempt?.state).toBe('REVIEW_REQUIRED');
+    const events = await localD1.prepare(
+      'SELECT event_type FROM shift_close_attempt_events WHERE attempt_id = ? ORDER BY created_at, rowid',
+    ).bind(attempt.id).all<{ event_type: string }>();
+    expect(events.results.map(r => r.event_type)).toEqual(['CLAIMED', 'REVIEW_REQUIRED']);
+  });
+
+  it('rolls back CLOSED and audits when COMMITTED journal event insertion fails', async () => {
+    const cookie = await login();
+    const shiftId = await readyShift(cookie);
+    await localD1.exec(`CREATE TRIGGER stage01p_reject_committed_event
+      BEFORE INSERT ON shift_close_attempt_events
+      WHEN NEW.event_type = 'COMMITTED'
+      BEGIN SELECT RAISE(ABORT, 'STAGE01P_COMMITTED_EVENT_FAILURE'); END;`);
+    const response = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as any).error.code).toBe('SHIFT_CLOSE_COMMIT_UNCERTAIN');
+    expect((await dbRow('SELECT status FROM operational_shifts WHERE id = ?', shiftId)).status).toBe('CLOSING');
+    expect(await count('shift_stock_reconciliations', shiftId)).toBeGreaterThan(0);
+    expect(await count('shift_financial_reconciliations', shiftId)).toBe(1);
+    expect(await count('audit_logs', shiftId, 'SHIFT_CLOSE')).toBe(0);
+    expect(await count('audit_logs', shiftId, 'FINANCIAL_RECONCILIATION')).toBe(0);
+    const attempt = await dbRow('SELECT id, state FROM shift_close_attempts WHERE shift_id = ?', shiftId);
+    expect(attempt?.state).toBe('REVIEW_REQUIRED');
+    const events = await localD1.prepare(
+      'SELECT event_type FROM shift_close_attempt_events WHERE attempt_id = ? ORDER BY created_at, rowid',
+    ).bind(attempt.id).all<{ event_type: string }>();
+    expect(events.results.map(r => r.event_type)).toEqual(['CLAIMED', 'PREPARED', 'REVIEW_REQUIRED']);
+    // No repeat close without a separate authorized review decision.
+    const repeat = await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    expect(repeat.status).toBe(409);
+    expect((await dbRow('SELECT count(*) AS n FROM shift_close_attempts WHERE shift_id = ?', shiftId)).n).toBe(1);
+  });
+
+  it('keeps journal events append-only against UPDATE and DELETE', async () => {
+    const cookie = await login();
+    const shiftId = await openShift(cookie);
+    await request(cookie, `/shifts/${shiftId}/close`, closePayload);
+    const event = await dbRow(`
+      SELECT e.id FROM shift_close_attempt_events e
+      JOIN shift_close_attempts a ON a.id = e.attempt_id
+      WHERE a.shift_id = ? LIMIT 1
+    `, shiftId);
+    expect(event?.id).toBeDefined();
+    await expect(localD1.prepare(
+      'UPDATE shift_close_attempt_events SET event_type = ? WHERE id = ?',
+    ).bind('COMMITTED', event.id).run()).rejects.toThrow('SHIFT_CLOSE_ATTEMPT_EVENTS_APPEND_ONLY_UPDATE');
+    await expect(localD1.prepare(
+      'DELETE FROM shift_close_attempt_events WHERE id = ?',
+    ).bind(event.id).run()).rejects.toThrow('SHIFT_CLOSE_ATTEMPT_EVENTS_APPEND_ONLY_DELETE');
+  });
+
+  it('returns null for a shift that does not exist without inserting evidence', async () => {
+    const snapshot = await readShiftCloseEvidenceSnapshot(getDb(localD1), 'not-a-shift', true);
+    expect(snapshot).toBeNull();
+  });
+
+  it('requires an explicit, independently verified uncertain-attempt flag', async () => {
+    await expect(readShiftCloseEvidenceSnapshot(getDb(localD1), 'shift-id', undefined as any))
+      .rejects.toThrow('SHIFT_CLOSE_EVIDENCE_ATTEMPT_VERIFICATION_REQUIRED');
+    await expect(readShiftCloseEvidenceSnapshot(getDb(localD1), ' ', false))
+      .rejects.toThrow('SHIFT_CLOSE_EVIDENCE_SHIFT_ID_REQUIRED');
+  });
+
+});

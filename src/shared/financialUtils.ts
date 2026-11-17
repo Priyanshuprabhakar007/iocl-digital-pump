@@ -29,7 +29,7 @@ export function parseSignedMoneyToPaise(amount: string): number {
 }
 
 export function formatPaiseToMoney(paise: number): string {
-  if (!Number.isInteger(paise)) throw new Error("INVALID_PAISE_VALUE");
+  if (!Number.isSafeInteger(paise)) throw new Error("INVALID_PAISE_VALUE");
   const isNegative = paise < 0;
   const absPaise = Math.abs(paise);
   

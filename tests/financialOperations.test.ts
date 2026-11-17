@@ -13,7 +13,7 @@ import fs from 'fs';
 import { parseMoneyToPaise, parseSignedMoneyToPaise, formatPaiseToMoney } from '../src/shared/financialUtils';
 import { ShiftCloseService } from '../src/worker/services/shiftCloseService';
 import { FinancialService } from '../src/worker/services/financialService';
-import { AuditRepository } from '../src/worker/repositories/auditRepository';
+import { AtomicShiftCloseFinalizer } from '../src/worker/services/atomicShiftCloseFinalizer';
 
 const TEST_DB_PATH = './.sqlite/test_financial_integration.db';
 
@@ -798,10 +798,10 @@ describe('Phase 2C Comprehensive Integration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-dealer', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-dealer', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-dealer', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-dealer', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -841,10 +841,10 @@ describe('Phase 2C Comprehensive Integration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-dealer', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-dealer', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-dealer', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-dealer', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -909,10 +909,10 @@ describe('Phase 2C Comprehensive Integration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -950,10 +950,10 @@ describe('Phase 2C Comprehensive Integration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
@@ -1094,7 +1094,7 @@ describe('Phase 2C Comprehensive Integration Suite', () => {
     expect(del3.reason).toBe('SHIFT_CLOSED');
   });
 
-  it('37. shift finalization failure cleans up both reconciliations', async () => {
+  it('37. uncertain finalization holds CLOSING and retains both reconciliation records for review', async () => {
     const { cookie } = await loginAs();
     const openRes = await app.fetch(
       new Request('http://localhost/api/v1/outlets/ro-1001/shifts/open', {
@@ -1108,11 +1108,11 @@ describe('Phase 2C Comprehensive Integration Suite', () => {
     const db = getDb(localD1);
     const pumpRepo = new PumpRepository(db);
     const finRepo = new FinancialRepository(db);
-    const auditRepo = new AuditRepository(db);
+    const atomicFinalizer = new AtomicShiftCloseFinalizer(localD1);
     const cngRepo = new CngRepository(db);
     const lubeRepo = new LubeRepository(db);
     const finService = new FinancialService(finRepo, pumpRepo, cngRepo, lubeRepo);
-    const closeService = new ShiftCloseService(pumpRepo, finRepo, finService, auditRepo);
+    const closeService = new ShiftCloseService(pumpRepo, finRepo, finService, atomicFinalizer);
 
     // Setup readings to pass validation
     const nozzles = await pumpRepo.listShiftNozzleSnapshots(shiftId);
@@ -1124,33 +1124,29 @@ describe('Phase 2C Comprehensive Integration Suite', () => {
     const tanks = await pumpRepo.listShiftTankSnapshots(shiftId);
     for (const t of tanks) {
       await pumpRepo.createTankReading({
-        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-open-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'OPENING', source: 'MANUAL', productDipMmMilliunits: 1000000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8500000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8500000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
       await pumpRepo.createTankReading({
-        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        id: `tsr-close-${t.tankId}-${shiftId}`, operationalShiftId: shiftId, outletId: 'ro-1001', tankId: t.tankId, productId: t.productId, calibrationChartId: t.calibrationChartId ?? null, calibrationRevision: t.calibrationRevision ?? null, readingType: 'CLOSING', source: 'MANUAL', productDipMmMilliunits: 950000, waterDipMmMilliunits: 0, grossObservedVolumeMilliunits: 8400000, waterVolumeMilliunits: 0, netProductVolumeMilliunits: 8400000, recordedAt: new Date().toISOString(), recordedByUserId: 'user-admin', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
 
-    // Force finalizeCloseConditional to fail by spying/mocking
-    const originalFinalize = pumpRepo.finalizeCloseConditional.bind(pumpRepo);
-    pumpRepo.finalizeCloseConditional = async () => ({ success: false, shift: await pumpRepo.findOperationalShiftById(shiftId) });
+    // Simulate an indeterminate atomic close outcome without any DB mutation.
+    atomicFinalizer.finalize = async () => false;
 
     const result = await closeService.closeShift(shiftId, 'user-admin');
-
     expect(result.success).toBe(false);
-    
-    // Verify shift restored to OPEN
+    expect(result.error).toBe('SHIFT_CLOSE_REVIEW_REQUIRED');
+
+    // Preserve the claimed shift and reconciliation evidence. Do not
+    // destructively "clean up" an outcome that requires human review.
     const shift = await pumpRepo.findOperationalShiftById(shiftId);
-    expect(shift?.status).toBe('OPEN');
+    expect(shift?.status).toBe('CLOSING');
 
-    // Verify both reconciliations are cleaned up
     const finRecon = await finRepo.findShiftFinancialReconciliation(shiftId);
-    expect(finRecon).toBeNull();
-
-    const stockRecon = await db.select().from(schema.shiftStockReconciliations).where(eq(schema.shiftStockReconciliations.operationalShiftId, shiftId));
-    expect(stockRecon.length).toBe(0);
-
-    // Cleanup mock
-    pumpRepo.finalizeCloseConditional = originalFinalize;
+    expect(finRecon).not.toBeNull();
+    const stockRecon = await db.select().from(schema.shiftStockReconciliations)
+      .where(eq(schema.shiftStockReconciliations.operationalShiftId, shiftId));
+    expect(stockRecon.length).toBeGreaterThan(0);
   });
 });
