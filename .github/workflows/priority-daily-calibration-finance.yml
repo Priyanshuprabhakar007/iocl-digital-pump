@@ -10,6 +10,8 @@ on:
     paths:
       - .github/workflows/priority-daily-calibration-finance.yml
       - src/**
+      - .devcontainer/**
+      - docs/P0_CLIENT_DEMO_20261117.md
       - tests/**
       - migrations/**
       - scripts/stage01x/**
@@ -69,5 +71,31 @@ jobs:
         run: bun test tests/p0StagingMigrationReadiness.test.ts
       - name: Offline backup integrity and tamper-safety checks (synthetic only)
         run: bun test tests/p0OfflineBackupVerification.test.ts
+      - name: Client demo — isolated local app boot and seeded login
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run dev > "$RUNNER_TEMP/p0-client-demo.log" 2>&1 &
+          demo_pid=$!
+          trap 'kill "$demo_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 75); do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:3000/ > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "::error::Local demo UI failed to start"
+            tail -60 "$RUNNER_TEMP/p0-client-demo.log"
+            exit 1
+          fi
+          response="$(curl --fail --silent --show-error --max-time 20 \\
+            -H 'Origin: http://localhost:3000' -H 'Content-Type: application/json' \\
+            -d '{"email":"admin@iocl.in","password":"Password@123"}' \\
+            http://127.0.0.1:3000/api/v1/auth/login)"
+          echo "$response" | jq -e '.success == true and (.data != null)' > /dev/null
+          echo "PASS: isolated local UI and sample admin login accessible"
       - name: Production build compatibility
         run: bun run build
