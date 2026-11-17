@@ -173,6 +173,56 @@ export class AtomicShiftCloseFinalizer {
             SELECT 1 FROM shift_financial_reconciliations AS f
             WHERE f.operational_shift_id = operational_shifts.id
               AND f.outlet_id = operational_shifts.outlet_id
+              -- An internally inconsistent persisted financial row must NEVER
+              -- be committed or stamped with a success audit.
+              AND f.total_collections_paise =
+                f.cash_collection_paise + f.pos_collection_paise +
+                f.upi_collection_paise + f.fleet_card_collection_paise +
+                f.credit_sales_paise + f.direct_bank_drop_paise
+              AND f.authoritative_sales_revenue_paise =
+                f.fuel_sales_revenue_paise + COALESCE(f.cng_sales_revenue_paise, 0) +
+                COALESCE(f.lube_sales_revenue_paise, 0)
+              AND f.sales_collection_variance_paise =
+                f.authoritative_sales_revenue_paise - f.total_collections_paise
+              -- Compare the live financial source rows INSIDE the same D1
+              -- transaction as CLOSED + audits. The preview may have been
+              -- correct before a collection was edited/inserted/deleted.
+              AND f.cash_collection_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'CASH'
+              ), 0)
+              AND f.pos_collection_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'POS_CARD'
+              ), 0)
+              AND f.upi_collection_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'UPI'
+              ), 0)
+              AND f.fleet_card_collection_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'FLEET_CARD'
+              ), 0)
+              AND f.credit_sales_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'CREDIT_SALE'
+              ), 0)
+              AND f.direct_bank_drop_paise = COALESCE((
+                SELECT SUM(c.amount_paise) FROM shift_collections AS c
+                WHERE c.operational_shift_id = operational_shifts.id
+                  AND c.outlet_id = operational_shifts.outlet_id
+                  AND c.collection_type = 'DIRECT_BANK_DROP'
+              ), 0)
           )
           AND EXISTS (
             SELECT 1 FROM operational_shift_tanks AS t
@@ -187,6 +237,63 @@ export class AtomicShiftCloseFinalizer {
                   AND sr.outlet_id = t.outlet_id
                   AND sr.tank_id = t.tank_id
                   AND sr.product_id = t.product_id
+                  -- Validate live tank measurements before CLOSED is committed.
+                  AND sr.opening_stock_milliunits = (
+                    SELECT r.net_product_volume_milliunits
+                    FROM tank_stock_readings AS r
+                    WHERE r.operational_shift_id = t.operational_shift_id
+                      AND r.tank_id = t.tank_id AND r.reading_type = 'OPENING'
+                  )
+                  AND sr.physical_closing_stock_milliunits = (
+                    SELECT r.net_product_volume_milliunits
+                    FROM tank_stock_readings AS r
+                    WHERE r.operational_shift_id = t.operational_shift_id
+                      AND r.tank_id = t.tank_id AND r.reading_type = 'CLOSING'
+                  )
+                  -- Keep both measurements bound to the shift's chosen
+                  -- tank-specific chart/revision (NULL legacy references
+                  -- must match NULL; superseded historical charts are valid).
+                  AND NOT EXISTS (
+                    SELECT 1 FROM tank_stock_readings AS reading
+                    WHERE reading.operational_shift_id = t.operational_shift_id
+                      AND reading.tank_id = t.tank_id
+                      AND reading.reading_type IN ('OPENING', 'CLOSING')
+                      AND (
+                        NOT (reading.calibration_chart_id IS t.calibration_chart_id)
+                        OR NOT (reading.calibration_revision IS t.calibration_revision)
+                      )
+                  )
+                  AND (
+                    t.calibration_chart_id IS NULL OR EXISTS (
+                      SELECT 1 FROM tank_calibration_charts AS chart
+                      WHERE chart.id = t.calibration_chart_id
+                        AND chart.tank_id = t.tank_id
+                        AND chart.revision_number = t.calibration_revision
+                    )
+                  )
+                  -- Only COMPLETED receipts count towards stock. Re-check
+                  -- the actual receipt lines inside the final D1 batch, not
+                  -- a pre-close preview (which can become stale).
+                  AND sr.receipt_quantity_milliunits = COALESCE((
+                    SELECT SUM(l.measured_received_quantity_milliunits)
+                    FROM fuel_receipts AS receipt
+                    JOIN fuel_receipt_tank_lines AS l ON l.fuel_receipt_id = receipt.id
+                    WHERE receipt.operational_shift_id = t.operational_shift_id
+                      AND receipt.outlet_id = t.outlet_id
+                      AND receipt.status = 'COMPLETED'
+                      AND l.tank_id = t.tank_id
+                      AND l.measured_received_quantity_milliunits IS NOT NULL
+                  ), 0)
+                  -- Same per-tank nozzle allocation as PumpRepository.
+                  AND sr.sales_quantity_milliunits = COALESCE((
+                    SELECT SUM(m.net_sales_quantity_milliunits)
+                    FROM operational_shift_nozzles AS n
+                    JOIN nozzle_meter_readings AS m
+                      ON m.operational_shift_id = n.operational_shift_id
+                     AND m.nozzle_id = n.nozzle_id
+                    WHERE n.operational_shift_id = t.operational_shift_id
+                      AND n.tank_id = t.tank_id
+                  ), 0)
               )
           )
           AND NOT EXISTS (

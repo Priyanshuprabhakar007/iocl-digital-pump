@@ -443,6 +443,28 @@ describe('Tank Calibration Chart Versioning, Non-Linear Tables, CSV Preview, Dry
     expect(tank1Snap.calibrationChartId).toBe('tcc-legacy-tank-ro1-1-r1');
     expect(tank1Snap.calibrationRevision).toBe(1);
 
+    // A shift snapshot must lock its historical chart even BEFORE any dip
+    // reading is entered. Otherwise a point could be edited in this gap.
+    const preDipChartRes = await app.fetch(new Request(
+      'http://localhost/api/v1/tanks/tank-ro1-1/calibration', {
+        headers: { Cookie: cookie, Origin: 'http://localhost:3000' },
+      }), env);
+    expect(preDipChartRes.status).toBe(200);
+    const preDipChart: any = await preDipChartRes.json();
+    expect(preDipChart.activeChart.isReferenced).toBe(true);
+    expect(preDipChart.activeChart.referencedShiftsCount).toBeGreaterThan(0);
+    const untouchedPoint = preDipChart.data.find((p: any) => p.dipMmStr === '1000.000');
+    expect(untouchedPoint).toBeDefined();
+    const preDipMutation = await app.fetch(new Request(
+      `http://localhost/api/v1/tanks/tank-ro1-1/calibration/${untouchedPoint.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ dipMillimetres: '1000.000', volumeLitres: '9999.000' }),
+      }), env);
+    expect(preDipMutation.status).toBe(409);
+    expect(((await preDipMutation.json()) as any).error.code)
+      .toBe('CALIBRATION_CHART_LOCKED_HISTORICAL_REFERENCE');
+
     // Step 2: Record OPENING (1500 mm -> 14,400 L in Rev #1) and CLOSING (1000 mm -> 8,500 L in Rev #1) readings for Tank #1
     const openDipRes = await app.fetch(
       new Request(`http://localhost/api/v1/shifts/${shift1Id}/tank-readings`, {

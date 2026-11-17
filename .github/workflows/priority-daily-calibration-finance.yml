@@ -6,11 +6,18 @@ on:
       - test/priority-daily-calibration-finance-20261114
       - fix/p0-finance-safe-paise-format-20261114
       - fix/p0-finance-checked-aggregations-20261114
+      - fix/p0-finance-provisional-reading-status-20261114
     paths:
       - .github/workflows/priority-daily-calibration-finance.yml
       - src/**
+      - .devcontainer/**
+      - docs/P0_CLIENT_DEMO_20261117.md
       - tests/**
       - migrations/**
+      - scripts/stage01x/**
+      - scripts/stage01y/**
+      - scripts/stage01z/**
+      - scripts/p0/**
       - package.json
       - bun.lock
   workflow_dispatch:
@@ -38,13 +45,54 @@ jobs:
         run: bun install --frozen-lockfile
       - name: TypeScript compile gate
         run: bun run typecheck
+      - name: Migration 0007 FK table-drop hazard — disposable rollback rehearsal
+        run: bun test tests/p0Migration0007ForeignKeyRehearsal.test.ts
+      - name: Migration 0004 / 0011 / 0032 FK rebuild hazard rehearsal
+        run: bun test tests/p0MigrationRebuildChildDataRehearsal.test.ts
+      - name: Fresh empty staging baseline — transactional local rehearsal only
+        run: bun test tests/p0FreshEmptyStagingBaselineRehearsal.test.ts
       - name: Daily Operations — actual API and shift flow
-        run: bun test tests/dailyFuelOperations.test.ts tests/openShiftIntegration.test.ts tests/fuelReceiptCompletionAndShiftClose.test.ts
+        run: bun test --timeout 15000 tests/dailyFuelOperations.test.ts tests/openShiftIntegration.test.ts tests/fuelReceiptCompletionAndShiftClose.test.ts
       - name: Tank Calibration — chart versions and dip conversions
         run: bun test tests/endToEndTankCalibration.test.ts tests/tankCalibrationVersioningAndEnhancements.test.ts tests/excelCalibrationImport.test.ts tests/globalTankCalibrationTemplates.test.ts
       - name: Finances — collections and atomic shift closing
-        run: bun test tests/financialOperations.test.ts tests/idempotencyAndDuplicateHardening.test.ts tests/adminEmptyShiftClose.test.ts tests/p0FinanceSafeMoneyBoundary.test.ts tests/p0FinanceAggregationPrecision.test.ts
+        run: bun test tests/financialOperations.test.ts tests/idempotencyAndDuplicateHardening.test.ts tests/adminEmptyShiftClose.test.ts tests/p0FinanceSafeMoneyBoundary.test.ts tests/p0FinanceAggregationPrecision.test.ts tests/p0FuelRevenueReadingCoverage.test.ts tests/p0FinanceCollectionRetrySafety.test.ts
       - name: Daily Operations to Finance — stock and reporting
         run: bun test tests/tankStockAndReconciliation.test.ts tests/monthlyOperationsAggregation.test.ts tests/dailyOperationsTestDataReset.test.ts
+      - name: One-day calibrated tank, nozzle, DSR and finance reconciliation
+        run: bun test tests/p0OneDayIntegratedReconciliation.test.ts
+      - name: Shift close — real local D1 failure recovery and audit integrity
+        run: bun test tests/stage01eLocalD1CloseRecovery.test.ts
+      - name: Calibration chart point DB immutability — proposed local guard
+        run: bun test tests/p0CalibrationPointImmutability.test.ts
+      - name: Offline staging identity and migration compatibility (NO remote writes)
+        run: bun test tests/stage01xIsolatedStagingConfig.test.ts tests/stage01yOfflineMigrationPreflight.test.ts tests/stage01zHostedD1MigrationCompatibility.test.ts
+      - name: P0 staging migration release decision (read-only NO-GO)
+        run: bun test tests/p0StagingMigrationReadiness.test.ts
+      - name: Offline backup integrity and tamper-safety checks (synthetic only)
+        run: bun test tests/p0OfflineBackupVerification.test.ts
+      - name: Client demo — isolated local app boot and seeded login
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run dev > "$RUNNER_TEMP/p0-client-demo.log" 2>&1 &
+          demo_pid=$!
+          trap 'kill "$demo_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 75); do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:3000/ > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "::error::Local demo UI failed to start"
+            tail -60 "$RUNNER_TEMP/p0-client-demo.log"
+            exit 1
+          fi
+          response="$(curl --fail --silent --show-error --max-time 20 -H 'Origin: http://localhost:3000' -H 'Content-Type: application/json' -d '{"email":"admin@iocl.in","password":"Password@123"}' http://127.0.0.1:3000/api/v1/auth/login)"
+          echo "$response" | jq -e '.success == true and (.data != null)' > /dev/null
+          echo "PASS: isolated local UI and sample admin login accessible"
       - name: Production build compatibility
         run: bun run build

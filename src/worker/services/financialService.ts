@@ -11,6 +11,7 @@ import {
 } from '../../shared/types';
 import { formatPaiseToMoney, calculateRevenuePaise, checkedMoneyAdd } from '../../shared/financialUtils';
 import { formatMilliunits } from '../../shared/precision';
+import { assessFuelRevenueReadingCoverage } from './fuelRevenueReadingCoverage';
 
 export class FinancialService {
   constructor(
@@ -42,10 +43,13 @@ export class FinancialService {
 
     const nozzleSnapshots = await this.pumpRepo.listShiftNozzleSnapshots(shiftId);
     const meterReadings = await this.pumpRepo.listReadingsForShift(shiftId);
+    const unavailabilityRecords = await this.pumpRepo.listUnavailabilityForShift(shiftId);
     const priceSnapshots = await this.financialRepo.listShiftProductPrices(shiftId);
 
     const priceMap = new Map<string, number>();
     priceSnapshots.filter(p => p.productCategory !== 'CNG').forEach(p => priceMap.set(p.productId, p.pricePaisePerUnit));
+
+    const readingCoverage = assessFuelRevenueReadingCoverage(nozzleSnapshots, meterReadings, unavailabilityRecords);
 
     const readingMap = new Map<string, typeof meterReadings[0]>();
     meterReadings.forEach(r => readingMap.set(r.nozzleId, r));
@@ -110,7 +114,8 @@ export class FinancialService {
     return {
       byProduct,
       fuelTotalPaise,
-      fuelTotalStr: formatPaiseToMoney(fuelTotalPaise)
+      fuelTotalStr: formatPaiseToMoney(fuelTotalPaise),
+      readingCoverage
     };
   }
 
@@ -245,6 +250,7 @@ export class FinancialService {
         byProduct: revenue.byProduct,
         fuelTotalPaise: revenue.fuelTotalPaise,
         fuelTotalStr: revenue.fuelTotalStr,
+        readingCoverage: revenue.readingCoverage,
         cngTotalPaise: cngRevenue.cngTotalPaise,
         cngTotalStr: cngRevenue.cngTotalStr,
         lubeTotalPaise: lubeRevenue.lubeTotalPaise,

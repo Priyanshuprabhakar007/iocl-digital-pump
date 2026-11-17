@@ -394,6 +394,18 @@ export const FinancialOperationsPage: React.FC = () => {
         </section>
       )}
 
+      {/* A financial preview can be provisional while nozzle evidence is incomplete. */}
+      {summary?.salesRevenue.readingCoverage?.status === 'INCOMPLETE' && (
+        <div role="status" aria-label="Incomplete fuel readings" className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            <strong>Fuel readings incomplete.</strong>{' '}
+            {summary.salesRevenue.readingCoverage.missingNozzleIds.length} nozzle(s) are missing a valid net reading or an unavailability record.
+            Financial totals shown are provisional; do not treat them as final reconciliation.
+          </span>
+        </div>
+      )}
+
       {/* Notifications */}
       {actionSuccess && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm flex items-center gap-2">
