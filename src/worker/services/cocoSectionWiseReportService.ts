@@ -428,14 +428,27 @@ export class CocoSectionWiseReportService {
       outletId: args.outletId,
       reportDate: args.reportDate,
     });
-    const [leases, vendors, equipment, actor] = await Promise.all([
+    // Optional additive schema: legacy environments continue serving existing compliance data
+    // until the reviewed migration 0036 is applied. Do not mutate a hosted database on read.
+    const legacySafe = async <T>(promise: Promise<T>, fallback: T): Promise<T> => {
+      try { return await promise; } catch (err) {
+        if (/no such table|SQLITE_ERROR.*no such table/i.test(String(err))) return fallback;
+        throw err;
+      }
+    };
+    const [leases, vendors, equipment, actor, agreementRecords, claimRecords, settlements, inspections] = await Promise.all([
       this.db.select().from(nfrLeases).where(eq(nfrLeases.outletId, args.outletId)).all(),
       this.db.select().from(nfrVendors).where(eq(nfrVendors.outletId, args.outletId)).all(),
       this.db.select().from(equipmentAssets).where(eq(equipmentAssets.outletId, args.outletId)).all(),
       this.db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, args.actorUserId)).get(),
+      legacySafe(this.db.select().from(cocoAgreementDetails).where(eq(cocoAgreementDetails.outletId, args.outletId)).all(), []),
+      legacySafe(this.db.select().from(cocoExpenseClaims).where(eq(cocoExpenseClaims.outletId, args.outletId)).all(), []),
+      legacySafe(this.db.select().from(cocoClaimSettlements).where(eq(cocoClaimSettlements.outletId, args.outletId)).all(), []),
+      legacySafe(this.db.select().from(cocoAssetInspections).where(eq(cocoAssetInspections.outletId, args.outletId)).all(), []),
     ]);
     const vendorById = new Map(vendors.map((v) => [v.id, v]));
     const leaseInfo: SectionWiseLease[] = leases.map((l) => ({
+      id: l.id,
       agreementNumber: l.agreementNumber,
       from: l.leaseStartDate,
       to: l.leaseEndDate,
@@ -452,11 +465,31 @@ export class CocoSectionWiseReportService {
       sections: buildSectionWiseSections({
         items: register.items,
         leases: leaseInfo,
+        agreements: agreementRecords.map((a) => ({
+          id: a.id, agreementType: a.agreementType, agreementName: a.agreementName,
+          agreementNumber: a.agreementNumber, linkedNfrLeaseId: a.linkedNfrLeaseId,
+          counterpartyName: a.counterpartyName, vendorCode: a.vendorCode,
+          customerCode: a.customerCode, siteClass: a.siteClass,
+          startDate: a.startDate, endDate: a.endDate, remarks: a.remarks,
+        })),
+        claims: claimRecords.map((claim) => ({
+          id: claim.id, claimCategory: claim.claimCategory, title: claim.title,
+          invoiceNumber: claim.invoiceNumber,
+          periodStart: claim.periodStart, periodEnd: claim.periodEnd, dueDate: claim.dueDate,
+          amountPaise: claim.amountPaise, approvalStatus: claim.approvalStatus,
+          paidPaise: settlements.filter((payment) => payment.claimId === claim.id &&
+            payment.paymentDate <= register.reportDate)
+            .reduce((sum, payment) => sum + payment.amountPaise, 0),
+          remarks: claim.remarks,
+        })),
+        inspections: inspections.map((i) => ({
+          equipmentAssetId: i.equipmentAssetId, inspectedOn: i.inspectedOn,
+          condition: i.condition, nextServiceDate: i.nextServiceDate,
+          remarks: i.remarks, createdAt: i.createdAt,
+        })),
         assets: equipment.map((e) => ({
-          equipmentType: e.equipmentType,
-          name: e.name,
-          manufacturer: e.manufacturer,
-          status: e.status,
+          id: e.id, equipmentType: e.equipmentType, name: e.name,
+          manufacturer: e.manufacturer, status: e.status,
         })),
         outletType: register.outlet.outletType,
         reportDate: register.reportDate,
