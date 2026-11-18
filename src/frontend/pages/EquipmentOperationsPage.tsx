@@ -273,9 +273,7 @@ export const EquipmentOperationsPage: React.FC = () => {
           <div>
             <h1 className="text-xl font-bold text-[#17365D] tracking-tight flex items-center gap-2">
               Equipment & Breakdowns
-              <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
-                Phase 3C
-              </span>
+              
             </h1>
             <p className="text-xs text-[#64748B] mt-0.5">
               Forecourt equipment health, breakdown tickets, technician assignments & resolution ledger
