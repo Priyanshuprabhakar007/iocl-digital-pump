@@ -47,6 +47,8 @@ export const CngOperationsPage: React.FC = () => {
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
   const [selectedShift, setSelectedShift] = useState<OperationalShift | null>(null);
   const [loadingShifts, setLoadingShifts] = useState(false);
+  const [shiftListError,setShiftListError]=useState<string|null>(null);
+  const [shiftListRevision,setShiftListRevision]=useState(0);
 
   // CNG Shift specific data
   const [cngLog, setCngLog] = useState<CngShiftLog | null>(null);
@@ -80,12 +82,15 @@ export const CngOperationsPage: React.FC = () => {
       return;
     }
 
+    let current=true;
     const loadShifts = async () => {
       setLoadingShifts(true);
+      setShiftListError(null);
       setActionError(null);
       try {
         const res = await apiFetch<OperationalShift[]>(`/api/v1/outlets/${selectedOutletId}/shifts`);
-        if (res.success && res.data) {
+        if(!current)return;
+        if (res.success && Array.isArray(res.data)) {
           const available=res.data.filter(s=>s.outletId===selectedOutletId);
           setShiftsList(available);
           const requested=initialSelection.current;
@@ -95,21 +100,26 @@ export const CngOperationsPage: React.FC = () => {
             setSelectedShiftId(chosen.id);
             remember(toWorkbenchSelection(chosen));
           } else {
+            shiftChoice.current='';
             setSelectedShiftId('');
             setSelectedShift(null);
             setCngLog(null);
             setPressureReadings([]);
           }
+        } else {
+          setShiftsList([]);shiftChoice.current='';setSelectedShiftId('');setSelectedShift(null);
+          setShiftListError(res.error?.message||'Failed to load operational shifts.');
         }
       } catch (err: any) {
-        setActionError(err.message || 'Failed to load operational shifts');
+        if(current){setShiftsList([]);shiftChoice.current='';setSelectedShiftId('');setSelectedShift(null);setShiftListError(err.message || 'Failed to load operational shifts');}
       } finally {
-        setLoadingShifts(false);
+        if(current)setLoadingShifts(false);
       }
     };
 
     loadShifts();
-  }, [selectedOutletId]);
+    return ()=>{current=false;};
+  }, [selectedOutletId,shiftListRevision]);
 
   // Load Selected Shift Details, CNG Log, and Pressure Readings
   const loadShiftData = async () => {
@@ -150,7 +160,7 @@ export const CngOperationsPage: React.FC = () => {
         setPressureReadings([]);
       }
     } catch (err: any) {
-      setActionError(err.message || 'Failed to load shift CNG records');
+      if(shiftChoice.current===requestShift){setSelectedShift(null);setCngLog(null);setPressureReadings([]);setActionError(err.message || 'Failed to load shift CNG records');}
     } finally {
       if(shiftChoice.current===requestShift)setLoadingShiftData(false);
     }
@@ -173,6 +183,7 @@ export const CngOperationsPage: React.FC = () => {
   };
 
   const handleRefresh = async () => {
+    if(!selectedShiftId){setShiftListRevision(v=>v+1);return;}
     await loadShiftData();
     setDailySummaryRefreshCounter((c) => c + 1);
   };
@@ -256,17 +267,18 @@ export const CngOperationsPage: React.FC = () => {
           </div>
 
           {/* Top Controls */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="iocl-mobile-stack flex flex-wrap items-center gap-3 min-w-0">
             {/* Outlet Selector */}
-            <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-1.5 min-w-[200px]">
+            <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-1.5 min-w-0 sm:min-w-[200px]">
               <Building2 className="w-4 h-4 text-[#64748B] shrink-0" />
               <select
+                aria-label="CNG retail outlet"
                 value={selectedOutletId}
                 onChange={(e) => setSelectedOutletId(e.target.value)}
                 disabled={loadingOutlets}
-                className="bg-transparent text-xs text-[#17365D] font-medium focus:outline-none w-full"
+                className="bg-transparent text-xs text-[#17365D] font-medium focus:outline-none w-full min-w-0"
               >
-                {loadingShifts||loadingShiftData?<div role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Loading saved CNG records…</div>:outlets.length === 0 ? (
+                {outlets.length === 0 ? (
                   <option value="">No outlets available</option>
                 ) : (
                   outlets.map((o) => (
@@ -279,9 +291,10 @@ export const CngOperationsPage: React.FC = () => {
             </div>
 
             {/* Shift Selector */}
-            <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-1.5 min-w-[220px]">
+            <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-1.5 min-w-0 sm:min-w-[220px]">
               <Clock className="w-4 h-4 text-[#64748B] shrink-0" />
               <select
+                aria-label="CNG operational shift"
                 value={selectedShiftId}
                 onChange={(e) => {
                 const next=shiftsList.find(s=>s.id===e.target.value);
@@ -292,7 +305,7 @@ export const CngOperationsPage: React.FC = () => {
                 if(next)remember(toWorkbenchSelection(next));
               }}
                 disabled={loadingShifts || loadingShiftData || pressureModalOpen || !!deletingPressureId || shiftsList.length === 0}
-                className="bg-transparent text-xs text-[#17365D] font-medium focus:outline-none w-full"
+                className="bg-transparent text-xs text-[#17365D] font-medium focus:outline-none w-full min-w-0"
               >
                 {shiftsList.length === 0 ? (
                   <option value="">No shifts available</option>
@@ -310,7 +323,8 @@ export const CngOperationsPage: React.FC = () => {
             <button
               type="button"
               onClick={handleRefresh}
-              disabled={loadingShiftData}
+              disabled={loadingShifts||loadingShiftData||pressureModalOpen||!!deletingPressureId}
+              aria-label="Refresh CNG records"
               className="p-2.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#475569] rounded-xl transition-colors disabled:opacity-50"
               title="Refresh Shift Data"
             >
@@ -403,7 +417,7 @@ export const CngOperationsPage: React.FC = () => {
       )}
 
       {/* Empty States */}
-      {outlets.length === 0 ? (
+      {loadingShifts||loadingShiftData?<div role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Loading saved CNG records…</div>:shiftListError?<div role="alert" className="rounded-xl border border-red-200 bg-white p-4 text-sm text-red-800"><p>{shiftListError}</p><button type="button" onClick={()=>setShiftListRevision(v=>v+1)} className="mt-3 rounded-lg bg-[#17365D] px-4 py-2 text-white">Retry</button></div>:outlets.length === 0 ? (
         <div className="py-16 text-center bg-white border border-[#E2E8F0] rounded-2xl space-y-2">
           <Building2 className="w-10 h-10 text-slate-600 mx-auto" />
           <h3 className="text-base font-bold text-[#17365D]">No Retail Outlets Available</h3>
