@@ -101,7 +101,7 @@ export const FinancialOperationsPage: React.FC = () => {
       setVarianceReason('');setActionError(null);setActionSuccess(null);
     }
     setSelectedShiftId(id);
-    if(shift)remember(toWorkbenchSelection(shift));
+    if(shift){initialSelection.current=toWorkbenchSelection(shift);remember(toWorkbenchSelection(shift));}
   };
   // Resolve exact remembered shift only against this outlet's authorized shift list.
   useEffect(() => {
@@ -347,7 +347,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
             <button
               disabled={workflowBusy}
-              onClick={() => {if(!selectedShiftId)setShiftListRevision(v=>v+1);refreshData();}}
+              onClick={() => {if(!selectedShiftId)setShiftListRevision(v=>v+1);else refreshData();}}
               aria-label="Refresh financial data"
               className="p-2 bg-[#F1F5F9] text-[#64748B] hover:text-[#17365D] rounded-xl border border-[#D7E0EA] transition-colors"
             >
