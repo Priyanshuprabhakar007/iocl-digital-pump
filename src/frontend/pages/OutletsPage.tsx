@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { RetailOutlet, User, State, Division, SalesArea } from '../../shared/types';
 import { PERMISSIONS } from '../../shared/constants';
 import { SectionSearchBar } from '../components/common/SectionSearchBar';
+import { DealerMasterExcelImporter } from '../components/outlets/DealerMasterExcelImporter';
 import { filterOutletsForSearch } from '../utils/sectionSearchHelpers';
 import {
   Building2,
@@ -30,6 +31,7 @@ export const OutletsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [directoryError,setDirectoryError]=useState<string|null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [showExcelImporter, setShowExcelImporter] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedOutlet, setSelectedOutlet] = useState<RetailOutlet | null>(null);
@@ -473,6 +475,10 @@ export const OutletsPage: React.FC = () => {
         </div>
 
         {hasPermission(PERMISSIONS.OUTLETS_CREATE) && (
+          <>
+          <button type="button" onClick={() => setShowExcelImporter(v => !v)} className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-[#17365D] text-xs font-bold self-start sm:self-auto">
+            {showExcelImporter ? 'Hide Excel Import' : 'Excel Import & Sync'}
+          </button>
           <button
             onClick={openCreateModal}
             className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-xs font-bold rounded-lg shadow-lg shadow-orange-500/20 flex items-center gap-2 self-start sm:self-auto"
@@ -480,8 +486,11 @@ export const OutletsPage: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>Register New Outlet</span>
           </button>
+          </>
         )}
       </div>
+
+      {showExcelImporter && <DealerMasterExcelImporter onCompleted={() => void fetchOutlets()} />}
 
       {/* Success Banner */}
       {successMsg && (
