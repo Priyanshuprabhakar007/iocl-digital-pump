@@ -59,6 +59,7 @@ import { HrNozzleAssignmentsPanel } from '../components/hr/HrNozzleAssignmentsPa
 import { HrUniformManagementPanel } from '../components/hr/HrUniformManagementPanel';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { GroupedWorkspaceNav } from '../components/common/GroupedWorkspaceNav';
 
 export const WorkforceOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
@@ -572,7 +573,7 @@ export const WorkforceOperationsPage: React.FC = () => {
               
             </div>
             <p className="text-xs text-[#64748B] mt-0.5">
-              Staff enrollment, manpower, shift roster, attendance, geofencing, nozzle assignments, uniform inventory & staff issue lifecycle
+              Manage staff, daily shift duties and uniform inventory.
             </p>
           </div>
         </div>
@@ -641,141 +642,22 @@ export const WorkforceOperationsPage: React.FC = () => {
       )}
 
       {/* Authoritative Manpower Summary Panel */}
-      {activeTab==='staff'||activeTab==='manpower'?<HrManpowerSummaryPanel summary={summary} isLoading={isLoadingCore} />:<details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[#17365D]">View manpower overview</summary><div className="p-4"><HrManpowerSummaryPanel summary={summary} isLoading={isLoadingCore} /></div></details>}
+      {activeTab==='manpower'?<HrManpowerSummaryPanel summary={summary} isLoading={isLoadingCore} />:<details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[#17365D]">View manpower overview</summary><div className="p-4"><HrManpowerSummaryPanel summary={summary} isLoading={isLoadingCore} /></div></details>}
 
       {/* Internal Navigation Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-[#E2E8F0] pb-2 overflow-x-auto">
-        <button
-          onClick={() => handleTabChange('staff')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-            activeTab === 'staff'
-              ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-              : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Staff Directory</span>
-          {staffList.length > 0 && (
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'staff' ? 'bg-orange-600 text-white' : 'bg-[#F1F5F9] text-[#64748B]'
-              }`}
-            >
-              {staffList.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => handleTabChange('designations')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-            activeTab === 'designations'
-              ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-              : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
-          }`}
-        >
-          <Tag className="w-4 h-4" />
-          <span>Designations</span>
-          {designationList.length > 0 && (
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'designations'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-[#F1F5F9] text-[#64748B]'
-              }`}
-            >
-              {designationList.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => handleTabChange('manpower')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-            activeTab === 'manpower'
-              ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-              : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>Manpower Allocation</span>
-        </button>
-
-        <button
-          onClick={() => handleTabChange('roster')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-            activeTab === 'roster'
-              ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-              : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          <span>Shift Roster</span>
-          {rosterList.length > 0 && (
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'roster' ? 'bg-orange-600 text-white' : 'bg-[#F1F5F9] text-[#64748B]'
-              }`}
-            >
-              {rosterList.length}
-            </span>
-          )}
-        </button>
-
-        {canReadAttendance && (
-          <>
-            <button
-              onClick={() => handleTabChange('attendance')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                activeTab === 'attendance'
-                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                  : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
-              }`}
-            >
-              <ClipboardCheck className="w-4 h-4" />
-              <span>Attendance</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('geofence')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                activeTab === 'geofence'
-                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                  : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
-              }`}
-            >
-              <MapPin className="w-4 h-4" />
-              <span>Geofence</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('nozzle-assignment')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                activeTab === 'nozzle-assignment'
-                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                  : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
-              }`}
-            >
-              <Fuel className="w-4 h-4" />
-              <span>Nozzle Assignment</span>
-            </button>
-          </>
-        )}
-
-        {canReadUniform && (
-          <button
-            onClick={() => handleTabChange('uniforms')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-              activeTab === 'uniforms'
-                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                : 'bg-white text-[#64748B] hover:text-[#17365D] hover:bg-[#F1F5F9]'
-            }`}
-          >
-            <Shirt className="w-4 h-4" />
-            <span>Uniform Management</span>
-          </button>
-        )}
-      </div>
+      <GroupedWorkspaceNav<HrWorkspaceTab> label="Workforce navigation" active={activeTab} onChange={handleTabChange}
+        disabled={isStaffModalOpen || isDesignationModalOpen || isSanctionModalOpen || isRosterModalOpen || !!cancellingRoster}
+        groups={[
+          {id:'people',label:'People & Staffing',items:[
+            {id:'staff',label:'Staff Directory',icon:Users},
+            {id:'manpower',label:'Manpower Allocation',icon:Layers},
+            {id:'designations',label:'Designations',icon:Tag}]},
+          {id:'duties',label:'Shift Duties',items:[
+            {id:'roster',label:'Shift Roster',icon:Calendar},
+            ...(canReadAttendance ? [{id:'attendance' as const,label:'Attendance',icon:ClipboardCheck},{id:'nozzle-assignment' as const,label:'Nozzle Assignment',icon:Fuel}] : [])]},
+          {id:'uniforms',label:'Uniforms',items:canReadUniform?[{id:'uniforms',label:'Uniform Management',icon:Shirt}]:[]},
+          {id:'settings',label:'Attendance Settings',items:canReadAttendance?[{id:'geofence',label:'Geofence',icon:MapPin}]:[]},
+        ]} />
 
       {/* Main Tab Panels Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
