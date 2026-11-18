@@ -1,13 +1,15 @@
 import { eq } from 'drizzle-orm';
 import { DrizzleD1Database } from 'drizzle-orm/d1';
 import * as schema from '../../db/schema';
-import { equipmentAssets, nfrLeases, nfrVendors, users, cocoAgreementDetails, cocoExpenseClaims, cocoClaimSettlements, cocoAssetInspections } from '../../db/schema';
+import { equipmentAssets, nfrLeases, nfrVendors, users, cocoAgreementDetails, cocoExpenseClaims, cocoClaimSettlements, cocoAssetInspections, documents } from '../../db/schema';
 import {
   CocoComplianceMergedItem,
   formatComplianceDateDisplay,
   formatIndianCurrencyFromPaise,
 } from '../../shared/cocoComplianceUtils';
 import { CocoComplianceService } from './cocoComplianceService';
+import { type LeaseTerms, formatLeaseDimension } from '../../shared/leaseTerms';
+import { getCocoLeaseTerms } from './cocoLeaseTermsService';
 
 export interface SectionWiseTable {
   title: string;
@@ -39,6 +41,8 @@ export interface SectionWiseLease {
   to: string;
   vendorName: string;
   status: string;
+  monthlyRentPaise?: number;
+  contractName?: string | null;
 }
 export interface SectionWiseAsset {
   id?: string;
@@ -62,6 +66,8 @@ export interface SectionWiseAgreement {
   startDate: string | null;
   endDate: string | null;
   remarks: string | null;
+  leaseTerms?: LeaseTerms | null;
+  contractName?: string | null;
 }
 export interface SectionWiseClaim {
   id: string;
@@ -148,11 +154,14 @@ export function buildSectionWiseSections(args: {
   const allAgreements: Array<{
     label: string; status: string; from: string; to: string; with: string; duration: string; remarks: string;
     vendorCode?: string; customerCode?: string; siteClass?: string; outletType?: string;
+    leaseKind?: boolean; dimensions?: string; monthlyLeaseValue?: string; contract?: string;
   }> = [];
   const leaseLine = (label: string, i?: CocoComplianceMergedItem) => ({
     label, status: fromItem(i), from: i ? date(i.issueDate) : NR,
     to: i ? date(i.validityDueDate) : NR, with: NR,
     duration: years(i?.issueDate, i?.validityDueDate), remarks: notes(i),
+    leaseKind:label==='Land Lease'||label==='NFR Lease',
+    contract:i?.attachments?.map(a=>a.name).join('; ')||NR,
   });
   const agreementStatus = (start: string | null, end: string | null): string =>
     !end ? NR : end < asOf ? 'Expired' : end <= renewalWindowEnd ? 'Expiring Soon'
@@ -164,6 +173,10 @@ export function buildSectionWiseSections(args: {
     with: a.counterpartyName || NR, duration: years(a.startDate, a.endDate),
     vendorCode: a.vendorCode || NR, customerCode: a.customerCode || NR,
     siteClass: a.siteClass || NR, outletType,
+    leaseKind:a.agreementType==='LAND_LEASE',
+    dimensions:a.agreementType==='LAND_LEASE'?formatLeaseDimension(a.leaseTerms):undefined,
+    monthlyLeaseValue:a.agreementType==='LAND_LEASE'&&a.leaseTerms?.monthlyLeaseValuePaise!=null?formatIndianCurrencyFromPaise(a.leaseTerms.monthlyLeaseValuePaise,{asciiPrefix:true}):undefined,
+    contract:a.contractName||NR,
     remarks: printable([a.agreementNumber ? 'Agreement: ' + a.agreementNumber : '', a.remarks || '']
       .filter(Boolean).join(' | ') || EMPTY),
   });
@@ -183,6 +196,9 @@ export function buildSectionWiseSections(args: {
         with: lease.vendorName || NR, duration: years(lease.from, lease.to),
         vendorCode: meta?.vendorCode || NR, customerCode: meta?.customerCode || NR,
         siteClass: meta?.siteClass || NR, outletType,
+        leaseKind:true,dimensions:formatLeaseDimension(meta?.leaseTerms),
+        monthlyLeaseValue:lease.monthlyRentPaise!=null?formatIndianCurrencyFromPaise(lease.monthlyRentPaise,{asciiPrefix:true}):undefined,
+        contract:[lease.contractName,meta?.contractName].filter((v,i,arr)=>v&&arr.indexOf(v)===i).join('; ')||NR,
         remarks: printable(['Agreement: ' + lease.agreementNumber, meta?.remarks || ''].filter(Boolean).join(' | ')),
       });
     }
@@ -205,6 +221,10 @@ export function buildSectionWiseSections(args: {
   const classificationRows = allAgreements.map((r, index) => [
     String(index + 1), r.label, r.vendorCode || NR,
     r.customerCode || NR, r.siteClass || NR, r.outletType || outletType || NR, r.remarks,
+  ]);
+
+  const leaseTermsRows=allAgreements.map((r,index)=>[
+    String(index+1),r.label,r.leaseKind?r.dimensions||NR:'N/A',r.leaseKind?r.monthlyLeaseValue||NR:'N/A',r.leaseKind?'Monthly':'N/A',printable(r.contract||NR),
   ]);
 
   const billDefs = [
@@ -343,9 +363,12 @@ export function buildSectionWiseSections(args: {
         { title: 'Agreement Identification & Classification', source: 'Outlet / Agreement register',
           headers: ['Sr.', 'Agreement / Lease Type', 'V Code', 'Customer Code', 'Site (A/B/C)', 'Outlet Type', 'Remarks'],
           widths: [25, 143, 66, 78, 59, 62, 76], rows: classificationRows },
+        { title: 'Lease Dimensions, Monthly Value & Contract Evidence', source: 'Agreement details / NFR lease / Document Vault',
+          headers:['Sr.','Agreement / Lease Type','Dimensions','Lease Value','Basis','Contract / Evidence'],
+          widths:[25,133,104,97,53,97],rows:leaseTermsRows },
       ],
       noteTitle: 'Source / Missing Data',
-      note: 'NFR lease dates/vendor are sourced from NFR Management. Land, service-provider and other agreements use the Agreements register. Extra NFR identification is linked by source lease ID; missing fields are not invented.',
+      note: 'NFR dates, vendor and monthly rent are sourced from NFR Management. Land lease terms and linked NFR dimensions come from Agreement Details. Contract names identify saved outlet evidence. Monthly lease value is not proof of payment; missing fields remain Not Recorded.',
     },
     {
       title: 'Bills, Taxes & Charges',
@@ -441,7 +464,7 @@ export class CocoSectionWiseReportService {
         throw err;
       }
     };
-    const [leases, vendors, equipment, actor, agreementRecords, claimRecords, settlements, inspections] = await Promise.all([
+    const [leases, vendors, equipment, actor, agreementRecords, claimRecords, settlements, inspections, leaseTerms, contractDocs] = await Promise.all([
       this.db.select().from(nfrLeases).where(eq(nfrLeases.outletId, args.outletId)).all(),
       this.db.select().from(nfrVendors).where(eq(nfrVendors.outletId, args.outletId)).all(),
       this.db.select().from(equipmentAssets).where(eq(equipmentAssets.outletId, args.outletId)).all(),
@@ -450,7 +473,10 @@ export class CocoSectionWiseReportService {
       legacySafe(this.db.select().from(cocoExpenseClaims).where(eq(cocoExpenseClaims.outletId, args.outletId)).all(), []),
       legacySafe(this.db.select().from(cocoClaimSettlements).where(eq(cocoClaimSettlements.outletId, args.outletId)).all(), []),
       legacySafe(this.db.select().from(cocoAssetInspections).where(eq(cocoAssetInspections.outletId, args.outletId)).all(), []),
+      getCocoLeaseTerms(this.db,args.outletId),
+      this.db.select({id:documents.id,name:documents.name}).from(documents).where(eq(documents.outletId,args.outletId)).all(),
     ]);
+    const docNames=new Map(contractDocs.map(d=>[d.id,d.name]));
     const vendorById = new Map(vendors.map((v) => [v.id, v]));
     const leaseInfo: SectionWiseLease[] = leases.map((l) => ({
       id: l.id,
@@ -459,6 +485,7 @@ export class CocoSectionWiseReportService {
       to: l.leaseEndDate,
       vendorName: vendorById.get(l.vendorId)?.vendorName || NR,
       status: l.status,
+      monthlyRentPaise:l.monthlyRentPaise,contractName:l.agreementDocumentId?docNames.get(l.agreementDocumentId)||null:null,
     }));
     return {
       outletId: register.outlet.id,
@@ -476,6 +503,7 @@ export class CocoSectionWiseReportService {
           counterpartyName: a.counterpartyName, vendorCode: a.vendorCode,
           customerCode: a.customerCode, siteClass: a.siteClass,
           startDate: a.startDate, endDate: a.endDate, remarks: a.remarks,
+          leaseTerms:leaseTerms.byId.get(a.id)||null,contractName:a.agreementDocumentId?docNames.get(a.agreementDocumentId)||null:null,
         })),
         claims: claimRecords.map((claim) => ({
           id: claim.id, claimCategory: claim.claimCategory, title: claim.title,
