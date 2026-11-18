@@ -19,10 +19,10 @@ export function financeStageDetails(summary:ShiftFinancialSummary|null, shift:Op
   const preview=financeSalesProvisional(summary);
   const money=(v:string)=>'₹ '+v;
   return {
-    sales:money(summary.salesRevenue.authoritativeTotalStr)+(preview?' · provisional':''),
-    collections:money(summary.collections.totalStr)+' recorded',
+    sales:preview?'Provisional · review evidence':'Saved revenue available',
+    collections:'Review recorded payment totals',
     handovers:money(summary.cashHandoverSummary.totalPendingStr)+' awaiting acknowledgement',
-    deposits:money(summary.cashDepositControl.pendingCashDepositStr)+' pending deposit',
-    reconciliation:preview?'Incomplete sales evidence':shift.status==='OPEN'?'Preview · '+money(summary.varianceStr):'Variance '+money(summary.varianceStr),
+    deposits:summary.cashDepositControl.pendingCashDepositPaise>0?'Pending cash deposit':'No pending cash per summary',
+    reconciliation:preview?'Incomplete sales evidence':shift.status==='OPEN'?'Preview · finalizes at shift close':summary.varianceStatus?'Review '+summary.varianceStatus.toLowerCase():'Review saved variance',
   };
 }
