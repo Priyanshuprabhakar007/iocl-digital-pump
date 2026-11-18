@@ -1,4 +1,4 @@
-import type { RetailOutlet, Division, SalesArea } from '../types';
+import type { RetailOutlet, Division, SalesArea } from './types';
 
 export type DealerMasterRow = {
   roCode: string; name: string; address: string; district: string;
