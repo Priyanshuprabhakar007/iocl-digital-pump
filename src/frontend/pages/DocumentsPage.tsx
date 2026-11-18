@@ -40,7 +40,6 @@ import {
   RefreshCw,
   X,
   Link2,
-  FileWarning,
   ClipboardCheck,
 } from 'lucide-react';
 
@@ -158,6 +157,9 @@ export const DocumentsPage: React.FC = () => {
   const canWrite = hasPermission(PERMISSIONS.DOCUMENTS_WRITE);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('REGISTER');
+  const [masterEditor, setMasterEditor] = useState<'agreements' | 'claims' | 'inspections'>('agreements');
+  const [refreshRevision, setRefreshRevision] = useState(0);
+  const [masterPreset, setMasterPreset] = useState<'LAND_LEASE' | 'SERVICE_PROVIDER' | 'WAGES_INCENTIVES_MISC' | null>(null);
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
   const [showCocoOnly, setShowCocoOnly] = useState<boolean>(true);
   const [selectedOutletId, setSelectedOutletId] = useState<string>('');
@@ -323,18 +325,13 @@ export const DocumentsPage: React.FC = () => {
     setIsLoading(true);
     setBannerError(null);
     try {
-      const [regRes, onePagerRes, docsRes] = await Promise.all([
+      const [regRes, docsRes] = await Promise.all([
         apiFetch<{
           items: CocoComplianceMergedItem[];
           dueDatesAndActions: CocoDueDatesAndActionsSummary;
           summary: CocoOnePagerReport['summary'];
         }>(
           `/api/v1/documents/compliance/register?outletId=${encodeURIComponent(
-            outletId
-          )}&reportDate=${encodeURIComponent(dateStr)}`
-        ),
-        apiFetch<CocoOnePagerReport>(
-          `/api/v1/documents/compliance/one-pager?outletId=${encodeURIComponent(
             outletId
           )}&reportDate=${encodeURIComponent(dateStr)}`
         ),
@@ -363,14 +360,6 @@ export const DocumentsPage: React.FC = () => {
         setBannerError(regRes.error?.message || 'Failed to load compliance register.');
       }
 
-      if (onePagerRes.success && onePagerRes.data) {
-        setOnePagerReport(onePagerRes.data);
-      } else if (!regRes.success) {
-        // regRes error already displayed in banner
-      } else if (!onePagerRes.success && onePagerRes.error?.message) {
-        setBannerError(onePagerRes.error.message);
-      }
-
       if (docsRes.success && Array.isArray(docsRes.data)) {
         setVaultDocs(docsRes.data);
       } else if (docsRes.error?.message && regRes.success) {
@@ -389,6 +378,17 @@ export const DocumentsPage: React.FC = () => {
     }
   }, [selectedOutletId, reportDate]);
 
+
+  // Legacy report is fetched only when explicitly opened.
+  useEffect(() => {
+    if (activeTab !== 'ONE_PAGER' || !selectedOutletId || !canRead) return;
+    let cancelled = false;
+    setOnePagerReport(null);
+    apiFetch<CocoOnePagerReport>('/api/v1/documents/compliance/one-pager?outletId=' + encodeURIComponent(selectedOutletId) + '&reportDate=' + encodeURIComponent(reportDate))
+      .then(res => { if (!cancelled) { if (res.success && res.data) setOnePagerReport(res.data); else setBannerError(res.error?.message || 'Unable to load legacy report.'); } })
+      .catch(err => { if (!cancelled) setBannerError(err?.message || 'Unable to load legacy report.'); });
+    return () => { cancelled = true; };
+  }, [activeTab, selectedOutletId, reportDate, canRead, refreshRevision]);
 
   // The section-wise preview and PDF are projections of the same saved source records.
   useEffect(() => {
@@ -410,7 +410,7 @@ export const DocumentsPage: React.FC = () => {
       if (!cancelled) setIsSectionWiseLoading(false);
     });
     return () => { cancelled = true; };
-  }, [activeTab, selectedOutletId, reportDate, canRead]);
+  }, [activeTab, selectedOutletId, reportDate, canRead, refreshRevision]);
 
   // Clean up blob URL when closing attachment preview modal
   useEffect(() => {
@@ -453,6 +453,15 @@ export const DocumentsPage: React.FC = () => {
   ) => {
     setBannerError(null);
     setBannerSuccess(null);
+
+    if (item && !item.id) {
+      const editor = item.categoryCode === 'SERVICE_PROVIDER_CONTRACT' || item.categoryCode === 'LAND_LEASE'
+        ? 'agreements' : item.categoryCode === 'WAGES_INCENTIVES_MISC' ? 'claims' : null;
+      if (editor) {
+        setMasterPreset(item.categoryCode === 'WAGES_INCENTIVES_MISC' ? 'WAGES_INCENTIVES_MISC' : item.categoryCode === 'SERVICE_PROVIDER_CONTRACT' ? 'SERVICE_PROVIDER' : 'LAND_LEASE');
+        setMasterEditor(editor); setIsEditorOpen(false); setActiveTab('MASTERS'); return;
+      }
+    }
 
     if (item) {
       setEditingItem(item);
@@ -850,44 +859,21 @@ export const DocumentsPage: React.FC = () => {
             <div className="flex items-center gap-2.5">
               <ShieldCheck className="w-6 h-6 text-orange-500" />
               <h2 className="text-2xl font-bold text-[#17365D] tracking-tight">
-                COCO Documents & Compliance Management
+                COCO Documentation
               </h2>
             </div>
             <p className="text-[#64748B] text-sm mt-1">
-              Maintain statutory licences, municipal taxes, lease rent, utility dues, equipment AMC & generate printable A4 COCO Compliance One-Pagers.
+              Manage outlet compliance, supporting evidence and the section-wise PDF in one workspace.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {canWrite && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => openRecordEditor(null, false)}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add / Update Record
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openRecordEditor(null, true)}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] text-sm font-medium rounded-lg transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 text-[#B8530D]" />
-                  Add Custom Category
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsVaultUploadOpen(true)}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] text-sm font-medium rounded-lg transition-colors cursor-pointer"
-                >
-                  <Upload className="w-4 h-4 text-blue-400" />
-                  R2 Vault Upload
-                </button>
-              </>
-            )}
-          </div>
+          {canWrite && selectedOutletId && (
+            <button type="button" onClick={() => setIsVaultUploadOpen(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] text-sm font-medium rounded-lg">
+              <Upload className="w-4 h-4" /> Upload Evidence
+            </button>
+          )}
+
         </div>
 
         {/* Outlet Selector + Report Date Selector */}
@@ -958,22 +944,14 @@ export const DocumentsPage: React.FC = () => {
           <div className="md:col-span-4 flex items-center justify-end gap-2">
             <button
               type="button"
-              onClick={() => fetchOutletComplianceData(selectedOutletId, reportDate)}
+              onClick={() => { fetchOutletComplianceData(selectedOutletId, reportDate); setRefreshRevision(v => v + 1); }}
               disabled={!selectedOutletId}
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] disabled:opacity-40 text-[#334155] border border-[#D7E0EA] rounded-lg text-xs font-medium transition-colors cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               Refresh Status
             </button>
-            <button
-              type="button"
-              onClick={handleGenerateOnePagerPdf}
-              disabled={isGeneratingPdf || !selectedOutletId}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              {isGeneratingPdf ? 'Generating PDF...' : 'Generate COCO One-Pager PDF'}
-            </button>
+
           </div>
         </div>
       </div>
@@ -1034,7 +1012,9 @@ export const DocumentsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Status Summary Strip */}
+      {/* Legacy compliance summary is relevant only to its register and due-date view. */}
+      {(activeTab === 'REGISTER' || activeTab === 'DUE_DATES') && <div className="space-y-2">
+      <p className="text-xs font-medium text-[#64748B]">Compliance register summary · excludes dedicated agreement, claim and inspection records</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5">
           <div className="text-xs font-medium text-[#64748B]">VALID</div>
@@ -1068,71 +1048,24 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
+      </div>}
+
       {/* Navigation Tabs */}
       <div className="border-b border-[#E2E8F0] flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('REGISTER')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'REGISTER'
-              ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
-              : 'border-transparent text-[#64748B] hover:text-[#334155]'
-          }`}
-        >
-          <ClipboardCheck className="w-4 h-4" />
-          Tab 1 — Document Register
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('ONE_PAGER')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'ONE_PAGER'
-              ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
-              : 'border-transparent text-[#64748B] hover:text-[#334155]'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          Tab 2 — Compliance One-Pager
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('DUE_DATES')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'DUE_DATES'
-              ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
-              : 'border-transparent text-[#64748B] hover:text-[#334155]'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          Tab 3 — Due Dates & Pending Actions
-          {summary.expiredCount + summary.paymentPendingCount + summary.actionRequiredCount > 0 && (
-            <span className="px-1.5 py-0.5 text-[11px] rounded bg-red-500/20 text-red-800 border border-red-500/30">
-              {summary.expiredCount + summary.paymentPendingCount + summary.actionRequiredCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('SECTION_WISE')}
-          className={'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ' +
-            (activeTab === 'SECTION_WISE'
-              ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
-              : 'border-transparent text-[#64748B] hover:text-[#334155]')}
-        >
-          <FileText className="w-4 h-4" />
-          Tab 4 — Section-wise PDF
-        </button>
-        <button type="button" onClick={() => setActiveTab('MASTERS')}
-          className={'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ' +
-            (activeTab === 'MASTERS'
-              ? 'border-orange-500 text-[#B8530D] bg-orange-500/5'
-              : 'border-transparent text-[#64748B] hover:text-[#334155]')}>
-          <ShieldCheck className="w-4 h-4" />
-          Tab 5 — Masters &amp; Evidence
-        </button>
+        {([
+          { id: 'REGISTER', label: 'Compliance Register', Icon: ClipboardCheck },
+          { id: 'MASTERS', label: 'Masters & Evidence', Icon: ShieldCheck },
+          { id: 'DUE_DATES', label: 'Due Dates & Actions', Icon: Clock },
+          { id: 'SECTION_WISE', label: 'Reports & PDF', Icon: FileText },
+        ] as const).map(({ id, label, Icon }) => {
+          const selected = activeTab === id || (id === 'SECTION_WISE' && activeTab === 'ONE_PAGER');
+          return <button key={id} type="button" aria-pressed={selected}
+            onClick={() => { if (id === 'MASTERS' && activeTab !== 'MASTERS') { setMasterPreset(null); setMasterEditor('agreements'); } setActiveTab(id); }}
+            className={'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ' +
+              (selected ? 'border-orange-500 text-[#B8530D] bg-orange-500/5' : 'border-transparent text-[#64748B] hover:text-[#334155]')}>
+            <Icon className="w-4 h-4" />{label}
+          </button>;
+        })}
       </div>
 
       {/* ===================================================================== */}
@@ -1140,6 +1073,10 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {activeTab === 'REGISTER' && (
         <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-[#64748B]">Statutory records and recurring compliance. Use Masters &amp; Evidence for dedicated agreements, expense claims and equipment inspections.</p>
+            {canWrite && selectedOutletId && <button type="button" onClick={() => openRecordEditor(null, true)} className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-[#D7E0EA] rounded-lg text-xs font-semibold text-[#17365D]"><Plus className="w-4 h-4" /> Add Custom Category</button>}
+          </div>
           {/* Search & Category Filter Bar */}
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
             <div className="relative w-full md:w-96">
@@ -1445,7 +1382,7 @@ export const DocumentsPage: React.FC = () => {
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] rounded-lg text-xs font-medium transition-colors cursor-pointer"
                               >
                                 <Edit3 className="w-3.5 h-3.5 text-[#B8530D]" />
-                                {item.id ? 'Edit Record' : 'Add Record'}
+                                {item.id ? 'Edit Record' : ['SERVICE_PROVIDER_CONTRACT','LAND_LEASE','WAGES_INCENTIVES_MISC'].includes(item.categoryCode) ? 'Open Master' : 'Add Record'}
                               </button>
                             )}
                           </td>
@@ -1470,26 +1407,18 @@ export const DocumentsPage: React.FC = () => {
           </div>
 
           {/* Outlet Cloudflare R2 Document Vault Repository (Preserves & exposes all outlet attachments) */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
+          <details className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+            <summary className="px-5 py-3.5 cursor-pointer text-sm font-semibold text-[#17365D]">Supporting files ({vaultDocs.length})</summary>
+            <div className="px-5 py-3.5 border-y border-[#E2E8F0] flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-[#17365D]">
-                  Outlet Cloudflare R2 Document Vault ({vaultDocs.length} Stored Files)
+                  Document Vault
                 </h3>
                 <p className="text-xs text-[#64748B] mt-0.5">
-                  All binary PDF, JPG, and PNG attachments stored for this outlet with authenticated scope-checked viewing and downloading.
+                  Uploaded PDF, JPG and PNG evidence for this outlet.
                 </p>
               </div>
-              {canWrite && (
-                <button
-                  type="button"
-                  onClick={() => setIsVaultUploadOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] border border-[#D7E0EA] rounded-lg text-xs font-medium cursor-pointer"
-                >
-                  <Upload className="w-3.5 h-3.5 text-[#B8530D]" />
-                  Upload File to R2
-                </button>
-              )}
+
             </div>
 
             {vaultDocs.length === 0 ? (
@@ -1544,7 +1473,7 @@ export const DocumentsPage: React.FC = () => {
                 </table>
               </div>
             )}
-          </div>
+          </details>
         </div>
       )}
 
@@ -1553,6 +1482,7 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {activeTab === 'ONE_PAGER' && (
         <div className="space-y-5">
+          <button type="button" onClick={() => setActiveTab('SECTION_WISE')} className="text-sm font-semibold text-[#17365D] underline">← Back to section-wise report</button>
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wider text-[#B8530D]">
@@ -1688,9 +1618,15 @@ export const DocumentsPage: React.FC = () => {
       {/* TAB 5 — AGREEMENTS, EXPENSE EVIDENCE & EQUIPMENT INSPECTIONS */}
       {activeTab === 'MASTERS' && selectedOutletId && (
         <CocoDocumentationMastersPanel
+          key={selectedOutletId}
           outletId={selectedOutletId}
           vaultDocs={vaultDocs}
-          onSaved={() => setSectionWiseReport(null)}
+          initialEditor={masterEditor}
+          initialCreate={masterPreset !== null}
+          initialAgreementType={masterPreset === 'SERVICE_PROVIDER' ? 'SERVICE_PROVIDER' : 'LAND_LEASE'}
+          initialClaimCategory={masterPreset === 'WAGES_INCENTIVES_MISC' ? masterPreset : undefined}
+          refreshRevision={refreshRevision}
+          onSaved={() => { setSectionWiseReport(null); fetchOutletComplianceData(selectedOutletId, reportDate); }}
         />
       )}
 
@@ -1718,6 +1654,7 @@ export const DocumentsPage: React.FC = () => {
               {isGeneratingSectionPdf ? 'Generating PDF...' : 'Download Section-wise PDF'}
             </button>
           </div>
+          <div className="flex justify-end"><button type="button" onClick={() => setActiveTab('ONE_PAGER')} className="text-xs text-[#64748B] underline">Legacy one-page report</button></div>
           {isSectionWiseLoading && (
             <div className="p-6 text-sm text-[#64748B] bg-white border border-[#E2E8F0] rounded-xl">
               Loading saved documents and linked operational records...
@@ -1736,7 +1673,7 @@ export const DocumentsPage: React.FC = () => {
                 </h4>
                 <p className="text-xs text-[#64748B] mt-1">{section.subtitle}</p>
               </div>
-              {section.tables.map((table, tableIndex) => (
+              {section.tables.filter(table => table.source !== 'Reporting rules' && table.source !== 'Status rules').map((table, tableIndex) => (
                 <div key={tableIndex} className="p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <h5 className="text-sm font-semibold text-[#17365D]">{table.title}</h5>
@@ -1991,57 +1928,11 @@ export const DocumentsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 5. Not-Recorded Documents */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileWarning className="w-4 h-4 text-[#64748B]" />
-                <h3 className="text-sm font-semibold text-[#17365D]">
-                  Not-Recorded Documents ({dueDatesAndActions.notRecorded.length})
-                </h3>
-              </div>
-              <span className="text-xs text-[#64748B]">
-                Missing records are never treated as valid, paid, or verified
-              </span>
-            </div>
-            <div className="p-4">
-              {!selectedOutletId ? (
-                <p className="text-xs text-[#64748B]">
-                  {outletLoadError
-                    ? 'Cannot evaluate categories: accessible retail outlets failed to load.'
-                    : 'Please select an accessible retail outlet to view missing compliance categories.'}
-                </p>
-              ) : dueDatesAndActions.notRecorded.length === 0 ? (
-                <p className="text-xs text-emerald-700">
-                  All 14 standard compliance categories have been recorded for this outlet!
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {dueDatesAndActions.notRecorded.map((item) => (
-                    <div
-                      key={item.categoryCode}
-                      className="p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg flex items-center justify-between gap-2"
-                    >
-                      <div>
-                        <div className="text-xs font-mono text-[#64748B]">Category #{item.srNo}</div>
-                        <div className="text-sm font-medium text-[#334155]">{item.categoryName}</div>
-                        <div className="text-[11px] text-amber-700/90 mt-0.5">Status: NOT RECORDED</div>
-                      </div>
-                      {canWrite && (
-                        <button
-                          type="button"
-                          onClick={() => openRecordEditor(item, item.isCustomCategory)}
-                          className="px-2.5 py-1.5 bg-orange-500/15 hover:bg-orange-500/25 text-orange-800 border border-orange-500/30 rounded text-xs font-medium cursor-pointer"
-                        >
-                          Add Record
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <button type="button" onClick={() => { setCategoryFilter('ALL'); setSearchQuery(''); setStatusFilter('NOT_RECORDED'); setActiveTab('REGISTER'); }}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-[#17365D] underline">
+            View missing compliance records ({dueDatesAndActions.notRecorded.length})
+          </button>
+
         </div>
       )}
 

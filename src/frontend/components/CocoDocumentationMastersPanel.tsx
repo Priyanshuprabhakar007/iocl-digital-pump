@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { PERMISSIONS } from '../../shared/constants';
-import { CheckCircle2, ClipboardList, FileText, RefreshCw, Save, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, ClipboardList, Save, ShieldCheck } from 'lucide-react';
 
 interface Agreement {
   id: string; outletId: string; agreementType: string; agreementName: string; agreementNumber: string | null;
@@ -62,7 +62,12 @@ export const CocoDocumentationMastersPanel: React.FC<{
   outletId: string;
   vaultDocs: VaultDocument[];
   onSaved?: () => void;
-}> = ({ outletId, vaultDocs, onSaved }) => {
+  initialEditor?: 'agreements' | 'claims' | 'inspections';
+  initialAgreementType?: 'LAND_LEASE' | 'SERVICE_PROVIDER';
+  initialClaimCategory?: string;
+  initialCreate?: boolean;
+  refreshRevision?: number;
+}> = ({ outletId, vaultDocs, onSaved, initialEditor = 'agreements', initialAgreementType = 'LAND_LEASE', initialClaimCategory, initialCreate = false, refreshRevision = 0 }) => {
   const { userCtx, hasPermission } = useAuth();
   const canWrite = hasPermission(PERMISSIONS.DOCUMENTS_WRITE);
   const canInspect = canWrite && hasPermission(PERMISSIONS.EQUIPMENT_ASSETS_WRITE);
@@ -73,11 +78,14 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [activeEditor, setActiveEditor] = useState<'agreements'|'claims'|'inspections'>('agreements');
+  const [activeEditor, setActiveEditor] = useState<'agreements'|'claims'|'inspections'>(initialEditor);
   const [agreementEdit, setAgreementEdit] = useState<Agreement | null>(null);
   const [claimEdit, setClaimEdit] = useState<Claim | null>(null);
   const [settleClaim, setSettleClaim] = useState<Claim | null>(null);
-  const [agreementType, setAgreementType] = useState('LAND_LEASE');
+  const [agreementType, setAgreementType] = useState<string>(initialAgreementType);
+  const [showAgreementForm, setShowAgreementForm] = useState(initialCreate && initialEditor === 'agreements');
+  const [showClaimForm, setShowClaimForm] = useState(initialCreate && initialEditor === 'claims');
+  const [showInspectionForm, setShowInspectionForm] = useState(initialCreate && initialEditor === 'inspections');
 
   const refresh = useCallback(() => setRev((v) => v + 1), []);
   useEffect(() => {
@@ -92,9 +100,12 @@ export const CocoDocumentationMastersPanel: React.FC<{
       }).catch((e) => { if (alive) setError(e?.message || 'Network error.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [outletId, rev]);
+  }, [outletId, rev, refreshRevision]);
   useEffect(() => {
-    setAgreementEdit(null); setClaimEdit(null); setSettleClaim(null); setAgreementType('LAND_LEASE');
+    setAgreementEdit(null); setClaimEdit(null); setSettleClaim(null); setAgreementType(initialAgreementType);
+    setShowAgreementForm(initialCreate && initialEditor === 'agreements');
+    setShowClaimForm(initialCreate && initialEditor === 'claims');
+    setShowInspectionForm(initialCreate && initialEditor === 'inspections');
   }, [outletId]);
 
   const submit = async (endpoint: string, method: 'POST' | 'PUT', payload: unknown, done: string) => {
@@ -129,7 +140,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
       agreementEdit ? base + '/agreements/' + agreementEdit.id : base + '/agreements',
       agreementEdit ? 'PUT' : 'POST', payload, 'Agreement saved and available to section-wise PDF.'
     )) {
-      setAgreementEdit(null);
+      setAgreementEdit(null); setShowAgreementForm(false);
     }
   };
   const onClaimSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -149,7 +160,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
     if (await submit(
       claimEdit ? base + '/claims/' + claimEdit.id : base + '/claims',
       claimEdit ? 'PUT' : 'POST', payload, 'Draft claim saved. Approval is required before settlement.'
-    )) setClaimEdit(null);
+    )) { setClaimEdit(null); setShowClaimForm(false); }
   };
   const onInspectionSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -159,7 +170,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
       condition: f.get('condition'), nextServiceDate: f.get('nextServiceDate') || null,
       evidenceDocumentId: f.get('evidenceDocumentId') || null, remarks: f.get('remarks') || null,
     };
-    await submit(base + '/inspections', 'POST', payload, 'Equipment inspection saved and linked to the report.');
+    if (await submit(base + '/inspections', 'POST', payload, 'Equipment inspection saved and linked to the report.')) setShowInspectionForm(false);
   };
   const onSettlementSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -192,16 +203,8 @@ export const CocoDocumentationMastersPanel: React.FC<{
 
   return (
     <div className="space-y-5">
-      <div className={col}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-[#17365D]">Documentation Masters &amp; Evidence</h3>
-            <p className="text-sm text-[#64748B]">Save agreement details, verified expense payments and equipment inspections for the five-page PDF.</p>
-          </div>
-          <button className="inline-flex items-center gap-2 px-3 py-2 text-xs border border-[#CBD5E1] rounded-lg" onClick={refresh} disabled={loading}>
-            <RefreshCw className="w-4 h-4"/> Refresh
-          </button>
-        </div>
+      <div className="space-y-2">
+        <p className="text-sm text-[#64748B]">Maintain source records here. Uploaded evidence and the section-wise PDF use these saved records.</p>
         {error && <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
         {success && <div role="status" className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-sm">{success}</div>}
         {loading && <div className="text-sm text-[#64748B]">Loading source records…</div>}
@@ -220,11 +223,12 @@ export const CocoDocumentationMastersPanel: React.FC<{
 
       {activeEditor === 'agreements' && (
         <div className="space-y-4">
-          {canWrite && (
+          {canWrite && data && !showAgreementForm && <button type="button" className={buttonStyle} onClick={() => { setAgreementEdit(null); setAgreementType('LAND_LEASE'); setShowAgreementForm(true); }}>+ Add Agreement</button>}
+          {canWrite && data && showAgreementForm && (
             <form key={agreementEdit?.id || 'new-agreement'} onSubmit={onAgreementSubmit} className={col}>
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-[#17365D]">{agreementEdit ? 'Edit Agreement' : 'Register Agreement'}</h4>
-                {agreementEdit && <button type="button" onClick={() => { setAgreementEdit(null); setAgreementType('LAND_LEASE'); }} className="text-sm underline text-[#64748B]">New agreement</button>}
+                <button type="button" disabled={saving} onClick={() => { setAgreementEdit(null); setShowAgreementForm(false); }} className="text-sm underline text-[#64748B]">Cancel</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <Field label="Agreement Type">
@@ -235,7 +239,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
                 </Field>
                 <Field label="Agreement Title">
                   <input name="agreementName" required maxLength={180} className={inputStyle}
-                    defaultValue={agreementEdit?.agreementName || (agreementType === 'LAND_LEASE' ? 'Land Lease' : '')} />
+                    defaultValue={agreementEdit?.agreementName || (agreementType === 'LAND_LEASE' ? 'Land Lease' : agreementType === 'SERVICE_PROVIDER' ? 'Service Provider Contract Agreement' : '')} />
                 </Field>
                 <Field label="Agreement Number">
                   <input name="agreementNumber" maxLength={100} className={inputStyle} defaultValue={agreementEdit?.agreementNumber || ''}/>
@@ -288,12 +292,12 @@ export const CocoDocumentationMastersPanel: React.FC<{
                       <td className="p-2">{a.vendorCode || '—'}</td>
                       <td className="p-2">{a.customerCode || '—'}</td>
                       <td className="p-2">{a.endDate || 'NFR source'}</td>
-                      <td className="p-2">{canWrite && <button className="text-[#B8530D] font-semibold" onClick={()=>{setAgreementEdit(a);setAgreementType(a.agreementType);}}>Edit</button>}</td>
+                      <td className="p-2">{canWrite && <button className="text-[#B8530D] font-semibold" onClick={()=>{setAgreementEdit(a);setAgreementType(a.agreementType);setShowAgreementForm(true);}}>Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {!data?.agreements.length && <p className="p-3 text-sm text-[#64748B]">No dedicated agreement entries yet. Existing NFR leases remain available in the section-wise report.</p>}
+              {data && !data.agreements.length && <p className="p-3 text-sm text-[#64748B]">No dedicated agreement entries yet. Existing NFR leases remain available in the section-wise report.</p>}
             </div>
           </div>
         </div>
@@ -301,15 +305,16 @@ export const CocoDocumentationMastersPanel: React.FC<{
 
       {activeEditor === 'claims' && (
         <div className="space-y-4">
-          {canWrite && (
+          {canWrite && data && !showClaimForm && <button type="button" className={buttonStyle} onClick={() => { setClaimEdit(null); setShowClaimForm(true); }}>+ Add Expense Claim</button>}
+          {canWrite && data && showClaimForm && (
             <form key={claimEdit?.id || 'new-claim'} onSubmit={onClaimSubmit} className={col}>
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-[#17365D]">{claimEdit ? 'Edit Draft Claim' : 'Create Expense Claim'}</h4>
-                {claimEdit && <button type="button" onClick={()=>setClaimEdit(null)} className="underline text-sm text-[#64748B]">New claim</button>}
+                <button type="button" disabled={saving} onClick={()=>{setClaimEdit(null);setShowClaimForm(false);}} className="underline text-sm text-[#64748B]">Cancel</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <Field label="Claim Category">
-                  <select className={inputStyle} name="claimCategory" defaultValue={claimEdit?.claimCategory || categories[0][0]}>
+                  <select className={inputStyle} name="claimCategory" defaultValue={claimEdit?.claimCategory || initialClaimCategory || categories[0][0]}>
                     {categories.map(([id, name])=><option key={id} value={id}>{name}</option>)}
                   </select>
                 </Field>
@@ -340,7 +345,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
                   <td className="p-2 whitespace-nowrap">{money(c.outstandingPaise)}</td>
                   <td className="p-2">{c.approvalStatus}</td><td className="p-2">{c.settlementStatus}</td>
                   <td className="p-2"><div className="flex items-center gap-3">
-                    {canWrite && c.approvalStatus === 'DRAFT' && <button className="text-[#B8530D]" onClick={()=>setClaimEdit(c)}>Edit</button>}
+                    {canWrite && c.approvalStatus === 'DRAFT' && <button className="text-[#B8530D]" onClick={()=>{setClaimEdit(c);setShowClaimForm(true);}}>Edit</button>}
                     {canApprove && c.approvalStatus === 'DRAFT' && c.createdBy !== userCtx?.user.id && (
                       <>
                         <button className="text-emerald-700 font-semibold" onClick={()=>onDecision(c,'APPROVED')}>Approve</button>
@@ -354,7 +359,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
                 </tr>
               ))}</tbody>
             </table></div>
-            {!data?.claims.length && <p className="text-sm text-[#64748B]">No expense claims recorded yet.</p>}
+            {data && !data.claims.length && <p className="text-sm text-[#64748B]">No expense claims recorded yet.</p>}
           </div>
           {canWrite && settleClaim && (
             <form key={settleClaim.id} onSubmit={onSettlementSubmit} className={col}>
@@ -381,9 +386,10 @@ export const CocoDocumentationMastersPanel: React.FC<{
 
       {activeEditor === 'inspections' && (
         <div className="space-y-4">
-          {canInspect ? (
+          {canInspect && data && !showInspectionForm && <button type="button" className={buttonStyle} onClick={() => setShowInspectionForm(true)}>+ Record Inspection</button>}
+          {canInspect && data && showInspectionForm && (
             <form onSubmit={onInspectionSubmit} className={col}>
-              <h4 className="font-bold text-[#17365D]">Record Equipment Condition</h4>
+              <div className="flex items-center justify-between"><h4 className="font-bold text-[#17365D]">Record Equipment Condition</h4><button type="button" disabled={saving} onClick={() => setShowInspectionForm(false)} className="text-sm underline text-[#64748B]">Cancel</button></div>
               <p className="text-xs text-[#64748B]">Choose a registered asset. Its lifecycle status alone does not prove Working / Not Working / Scrapped.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <Field label="Registered Equipment Asset"><select name="equipmentAssetId" required className={inputStyle}>
@@ -399,7 +405,8 @@ export const CocoDocumentationMastersPanel: React.FC<{
               <Field label="Inspection Notes"><textarea name="remarks" className={inputStyle} rows={2}/></Field>
               <button className={buttonStyle} disabled={saving || !data?.assets.length} type="submit"><ClipboardList className="w-4 h-4"/> Save Inspection</button>
             </form>
-          ) : <div className={col}><p className="text-sm text-[#64748B]">Recording equipment inspections requires both Documents Write and Equipment Assets Write permissions.</p></div>}
+          )}
+          {!canInspect && <div className={col}><p className="text-sm text-[#64748B]">Recording equipment inspections requires both Documents Write and Equipment Assets Write permissions.</p></div>}
           <div className={col}>
             <h4 className="font-bold text-[#17365D]">Recorded Equipment Inspections</h4>
             <div className="overflow-x-auto"><table className="w-full text-xs">
@@ -410,7 +417,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
                 <td className="p-2">{i.nextServiceDate || '—'}</td><td className="p-2">{i.remarks || '—'}</td>
               </tr>)}</tbody>
             </table></div>
-            {!data?.inspections.length && <p className="text-sm text-[#64748B]">No operational condition inspections recorded yet.</p>}
+            {data && !data.inspections.length && <p className="text-sm text-[#64748B]">No operational condition inspections recorded yet.</p>}
           </div>
         </div>
       )}
