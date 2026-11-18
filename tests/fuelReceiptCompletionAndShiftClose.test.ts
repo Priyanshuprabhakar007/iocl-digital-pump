@@ -552,7 +552,8 @@ describe('Fuel Receipt Lifecycle Completion, Audited Cancellation, Stock Reconci
     const pagePath = path.resolve(__dirname, '../src/frontend/pages/StockOperationsPage.tsx');
     const source = fs.readFileSync(pagePath, 'utf-8');
 
-    expect(source).toContain('Manage Receipt');
+    expect(source).toContain('Continue Receipt');
+    expect(source).toContain('openManageReceiptModal(rcpt, false)');
     expect(source).toContain('evaluateReceiptCompletionReadiness');
     expect(source).toContain('summarizeShiftReceiptReadiness');
     expect(source).toContain('/api/v1/fuel-receipts/${rcpt.id}/status');
@@ -560,7 +561,8 @@ describe('Fuel Receipt Lifecycle Completion, Audited Cancellation, Stock Reconci
     expect(source).toContain('PRE_RECEIPT');
     expect(source).toContain('POST_RECEIPT');
     expect(source).toContain('cancellationReason');
-    expect(source).toContain('Recompute Stock Reconciliation');
+    expect(source).toContain('Review Stock Reconciliation');
+    expect(source).toContain('onClick={handleComputeReconciliation}');
     expect(source).not.toMatch(/\bfetch\s*\(/);
   });
 

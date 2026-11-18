@@ -25,7 +25,7 @@ describe('Structural UX redesign from production screenshot review', () => {
     for (const id of ['OPENING', 'RECEIPTS', 'CLOSING', 'RECONCILIATION']) {
       expect(source).toContain(`id: '${id}'`);
     }
-    expect(source).toContain('setActiveTab(tab.id as any)');
+    expect(source).toContain('changeStage(tab.id as StockStage)');
     expect(source).toContain('handleRecordDip');
   });
   it('supports real Cards/List outlet layout choices without changing record actions', () => {
