@@ -73,8 +73,14 @@ function getTabFromLocation(): string {
 }
 
 function OutletScopedPage({children}: {children: React.ReactNode}) {
-  const {activeOutletId, activeOutlet, loading} = useActiveOutlet();
-  if(loading || !activeOutletId || activeOutlet?.id !== activeOutletId) return <p className="p-5 text-sm text-slate-600">{loading?'Loading accessible outlets…':'Select an accessible active outlet.'}</p>;
+  const {activeOutletId, activeOutlet, loading, outletLoadError, refreshAccessibleOutlets} = useActiveOutlet();
+  if(loading) return <p role="status" className="p-5 text-sm text-slate-600">Loading accessible outlets…</p>;
+  if(outletLoadError) return <section role="alert" className="mx-auto max-w-3xl rounded-xl border border-red-200 bg-white p-5 shadow-sm">
+    <h2 className="font-semibold text-red-800">Failed to load accessible retail outlets</h2>
+    <p className="mt-2 text-sm text-slate-600">{outletLoadError}</p>
+    <button type="button" onClick={()=>void refreshAccessibleOutlets()} className="mt-4 rounded-lg bg-[#17365D] px-4 py-2 text-sm font-semibold text-white">Retry</button>
+  </section>;
+  if(!activeOutletId || activeOutlet?.id !== activeOutletId) return <p className="p-5 text-sm text-slate-600">Select an accessible active outlet.</p>;
   return <React.Fragment key={activeOutletId}>{children}</React.Fragment>;
 }
 
@@ -166,8 +172,8 @@ function MainAppContent() {
         {activeTab === 'pump-infra' && <PumpInfrastructurePage />}
         {activeTab === 'hr-workforce' && <WorkforceOperationsPage />}
         {activeTab === 'stock-ops' && <OutletScopedPage><StockOperationsPage /></OutletScopedPage>}
-        {activeTab === 'cng-ops' && <CngOperationsPage />}
-        {activeTab === 'lube-ops' && <LubeOperationsPage />}
+        {activeTab === 'cng-ops' && <OutletScopedPage><CngOperationsPage /></OutletScopedPage>}
+        {activeTab === 'lube-ops' && <OutletScopedPage><LubeOperationsPage /></OutletScopedPage>}
         {activeTab === 'equipment-ops' && <EquipmentOperationsPage />}
         {activeTab === 'utilities-ops' && <UtilitiesOperationsPage />}
         {activeTab === 'municipal-taxes' && <MunicipalTaxesPage />}
@@ -181,7 +187,7 @@ function MainAppContent() {
         {activeTab === 'org-masters' && <OrganizationMastersPage />}
         {activeTab === 'rbac' && <RbacPage />}
         {activeTab === 'audit' && <AuditPage />}
-        {activeTab === 'documents' && <DocumentsPage />}
+        {activeTab === 'documents' && <OutletScopedPage><DocumentsPage /></OutletScopedPage>}
       </DashboardShell>
       </ShiftWorkbenchProvider>
     </ActiveOutletProvider>

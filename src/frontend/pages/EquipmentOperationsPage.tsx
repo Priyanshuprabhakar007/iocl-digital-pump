@@ -273,9 +273,7 @@ export const EquipmentOperationsPage: React.FC = () => {
           <div>
             <h1 className="text-xl font-bold text-[#17365D] tracking-tight flex items-center gap-2">
               Equipment & Breakdowns
-              <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
-                Phase 3C
-              </span>
+              
             </h1>
             <p className="text-xs text-[#64748B] mt-0.5">
               Forecourt equipment health, breakdown tickets, technician assignments & resolution ledger
@@ -316,7 +314,7 @@ export const EquipmentOperationsPage: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin text-amber-700' : ''}`} />
           </button>
 
-          {canCreateTicket && selectedOutletId && (
+          {canCreateTicket && selectedOutletId && activeTab !== 'tickets' && (
             <button
               onClick={() => setIsCreateTicketOpen(true)}
               className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors shadow-lg shadow-rose-600/20"

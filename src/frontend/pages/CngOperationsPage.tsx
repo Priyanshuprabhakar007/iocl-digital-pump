@@ -27,6 +27,9 @@ import { CngDailySummaryPanel } from '../components/cng/CngDailySummaryPanel';
 import { CngPressureModal } from '../components/cng/CngPressureModal';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { useShiftWorkbench } from '../context/ShiftWorkbenchContext';
+import { resolveWorkbenchShift, toWorkbenchSelection } from '../utils/shiftWorkbench';
+import { getLocalDateInputValue } from '../../shared/utils/dateUtils';
 
 export const CngOperationsPage: React.FC = () => {
   const { hasPermission } = useAuth();
@@ -36,6 +39,9 @@ export const CngOperationsPage: React.FC = () => {
   const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
   const selectedOutletId = activeOutletId || '';
   const setSelectedOutletId = setActiveOutletId;
+  const {selection,remember,navigate} = useShiftWorkbench();
+  const initialSelection = React.useRef(selection);
+  const shiftChoice = React.useRef('');
 
   const [shiftsList, setShiftsList] = useState<OperationalShift[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
@@ -80,10 +86,14 @@ export const CngOperationsPage: React.FC = () => {
       try {
         const res = await apiFetch<OperationalShift[]>(`/api/v1/outlets/${selectedOutletId}/shifts`);
         if (res.success && res.data) {
-          setShiftsList(res.data);
-          if (res.data.length > 0) {
-            // Pick current active or first shift
-            setSelectedShiftId(res.data[0].id);
+          const available=res.data.filter(s=>s.outletId===selectedOutletId);
+          setShiftsList(available);
+          const requested=initialSelection.current;
+          const chosen=resolveWorkbenchShift(available,selectedOutletId,requested || {outletId:selectedOutletId,businessDate:getLocalDateInputValue(),shiftId:null});
+          if (chosen) {
+            shiftChoice.current=chosen.id;
+            setSelectedShiftId(chosen.id);
+            remember(toWorkbenchSelection(chosen));
           } else {
             setSelectedShiftId('');
             setSelectedShift(null);
@@ -110,6 +120,7 @@ export const CngOperationsPage: React.FC = () => {
       return;
     }
 
+    const requestShift=selectedShiftId;
     setLoadingShiftData(true);
     setActionError(null);
 
@@ -120,10 +131,11 @@ export const CngOperationsPage: React.FC = () => {
         apiFetch<CngPressureReading[]>(`/api/v1/shifts/${selectedShiftId}/cng-pressure-readings`),
       ]);
 
-      if (shiftRes.success && shiftRes.data) {
+      if(shiftChoice.current!==requestShift)return;
+      if (shiftRes.success && shiftRes.data?.id===requestShift && shiftRes.data.outletId===selectedOutletId && logRes.success && pressureRes.success) {
         setSelectedShift(shiftRes.data);
       } else {
-        setSelectedShift(null);
+        setSelectedShift(null);setActionError('Unable to verify shift or load all CNG records. Refresh before entering data.');
       }
 
       if (logRes.success) {
@@ -140,7 +152,7 @@ export const CngOperationsPage: React.FC = () => {
     } catch (err: any) {
       setActionError(err.message || 'Failed to load shift CNG records');
     } finally {
-      setLoadingShiftData(false);
+      if(shiftChoice.current===requestShift)setLoadingShiftData(false);
     }
   };
 
@@ -254,7 +266,7 @@ export const CngOperationsPage: React.FC = () => {
                 disabled={loadingOutlets}
                 className="bg-transparent text-xs text-[#17365D] font-medium focus:outline-none w-full"
               >
-                {outlets.length === 0 ? (
+                {loadingShifts||loadingShiftData?<div role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Loading saved CNG records…</div>:outlets.length === 0 ? (
                   <option value="">No outlets available</option>
                 ) : (
                   outlets.map((o) => (
@@ -271,18 +283,25 @@ export const CngOperationsPage: React.FC = () => {
               <Clock className="w-4 h-4 text-[#64748B] shrink-0" />
               <select
                 value={selectedShiftId}
-                onChange={(e) => setSelectedShiftId(e.target.value)}
-                disabled={loadingShifts || shiftsList.length === 0}
+                onChange={(e) => {
+                const next=shiftsList.find(s=>s.id===e.target.value);
+                shiftChoice.current=next?.id||'';
+                setSelectedShift(null);
+                setCngLog(null);setPressureReadings([]);setEditingPressureReading(null);setPressureModalOpen(false);
+                setSelectedShiftId(next?.id||'');
+                if(next)remember(toWorkbenchSelection(next));
+              }}
+                disabled={loadingShifts || loadingShiftData || pressureModalOpen || !!deletingPressureId || shiftsList.length === 0}
                 className="bg-transparent text-xs text-[#17365D] font-medium focus:outline-none w-full"
               >
                 {shiftsList.length === 0 ? (
                   <option value="">No shifts available</option>
                 ) : (
-                  shiftsList.map((s) => (
+                  <><option value="">Select operational shift</option>{shiftsList.map((s) => (
                     <option key={s.id} value={s.id} className="bg-white text-[#17365D]">
                       {s.businessDate} • {s.shiftTemplateName || 'Shift'} [{s.status}]
                     </option>
-                  ))
+                  ))}</>
                 )}
               </select>
             </div>
@@ -300,6 +319,7 @@ export const CngOperationsPage: React.FC = () => {
           </div>
         </div>
 
+        {hasPermission(PERMISSIONS.SHIFTS_READ)&&<button type="button" disabled={loadingShiftData||pressureModalOpen||!!deletingPressureId} onClick={()=>navigate('daily-ops')} className="text-xs font-semibold text-[#17365D] underline disabled:opacity-50">Return to shift workbench</button>}
         {/* Selected Shift Context Card */}
         {selectedShift && (
           <div className="pt-3 border-t border-[#E2E8F0]/80 flex flex-wrap items-center justify-between gap-4 text-xs">

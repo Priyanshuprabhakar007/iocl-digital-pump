@@ -441,10 +441,11 @@ export const StockOperationsPage: React.FC = () => {
       }
       const available = res.data.filter(s=>s.outletId===outletId);
       setShifts(available);
+      setErrorMsg(null);
       const preferredId = preserveShiftId || selectedRef.current;
       const preferred = preferredId ? available.find(s=>s.id===preferredId) : undefined;
       const chosen = preferredId ? preferred || null : resolveWorkbenchShift(available,outletId,initialSelection.current);
-      if (!chosen && (preferredId || initialSelection.current?.outletId===outletId)) {
+      if (!chosen && (preferredId || initialSelection.current?.shiftId)) {
         setErrorMsg('Selected shift is unavailable for this outlet and date. Choose a shift explicitly.');
       }
       chooseShift(chosen);
@@ -1106,7 +1107,7 @@ export const StockOperationsPage: React.FC = () => {
         )}
       </div>
 
-      {hasPermission(PERMISSIONS.SHIFTS_READ) && <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"><span className="text-xs text-slate-600">{currentShift ? 'Working on '+currentShift.businessDate+' · '+(currentShift.shiftTemplateName || currentShift.shiftTemplateCode || currentShift.shiftTemplateId) : 'Choose a verified shift to continue.'}</span><button type="button" disabled={workflowBusy || !currentShift} onClick={goBackToShift} className="text-sm font-semibold text-[#17365D] underline disabled:opacity-50">Return to shift workbench</button></div>}
+      {hasPermission(PERMISSIONS.SHIFTS_READ) && <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"><span className="text-xs text-slate-600">{currentShift ? 'Working on '+currentShift.businessDate+' · '+(currentShift.shiftTemplateName || currentShift.shiftTemplateCode || currentShift.shiftTemplateId) : shifts.length===0&&!shiftListLoading?'No saved shifts for this outlet. Open a shift in Shift & Readings.':'Choose a verified shift to continue.'}</span><button type="button" disabled={workflowBusy} onClick={()=>{if(currentShift)goBackToShift();else navigate('daily-ops');}} className="text-sm font-semibold text-[#17365D] underline disabled:opacity-50">Return to shift workbench</button></div>}
       {/* Error & Success Messages */}
       {errorMsg && (
         <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
@@ -1170,7 +1171,7 @@ export const StockOperationsPage: React.FC = () => {
       </section>
 
       {/* Read-only record counts from the currently selected operational shift. */}
-      {!currentShift && <p role="status" className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">{loading||shiftListLoading?'Loading the selected shift…':'Select a verified shift to view saved stock and receipts.'}</p>}
+      {!currentShift && <p role="status" className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">{loading||shiftListLoading?'Loading the selected shift…':shifts.length===0?'No shifts recorded for this outlet. Open a shift in Shift & Readings to enter stock or fuel receipts.':'Select a verified shift to view saved stock and receipts.'}</p>}
       {currentShift && <section aria-label="Shift stock snapshot" className="option4-panel p-4 sm:p-5">
         <div className="mb-3">
           <h2 className="text-base font-bold text-[#17365D]">Shift stock overview</h2>

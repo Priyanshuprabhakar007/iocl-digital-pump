@@ -569,9 +569,7 @@ export const WorkforceOperationsPage: React.FC = () => {
               <h1 className="text-xl sm:text-2xl font-black text-[#17365D] tracking-tight">
                 Workforce & Shift Roster
               </h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/10 text-[#B8530D] border border-orange-500/20">
-                Phase 5C-2A
-              </span>
+              
             </div>
             <p className="text-xs text-[#64748B] mt-0.5">
               Staff enrollment, manpower, shift roster, attendance, geofencing, nozzle assignments, uniform inventory & staff issue lifecycle
@@ -643,7 +641,7 @@ export const WorkforceOperationsPage: React.FC = () => {
       )}
 
       {/* Authoritative Manpower Summary Panel */}
-      <HrManpowerSummaryPanel summary={summary} isLoading={isLoadingCore} />
+      {activeTab==='staff'||activeTab==='manpower'?<HrManpowerSummaryPanel summary={summary} isLoading={isLoadingCore} />:<details className="rounded-xl border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[#17365D]">View manpower overview</summary><div className="p-4"><HrManpowerSummaryPanel summary={summary} isLoading={isLoadingCore} /></div></details>}
 
       {/* Internal Navigation Tabs */}
       <div className="flex items-center gap-1.5 border-b border-[#E2E8F0] pb-2 overflow-x-auto">

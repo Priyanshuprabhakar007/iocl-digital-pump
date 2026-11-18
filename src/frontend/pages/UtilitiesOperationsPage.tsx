@@ -318,9 +318,7 @@ export const UtilitiesOperationsPage: React.FC = () => {
               <h1 className="text-xl font-black text-[#17365D] tracking-tight">
                 Utilities & Sub-Meters
               </h1>
-              <span className="px-2 py-0.5 bg-orange-500/10 border border-orange-500/20 text-[#B8530D] text-[10px] font-bold uppercase tracking-wider rounded-md">
-                Phase 4A
-              </span>
+              
             </div>
             <p className="text-xs text-[#64748B] mt-0.5">
               Main electricity invoices, settlement workflows, and sub-meter consumption ledgers

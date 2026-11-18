@@ -48,9 +48,17 @@ describe('Documents & Compliance Frontend API Connection & Safety Suite', () => 
       expect(sourceCode).toContain('EMPTY_SUMMARY');
     });
 
-    it('1.4 should render dedicated error state when outlet loading fails', () => {
-      expect(sourceCode).toContain('outletLoadError');
-      expect(sourceCode).toContain('Failed to load accessible retail outlets');
+    it('1.4 should render dedicated error state when shared outlet loading fails', () => {
+      const context = fs.readFileSync(path.resolve(__dirname, '../src/frontend/context/ActiveOutletContext.tsx'), 'utf-8');
+      const app = fs.readFileSync(path.resolve(__dirname, '../src/App.tsx'), 'utf-8');
+      expect(sourceCode).toContain('useActiveOutlet()');
+      expect(context).toContain('outletLoadError: string | null');
+      expect(context).toContain("setOutletLoadError(res.error?.message");
+      expect(context).toMatch(/if \(!res.success \|\| !Array.isArray\(res.data\)\) \{\s*setAccessibleOutlets\(\[\]\);\s*setActiveOutletIdState\(null\);\s*setOutletLoadError/);
+      expect(app).toContain('if(outletLoadError) return <section role="alert"');
+      expect(app).toContain('Failed to load accessible retail outlets');
+      expect(app).toContain('onClick={()=>void refreshAccessibleOutlets()}');
+      expect(app).toContain('<OutletScopedPage><DocumentsPage /></OutletScopedPage>');
     });
   });
 

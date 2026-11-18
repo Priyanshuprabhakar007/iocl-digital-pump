@@ -451,7 +451,7 @@ export const OrganizationMastersPage: React.FC = () => {
   }
 
   return (
-    <div className="admin-modern space-y-6 pb-10">
+    <div className="admin-modern org-light space-y-6 pb-10">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0]">
         <div>

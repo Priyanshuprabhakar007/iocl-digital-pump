@@ -13,6 +13,7 @@ interface ActiveOutletContextType {
   setActiveOutletId: (outletId: string) => void;
   refreshAccessibleOutlets: () => Promise<void>;
   loading: boolean;
+  outletLoadError: string | null;
   archivedNotice: string | null;
   clearArchivedNotice: () => void;
 }
@@ -31,6 +32,7 @@ export const ActiveOutletProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return null;
   });
   const [loading, setLoading] = useState(true);
+  const [outletLoadError, setOutletLoadError] = useState<string | null>(null);
   const [archivedNotice, setArchivedNotice] = useState<string | null>(null);
 
   const setActiveOutletId = useCallback((id: string) => {
@@ -43,6 +45,7 @@ export const ActiveOutletProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   const refreshAccessibleOutlets = useCallback(async () => {
+    setOutletLoadError(null);
     if (!userCtx) {
       setAccessibleOutlets([]);
       setActiveOutletIdState(null);
@@ -51,37 +54,33 @@ export const ActiveOutletProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     setLoading(true);
-    const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
-    if (res.success && res.data) {
-      const activeOnly = res.data.filter((o) => o.status === 'ACTIVE');
-      setAccessibleOutlets(activeOnly);
-
-      if (activeOnly.length === 0) {
-        setActiveOutletIdState(null);
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem(ACTIVE_OUTLET_STORAGE_KEY);
-        }
-      } else {
-        const currentSaved =
-          typeof window !== 'undefined'
-            ? sessionStorage.getItem(ACTIVE_OUTLET_STORAGE_KEY)
-            : null;
-        const targetId = activeOutletIdState || currentSaved;
-        const match = activeOnly.find((o) => o.id === targetId);
-
-        if (match) {
-          setActiveOutletId(match.id);
-        } else {
-          setActiveOutletId(activeOnly[0].id);
-        }
-      }
-    } else {
-      if (res.error?.code === 'OUTLET_ARCHIVED') {
+    try {
+      const res = await apiFetch<RetailOutlet[]>('/api/v1/outlets');
+      if (!res.success || !Array.isArray(res.data)) {
         setAccessibleOutlets([]);
         setActiveOutletIdState(null);
+        setOutletLoadError(res.error?.message || 'Unable to retrieve accessible outlets.');
+        return;
       }
+      const activeOnly = res.data.filter((o) => o.status === 'ACTIVE');
+      setAccessibleOutlets(activeOnly);
+      if (activeOnly.length === 0) {
+        setActiveOutletIdState(null);
+        try { sessionStorage.removeItem(ACTIVE_OUTLET_STORAGE_KEY); } catch {}
+      } else {
+        let currentSaved: string | null = null;
+        try { currentSaved = sessionStorage.getItem(ACTIVE_OUTLET_STORAGE_KEY); } catch {}
+        const targetId = currentSaved || activeOutletIdState;
+        const match = activeOnly.find((o) => o.id === targetId);
+        setActiveOutletId((match || activeOnly[0]).id);
+      }
+    } catch {
+      setAccessibleOutlets([]);
+      setActiveOutletIdState(null);
+      setOutletLoadError('Unable to retrieve accessible outlets. Check your connection.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [userCtx, activeOutletIdState, setActiveOutletId]);
 
   useEffect(() => {
@@ -90,6 +89,7 @@ export const ActiveOutletProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } else {
       setAccessibleOutlets([]);
       setActiveOutletIdState(null);
+      setOutletLoadError(null);
       setLoading(false);
     }
   }, [userCtx]);
@@ -132,6 +132,7 @@ export const ActiveOutletProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setActiveOutletId,
         refreshAccessibleOutlets,
         loading,
+        outletLoadError,
         archivedNotice,
         clearArchivedNotice: () => setArchivedNotice(null),
       }}
