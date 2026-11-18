@@ -176,7 +176,7 @@ export const FinancialOperationsPage: React.FC = () => {
         const verifiedSummary = results[7].success && results[7].data?.operationalShiftId===selectedShiftId && results[7].data?.outletId===selectedOutletId ? results[7].data : null;
         setSummary(verifiedSummary);
         setLoadedSections(prev=>({...prev,collections:!!results[4].success,handovers:!!results[5].success,deposits:!!results[6].success}));
-        if(!verifiedSummary || [[4,PERMISSIONS.COLLECTIONS_READ],[5,PERMISSIONS.CASH_HANDOVER_READ],[6,PERMISSIONS.BANK_DEPOSITS_READ]].some(([i,p])=>hasPermission(p as typeof PERMISSIONS.COLLECTIONS_READ) && !results[Number(i)].success))setActionError('Some financial records could not be loaded. Refresh before relying on these figures.');
+        if(!verifiedSummary || (hasPermission(PERMISSIONS.COLLECTIONS_READ)&&!results[4].success || hasPermission(PERMISSIONS.CASH_HANDOVER_READ)&&!results[5].success || hasPermission(PERMISSIONS.BANK_DEPOSITS_READ)&&!results[6].success))setActionError('Some financial records could not be loaded. Refresh before relying on these figures.');
       }
     } catch(err) {
       if(current()){setSelectedShift(null);setCollections([]);setHandovers([]);setDeposits([]);setSummary(null);setLoadedSections({collections:false,handovers:false,deposits:false,prices:false,parties:false});setActionError('Could not load financial data. Refresh and try again.');}
@@ -200,7 +200,7 @@ export const FinancialOperationsPage: React.FC = () => {
       setActionSuccess('Product price updated successfully');
       setShowEditPriceModal(false);
       setEditingPrice(null);
-      refreshData();
+      await refreshData();
     } else {
       setActionError(res.error?.message || 'Failed to update product price');
     }
@@ -210,6 +210,13 @@ export const FinancialOperationsPage: React.FC = () => {
     refreshData();
   }, [selectedOutletId, selectedShiftId]);
 
+  const withFinancialAction = async (operation:()=>Promise<void>) => {
+    if(actionLock.current || loadingData || !mounted.current || !selectedShift || selectedShift.id!==selectedRef.current || selectedShift.outletId!==selectedOutletId) return;
+    actionLock.current=true;setSavingAction(true);setActionError(null);setActionSuccess(null);
+    try {await operation();}
+    catch {if(mounted.current)setActionError('Action failed. Refresh saved records before retrying.');}
+    finally {actionLock.current=false;if(mounted.current)setSavingAction(false);}
+  };
   const handleCreateCollection = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -223,6 +230,8 @@ export const FinancialOperationsPage: React.FC = () => {
       notes: formData.get('notes') || null,
     };
 
+    if(selectedShift?.status !== 'OPEN' || !hasPermission(PERMISSIONS.COLLECTIONS_WRITE))return;
+    await withFinancialAction(async()=>{
     const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/collections`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -231,10 +240,11 @@ export const FinancialOperationsPage: React.FC = () => {
     if (res.success) {
       setActionSuccess('Collection recorded');
       setShowCollectionModal(false);
-      refreshData();
+      await refreshData();
     } else {
       setActionError(res.error?.message || 'Failed to record collection');
     }
+    });
   };
 
   const handleCreateHandover = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -246,6 +256,8 @@ export const FinancialOperationsPage: React.FC = () => {
       notes: formData.get('notes') || null,
     };
 
+    if(selectedShift?.status !== 'OPEN' || !hasPermission(PERMISSIONS.CASH_HANDOVER_WRITE))return;
+    await withFinancialAction(async()=>{
     const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/cash-handovers`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -254,10 +266,11 @@ export const FinancialOperationsPage: React.FC = () => {
     if (res.success) {
       setActionSuccess('Handover recorded');
       setShowHandoverModal(false);
-      refreshData();
+      await refreshData();
     } else {
       setActionError(res.error?.message || 'Failed to record handover');
     }
+    });
   };
 
   const handleCreateDeposit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -271,6 +284,8 @@ export const FinancialOperationsPage: React.FC = () => {
       documentId: formData.get('documentId') || null,
     };
 
+    if(!hasPermission(PERMISSIONS.BANK_DEPOSITS_WRITE))return;
+    await withFinancialAction(async()=>{
     const res = await apiFetch(`/api/v1/shifts/${selectedShiftId}/bank-deposits`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -279,13 +294,16 @@ export const FinancialOperationsPage: React.FC = () => {
     if (res.success) {
       setActionSuccess('Deposit submitted');
       setShowDepositModal(false);
-      refreshData();
+      await refreshData();
     } else {
       setActionError(res.error?.message || 'Failed to submit deposit');
     }
+    });
   };
 
   const handleAcknowledgeHandover = async (id: string, status: 'ACKNOWLEDGED' | 'DISPUTED') => {
+    if(!hasPermission(PERMISSIONS.CASH_HANDOVER_ACKNOWLEDGE) || !handovers.some(h=>h.id===id && h.status==='PENDING'))return;
+    await withFinancialAction(async()=>{
     const res = await apiFetch(`/api/v1/cash-handovers/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
@@ -293,13 +311,16 @@ export const FinancialOperationsPage: React.FC = () => {
 
     if (res.success) {
       setActionSuccess(`Handover ${status.toLowerCase()}`);
-      refreshData();
+      await refreshData();
     } else {
       setActionError(res.error?.message || 'Failed to update handover status');
     }
+    });
   };
 
   const handleVerifyDeposit = async (id: string, status: 'VERIFIED' | 'REJECTED', reason?: string) => {
+    if(!hasPermission(PERMISSIONS.BANK_DEPOSITS_VERIFY) || !deposits.some(d=>d.id===id && d.status==='SUBMITTED'))return;
+    await withFinancialAction(async()=>{
     const res = await apiFetch(`/api/v1/bank-deposits/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status, rejectionReason: reason }),
@@ -307,10 +328,11 @@ export const FinancialOperationsPage: React.FC = () => {
 
     if (res.success) {
       setActionSuccess(`Deposit ${status.toLowerCase()}`);
-      refreshData();
+      await refreshData();
     } else {
       setActionError(res.error?.message || 'Failed to update deposit status');
     }
+    });
   };
 
   const workflowBusy = savingAction || loadingData || shiftListLoading || showCollectionModal || showHandoverModal || showDepositModal || showPartyModal || showPriceModal || showEditPriceModal;
@@ -322,7 +344,7 @@ export const FinancialOperationsPage: React.FC = () => {
   const stageIndex=stages.findIndex(s=>s.id===activeTab);
   const currentStage=stages[stageIndex];
   const currentSectionLoaded=activeTab==='collections'?loadedSections.collections:activeTab==='handovers'?loadedSections.handovers:activeTab==='deposits'?loadedSections.deposits:activeTab==='prices'?loadedSections.prices:activeTab==='credit-parties'?loadedSections.parties:!!summary;
-  const canRenderSection=currentSectionLoaded && !loadingData && (isMaster || !!selectedShift);
+  const canRenderSection=currentSectionLoaded && !loadingData && (isMaster || !!selectedShift) && (activeTab==='sales'||activeTab==='reconciliation'||activeTab==='collections'&&hasPermission(PERMISSIONS.COLLECTIONS_READ)||activeTab==='handovers'&&hasPermission(PERMISSIONS.CASH_HANDOVER_READ)||activeTab==='deposits'&&hasPermission(PERMISSIONS.BANK_DEPOSITS_READ)||activeTab==='prices'&&hasPermission(PERMISSIONS.PRODUCT_PRICES_READ)||activeTab==='credit-parties'&&hasPermission(PERMISSIONS.CREDIT_PARTIES_READ));
   const shiftLabel=selectedShift ? selectedShift.businessDate+' · '+(selectedShift.shiftTemplateName||selectedShift.shiftTemplateCode||selectedShift.shiftTemplateId)+' · '+selectedShift.status : '';
   return (
     <div className="finance-modern space-y-6 pb-10">
@@ -401,7 +423,7 @@ export const FinancialOperationsPage: React.FC = () => {
             { label: provisional ? 'Sales (provisional)' : 'Authoritative Sales', value: summary.salesRevenue.authoritativeTotalStr, tone: 'text-[#17365D]' },
             { label: 'Total Collections', value: summary.collections.totalStr, tone: 'text-[#17365D]' },
             { label: 'Sales vs Collections Variance', value: summary.varianceStr,
-              tone: !provisional && !provisional && summary.variancePaise === 0 ? 'text-emerald-700' : 'text-amber-800' },
+              tone: !provisional && summary.variancePaise === 0 ? 'text-emerald-700' : 'text-amber-800' },
             { label: 'Pending Cash Deposit', value: summary.cashDepositControl.pendingCashDepositStr,
               tone: summary.cashDepositControl.pendingCashDepositPaise > 0 ? 'text-amber-800' : 'text-emerald-700' },
           ].map(metric => (
@@ -447,7 +469,7 @@ export const FinancialOperationsPage: React.FC = () => {
               <h2 className="text-lg font-bold text-[#17365D]">Shift Collections</h2>
               {selectedShift?.status === 'OPEN' && hasPermission(PERMISSIONS.COLLECTIONS_WRITE) && (
                 <button
-                  onClick={() => {setCollectionType('CASH');setShowCollectionModal(true);}}
+                  disabled={savingAction || loadingData} onClick={() => {setCollectionType('CASH');setShowCollectionModal(true);}}
                   className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> Add Collection
@@ -483,10 +505,12 @@ export const FinancialOperationsPage: React.FC = () => {
                   {selectedShift?.status === 'OPEN' && hasPermission(PERMISSIONS.COLLECTIONS_WRITE) && (
                     <button
                       onClick={async () => {
-                        if (confirm('Delete this collection?')) {
-                          await apiFetch(`/api/v1/collections/${c.id}`, { method: 'DELETE' });
-                          refreshData();
-                        }
+                        if (selectedShift?.status !== 'OPEN' || !hasPermission(PERMISSIONS.COLLECTIONS_WRITE)) return;
+                        if (confirm('Delete this collection?')) await withFinancialAction(async()=>{
+                          const res=await apiFetch(`/api/v1/collections/${c.id}`, {method:'DELETE'});
+                          if(res.success){setActionSuccess('Collection deleted');await refreshData();}
+                          else setActionError(res.error?.message||'Could not delete collection');
+                        });
                       }}
                       className="absolute top-2 right-2 p-1.5 text-slate-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
@@ -668,7 +692,7 @@ export const FinancialOperationsPage: React.FC = () => {
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#64748B] font-mono">Sales vs Collections Variance</div>
                   <div className={`text-3xl font-bold font-mono ${
-                    summary.variancePaise === 0 ? 'text-emerald-700' :
+                    !provisional && summary.variancePaise === 0 ? 'text-emerald-700' :
                     summary.variancePaise > 0 ? 'text-rose-700' : 'text-amber-700'
                   }`}>
                     ₹ {summary.varianceStr}
@@ -706,7 +730,7 @@ export const FinancialOperationsPage: React.FC = () => {
               <h2 className="text-lg font-bold text-[#17365D]">Cash Handovers</h2>
               {selectedShift?.status === 'OPEN' && hasPermission(PERMISSIONS.CASH_HANDOVER_WRITE) && (
                 <button
-                  onClick={() => setShowHandoverModal(true)}
+                  disabled={savingAction || loadingData} onClick={() => setShowHandoverModal(true)}
                   className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> Record Handover
@@ -714,6 +738,7 @@ export const FinancialOperationsPage: React.FC = () => {
               )}
             </div>
 
+            {handovers.length===0&&<p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">No cash handovers recorded for this shift.</p>}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {handovers.map(h => (
                 <div key={h.id} className="bg-white border border-[#E2E8F0] rounded-xl p-5 space-y-4">
@@ -734,7 +759,7 @@ export const FinancialOperationsPage: React.FC = () => {
                   {h.status === 'PENDING' && hasPermission(PERMISSIONS.CASH_HANDOVER_ACKNOWLEDGE) && (
                     <div className="flex gap-2 pt-2 border-t border-[#E2E8F0]">
                       <button
-                        onClick={() => handleAcknowledgeHandover(h.id, 'ACKNOWLEDGED')}
+                        disabled={savingAction || loadingData} onClick={() => handleAcknowledgeHandover(h.id, 'ACKNOWLEDGED')}
                         className="flex-1 px-3 py-2 bg-emerald-600/20 text-emerald-700 rounded-lg text-[10px] font-bold border border-emerald-600/30 hover:bg-emerald-700 hover:text-white transition-all"
                       >
                         Acknowledge Receipt
@@ -758,7 +783,7 @@ export const FinancialOperationsPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-[#17365D]">Bank Deposits</h2>
               {selectedShift && hasPermission(PERMISSIONS.BANK_DEPOSITS_WRITE) && <button
-                onClick={() => setShowDepositModal(true)}
+                disabled={savingAction || loadingData} onClick={() => setShowDepositModal(true)}
                 className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4" /> New Deposit
@@ -799,6 +824,7 @@ export const FinancialOperationsPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
+                  {deposits.length===0&&<tr><td colSpan={6} className="p-5 text-center text-slate-600">No bank deposits recorded for this shift.</td></tr>}
                   {deposits.map(d => (
                     <tr key={d.id} className="hover:bg-[#F1F5F9]/30">
                       <td className="py-3 px-4 font-mono">{d.depositDate}</td>
@@ -820,7 +846,7 @@ export const FinancialOperationsPage: React.FC = () => {
                         {d.status === 'SUBMITTED' && hasPermission(PERMISSIONS.BANK_DEPOSITS_VERIFY) && (
                           <div className="flex items-center justify-center gap-2">
                             <button
-                              onClick={() => handleVerifyDeposit(d.id, 'VERIFIED')}
+                              disabled={savingAction || loadingData} onClick={() => handleVerifyDeposit(d.id, 'VERIFIED')}
                               className="p-1.5 bg-emerald-600/20 text-emerald-700 rounded-lg hover:bg-emerald-700 hover:text-white transition-all"
                               title="Verify"
                             >
@@ -982,7 +1008,7 @@ export const FinancialOperationsPage: React.FC = () => {
       
       {showCollectionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowCollectionModal(false)} />
+          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => {if(!actionLock.current)setShowCollectionModal(false);}} />
           <form onSubmit={handleCreateCollection} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">Record Shift Collection</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>
             <div className="space-y-3">
@@ -1026,8 +1052,8 @@ export const FinancialOperationsPage: React.FC = () => {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowCollectionModal(false)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-[#17365D] text-white rounded-xl text-xs font-bold shadow-sm">Record Collection</button>
+              <button type="button" onClick={() => {if(!actionLock.current)setShowCollectionModal(false);}} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
+              <button type="submit" disabled={savingAction || loadingData} className="px-5 py-2 bg-[#17365D] text-white rounded-xl text-xs font-bold shadow-sm">Record Collection</button>
             </div>
           </form>
         </div>
@@ -1035,7 +1061,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showHandoverModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowHandoverModal(false)} />
+          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => {if(!actionLock.current)setShowHandoverModal(false);}} />
           <form onSubmit={handleCreateHandover} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">Log Cash Handover</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>
             <p className="text-xs text-[#64748B]">Record physical custody transfer of cash to supervisor or next staff.</p>
@@ -1050,8 +1076,8 @@ export const FinancialOperationsPage: React.FC = () => {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowHandoverModal(false)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20">Confirm Handover</button>
+              <button type="button" onClick={() => {if(!actionLock.current)setShowHandoverModal(false);}} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
+              <button type="submit" disabled={savingAction || loadingData} className="px-5 py-2 bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20">Confirm Handover</button>
             </div>
           </form>
         </div>
@@ -1059,7 +1085,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {showDepositModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowDepositModal(false)} />
+          <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => {if(!actionLock.current)setShowDepositModal(false);}} />
           <form onSubmit={handleCreateDeposit} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">New Bank Deposit Submission</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>
             <div className="space-y-3">
@@ -1091,8 +1117,8 @@ export const FinancialOperationsPage: React.FC = () => {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowDepositModal(false)} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-blue-600 text-[#17365D] rounded-xl text-xs font-bold">Submit Deposit</button>
+              <button type="button" onClick={() => {if(!actionLock.current)setShowDepositModal(false);}} className="px-4 py-2 bg-[#F1F5F9] rounded-xl text-xs text-[#475569]">Cancel</button>
+              <button type="submit" disabled={savingAction || loadingData} className="px-5 py-2 bg-blue-600 text-[#17365D] rounded-xl text-xs font-bold">Submit Deposit</button>
             </div>
           </form>
         </div>
