@@ -390,7 +390,7 @@ export const DailyOperationsPage: React.FC = () => {
         const preferred = preserveActiveShift && activeShiftId
           ? {outletId, businessDate:date, shiftId:activeShiftId} : requested;
         const chosen = resolveWorkbenchShift(data.shifts.map(s=>s.shift), outletId, preferred || {outletId,businessDate:date,shiftId:null});
-        initialSelection.current = chosen || !preferred?.shiftId ? null : preferred;
+        initialSelection.current = chosen ? toWorkbenchSelection(chosen) : preferred?.shiftId ? preferred : null;
         setActiveShiftId(chosen?.id || '');
         if (chosen) remember(toWorkbenchSelection(chosen));
         else if (preferred?.shiftId) setPageError('Previously selected shift is no longer available. Choose a shift explicitly.');
@@ -476,6 +476,7 @@ export const DailyOperationsPage: React.FC = () => {
 
     setNewShiftNotes('');
     setActionSuccess('Operational shift opened with active tank and nozzle snapshots.');
+    initialSelection.current=null;
     await loadBootstrap(selectedOutletId, businessDate, false);
   };
 
@@ -1471,7 +1472,7 @@ export const DailyOperationsPage: React.FC = () => {
                     <button
                       key={ws.shift.id}
                       type="button"
-                      onClick={() => { if(navigationBusy) return; initialSelection.current=null; setActiveShiftId(ws.shift.id); remember(toWorkbenchSelection(ws.shift)); }}
+                      onClick={() => { if(navigationBusy) return; initialSelection.current=toWorkbenchSelection(ws.shift); setActiveShiftId(ws.shift.id); remember(toWorkbenchSelection(ws.shift)); }}
                       className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors flex items-center gap-2 ${
                         isSelected
                           ? 'bg-[#003366] text-white border-[#003366]'
