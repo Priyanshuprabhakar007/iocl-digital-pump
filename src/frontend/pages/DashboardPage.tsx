@@ -10,19 +10,15 @@ import {
   Building2,
   Users,
   ShieldCheck,
-  MapPin,
   Layers,
   FileText,
   Activity,
   CheckCircle2,
-  AlertTriangle,
-  ArrowUpRight,
   Fuel,
   ClipboardList,
   Wallet,
   Wrench,
-  ChevronRight,
-  BookOpen
+  ChevronRight
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -50,11 +46,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const summary = currentStatus?.summary;
   const indicators = summary ? getWorkDeskIndicators(summary) : [];
   const [stats, setStats] = useState({
-    outletsCount: 0,
-    usersCount: 0,
-    scopesCount: 0,
-    statesCount: 0,
-    auditLogsCount: 0,
+    outletsCount: null as number | null,
+    usersCount: null as number | null,
+    scopesCount: null as number | null,
+    statesCount: null as number | null,
+    auditLogsCount: null as number | null,
   });
   const [loading, setLoading] = useState(true);
 
@@ -74,11 +70,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
       if (cancelled) return;
       setStats({
-        outletsCount: outletsRes.data?.length || 0,
-        usersCount: usersRes.data?.length || 0,
-        scopesCount: scopesRes.data?.length || 0,
-        statesCount: statesRes.data?.length || 0,
-        auditLogsCount: auditRes.data?.length || 0,
+        outletsCount: outletsRes.data?.length ?? null,
+        usersCount: usersRes.data?.length ?? null,
+        scopesCount: scopesRes.data?.length ?? null,
+        statesCount: statesRes.data?.length ?? null,
+        auditLogsCount: auditRes.data?.length ?? null,
       });
 
       setLoading(false);
@@ -86,7 +82,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
     loadStats();
     return () => { cancelled = true; };
-  }, [userCtx, governanceOpen, hasPermission]);
+  }, [userCtx, governanceOpen]);
 
   if (!userCtx) return null;
 
@@ -166,7 +162,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             {label:'Scoped users',value:loading?'…':stats.usersCount,icon:Users,tone:'blue',visible:hasPermission(PERMISSIONS.USERS_READ)},
             {label:'Permissions',value:userCtx.isGlobalAdmin?'ALL':userCtx.permissions.length,icon:ShieldCheck,tone:'purple',visible:true},
             {label:'Audit records',value:loading?'…':stats.auditLogsCount,icon:Activity,tone:'green',visible:hasPermission(PERMISSIONS.AUDIT_READ)}
-          ].filter(metric=>metric.visible).map(metric=><div key={metric.label} data-tone={metric.tone} className="option4-stat p-4"><p className="text-xs text-[#64748B]">{metric.label}</p><p className="mt-2 text-xl font-bold text-[#17365D]">{metric.value}</p></div>)}
+          ].filter(metric=>metric.visible).map(metric=><div key={metric.label} data-tone={metric.tone} className="option4-stat p-4"><p className="text-xs text-[#64748B]">{metric.label}</p><p className="mt-2 text-xl font-bold text-[#17365D]">{metric.value ?? 'Unavailable'}</p></div>)}
         </div>
         <div className="grid gap-5 items-start border-t border-[#E2E8F0] p-5 lg:grid-cols-2">
           <div className="space-y-3">
