@@ -448,6 +448,10 @@ export const DailyOperationsPage: React.FC = () => {
     remember(toWorkbenchSelection(activeWorkspace.shift));
     navigate(page);
   };
+  const handleWorkbenchOutletChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (navigationBusy || (hasUnsaved && !window.confirm('Unsaved entries may be lost. Change outlet?'))) return;
+    setSelectedOutletId(e.target.value);
+  };
   const isShiftReadOnly =
     !activeWorkspace ||
     activeWorkspace.shift.status === 'CLOSED' ||
@@ -1215,7 +1219,7 @@ export const DailyOperationsPage: React.FC = () => {
               <select
                 value={selectedOutletId}
                 disabled={navigationBusy}
-                onChange={(e) => {if(hasUnsaved && !window.confirm('Unsaved entries may be lost. Change outlet?'))return;setSelectedOutletId(e.target.value);}}
+                onChange={handleWorkbenchOutletChange}
                 className="h-9 px-3 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
               >
                 {outlets.map((o) => (
