@@ -38,7 +38,7 @@ describe('Dealer master Excel synchronization safeguards',()=>{
   it('blocks unknown new outlet city and pincode, even with known hierarchy',()=>{
     const item=buildDealerImportPlan(parseDealerMasterRows([excel(123456)]),[],[div],[area])[0];
     expect(item.action).toBe('REVIEW');
-    expect(item.messages.some(x=>x.includes('City and PIN'))).toBe(true);
+    expect(item.messages.some(x=>x.includes('PIN code required'))).toBe(true);
   });
   it('flags duplicate codes in the upload and missing hierarchy',()=>{
     const duplicate=buildDealerImportPlan(parseDealerMasterRows([excel(),excel()]),[current],[div],[area]);
