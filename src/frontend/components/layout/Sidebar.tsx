@@ -243,7 +243,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="font-bold text-white text-xs">IOCL Navigation</span>
         </div>
         <button type="button" onClick={onCloseMobile}
-          aria-label="Close navigation" autoFocus className="rounded-lg p-2 text-slate-200 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#F47721]">
+          aria-label="Close navigation" className="rounded-lg p-2 text-slate-200 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#F47721]">
           <X className="w-5 h-5" />
         </button>
       </div>
