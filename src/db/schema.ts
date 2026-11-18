@@ -1887,6 +1887,15 @@ export const cocoAgreementDetails = sqliteTable('coco_agreement_details', {
   uniqueIndex('uq_coco_agreements_nfr_metadata').on(table.linkedNfrLeaseId),
 ]);
 
+export const cocoAgreementLeaseTerms = sqliteTable('coco_agreement_lease_terms', {
+  agreementId: text('agreement_id').primaryKey().notNull().references(() => cocoAgreementDetails.id, { onDelete: 'cascade' }),
+  dimensionUnit: text('dimension_unit', { enum: ['SQYD','SQFT','FT_LXW'] }),
+  areaMilli: integer('area_milli'),
+  lengthMilliFt: integer('length_milli_ft'),
+  widthMilliFt: integer('width_milli_ft'),
+  monthlyLeaseValuePaise: integer('monthly_lease_value_paise'),
+});
+
 export const cocoExpenseClaims = sqliteTable('coco_expense_claims', {
   id: text('id').primaryKey(),
   outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
