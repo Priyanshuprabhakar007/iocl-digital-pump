@@ -1,5 +1,5 @@
 import './adminModern.css';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { UserScopeAssignment, User, State, Division, SalesArea, RetailOutlet } from '../../shared/types';
@@ -19,6 +19,11 @@ export const ScopesPage: React.FC = () => {
   const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [levelFilter,setLevelFilter]=useState('ALL');
+  const [scopeLoadError,setScopeLoadError]=useState<string|null>(null);
+  const [scopeFeedback,setScopeFeedback]=useState<string|null>(null);
+  const [savingScope,setSavingScope]=useState(false);
+  const scopeLock=useRef(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -32,6 +37,8 @@ export const ScopesPage: React.FC = () => {
 
   const fetchAllData = async () => {
     setLoading(true);
+    setScopeLoadError(null);
+    try {
     const [scopesRes, usersRes, statesRes, divRes, saRes, outletRes] = await Promise.all([
       apiFetch<UserScopeAssignment[]>('/api/v1/scopes'),
       apiFetch<User[]>('/api/v1/users'),
@@ -40,13 +47,15 @@ export const ScopesPage: React.FC = () => {
       apiFetch<SalesArea[]>('/api/v1/hierarchy/sales-areas'),
       apiFetch<RetailOutlet[]>('/api/v1/outlets'),
     ]);
-    if (scopesRes.data) setScopes(scopesRes.data);
-    if (usersRes.data) setUsers(usersRes.data);
-    if (statesRes.data) setStates(statesRes.data);
-    if (divRes.data) setDivisions(divRes.data);
-    if (saRes.data) setSalesAreas(saRes.data);
-    if (outletRes.data) setOutlets(outletRes.data);
-    setLoading(false);
+    if (scopesRes.success&&Array.isArray(scopesRes.data)) setScopes(scopesRes.data);
+    else {setScopes([]);setScopeLoadError(scopesRes.error?.message||'Unable to load access assignments.');}
+    setUsers(usersRes.success&&Array.isArray(usersRes.data)?usersRes.data:[]);
+    setStates(statesRes.success&&Array.isArray(statesRes.data)?statesRes.data:[]);
+    setDivisions(divRes.success&&Array.isArray(divRes.data)?divRes.data:[]);
+    setSalesAreas(saRes.success&&Array.isArray(saRes.data)?saRes.data:[]);
+    setOutlets(outletRes.success&&Array.isArray(outletRes.data)?outletRes.data:[]);
+    } catch {setScopes([]);setUsers([]);setStates([]);setDivisions([]);setSalesAreas([]);setOutlets([]);setScopeLoadError('Unable to load access assignments. Check your connection.');}
+    finally {setLoading(false);}
   };
 
   useEffect(() => {
@@ -54,11 +63,12 @@ export const ScopesPage: React.FC = () => {
   }, []);
 
   const filteredScopes = useMemo(() => {
-    return filterScopesForSearch(scopes, searchQuery, users, states, divisions, salesAreas, outlets);
-  }, [scopes, searchQuery, users, states, divisions, salesAreas, outlets]);
+    return filterScopesForSearch(scopes, searchQuery, users, states, divisions, salesAreas, outlets).filter(s=>levelFilter==='ALL'||s.scopeLevel===levelFilter);
+  }, [scopes, searchQuery, users, states, divisions, salesAreas, outlets,levelFilter]);
 
   const handleCreateScope = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(scopeLock.current||!hasPermission(PERMISSIONS.SCOPES_ASSIGN))return;
     setErrorMsg(null);
     const validation = buildScopeAssignmentPayload({
       userId: selectedUserId,
@@ -72,23 +82,28 @@ export const ScopesPage: React.FC = () => {
       setErrorMsg(validation.errorMessage || 'Invalid scope configuration');
       return;
     }
-    const res = await apiFetch<UserScopeAssignment>('/api/v1/scopes', {
-      method: 'POST',
-      body: JSON.stringify(validation.payload),
-    });
-    if (res.success) {
-      setModalOpen(false);
-      fetchAllData();
-    } else {
-      setErrorMsg(res.error?.message || 'Failed to assign scope');
-    }
+    scopeLock.current=true;setSavingScope(true);setScopeFeedback(null);
+    try {
+      const res = await apiFetch<UserScopeAssignment>('/api/v1/scopes', {method:'POST',body:JSON.stringify(validation.payload)});
+      if(res.success){setModalOpen(false);setScopeFeedback('Access scope assigned.');await fetchAllData();}
+      else setErrorMsg(res.error?.message||'Failed to assign scope');
+    } catch {setErrorMsg('Unable to verify assignment. Refresh before retrying.');}
+    finally {scopeLock.current=false;setSavingScope(false);}
   };
 
   const handleDeleteScope = async (scopeId: string) => {
-    const res = await apiFetch(`/api/v1/scopes/${scopeId}`, { method: 'DELETE' });
-    if (res.success) {
-      fetchAllData();
-    }
+    if(scopeLock.current||loading||!hasPermission(PERMISSIONS.SCOPES_ASSIGN))return;
+    const assignment=scopes.find(s=>s.id===scopeId);
+    if(!assignment)return;
+    const target=assignment.scopeLevel==='GLOBAL'?'all-India':assignment.outletName||assignment.salesAreaName||assignment.divisionName||assignment.stateName||assignment.outletId||assignment.salesAreaId||assignment.divisionId||assignment.stateId||assignment.scopeLevel;
+    if(!window.confirm('Revoke '+assignment.scopeLevel+' access ('+target+') for '+(assignment.userName||assignment.userId)+'?'))return;
+    scopeLock.current=true;setSavingScope(true);setScopeFeedback(null);
+    try{
+      const res=await apiFetch(`/api/v1/scopes/${scopeId}`,{method:'DELETE'});
+      if(res.success){setScopeFeedback('Access scope revoked.');await fetchAllData();}
+      else setScopeFeedback(res.error?.message||'Unable to revoke access scope.');
+    }catch{setScopeFeedback('Unable to verify revocation. Refresh before retrying.');}
+    finally{scopeLock.current=false;setSavingScope(false);}
   };
 
   const filteredDivisions = stateId ? divisions.filter(d => d.stateId === stateId) : divisions;
@@ -102,16 +117,17 @@ export const ScopesPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <MapPin className="w-6 h-6 text-[#B8530D]" />
-            <h1 className="text-xl font-extrabold text-[#17365D]">Organizational Scope Assignments</h1>
+            <h1 className="text-xl font-extrabold text-[#17365D]">Access Scope Assignments</h1>
           </div>
           <p className="text-xs text-[#64748B] mt-1">
-            Map system users to administrative and operational organizational boundaries.
+            Choose which outlets or organizational areas each user can access.
           </p>
         </div>
         {hasPermission(PERMISSIONS.SCOPES_ASSIGN) && (
-          <button
+          <button disabled={loading||savingScope||!!scopeLoadError}
             onClick={() => {
               setErrorMsg(null);
+              setSelectedUserId('');setScopeLevel('STATE');setStateId('');setDivisionId('');setSalesAreaId('');setOutletId('');
               setModalOpen(true);
             }}
             className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-[#17365D] text-xs font-bold rounded-lg shadow-lg shadow-orange-500/20 flex items-center gap-2 self-start sm:self-auto"
@@ -122,21 +138,26 @@ export const ScopesPage: React.FC = () => {
         )}
       </div>
 
+      {scopeFeedback&&<p role="status" className="rounded-lg bg-white border border-slate-200 p-3 text-sm text-[#17365D]">{scopeFeedback}</p>}
       {/* Search Bar */}
-      <SectionSearchBar
+      <div className="flex flex-wrap items-start gap-3 rounded-xl border border-slate-200 bg-white p-3">
+      <SectionSearchBar className="flex-1 min-w-0 basis-full md:basis-auto"
         value={searchQuery}
         onChange={setSearchQuery}
         placeholder="Search user, employee code, scope or organizational unit..."
-        resultCount={filteredScopes.length}
-        totalCount={scopes.length}
+        resultCount={loading||scopeLoadError?undefined:filteredScopes.length}
+        totalCount={loading||scopeLoadError?undefined:scopes.length}
       />
+      <select aria-label="Filter access scope level" value={levelFilter} onChange={e=>setLevelFilter(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-[#17365D]"><option value="ALL">All scope levels</option>{Object.values(SCOPE_LEVELS).map(level=><option key={level} value={level}>{level.replaceAll('_',' ')}</option>)}</select>
+      <button type="button" disabled={loading||savingScope} onClick={()=>void fetchAllData()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-[#17365D] font-semibold disabled:opacity-50">Refresh</button>
+      </div>
 
       {/* Table */}
       {loading ? (
         <div className="py-12 text-center text-xs text-[#64748B] font-mono animate-pulse">
           Loading scope assignments...
         </div>
-      ) : filteredScopes.length === 0 ? (
+      ) : scopeLoadError ? (<div role="alert" className="rounded-xl border border-red-200 bg-white p-4 text-sm text-red-800">{scopeLoadError}</div>) : filteredScopes.length === 0 ? (
         <div className="py-12 text-center border border-dashed border-[#E2E8F0] rounded-2xl p-8 bg-white/50 space-y-2">
           <p className="text-sm font-semibold text-[#475569]">No matching scope assignments within your authorized organizational boundary.</p>
         </div>
@@ -166,7 +187,7 @@ export const ScopesPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="p-4 font-mono text-[#475569]">
-                      {s.scopeLevel === 'GLOBAL' && <span className="text-purple-400 font-semibold">ALL-INDIA GLOBAL ACCESS</span>}
+                      {s.scopeLevel === 'GLOBAL' && <span className="text-purple-800 font-semibold">ALL-INDIA GLOBAL ACCESS</span>}
                       {s.scopeLevel === 'STATE' && <span>State: <strong className="text-[#17365D]">{s.stateName || s.stateId}</strong></span>}
                       {s.scopeLevel === 'DIVISION' && <span>Division: <strong className="text-[#17365D]">{s.divisionName || s.divisionId}</strong></span>}
                       {s.scopeLevel === 'SALES_AREA' && <span>Sales Area: <strong className="text-[#17365D]">{s.salesAreaName || s.salesAreaId}</strong></span>}
@@ -178,11 +199,12 @@ export const ScopesPage: React.FC = () => {
                     <td className="p-4 text-right">
                       {hasPermission(PERMISSIONS.SCOPES_ASSIGN) && (
                         <button
+                          type="button" disabled={savingScope}
                           onClick={() => handleDeleteScope(s.id)}
                           className="p-1.5 text-[#64748B] hover:text-red-700 hover:bg-red-500/10 rounded transition-colors"
                           title="Revoke Scope"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          Revoke access
                         </button>
                       )}
                     </td>
@@ -197,7 +219,7 @@ export const ScopesPage: React.FC = () => {
       {/* Assign Scope Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div role="dialog" aria-modal="true" className="bg-white border border-[#E2E8F0] rounded-xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto">
             <h2 className="text-lg font-bold text-[#17365D]">Assign User Scope</h2>
             {errorMsg && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-800 text-xs flex items-center gap-2">
@@ -313,13 +335,13 @@ export const ScopesPage: React.FC = () => {
               <div className="pt-3 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setModalOpen(false)}
+                  disabled={savingScope} onClick={() => setModalOpen(false)}
                   className="px-4 py-2 bg-[#F1F5F9] text-[#475569] rounded-lg font-semibold hover:bg-[#E8EEF5]"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="submit" disabled={savingScope}
                   className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md"
                 >
                   Confirm Scope

@@ -29,7 +29,7 @@ export const SectionSearchBar: React.FC<SectionSearchBarProps> = ({
   return (
     <div className={`space-y-1.5 ${className}`}>
       <div className="relative flex items-center">
-        <div className="absolute left-3.5 text-slate-400 pointer-events-none flex items-center">
+        <div className="absolute left-3.5 text-slate-500 pointer-events-none flex items-center">
           <Search className="w-4 h-4" />
         </div>
         <input
@@ -40,7 +40,7 @@ export const SectionSearchBar: React.FC<SectionSearchBarProps> = ({
           placeholder={placeholder}
           autoFocus={false}
           aria-label={ariaLabel}
-          className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-10 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all shadow-inner"
+          className="w-full bg-white border border-slate-300 rounded-lg pl-10 pr-10 py-2.5 text-sm text-slate-900 placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors"
         />
         {value && (
           <button
@@ -48,14 +48,14 @@ export const SectionSearchBar: React.FC<SectionSearchBarProps> = ({
             onClick={() => onChange('')}
             title="Clear search (Esc)"
             aria-label="Clear search"
-            className="absolute right-3 text-slate-400 hover:text-slate-200 p-1 rounded-md transition-colors"
+            className="absolute right-3 text-slate-500 hover:text-slate-900 p-1 rounded-md transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         )}
       </div>
       {(resultCount !== undefined || totalCount !== undefined) && (
-        <div className="text-xs text-slate-400 px-1 flex items-center justify-between">
+        <div className="text-xs text-slate-600 px-1 flex items-center justify-between">
           <span>
             {value.trim() !== '' && resultCount !== undefined && totalCount !== undefined
               ? `Showing ${resultCount} of ${totalCount} accessible records`

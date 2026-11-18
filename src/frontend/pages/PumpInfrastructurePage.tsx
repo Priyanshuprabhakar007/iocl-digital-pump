@@ -71,6 +71,7 @@ import { PERMISSIONS } from '../../shared/constants';
 import { GlobalCalibrationMasterSection } from '../components/pump/GlobalCalibrationMasterSection';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { GroupedWorkspaceNav } from '../components/common/GroupedWorkspaceNav';
 
 export const PumpInfrastructurePage: React.FC = () => {
   const { userCtx, hasPermission } = useAuth();
@@ -1339,94 +1340,20 @@ export const PumpInfrastructurePage: React.FC = () => {
       )}
 
       {/* Sub-tab Navigation */}
-      <div className="flex items-center gap-1 border-b border-[#E2E8F0] pb-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('products')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-            activeTab === 'products'
-              ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
-          }`}
-        >
-          <Fuel className="w-3.5 h-3.5" />
-          <span>Mapped Products ({outletProducts.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('tanks')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-            activeTab === 'tanks'
-              ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
-          }`}
-        >
-          <Gauge className="w-3.5 h-3.5" />
-          <span>Underground Tanks ({tanks.length})</span>
-        </button>
-
-        {canReadTankCalibration && (
-          <button
-            onClick={() => setActiveTab('globalCalibration')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'globalCalibration'
-                ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-                : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
-            }`}
-            data-testid="tab-global-calibration-masters"
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Global Calibration Masters</span>
-          </button>
-        )}
-
-        <button
-          onClick={() => setActiveTab('dispensers')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-            activeTab === 'dispensers'
-              ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
-          }`}
-        >
-          <Sliders className="w-3.5 h-3.5" />
-          <span>Dispensers / MPDs ({dispensers.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('nozzles')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-            activeTab === 'nozzles'
-              ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
-          }`}
-        >
-          <Flame className="w-3.5 h-3.5" />
-          <span>Nozzles ({nozzles.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('fuelMapping')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-            activeTab === 'fuelMapping'
-              ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
-          }`}
-        >
-          <Network className="w-3.5 h-3.5" />
-          <span>Fuel Mapping</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('shifts')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-            activeTab === 'shifts'
-              ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-              : 'text-[#64748B] hover:text-[#17365D] hover:bg-white'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5" />
-          <span>Shift Templates ({shiftTemplates.length})</span>
-        </button>
-      </div>
+      <GroupedWorkspaceNav<typeof activeTab> label="Pump infrastructure navigation" active={activeTab} onChange={setActiveTab}
+        disabled={modalSubmitting || !!modalType}
+        groups={[
+          {id:'storage',label:'1. Fuel & Storage',items:[
+            {id:'products',label:'Mapped Products',icon:Fuel},
+            {id:'tanks',label:'Underground Tanks',icon:Gauge},
+            ...(canReadTankCalibration?[{id:'globalCalibration' as const,label:'Global Calibration Masters',icon:Layers,testId:'tab-global-calibration-masters'}]:[])]},
+          {id:'dispensing',label:'2. Dispensing & Mapping',items:[
+            {id:'dispensers',label:'Dispensers / MPDs',icon:Sliders},
+            {id:'nozzles',label:'Nozzles',icon:Flame},
+            {id:'fuelMapping',label:'Fuel Mapping',icon:Network}]},
+          {id:'shifts',label:'3. Shift Setup',items:[{id:'shifts',label:'Shift Templates',icon:Clock}]},
+        ]}/>
+      <p className="text-xs text-[#64748B]">Configure applicable items in this order: mapped products, tanks and calibration, dispensers and nozzles, fuel mapping, then shift templates. Existing configuration validations still apply.</p>
 
       {/* TAB CONTENT */}
 

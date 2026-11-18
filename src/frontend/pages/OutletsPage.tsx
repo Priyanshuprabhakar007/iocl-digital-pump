@@ -28,6 +28,7 @@ export const OutletsPage: React.FC = () => {
   const [outlets, setOutlets] = useState<RetailOutlet[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [directoryError,setDirectoryError]=useState<string|null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
@@ -93,11 +94,13 @@ export const OutletsPage: React.FC = () => {
   const fetchOutlets = async () => {
     setLoading(true);
     const endpoint = canManageArchive ? '/api/v1/outlets?includeArchived=true' : '/api/v1/outlets';
-    const res = await apiFetch<RetailOutlet[]>(endpoint);
-    if (res.success && res.data) {
-      setOutlets(res.data);
-    }
-    setLoading(false);
+    setDirectoryError(null);
+    try {
+      const res=await apiFetch<RetailOutlet[]>(endpoint);
+      if(res.success && Array.isArray(res.data))setOutlets(res.data);
+      else {setOutlets([]);setDirectoryError(res.error?.message||'Unable to load the outlet directory.');}
+    } catch {setOutlets([]);setDirectoryError('Unable to load the outlet directory. Check your connection.');}
+    finally {setLoading(false);}
   };
 
   const fetchUsers = async () => {
@@ -458,13 +461,13 @@ export const OutletsPage: React.FC = () => {
       <div className="option4-hero flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-7">
         <img className="option4-station-art" src="/option4-fuel-station.svg" alt="" aria-hidden="true" />
         <div className="option4-hero-content max-w-2xl">
-          <span className="option4-eyebrow">Infrastructure & Assets / Retail Outlets</span>
+          <span className="option4-eyebrow">Outlet Setup / Retail Outlets</span>
           <div className="mt-3 flex items-center gap-2">
             <Building2 className="w-6 h-6 text-orange-500" />
             <h1 className="text-2xl font-extrabold text-[#17365D] sm:text-3xl">Retail <span className="text-[#FF7139]">Outlets</span></h1>
           </div>
           <p className="text-xs text-[#64748B] mt-1">
-            IOCL Retail Petrol Pump Outlets • Filtered strictly by backend scope:{' '}
+            IOCL retail outlets · Access scope:{' '}
             <span className="font-mono text-[#B8530D] font-bold">{userCtx?.primaryScope}</span>
           </p>
         </div>
@@ -493,62 +496,20 @@ export const OutletsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Directory overview: view-only counts from the existing scoped outlet data. */}
-      <section aria-label="Outlet directory overview" className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <div className="option4-stat px-5 py-5" data-tone="orange">
-          <p className="text-xs font-medium text-[#64748B]">Accessible outlets</p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-[#17365D]">{visibilityFilteredOutlets.length}</p>
+      {/* Directory overview: scoped counts and search controls in one toolbar. */}
+      <section aria-label="Outlet directory overview" className="option4-panel p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#475569]">
+            <span><strong className="text-[#17365D]">{loading||directoryError?'—':visibilityFilteredOutlets.length}</strong> visible outlets</span>
+            {canManageArchive&&<span><strong className="text-[#17365D]">{loading||directoryError?'—':archivedCount}</strong> archived</span>}
+          </div>
+          {canManageArchive&&<label className="inline-flex items-center gap-2 text-sm text-[#475569]">
+            <input type="checkbox" checked={showHidden} onChange={e=>setShowHidden(e.target.checked)} className="w-4 h-4 rounded border-slate-300" />
+            Show Archived Outlets
+          </label>}
         </div>
-        <div className="option4-stat px-5 py-5" data-tone="blue">
-          <p className="text-xs font-medium text-[#64748B]">Matching current search</p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-[#17365D]">{displayedOutlets.length}</p>
-        </div>
-        <div className="option4-stat col-span-2 px-5 py-5 lg:col-span-1" data-tone="purple">
-          <p className="text-xs font-medium text-[#64748B]">Archived outlets</p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-[#17365D]">{archivedCount}</p>
-        </div>
-      </section>
-
-      {/* Scope Banner & Show Hidden Controls */}
-          <>
-            <div className="option4-panel p-3.5 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-[#475569]">
-                <Filter className="w-4 h-4 text-[#B8530D]" />
-                <span>
-                  Active Scope Constraint:{' '}
-                  <strong className="text-[#17365D] font-mono">{userCtx?.primaryScope}</strong>
-                </span>
-              </div>
-
-              <div className="flex items-center gap-4">
-                {canManageArchive && (
-                  <label className="flex items-center gap-2 cursor-pointer text-[#475569] hover:text-[#17365D] select-none">
-                    <input
-                      type="checkbox"
-                      checked={showHidden}
-                      onChange={(e) => setShowHidden(e.target.checked)}
-                      className="w-4 h-4 rounded bg-[#F1F5F9] border-[#D7E0EA] text-orange-500 focus:ring-orange-500 focus:ring-offset-slate-900"
-                    />
-                    <span className="flex items-center gap-1.5 font-medium">
-                      {showHidden ? <Eye className="w-3.5 h-3.5 text-[#B8530D]" /> : <EyeOff className="w-3.5 h-3.5 text-[#64748B]" />}
-                      <span>Show Archived Outlets ({archivedCount})</span>
-                    </span>
-                  </label>
-                )}
-
-                <span className="text-[11px] font-mono text-[#64748B] border-l border-[#E2E8F0] pl-4">
-                  {searchQuery.trim()
-                    ? `Showing ${displayedOutlets.length} of ${visibilityFilteredOutlets.length} accessible records`
-                    : `Showing ${displayedOutlets.length} accessible record(s)`}
-                </span>
-              </div>
-            </div>
-            <div className="option4-panel p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-bold text-[#17365D]">Browse retail outlets</h2>
-                  <p className="text-xs text-[#64748B]">Search your accessible records or choose a comfortable layout.</p>
-                </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold text-[#17365D]">Browse retail outlets</h2>
                 <div className="inline-flex rounded-lg border border-[#D7E0EA] bg-[#F8FAFC] p-1" role="group" aria-label="Directory layout">
                   <button type="button" aria-pressed={directoryLayout === 'GRID'} onClick={() => setDirectoryLayout('GRID')}
                     className={`rounded-md px-4 py-2 text-xs font-bold transition-colors ${directoryLayout === 'GRID' ? 'bg-[#2354C6] text-white shadow-sm' : 'text-[#526477] hover:bg-white'}`}>Cards</button>
@@ -560,24 +521,25 @@ export const OutletsPage: React.FC = () => {
                 value={searchQuery}
                 onChange={setSearchQuery}
                 placeholder="Search outlet name, RO code, city, sales area..."
-                resultCount={displayedOutlets.length}
-                totalCount={visibilityFilteredOutlets.length}
+                resultCount={loading||directoryError?undefined:displayedOutlets.length}
+                totalCount={loading||directoryError?undefined:visibilityFilteredOutlets.length}
               />
-            </div>
+            </section>
+            <>
 
             {/* Outlet Cards / Table */}
             {loading ? (
               <div className="py-12 text-center text-xs text-[#64748B] font-mono animate-pulse">
                 Loading scoped retail outlets...
               </div>
-            ) : displayedOutlets.length === 0 ? (
+            ) : directoryError ? (<div role="alert" className="rounded-xl border border-red-200 bg-white p-5 text-sm text-red-800"><p>{directoryError}</p><button type="button" onClick={()=>void fetchOutlets()} className="mt-3 rounded-lg bg-[#17365D] px-4 py-2 text-white font-semibold">Retry</button></div>) : displayedOutlets.length === 0 ? (
               <div className="py-12 text-center border border-dashed border-[#E2E8F0] rounded-2xl p-8 bg-white/50 space-y-3">
                 <Building2 className="w-10 h-10 text-slate-600 mx-auto" />
                 <p className="text-sm font-semibold text-[#475569]">{searchQuery.trim() ? 'No matching retail outlets within your authorized scope.' : 'No Retail Outlets Accessible'}</p>
                 <p className="text-xs text-[#64748B] max-w-md mx-auto">
                   {showHidden
                     ? `No retail outlets match your assigned organizational scope (${userCtx?.primaryScope}).`
-                    : `No active visible retail outlets match your assigned organizational scope (${userCtx?.primaryScope}). Turn on "Show Hidden Outlets" to view hidden outlets.`}
+                    : `No active visible retail outlets match your assigned organizational scope (${userCtx?.primaryScope}). Turn on "Show Archived Outlets" to include archived outlets.`}
                 </p>
               </div>
             ) : (
@@ -585,7 +547,7 @@ export const OutletsPage: React.FC = () => {
                 {displayedOutlets.map((ro) => (
                   <div
                     key={ro.id}
-                    className={`outlet-directory-card bg-white border rounded-2xl p-5 space-y-4 shadow-sm transition-all ${
+                    className={`outlet-directory-card bg-white border rounded-2xl p-4 space-y-3 shadow-sm transition-all ${
                       ro.directoryHidden
                         ? 'border-rose-900/40 bg-white/90'
                         : 'border-[#E2E8F0] hover:border-[#D7E0EA]'
@@ -656,7 +618,7 @@ export const OutletsPage: React.FC = () => {
                     </div>
 
                     {/* User Assignments & Actions */}
-                    <div className="pt-3 border-t border-[#E2E8F0] flex items-center justify-between">
+                    <div className="pt-3 border-t border-[#E2E8F0] flex flex-wrap gap-2 items-center justify-between">
                       <div className="text-xs font-mono text-[#64748B]">
                         Assigned Personnel:{' '}
                         <span className="text-[#17365D] font-bold">{ro.assignedUsersCount || 0}</span>
@@ -692,7 +654,7 @@ export const OutletsPage: React.FC = () => {
                             {isOutletArchived(ro) ? (
                               <button
                                 onClick={() => handleRestoreOutlet(ro)}
-                                className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 hover:text-emerald-200 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 hover:text-emerald-900 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                                 title="Restore Retail Outlet"
                               >
                                 <RefreshCw className="w-3.5 h-3.5 text-emerald-700" />
@@ -701,11 +663,11 @@ export const OutletsPage: React.FC = () => {
                             ) : (
                               <button
                                 onClick={() => openHideConfirm(ro)}
-                                className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-800 hover:text-rose-200 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-800 hover:text-rose-900 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                                 title="Archive Retail Outlet"
                               >
                                 <Trash2 className="w-3.5 h-3.5 text-rose-700" />
-                                <span>Delete</span>
+                                <span>Archive</span>
                               </button>
                             )}
                           </>
