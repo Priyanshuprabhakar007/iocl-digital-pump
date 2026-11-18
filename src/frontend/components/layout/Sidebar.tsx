@@ -49,7 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'overview', label: 'Overview', ids: ['dashboard'] },
     { id: 'operations', label: 'Daily Operations', ids: ['daily-ops', 'stock-ops', 'cng-ops', 'lube-ops'] },
     { id: 'assets', label: 'Infrastructure & Assets', ids: ['outlets', 'products', 'pump-infra', 'equipment-ops', 'utilities-ops', 'hr-workforce', 'municipal-taxes', 'nfr-ops'] },
-    { id: 'finance', label: 'Finance & Reports', ids: ['financials', 'reports'] },
+    { id: 'finance', label: 'Finance & Reports', ids: ['financials', 'dsr-reports', 'reports'] },
     { id: 'admin', label: 'Administration', ids: ['users', 'scopes', 'hierarchy', 'org-masters', 'rbac', 'audit', 'documents'] },
   ];
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['overview', 'operations']);
@@ -146,6 +146,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       perm: PERMISSIONS.FINANCIAL_RECONCILIATION_READ,
     },
     {
+      id: 'dsr-reports',
+      label: 'DSR Reports',
+      icon: FileText,
+      perm: PERMISSIONS.REPORTS_READ,
+    },
+    {
       id: 'reports',
       label: 'Monthly Reports',
       icon: FileText,
@@ -195,7 +201,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
-  const filteredNav = navItems.filter(item => item.perm === null || hasPermission(item.perm as PermissionCode));
+  const filteredNav = navItems.filter(item => (item.perm === null || hasPermission(item.perm as PermissionCode)) && (item.id !== 'dsr-reports' || hasPermission(PERMISSIONS.SHIFTS_READ)));
   const searchedNav = filteredNav.filter(item => item.label.toLowerCase().includes(navSearch.trim().toLowerCase()));
 
   const content = (
