@@ -1732,7 +1732,7 @@ export const StockOperationsPage: React.FC = () => {
       {/* Manage Fuel Receipt Lifecycle & Decantation Modal */}
       {managingReceipt && managingReceiptReadiness && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-4xl w-full p-4 sm:p-6 space-y-5 max-h-[92vh] overflow-y-auto">
+          <div className="iocl-scroll-panel bg-white border border-[#E2E8F0] rounded-2xl max-w-4xl w-full p-4 sm:p-6 space-y-5 max-h-[92vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] pb-4">
               <div>
@@ -2416,7 +2416,7 @@ export const StockOperationsPage: React.FC = () => {
       {/* Fuel Receipt Creation Modal */}
       {showReceiptModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl max-w-lg w-full p-5 space-y-4 max-h-[92vh] overflow-y-auto">
+          <div className="iocl-scroll-panel bg-white border border-[#E2E8F0] rounded-2xl max-w-lg w-full p-5 space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-base font-bold text-[#17365D] flex items-center gap-2">
                 <Fuel className="w-5 h-5 text-orange-500" />
