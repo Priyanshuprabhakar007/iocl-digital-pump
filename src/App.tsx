@@ -166,8 +166,8 @@ function MainAppContent() {
         {activeTab === 'pump-infra' && <PumpInfrastructurePage />}
         {activeTab === 'hr-workforce' && <WorkforceOperationsPage />}
         {activeTab === 'stock-ops' && <OutletScopedPage><StockOperationsPage /></OutletScopedPage>}
-        {activeTab === 'cng-ops' && <CngOperationsPage />}
-        {activeTab === 'lube-ops' && <LubeOperationsPage />}
+        {activeTab === 'cng-ops' && <OutletScopedPage><CngOperationsPage /></OutletScopedPage>}
+        {activeTab === 'lube-ops' && <OutletScopedPage><LubeOperationsPage /></OutletScopedPage>}
         {activeTab === 'equipment-ops' && <EquipmentOperationsPage />}
         {activeTab === 'utilities-ops' && <UtilitiesOperationsPage />}
         {activeTab === 'municipal-taxes' && <MunicipalTaxesPage />}
