@@ -314,7 +314,7 @@ export const EquipmentOperationsPage: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin text-amber-700' : ''}`} />
           </button>
 
-          {canCreateTicket && selectedOutletId && (
+          {canCreateTicket && selectedOutletId && activeTab !== 'tickets' && (
             <button
               onClick={() => setIsCreateTicketOpen(true)}
               className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors shadow-lg shadow-rose-600/20"
