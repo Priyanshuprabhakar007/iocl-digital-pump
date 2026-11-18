@@ -4,11 +4,13 @@ import type { ShiftFinancialSummary, OperationalShift } from '../src/shared/type
 import { financeStages, financeStageDetails, financeSalesProvisional } from '../src/frontend/utils/financeWorkflow';
 
 const shift={id:'shift-a',outletId:'ro-a',status:'OPEN'} as OperationalShift;
-const recorded={operationalShiftId:'shift-a',outletId:'ro-a',
-  salesRevenue:{readingCoverage:{status:'COMPLETE'},cngApplicable:false,cngComplete:false,pendingComponents:[],authoritativeTotalStr:'1000.00'},
-  collections:{totalStr:'1000.00'},cashHandoverSummary:{totalPendingStr:'200.00'},
-  cashDepositControl:{pendingCashDepositPaise:30000,pendingCashDepositStr:'300.00'},
-  varianceStr:'0.00',varianceStatus:'BALANCED'} as ShiftFinancialSummary;
+const recorded:ShiftFinancialSummary={operationalShiftId:'shift-a',outletId:'ro-a',
+  salesRevenue:{byProduct:[],fuelTotalPaise:100000,fuelTotalStr:'1000.00',readingCoverage:{status:'COMPLETE',expectedNozzles:1,recordedNozzles:1,unavailableNozzles:0,missingNozzleIds:[]},cngApplicable:false,cngComplete:false,cngTotalPaise:null,cngTotalStr:null,lubeTotalPaise:0,lubeTotalStr:'0.00',lubeBySku:[],includedComponents:['FUEL','LUBE'],pendingComponents:[],authoritativeTotalPaise:100000,authoritativeTotalStr:'1000.00'},
+  collections:{cashPaise:30000,cashStr:'300.00',posCardPaise:70000,posCardStr:'700.00',upiPaise:0,upiStr:'0.00',fleetCardPaise:0,fleetCardStr:'0.00',creditSalesPaise:0,creditSalesStr:'0.00',directBankDropPaise:0,directBankDropStr:'0.00',totalPaise:100000,totalStr:'1000.00'},
+  creditSalesByParty:[],cashHandoverSummary:{totalPendingPaise:20000,totalPendingStr:'200.00',totalAcknowledgedPaise:0,totalAcknowledgedStr:'0.00'},
+  bankDepositSummary:{totalSubmittedPaise:0,totalSubmittedStr:'0.00',totalVerifiedPaise:0,totalVerifiedStr:'0.00',totalRejectedPaise:0,totalRejectedStr:'0.00'},
+  cashDepositControl:{cashCollectedPaise:30000,cashCollectedStr:'300.00',verifiedCashDepositedPaise:0,verifiedCashDepositedStr:'0.00',pendingCashDepositPaise:30000,pendingCashDepositStr:'300.00'},
+  variancePaise:0,varianceStr:'0.00',varianceStatus:'BALANCED',varianceReason:null};
 describe('Connected financial workflow',()=>{
   it('presents the five operational stages in clear order',()=>{
     expect(financeStages.map(s=>s.id)).toEqual(['sales','collections','handovers','deposits','reconciliation']);
