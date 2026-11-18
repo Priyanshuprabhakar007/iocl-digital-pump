@@ -33,6 +33,7 @@ import { LubeDailySummaryPanel } from '../components/lube/LubeDailySummaryPanel'
 import { LubeSummaryPanel } from '../components/lube/LubeSummaryPanel';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { GroupedWorkspaceNav } from '../components/common/GroupedWorkspaceNav';
 import { useShiftWorkbench } from '../context/ShiftWorkbenchContext';
 import { resolveWorkbenchShift, toWorkbenchSelection } from '../utils/shiftWorkbench';
 import { getLocalDateInputValue } from '../../shared/utils/dateUtils';
@@ -65,7 +66,7 @@ export const LubeOperationsPage: React.FC = () => {
   const [shiftSummary, setShiftSummary] = useState<LubeShiftSummary | null>(null);
 
   const [loadingData, setLoadingData] = useState(false);
-  const [activeTab, setActiveTab] = useState<'sales' | 'summary' | 'inventory' | 'skus' | 'prices' | 'transactions' | 'daily'>('sales');
+  const [activeTab, setActiveTab] = useState<'sales' | 'summary' | 'inventory' | 'skus' | 'prices' | 'transactions' | 'daily'>(hasShiftsRead?'sales':'inventory');
 
   // Action feedback
   const [actionError, setActionError] = useState<string | null>(null);
@@ -478,81 +479,17 @@ export const LubeOperationsPage: React.FC = () => {
       )}
 
       {/* Segmented Workspace Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-[#F8FAFC] border border-slate-200 rounded-xl overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('sales')}
-          className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'sales'
-              ? 'bg-white text-[#17365D] shadow'
-              : 'text-[#64748B] hover:text-[#334155]'
-          }`}
-        >
-          Shift Sales Log
-        </button>
-        <button
-          onClick={() => setActiveTab('summary')}
-          className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'summary'
-              ? 'bg-white text-[#17365D] shadow'
-              : 'text-[#64748B] hover:text-[#334155]'
-          }`}
-        >
-          Shift Summary
-        </button>
-        <button
-          onClick={() => setActiveTab('inventory')}
-          className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'inventory'
-              ? 'bg-white text-[#17365D] shadow'
-              : 'text-[#64748B] hover:text-[#334155]'
-          }`}
-        >
-          Inventory Stock
-        </button>
-        <button
-          onClick={() => setActiveTab('skus')}
-          className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'skus'
-              ? 'bg-white text-[#17365D] shadow'
-              : 'text-[#64748B] hover:text-[#334155]'
-          }`}
-        >
-          SKU Catalog
-        </button>
-        <button
-          onClick={() => setActiveTab('prices')}
-          className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'prices'
-              ? 'bg-white text-[#17365D] shadow'
-              : 'text-[#64748B] hover:text-[#334155]'
-          }`}
-        >
-          Selling Prices
-        </button>
-        <button
-          onClick={() => setActiveTab('transactions')}
-          className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'transactions'
-              ? 'bg-white text-[#17365D] shadow'
-              : 'text-[#64748B] hover:text-[#334155]'
-          }`}
-        >
-          Transaction Ledger
-        </button>
-        <button
-          onClick={() => setActiveTab('daily')}
-          className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'daily'
-              ? 'bg-white text-[#17365D] shadow'
-              : 'text-[#64748B] hover:text-[#334155]'
-          }`}
-        >
-          Daily Summary
-        </button>
-      </div>
+      <GroupedWorkspaceNav<typeof activeTab> label="Lube workspace navigation" active={activeTab} onChange={setActiveTab}
+        groups={[
+          {id:'daily-work',label:'Daily Sales',items:[
+            ...(hasShiftsRead?[{id:'sales' as const,label:'Shift Sales Log'},{id:'summary' as const,label:'Shift Summary'}]:[]),
+            {id:'daily',label:'Daily Summary'}]},
+          {id:'inventory',label:'Inventory & Stock',items:[{id:'inventory',label:'Inventory Stock'},{id:'transactions',label:'Transaction Ledger'}]},
+          {id:'setup',label:'Product Setup',items:[{id:'skus',label:'SKU Catalog'},{id:'prices',label:'Selling Prices'}]},
+        ]}/>
 
       {/* Main Tab Viewports */}
-      <div className="p-6 bg-white border border-[#E2E8F0] rounded-2xl">
+      <div className="p-3 sm:p-5 bg-white border border-[#E2E8F0] rounded-xl">
         {(activeTab === 'sales' || activeTab === 'summary') && !hasShiftsRead ? (
           <div className="p-12 text-center bg-white border border-[#E2E8F0] rounded-2xl space-y-3">
             <Lock className="w-8 h-8 text-[#64748B] mx-auto" />
