@@ -49,12 +49,12 @@ export const ScopesPage: React.FC = () => {
     ]);
     if (scopesRes.success&&Array.isArray(scopesRes.data)) setScopes(scopesRes.data);
     else {setScopes([]);setScopeLoadError(scopesRes.error?.message||'Unable to load access assignments.');}
-    if (usersRes.data) setUsers(usersRes.data);
-    if (statesRes.data) setStates(statesRes.data);
-    if (divRes.data) setDivisions(divRes.data);
-    if (saRes.data) setSalesAreas(saRes.data);
-    if (outletRes.data) setOutlets(outletRes.data);
-    } catch {setScopes([]);setScopeLoadError('Unable to load access assignments. Check your connection.');}
+    setUsers(usersRes.success&&Array.isArray(usersRes.data)?usersRes.data:[]);
+    setStates(statesRes.success&&Array.isArray(statesRes.data)?statesRes.data:[]);
+    setDivisions(divRes.success&&Array.isArray(divRes.data)?divRes.data:[]);
+    setSalesAreas(saRes.success&&Array.isArray(saRes.data)?saRes.data:[]);
+    setOutlets(outletRes.success&&Array.isArray(outletRes.data)?outletRes.data:[]);
+    } catch {setScopes([]);setUsers([]);setStates([]);setDivisions([]);setSalesAreas([]);setOutlets([]);setScopeLoadError('Unable to load access assignments. Check your connection.');}
     finally {setLoading(false);}
   };
 
@@ -94,7 +94,9 @@ export const ScopesPage: React.FC = () => {
   const handleDeleteScope = async (scopeId: string) => {
     if(scopeLock.current||loading||!hasPermission(PERMISSIONS.SCOPES_ASSIGN))return;
     const assignment=scopes.find(s=>s.id===scopeId);
-    if(!assignment||!window.confirm('Revoke '+assignment.scopeLevel+' access for '+(assignment.userName||assignment.userId)+'?'))return;
+    if(!assignment)return;
+    const target=assignment.scopeLevel==='GLOBAL'?'all-India':assignment.outletName||assignment.salesAreaName||assignment.divisionName||assignment.stateName||assignment.outletId||assignment.salesAreaId||assignment.divisionId||assignment.stateId||assignment.scopeLevel;
+    if(!window.confirm('Revoke '+assignment.scopeLevel+' access ('+target+') for '+(assignment.userName||assignment.userId)+'?'))return;
     scopeLock.current=true;setSavingScope(true);setScopeFeedback(null);
     try{
       const res=await apiFetch(`/api/v1/scopes/${scopeId}`,{method:'DELETE'});
@@ -122,7 +124,7 @@ export const ScopesPage: React.FC = () => {
           </p>
         </div>
         {hasPermission(PERMISSIONS.SCOPES_ASSIGN) && (
-          <button
+          <button disabled={loading||savingScope||!!scopeLoadError}
             onClick={() => {
               setErrorMsg(null);
               setSelectedUserId('');setScopeLevel('STATE');setStateId('');setDivisionId('');setSalesAreaId('');setOutletId('');
