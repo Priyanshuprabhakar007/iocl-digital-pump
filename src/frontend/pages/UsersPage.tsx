@@ -20,6 +20,7 @@ export const UsersPage = () => {
   const [listError,setListError]=useState<string|null>(null);
   const [statusFeedback,setStatusFeedback]=useState<{kind:'success'|'error';message:string}|null>(null);
   const statusLock=useRef(false);
+  const createLock=useRef(false);
   const [creatingUser, setCreatingUser] = useState(false);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
@@ -56,7 +57,8 @@ export const UsersPage = () => {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (creatingUser || !hasPermission(PERMISSIONS.USERS_CREATE)) return;
+    if (createLock.current || statusLock.current || !hasPermission(PERMISSIONS.USERS_CREATE)) return;
+    createLock.current=true;
     setCreatingUser(true);
     setErrorMsg(null);
     try {
@@ -73,12 +75,13 @@ export const UsersPage = () => {
         setErrorMsg(res.error?.message || 'Failed to create user');
       }
     } catch {setErrorMsg('Unable to create user. Review the directory before retrying.');} finally {
+      createLock.current=false;
       setCreatingUser(false);
     }
   };
 
   const handleToggleStatus = async (userId: string, currentStatus: string) => {
-    if (statusLock.current || loading || !hasPermission(PERMISSIONS.USERS_UPDATE)) return;
+    if (statusLock.current || createLock.current || loading || !hasPermission(PERMISSIONS.USERS_UPDATE)) return;
     const user=users.find(u=>u.id===userId && u.status===currentStatus);
     if(!user)return;
     const nextStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
@@ -117,7 +120,7 @@ export const UsersPage = () => {
           </p>
         </div>
         {hasPermission(PERMISSIONS.USERS_CREATE) && (
-          <button
+          <button disabled={loading||!!togglingUserId||creatingUser||!!listError}
             onClick={() => {
               setErrorMsg(null);
               setForm(initialForm);
