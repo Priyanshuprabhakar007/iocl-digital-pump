@@ -185,7 +185,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
   const handleUpdatePrice = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!editingPrice) return;
+    if (!editingPrice || !hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE)) return;
     const formData = new FormData(e.currentTarget);
     const res = await apiFetch(`/api/v1/product-prices/${editingPrice.id}`, {
       method: 'PUT',
@@ -399,16 +399,16 @@ export const FinancialOperationsPage: React.FC = () => {
         {hasPermission(PERMISSIONS.SHIFTS_READ) && <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="text-xs text-slate-600">{selectedShift ? 'Working on '+selectedShift.businessDate+' · '+(selectedShift.shiftTemplateName||selectedShift.shiftTemplateCode||selectedShift.shiftTemplateId) : 'Choose a verified shift to continue.'}</span><button type="button" disabled={workflowBusy||!selectedShift} onClick={goBackToShift} className="text-sm font-semibold text-[#17365D] underline disabled:opacity-50">Return to shift workbench</button></div>}
         {shiftListError&&<p role="alert" className="mt-3 text-sm text-amber-800">{shiftListError}</p>}
         <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[#E2E8F0] pt-3">
-          {hasPermission(PERMISSIONS.CREDIT_PARTIES_READ)&&<button type="button" aria-pressed={activeTab==='credit-parties'} onClick={()=>setActiveTab('credit-parties')} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-[#17365D]">Credit Customers</button>}
-          {hasPermission(PERMISSIONS.PRODUCT_PRICES_READ)&&<button type="button" aria-pressed={activeTab==='prices'} onClick={()=>setActiveTab('prices')} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-[#17365D]">Price Master</button>}
-          {isMaster&&<button type="button" onClick={()=>setActiveTab('sales')} className="rounded-lg bg-[#17365D] px-3 py-2 text-xs font-semibold text-white">Return to finance workflow</button>}
+          {hasPermission(PERMISSIONS.CREDIT_PARTIES_READ)&&<button type="button" aria-pressed={activeTab==='credit-parties'} disabled={workflowBusy} onClick={()=>setActiveTab('credit-parties')} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-[#17365D]">Credit Customers</button>}
+          {hasPermission(PERMISSIONS.PRODUCT_PRICES_READ)&&<button type="button" aria-pressed={activeTab==='prices'} disabled={workflowBusy} onClick={()=>setActiveTab('prices')} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-[#17365D]">Price Master</button>}
+          {isMaster&&<button type="button" disabled={workflowBusy} onClick={()=>setActiveTab('sales')} className="rounded-lg bg-[#17365D] px-3 py-2 text-xs font-semibold text-white">Return to finance workflow</button>}
         </div>
       </div>
 
       {!isMaster && <section aria-label="Financial workflow" className="phase3-surface p-4 space-y-3">
         <div><h2 className="text-base font-bold text-[#17365D]">Shift financial workflow</h2><p className="mt-1 text-xs text-[#64748B]">Choose any applicable task. Existing backend rules govern financial reconciliation and shift closure.</p></div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          {stages.map((stage,index)=><button type="button" key={stage.id} aria-pressed={activeTab===stage.id} onClick={()=>setActiveTab(stage.id)} className={'rounded-xl border p-3 text-left '+(activeTab===stage.id?'border-orange-500 bg-orange-50':'border-slate-200 bg-white hover:border-slate-400')}>
+          {stages.map((stage,index)=><button type="button" key={stage.id} aria-pressed={activeTab===stage.id} disabled={workflowBusy} onClick={()=>setActiveTab(stage.id)} className={'rounded-xl border p-3 text-left '+(activeTab===stage.id?'border-orange-500 bg-orange-50':'border-slate-200 bg-white hover:border-slate-400')}>
             <span className="block text-xs font-bold text-[#17365D]">{index+1}. {stage.label}</span>
             <span className="mt-1 block text-[11px] text-[#64748B]">{stage.description}</span>
             <span className="mt-2 block text-xs font-semibold text-[#17365D]">{loadingData?'Loading…':stageDetails[stage.id]}</span>
@@ -437,7 +437,7 @@ export const FinancialOperationsPage: React.FC = () => {
 
       {/* A financial preview can be provisional while nozzle evidence is incomplete. */}
       {!isMaster && summary && provisional && (
-        <div role="status" aria-label="Incomplete fuel readings" className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm flex items-start gap-2">
+        <div role="status" aria-label="Incomplete sales evidence" className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>
             <strong>Sales evidence incomplete or unverified.</strong>{' '}
@@ -469,7 +469,7 @@ export const FinancialOperationsPage: React.FC = () => {
               <h2 className="text-lg font-bold text-[#17365D]">Shift Collections</h2>
               {selectedShift?.status === 'OPEN' && hasPermission(PERMISSIONS.COLLECTIONS_WRITE) && (
                 <button
-                  disabled={savingAction || loadingData} onClick={() => {setCollectionType('CASH');setShowCollectionModal(true);}}
+                  disabled={savingAction || loadingData} onClick={() => {setActionError(null);setCollectionType('CASH');setShowCollectionModal(true);}}
                   className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> Add Collection
@@ -477,6 +477,10 @@ export const FinancialOperationsPage: React.FC = () => {
               )}
             </div>
 
+            {summary&&<div className="rounded-xl border border-slate-200 bg-white p-4"><h3 className="mb-3 text-sm font-semibold text-[#17365D]">Recorded payment breakdown</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">{[
+              ['Cash',summary.collections.cashStr],['POS card',summary.collections.posCardStr],['UPI',summary.collections.upiStr],
+              ['Fleet card',summary.collections.fleetCardStr],['Credit sales',summary.collections.creditSalesStr],['Direct bank drop',summary.collections.directBankDropStr]
+            ].map(([label,value])=><div key={label} className="rounded-lg border border-slate-200 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 font-semibold tabular-nums text-[#17365D]">₹ {value}</div></div>)}</div></div>}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {collections.map(c => (
                 <div key={c.id} className="bg-white border border-[#E2E8F0] rounded-xl p-4 space-y-2 relative group">
@@ -730,7 +734,7 @@ export const FinancialOperationsPage: React.FC = () => {
               <h2 className="text-lg font-bold text-[#17365D]">Cash Handovers</h2>
               {selectedShift?.status === 'OPEN' && hasPermission(PERMISSIONS.CASH_HANDOVER_WRITE) && (
                 <button
-                  disabled={savingAction || loadingData} onClick={() => setShowHandoverModal(true)}
+                  disabled={savingAction || loadingData} onClick={() => {setActionError(null);setShowHandoverModal(true);}}
                   className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> Record Handover
@@ -783,7 +787,7 @@ export const FinancialOperationsPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-[#17365D]">Bank Deposits</h2>
               {selectedShift && hasPermission(PERMISSIONS.BANK_DEPOSITS_WRITE) && <button
-                disabled={savingAction || loadingData} onClick={() => setShowDepositModal(true)}
+                disabled={savingAction || loadingData} onClick={() => {setActionError(null);setShowDepositModal(true);}}
                 className="px-3 py-1.5 bg-[#17365D] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4" /> New Deposit
@@ -1010,7 +1014,7 @@ export const FinancialOperationsPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => {if(!actionLock.current)setShowCollectionModal(false);}} />
           <form onSubmit={handleCreateCollection} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-[#17365D]">Record Shift Collection</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>
+            <h2 className="text-lg font-bold text-[#17365D]">Record Shift Collection</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>{actionError&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">{actionError}</p>}
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-[#64748B] mb-1">Collection Type</label>
@@ -1063,7 +1067,7 @@ export const FinancialOperationsPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => {if(!actionLock.current)setShowHandoverModal(false);}} />
           <form onSubmit={handleCreateHandover} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-[#17365D]">Log Cash Handover</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>
+            <h2 className="text-lg font-bold text-[#17365D]">Log Cash Handover</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>{actionError&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">{actionError}</p>}
             <p className="text-xs text-[#64748B]">Record physical custody transfer of cash to supervisor or next staff.</p>
             <div className="space-y-3">
               <div>
@@ -1087,7 +1091,7 @@ export const FinancialOperationsPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => {if(!actionLock.current)setShowDepositModal(false);}} />
           <form onSubmit={handleCreateDeposit} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
-            <h2 className="text-lg font-bold text-[#17365D]">New Bank Deposit Submission</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>
+            <h2 className="text-lg font-bold text-[#17365D]">New Bank Deposit Submission</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>{actionError&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">{actionError}</p>}
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-[#64748B] mb-1">Deposit Channel</label>
