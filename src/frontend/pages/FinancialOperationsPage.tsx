@@ -123,7 +123,7 @@ export const FinancialOperationsPage: React.FC = () => {
         setShiftsList(available);
         const currentChoice=selectedRef.current ? available.find(s=>s.id===selectedRef.current) || null : resolveWorkbenchShift(available,selectedOutletId,initialSelection.current,'latest');
         const chosen=currentChoice;
-        if(!chosen&&initialSelection.current?.outletId===selectedOutletId)setShiftListError('Selected shift is unavailable for this outlet and date. Choose a shift explicitly.');
+        if(!chosen&&initialSelection.current?.shiftId)setShiftListError('Selected shift is unavailable for this outlet and date. Choose a shift explicitly.');
         chooseShift(chosen);
         if(chosen)initialSelection.current=toWorkbenchSelection(chosen);
       } finally {if(!cancelled)setShiftListLoading(false);}
@@ -396,7 +396,7 @@ export const FinancialOperationsPage: React.FC = () => {
           </div>
         </div>
 
-        {hasPermission(PERMISSIONS.SHIFTS_READ) && <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="text-xs text-slate-600">{selectedShift ? 'Working on '+selectedShift.businessDate+' · '+(selectedShift.shiftTemplateName||selectedShift.shiftTemplateCode||selectedShift.shiftTemplateId) : 'Choose a verified shift to continue.'}</span><button type="button" disabled={workflowBusy||!selectedShift} onClick={goBackToShift} className="text-sm font-semibold text-[#17365D] underline disabled:opacity-50">Return to shift workbench</button></div>}
+        {hasPermission(PERMISSIONS.SHIFTS_READ) && <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="text-xs text-slate-600">{selectedShift ? 'Working on '+selectedShift.businessDate+' · '+(selectedShift.shiftTemplateName||selectedShift.shiftTemplateCode||selectedShift.shiftTemplateId) : 'Choose a verified shift to continue.'}</span><button type="button" disabled={workflowBusy} onClick={()=>{if(selectedShift)goBackToShift();else navigate('daily-ops');}} className="text-sm font-semibold text-[#17365D] underline disabled:opacity-50">Return to shift workbench</button></div>}
         {shiftListError&&<p role="alert" className="mt-3 text-sm text-amber-800">{shiftListError}</p>}
         <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[#E2E8F0] pt-3">
           {hasPermission(PERMISSIONS.CREDIT_PARTIES_READ)&&<button type="button" aria-pressed={activeTab==='credit-parties'} disabled={workflowBusy} onClick={()=>setActiveTab('credit-parties')} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-[#17365D]">Credit Customers</button>}
