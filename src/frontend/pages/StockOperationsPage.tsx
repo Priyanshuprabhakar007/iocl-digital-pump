@@ -411,7 +411,7 @@ export const StockOperationsPage: React.FC = () => {
       setDipForm({tankId:'',readingType:'OPENING',source:'MANUAL',productDipMm:'',waterDipMm:'0.000'});
     }
     setSelectedShiftId(id);
-    if(shift) remember(toWorkbenchSelection(shift));
+    if(shift) {initialSelection.current=toWorkbenchSelection(shift);remember(toWorkbenchSelection(shift));}
   };
   useEffect(() => {
     mounted.current = true;
@@ -442,7 +442,7 @@ export const StockOperationsPage: React.FC = () => {
         setErrorMsg('Selected shift is unavailable for this outlet and date. Choose a shift explicitly.');
       }
       chooseShift(chosen);
-      if(chosen || !initialSelection.current?.shiftId)initialSelection.current=null;
+      if(!chosen && !initialSelection.current?.shiftId)initialSelection.current=null;
     } finally {
       if(mounted.current && request===listRequest.current)setShiftListLoading(false);
     }
