@@ -46,11 +46,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [collapsed, setCollapsed] = useState(false);
   const [navSearch, setNavSearch] = useState('');
   const navigationGroups = [
-    { id: 'overview', label: 'Overview', ids: ['dashboard'] },
-    { id: 'operations', label: 'Daily Operations', ids: ['daily-ops', 'stock-ops', 'cng-ops', 'lube-ops'] },
-    { id: 'assets', label: 'Infrastructure & Assets', ids: ['outlets', 'products', 'pump-infra', 'equipment-ops', 'utilities-ops', 'hr-workforce', 'municipal-taxes', 'nfr-ops'] },
+    { id: 'overview', label: 'Home', ids: ['dashboard'] },
+    { id: 'operations', label: 'Daily Work', ids: ['daily-ops', 'stock-ops', 'cng-ops', 'lube-ops'] },
     { id: 'finance', label: 'Finance & Reports', ids: ['financials', 'dsr-reports', 'reports'] },
-    { id: 'admin', label: 'Administration', ids: ['users', 'scopes', 'hierarchy', 'org-masters', 'rbac', 'audit', 'documents'] },
+    { id: 'compliance', label: 'Compliance & Outlet Support', ids: ['documents', 'equipment-ops', 'utilities-ops', 'hr-workforce', 'municipal-taxes', 'nfr-ops'] },
+    { id: 'setup', label: 'Outlet Setup', ids: ['outlets', 'products', 'pump-infra'] },
+    { id: 'admin', label: 'Administration', ids: ['users', 'scopes', 'hierarchy', 'org-masters', 'rbac', 'audit'] },
   ];
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['overview', 'operations']);
 
@@ -63,13 +64,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     {
       id: 'dashboard',
-      label: 'Executive Dashboard',
+      label: 'Outlet Work Desk',
       icon: LayoutDashboard,
       perm: null,
     },
     {
       id: 'daily-ops',
-      label: 'Daily Operations & DSR',
+      label: 'Shift & Readings',
       icon: Fuel,
       perm: PERMISSIONS.SHIFTS_READ,
     },
@@ -99,7 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'stock-ops',
-      label: 'Stock & Decantation',
+      label: 'Fuel Receipts & Stock',
       icon: Droplets,
       perm: PERMISSIONS.TANK_STOCK_READ,
     },
@@ -141,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'financials',
-      label: 'Financials',
+      label: 'Collections & Finance',
       icon: Banknote,
       perm: PERMISSIONS.FINANCIAL_RECONCILIATION_READ,
     },
@@ -195,14 +196,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'documents',
-      label: 'Document Vault (R2)',
+      label: 'Documentation & Compliance',
       icon: FolderGit2,
       perm: PERMISSIONS.DOCUMENTS_READ,
     },
   ];
 
   const filteredNav = navItems.filter(item => (item.perm === null || hasPermission(item.perm as PermissionCode)) && (item.id !== 'dsr-reports' || hasPermission(PERMISSIONS.SHIFTS_READ)));
-  const searchedNav = filteredNav.filter(item => item.label.toLowerCase().includes(navSearch.trim().toLowerCase()));
+  const searchAliases: Record<string,string> = {
+    dashboard: 'executive dashboard home daily work desk',
+    'daily-ops': 'daily operations dsr tank dips nozzle readings shift closing',
+    'stock-ops': 'stock decantation fuel receipt tanker',
+    'financials': 'financials sales revenue cash bank credit payment price',
+    'dsr-reports': 'daily sales report pdf historical week month date',
+    'reports': 'monthly reports performance pdf',
+    'documents': 'document vault r2 statutory licence agreement evidence claims pdf',
+    'pump-infra': 'pump infrastructure tanks nozzles calibration',
+  };
+  const searchedNav = filteredNav.filter(item => (item.label + ' ' + (searchAliases[item.id] || '')).toLowerCase().includes(navSearch.trim().toLowerCase()));
 
   const content = (
     <div className={`flex h-full min-h-0 ${collapsed ? 'w-64 lg:w-[72px]' : 'w-64'} flex-col overflow-hidden border-r border-[#153F9B] bg-gradient-to-b from-[#1646B1] via-[#103991] to-[#092767] p-3 text-white shadow-[8px_0_22px_rgba(11,30,52,0.09)] transition-[width] duration-200`}>
@@ -267,7 +278,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </p>
         )}
         {navigationGroups.map(group => {
-          const available = searchedNav.filter(item => group.ids.includes(item.id));
+          const available = searchedNav.filter(item => group.ids.includes(item.id)).sort((a,b) => group.ids.indexOf(a.id)-group.ids.indexOf(b.id));
           if (!available.length) return null;
           const open = Boolean(navSearch.trim()) || expandedGroups.includes(group.id) || (collapsed && available.some(item => item.id === activeTab));
           return (
