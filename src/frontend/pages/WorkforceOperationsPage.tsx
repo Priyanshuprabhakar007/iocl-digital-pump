@@ -579,10 +579,11 @@ export const WorkforceOperationsPage: React.FC = () => {
         </div>
 
         {/* Outlet Selector & Refresh Button */}
-        <div className="flex items-center gap-3">
-          <div className="relative min-w-[220px] sm:min-w-[280px]">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
+          <div className="relative flex-1 min-w-0 sm:min-w-[280px]">
             <Building2 className="w-4 h-4 text-[#64748B] absolute left-3 top-3" />
             <select
+              aria-label="Workforce retail outlet"
               value={selectedOutletId}
               onChange={e => handleOutletChange(e.target.value)}
               disabled={isLoadingOutlets || outlets.length === 0}
