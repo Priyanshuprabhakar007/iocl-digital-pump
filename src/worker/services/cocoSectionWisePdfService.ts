@@ -81,9 +81,10 @@ export class CocoSectionWisePdfService {
       return { page, y: y - 61 };
     };
 
-    const drawTableTitle = (page: PDFPage, y: number, table: SectionWiseTable): number => {
+    const drawTableTitle = (page: PDFPage, y: number, table: SectionWiseTable, compact = false): number => {
+      const height = compact ? 20 : 24;
       page.drawRectangle({
-        x: LEFT, y: y - 24, width: WIDTH, height: 24,
+        x: LEFT, y: y - height, width: WIDTH, height,
         color: PALE, borderColor: BORDER, borderWidth: 0.65,
       });
       write(page, fitted(table.title, bold, 9.4, WIDTH - 205),
@@ -91,7 +92,7 @@ export class CocoSectionWisePdfService {
       const src = fitted('Source: ' + table.source, font, 7.1, 191);
       write(page, src, LEFT + WIDTH - 9 - font.widthOfTextAtSize(src, 7.1),
         y - 15, 7.1, false, GREY);
-      return y - 27;
+      return y - height - 3;
     };
 
     const tableWidths = (table: SectionWiseTable) => {
@@ -99,18 +100,20 @@ export class CocoSectionWisePdfService {
       return table.widths.map((w) => w * WIDTH / sum);
     };
 
-    const rowHeight = (cells: string[][], header: boolean): number => {
+    const rowHeight = (cells: string[][], header: boolean, compact = false): number => {
       const maxLines = Math.max(...cells.map((x) => x.length), 1);
-      return Math.max(header ? 24 : 29, maxLines * (header ? 8.2 : 9.0) + (header ? 12 : 18));
+      return compact
+        ? Math.max(header ? 20 : 23, maxLines * (header ? 8.2 : 9.0) + (header ? 9 : 10))
+        : Math.max(header ? 24 : 29, maxLines * (header ? 8.2 : 9.0) + (header ? 12 : 18));
     };
 
     const drawTableRow = (page: PDFPage, y: number, table: SectionWiseTable,
-      values: string[], header: boolean, alternate = false): number => {
+      values: string[], header: boolean, alternate = false, compact = false): number => {
       const widths = tableWidths(table);
       const f = header ? bold : font;
       const size = header ? 6.9 : 7.35;
       const parsed = values.map((value, i) => wrapPdfText(value, i === 1 || header ? bold : f, size, widths[i] - 9));
-      const height = rowHeight(parsed, header);
+      const height = rowHeight(parsed, header, compact);
       page.drawRectangle({
         x: LEFT, y: y - height, width: WIDTH, height,
         borderColor: BORDER, borderWidth: 0.55,
@@ -148,27 +151,35 @@ export class CocoSectionWisePdfService {
     };
 
     for (const section of report.sections) {
+      // The agreement section has three linked tables; tighten vertical padding only.
+      // Keep font sizes and wrapping unchanged, and allow continuation for larger registers.
+      const compact = section.title === 'Lease & Agreements';
       let { page, y } = startPage(section, false);
       for (const table of section.tables) {
         let index = 0;
-        if (y - 65 < FOOTER_TOP + 35) ({ page, y } = startPage(section, true));
-        y = drawTableTitle(page, y, table);
-        y = drawTableRow(page, y, table, table.headers, true);
+        const widths = tableWidths(table);
+        const headerHeight = rowHeight(table.headers.map((value, i) =>
+          wrapPdfText(value, bold, 6.9, widths[i] - 9)), true, compact);
+        const firstRowHeight = table.rows.length ? rowHeight(table.rows[0].map((value, i) =>
+          wrapPdfText(value, i === 1 ? bold : font, 7.35, widths[i] - 9)), false, compact) : 0;
+        if (y - (compact ? 23 : 27) - headerHeight - firstRowHeight < FOOTER_TOP + 35)
+          ({ page, y } = startPage(section, true));
+        y = drawTableTitle(page, y, table, compact);
+        y = drawTableRow(page, y, table, table.headers, true, false, compact);
         while (index < table.rows.length) {
           const row = table.rows[index];
-          const widths = tableWidths(table);
           const cellLines = row.map((value, i) =>
             wrapPdfText(value, i === 1 ? bold : font, 7.35, widths[i] - 9));
-          const height = rowHeight(cellLines, false);
+          const height = rowHeight(cellLines, false, compact);
           if (y - height < FOOTER_TOP + 35) {
             ({ page, y } = startPage(section, true));
-            y = drawTableTitle(page, y, table);
-            y = drawTableRow(page, y, table, table.headers, true);
+            y = drawTableTitle(page, y, table, compact);
+            y = drawTableRow(page, y, table, table.headers, true, false, compact);
           }
-          y = drawTableRow(page, y, table, row, false, index % 2 === 1);
+          y = drawTableRow(page, y, table, row, false, index % 2 === 1, compact);
           index++;
         }
-        y -= 16;
+        y -= compact ? 8 : 16;
       }
       const noteHeight = Math.max(56,
         34 + wrapPdfText(section.note, font, 8, WIDTH - 20).length * 11.5);

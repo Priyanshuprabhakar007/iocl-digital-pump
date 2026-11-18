@@ -4,13 +4,15 @@ import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '../../db';
 import {
   auditLogs, cocoAgreementDetails, cocoExpenseClaims, cocoClaimSettlements,
-  cocoAssetInspections, documents, equipmentAssets, nfrLeases,
+  cocoAssetInspections, documents, equipmentAssets, nfrLeases, cocoAgreementLeaseTerms,
 } from '../../db/schema';
 import { requireAuth, type AppContext, type EnvBindings } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 import { PERMISSIONS } from '../../shared/constants';
 import { ScopeService } from '../services/scopeService';
 import { OutletRepository } from '../repositories/outletRepository';
+import { leaseTermsSchema,isLeaseAgreement } from '../../shared/leaseTerms';
+import { getCocoLeaseTerms } from '../services/cocoLeaseTermsService';
 
 export const cocoDocumentationMasterRoutes = new Hono<{ Bindings: EnvBindings }>();
 cocoDocumentationMasterRoutes.use('*', requireAuth as any);
@@ -33,8 +35,11 @@ const agreementInput = z.object({
   siteClass: z.enum(['A','B','C']).nullable().optional(),
   startDate: optDate, endDate: optDate,
   agreementDocumentId: optional(100),
+  leaseTerms: leaseTermsSchema.nullable().optional(),
   remarks: optional(2000),
 }).superRefine((data, ctx) => {
+  if (data.leaseTerms && !isLeaseAgreement(data.agreementType)) ctx.addIssue({code:'custom',message:'Lease dimensions and value apply only to land and NFR leases.'});
+  if (data.agreementType==='NFR_METADATA' && data.leaseTerms?.monthlyLeaseValuePaise!=null) ctx.addIssue({code:'custom',message:'NFR monthly rent must be maintained in NFR Lease Management, not duplicated here.'});
   if ((data.agreementType === 'NFR_METADATA') !== Boolean(data.linkedNfrLeaseId)) {
     ctx.addIssue({ code: 'custom', message: 'NFR_METADATA requires an existing linked NFR lease; other types cannot link to one.' });
   }
@@ -137,6 +142,7 @@ cocoDocumentationMasterRoutes.get('/compliance/masters', requirePermission(PERMI
       db.select().from(equipmentAssets).where(eq(equipmentAssets.outletId, outletId)).all(),
       db.select().from(nfrLeases).where(eq(nfrLeases.outletId, outletId)).all(),
     ]);
+    const leaseTerms=await getCocoLeaseTerms(db,outletId);
     const totals = new Map<string, number>();
     for (const s of settlements) totals.set(s.claimId, (totals.get(s.claimId) || 0) + s.amountPaise);
     const claimsWithTotals = claims.map((claim) => ({
@@ -148,7 +154,7 @@ cocoDocumentationMasterRoutes.get('/compliance/masters', requirePermission(PERMI
         : (totals.get(claim.id) || 0) > 0 ? 'PARTIALLY_PAID'
         : claim.dueDate && claim.dueDate < new Date().toISOString().slice(0, 10) ? 'OVERDUE' : 'PENDING',
     }));
-    return ok(c, { agreements, claims: claimsWithTotals, settlements, inspections, assets, nfrLeases: leases });
+    return ok(c, { agreements:agreements.map(a=>({...a,leaseTerms:isLeaseAgreement(a.agreementType)?leaseTerms.byId.get(a.id)||null:null})), leaseTermsAvailable:leaseTerms.available, claims: claimsWithTotals, settlements, inspections, assets, nfrLeases: leases });
   } catch (e) {
     const underlying = e instanceof Error && 'cause' in e ? String((e as Error & { cause?: unknown }).cause) : '';
     if (/no such table/i.test(String(e) + ' ' + underlying)) {
@@ -187,11 +193,15 @@ cocoDocumentationMasterRoutes.post('/compliance/masters/agreements', requirePerm
     createdAt: now, updatedAt: now,
   };
   try {
+    const terms=await getCocoLeaseTerms(db,i.outletId);
+    if(i.leaseTerms&&!terms.available)return failed(c,'SCHEMA_MIGRATION_REQUIRED','Lease terms migration 0037 must be enabled before dimensions or lease value can be saved.',503);
+    const termRow=i.leaseTerms?{agreementId:row.id,...i.leaseTerms}:null;
     await db.batch([
       db.insert(cocoAgreementDetails).values(row),
-      db.insert(auditLogs).values(audit(c, 'CREATE_COCO_AGREEMENT', 'coco_agreement', row.id, row)),
+      ...(termRow?[db.insert(cocoAgreementLeaseTerms).values(termRow)]:[]),
+      db.insert(auditLogs).values(audit(c, 'CREATE_COCO_AGREEMENT', 'coco_agreement', row.id, {...row,leaseTerms:termRow})),
     ]);
-    return ok(c, row, 201);
+    return ok(c, {...row,leaseTerms:termRow}, 201);
   } catch (e) { return safeError(c, e); }
 });
 
@@ -219,11 +229,19 @@ cocoDocumentationMasterRoutes.put('/compliance/masters/agreements/:id', requireP
     updatedBy: c.var.user.user.id, updatedAt: new Date().toISOString(),
   };
   try {
+    const terms=await getCocoLeaseTerms(db,old.outletId);
+    if(i.leaseTerms&&!terms.available)return failed(c,'SCHEMA_MIGRATION_REQUIRED','Lease terms migration 0037 must be enabled before dimensions or lease value can be saved.',503);
+    const previous=terms.byId.get(old.id)||null;
+    const sameLease=old.agreementType===i.agreementType&&old.linkedNfrLeaseId===(i.linkedNfrLeaseId||null);
+    const next=isLeaseAgreement(i.agreementType)?(i.leaseTerms===undefined?(sameLease?previous:null):i.leaseTerms):null;
+    const termRow=next?{...next,agreementId:old.id}:null;
+    const termWrites=terms.available?(termRow?[db.insert(cocoAgreementLeaseTerms).values(termRow).onConflictDoUpdate({target:cocoAgreementLeaseTerms.agreementId,set:termRow})]:[db.delete(cocoAgreementLeaseTerms).where(eq(cocoAgreementLeaseTerms.agreementId,old.id))]):[];
     await db.batch([
       db.update(cocoAgreementDetails).set(update).where(eq(cocoAgreementDetails.id, old.id)),
-      db.insert(auditLogs).values(audit(c, 'UPDATE_COCO_AGREEMENT', 'coco_agreement', old.id, update, old)),
+      ...termWrites,
+      db.insert(auditLogs).values(audit(c, 'UPDATE_COCO_AGREEMENT', 'coco_agreement', old.id, {...update,leaseTerms:termRow}, {...old,leaseTerms:previous})),
     ]);
-    return ok(c, { ...old, ...update });
+    return ok(c, { ...old, ...update,leaseTerms:termRow });
   } catch (e) { return safeError(c, e); }
 });
 

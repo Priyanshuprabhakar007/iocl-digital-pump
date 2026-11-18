@@ -1,14 +1,16 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { apiFetch } from '../services/api';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { apiFetch, apiFetchBlob } from '../services/api';
+import { type LeaseTerms, formatLeaseDimension, displayMeasure, parseLeaseMeasure, parseMonthlyLeaseValue, isLeaseAgreement } from '../../shared/leaseTerms';
 import { useAuth } from '../context/AuthContext';
 import { PERMISSIONS } from '../../shared/constants';
-import { CheckCircle2, ClipboardList, Save, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, ClipboardList, Save, ShieldCheck, Upload, Download } from 'lucide-react';
 
 interface Agreement {
   id: string; outletId: string; agreementType: string; agreementName: string; agreementNumber: string | null;
   linkedNfrLeaseId: string | null; counterpartyName: string | null; vendorCode: string | null;
   customerCode: string | null; siteClass: string | null; startDate: string | null; endDate: string | null;
   agreementDocumentId: string | null; remarks: string | null;
+  leaseTerms?: LeaseTerms | null;
 }
 interface Claim {
   id: string; title: string; outletId: string; claimCategory: string;
@@ -24,11 +26,12 @@ interface Inspection {
   id: string; equipmentAssetId: string; condition: string; inspectedOn: string;
   nextServiceDate: string | null; remarks: string | null;
 }
-interface NfrLease { id: string; agreementNumber: string; leaseStartDate: string; leaseEndDate: string; }
+interface NfrLease { id: string; agreementNumber: string; leaseStartDate: string; leaseEndDate: string; monthlyRentPaise: number; agreementDocumentId: string | null; }
 interface VaultDocument { id: string; name: string; outletId: string | null; }
 interface MasterResponse {
   agreements: Agreement[]; claims: Claim[]; inspections: Inspection[]; assets: Asset[];
   nfrLeases: NfrLease[];
+  leaseTermsAvailable?: boolean;
 }
 const categories = [
   ['WEIGHTS_MEASURES_STAMPING_CHARGES', 'Weights & Measures Stamping Charges'],
@@ -39,7 +42,7 @@ const categories = [
 ];
 const agreementTypes = [
   ['LAND_LEASE', 'Land Lease'], ['SERVICE_PROVIDER', 'Service Provider Contract Agreement'],
-  ['OTHER', 'Other Agreement'], ['NFR_METADATA', 'Additional NFR Lease Details'],
+  ['OTHER', 'Other Agreement'], ['NFR_METADATA', 'NFR Lease Details (linked)'],
 ];
 const money = (paise: number) => '₹' + (paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function toPaise(value: string): number {
@@ -84,6 +87,22 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const [settleClaim, setSettleClaim] = useState<Claim | null>(null);
   const [agreementType, setAgreementType] = useState<string>(initialAgreementType);
   const [showAgreementForm, setShowAgreementForm] = useState(initialCreate && initialEditor === 'agreements');
+  const [dimensionUnit,setDimensionUnit]=useState<LeaseTerms['dimensionUnit']>(null);
+  const [linkedLeaseId,setLinkedLeaseId]=useState('');
+  const [contractId,setContractId]=useState('');
+  const [uploadedContracts,setUploadedContracts]=useState<VaultDocument[]>([]);
+  const [uploadingContract,setUploadingContract]=useState(false);
+  const contractLock=useRef(false);
+  const agreementSaveLock=useRef(false);
+  const mounted=useRef(true);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  useEffect(()=>{setUploadedContracts([]);},[outletId]);
+  useEffect(()=>{
+    if(!showAgreementForm)return;
+    setDimensionUnit(agreementEdit?.leaseTerms?.dimensionUnit||null);
+    setLinkedLeaseId(agreementEdit?.linkedNfrLeaseId||'');
+    setContractId(agreementEdit?.agreementDocumentId||'');
+  },[showAgreementForm,agreementEdit,outletId]);
   const [showClaimForm, setShowClaimForm] = useState(initialCreate && initialEditor === 'claims');
   const [showInspectionForm, setShowInspectionForm] = useState(initialCreate && initialEditor === 'inspections');
 
@@ -121,7 +140,18 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const base = '/api/v1/documents/compliance/masters';
   const onAgreementSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if(!canWrite||saving||contractLock.current||agreementSaveLock.current)return;
     const f = new FormData(e.currentTarget);
+    let leaseTerms:LeaseTerms|null|undefined;
+    try {
+      if(data?.leaseTermsAvailable&&isLeaseAgreement(agreementType)){
+        const monthly=String(f.get('monthlyLeaseValue')||'').trim();
+        const terms:LeaseTerms={dimensionUnit,areaMilli:null,lengthMilliFt:null,widthMilliFt:null,monthlyLeaseValuePaise:agreementType==='LAND_LEASE'&&monthly?parseMonthlyLeaseValue(monthly):null};
+        if(dimensionUnit==='FT_LXW'){terms.lengthMilliFt=parseLeaseMeasure(String(f.get('lengthFt')||''));terms.widthMilliFt=parseLeaseMeasure(String(f.get('widthFt')||''));}
+        else if(dimensionUnit)terms.areaMilli=parseLeaseMeasure(String(f.get('area')||''));
+        leaseTerms=dimensionUnit||terms.monthlyLeaseValuePaise!==null?terms:null;
+      }
+    }catch(err){setError(err instanceof Error?err.message:'Invalid lease terms.');return;}
     const payload = {
       outletId, agreementType: f.get('agreementType'),
       agreementName: f.get('agreementName'),
@@ -133,15 +163,17 @@ export const CocoDocumentationMastersPanel: React.FC<{
       siteClass: f.get('siteClass') || null,
       startDate: f.get('startDate') || null,
       endDate: f.get('endDate') || null,
-      agreementDocumentId: f.get('agreementDocumentId') || null,
+      agreementDocumentId: contractId || null,
+      ...(leaseTerms!==undefined?{leaseTerms}:{}),
       remarks: f.get('remarks') || null,
     };
-    if (await submit(
-      agreementEdit ? base + '/agreements/' + agreementEdit.id : base + '/agreements',
-      agreementEdit ? 'PUT' : 'POST', payload, 'Agreement saved and available to section-wise PDF.'
-    )) {
-      setAgreementEdit(null); setShowAgreementForm(false);
-    }
+    agreementSaveLock.current=true;
+    try {
+      if (await submit(
+        agreementEdit ? base + '/agreements/' + agreementEdit.id : base + '/agreements',
+        agreementEdit ? 'PUT' : 'POST', payload, 'Agreement saved and available to section-wise PDF.'
+      )) {setAgreementEdit(null); setShowAgreementForm(false);}
+    } finally {agreementSaveLock.current=false;}
   };
   const onClaimSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -193,7 +225,27 @@ export const CocoDocumentationMastersPanel: React.FC<{
     await submit(base + '/claims/' + claim.id + '/decision', 'POST', { decision },
       decision === 'APPROVED' ? 'Claim approved.' : 'Claim rejected.');
   };
-  const docs = vaultDocs.filter((d) => d.outletId === outletId);
+  const docs = Array.from(new Map([...vaultDocs,...uploadedContracts].filter(d=>d.outletId===outletId).map(d=>[d.id,d])).values());
+  const linkedNfr=data?.nfrLeases.find(l=>l.id===linkedLeaseId);
+  const currentTerms=agreementEdit?.agreementType===agreementType&&(agreementType!=='NFR_METADATA'||agreementEdit.linkedNfrLeaseId===linkedLeaseId)?agreementEdit.leaseTerms:null;
+  const uploadContract=async(e:React.ChangeEvent<HTMLInputElement>)=>{
+    const file=e.target.files?.[0];e.target.value='';
+    if(!file||!canWrite||saving||contractLock.current||agreementSaveLock.current)return;
+    if(!['application/pdf','image/png','image/jpeg','image/jpg'].includes(file.type)||file.size===0||file.size>5*1024*1024){setError('Select a non-empty PDF, JPG or PNG file up to 5 MB.');return;}
+    contractLock.current=true;setUploadingContract(true);setError('');setSuccess('');
+    try{
+      const body=new FormData();body.append('file',file);body.append('outletId',outletId);
+      const res=await apiFetch<VaultDocument>('/api/v1/documents',{method:'POST',body});
+      if(!mounted.current)return;
+      if(res.success&&res.data?.id&&res.data.outletId===outletId){const doc=res.data;setUploadedContracts(prev=>[doc,...prev]);setContractId(doc.id);setSuccess('Contract uploaded. Save Agreement to link it to this record.');}
+      else setError(res.error?.message||'Contract upload failed or could not be verified.');
+    }catch(err){if(mounted.current)setError(err instanceof Error?err.message:'Contract upload failed.');}
+    finally{contractLock.current=false;if(mounted.current)setUploadingContract(false);}
+  };
+  const downloadContract=async(id:string)=>{
+    try{const res=await apiFetchBlob('/api/v1/documents/'+encodeURIComponent(id)+'/download');if(!res.success||!res.blob)throw Error(res.error?.message||'Contract download failed.');const url=URL.createObjectURL(res.blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=res.filename||docs.find(d=>d.id===id)?.name||'contract';anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+    catch(err){setError(err instanceof Error?err.message:'Contract download failed.');}
+  };
   const docOptions = (name: string, required = false, selectedId = '') => (
     <select name={name} required={required} className={inputStyle} defaultValue={selectedId}>
       <option value="">{required ? 'Select uploaded receipt' : 'No document linked'}</option>
@@ -213,7 +265,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
       <div className="flex flex-wrap gap-2">
         {([['agreements', 'Lease & Agreements'], ['claims', 'Claims & Settlements'], ['inspections', 'Asset Inspections']] as const)
           .map(([id, label]) => (
-          <button key={id} type="button" onClick={() => setActiveEditor(id)}
+          <button key={id} type="button" disabled={saving||uploadingContract} onClick={() => setActiveEditor(id)}
             className={'px-4 py-2 text-sm font-medium rounded-lg border ' +
               (activeEditor === id ? 'bg-[#17365D] border-[#17365D] text-white' : 'bg-white text-[#17365D] border-[#CBD5E1]')}>
             {label}
@@ -223,17 +275,17 @@ export const CocoDocumentationMastersPanel: React.FC<{
 
       {activeEditor === 'agreements' && (
         <div className="space-y-4">
-          {canWrite && data && !showAgreementForm && <button type="button" className={buttonStyle} onClick={() => { setAgreementEdit(null); setAgreementType('LAND_LEASE'); setShowAgreementForm(true); }}>+ Add Agreement</button>}
+          {canWrite && data && !showAgreementForm && <button type="button" disabled={saving||uploadingContract} className={buttonStyle} onClick={() => { setAgreementEdit(null); setAgreementType('LAND_LEASE'); setShowAgreementForm(true); }}>+ Add Agreement</button>}
           {canWrite && data && showAgreementForm && (
             <form key={agreementEdit?.id || 'new-agreement'} onSubmit={onAgreementSubmit} className={col}>
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-[#17365D]">{agreementEdit ? 'Edit Agreement' : 'Register Agreement'}</h4>
-                <button type="button" disabled={saving} onClick={() => { setAgreementEdit(null); setShowAgreementForm(false); }} className="text-sm underline text-[#64748B]">Cancel</button>
+                <button type="button" disabled={saving||uploadingContract} onClick={() => { setAgreementEdit(null); setShowAgreementForm(false); }} className="text-sm underline text-[#64748B]">Cancel</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <Field label="Agreement Type">
                   <select name="agreementType" className={inputStyle} value={agreementType}
-                    onChange={(e) => setAgreementType(e.target.value)}>
+                    disabled={saving||uploadingContract} onChange={(e) => {setAgreementType(e.target.value);setDimensionUnit(null);setLinkedLeaseId('');}}>
                     {agreementTypes.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
                   </select>
                 </Field>
@@ -246,7 +298,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
                 </Field>
                 {agreementType === 'NFR_METADATA' ? (
                   <Field label="Existing NFR Lease">
-                    <select name="linkedNfrLeaseId" required className={inputStyle} defaultValue={agreementEdit?.linkedNfrLeaseId || ''}>
+                    <select name="linkedNfrLeaseId" required className={inputStyle} value={linkedLeaseId} disabled={saving||uploadingContract} onChange={e=>{setLinkedLeaseId(e.target.value);setDimensionUnit(null);}}>
                       <option value="">Select NFR agreement</option>
                       {data?.nfrLeases.map((l) => <option key={l.id} value={l.id}>{l.agreementNumber}</option>)}
                     </select>
@@ -267,14 +319,45 @@ export const CocoDocumentationMastersPanel: React.FC<{
                     <option value="">Not Recorded</option><option value="A">A Site</option><option value="B">B Site</option><option value="C">C Site</option>
                   </select>
                 </Field>
-                <Field label="Agreement File (Document Vault)">
-                  <select name="agreementDocumentId" className={inputStyle} defaultValue={agreementEdit?.agreementDocumentId || ''}>
-                    <option value="">No document linked</option>{docs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </Field>
               </div>
+              {isLeaseAgreement(agreementType)&&<section className="rounded-xl border border-[#D7E0EA] bg-[#F8FAFC] p-3 space-y-3">
+                <h5 className="font-semibold text-[#17365D]">Lease Dimensions &amp; Monthly Value</h5>
+                {!data.leaseTermsAvailable&&<p role="status" className="text-xs text-amber-800">New lease fields require storage migration 0037. Existing agreement entries remain available.</p>}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" key={agreementType+':'+linkedLeaseId+':'+dimensionUnit}>
+                  <Field label="Dimension / Area Unit">
+                    <select className={inputStyle} disabled={!data.leaseTermsAvailable||saving} value={dimensionUnit||''} onChange={e=>setDimensionUnit((e.target.value||null) as LeaseTerms['dimensionUnit'])}>
+                      <option value="">Not Recorded</option><option value="SQYD">Square yards (sq yd)</option><option value="SQFT">Square feet (sq ft)</option><option value="FT_LXW">Length x Width (feet)</option>
+                    </select>
+                  </Field>
+                  {dimensionUnit==='FT_LXW'?<>
+                    <Field label="Length (ft)"><input name="lengthFt" required inputMode="decimal" className={inputStyle} defaultValue={displayMeasure(currentTerms?.lengthMilliFt)}/></Field>
+                    <Field label="Width (ft)"><input name="widthFt" required inputMode="decimal" className={inputStyle} defaultValue={displayMeasure(currentTerms?.widthMilliFt)}/></Field>
+                  </>:dimensionUnit&&<Field label={dimensionUnit==='SQYD'?'Area (sq yd)':'Area (sq ft)'}><input name="area" required inputMode="decimal" className={inputStyle} defaultValue={currentTerms?.dimensionUnit===dimensionUnit?displayMeasure(currentTerms.areaMilli):''}/></Field>}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3" key={agreementType+':'+linkedLeaseId}>
+                  {agreementType==='LAND_LEASE'?<Field label="Lease Value (₹ per month)"><input name="monthlyLeaseValue" inputMode="decimal" disabled={!data.leaseTermsAvailable||saving} className={inputStyle} defaultValue={currentTerms?.monthlyLeaseValuePaise!=null?(currentTerms.monthlyLeaseValuePaise/100).toFixed(2):''} placeholder="Enter monthly rent"/></Field>:
+                    <Field label="Lease Value (₹ per month) — NFR source"><input className={inputStyle} readOnly value={linkedNfr?.monthlyRentPaise!=null?money(linkedNfr.monthlyRentPaise):'Select NFR lease'}/></Field>}
+                  <Field label="Lease Basis"><input className={inputStyle} readOnly value="Monthly"/></Field>
+                </div>
+                {agreementType==='NFR_METADATA'&&<p className="text-xs text-slate-600">Monthly rent is read from NFR &amp; Lease Management. Edit it there so the rent ledger remains consistent.</p>}
+              </section>}
+              <section className="rounded-xl border border-[#D7E0EA] p-3 space-y-2">
+                <h5 className="font-semibold text-[#17365D]">Signed Contract / Agreement</h5>
+                {agreementType==='NFR_METADATA'&&linkedNfr?.agreementDocumentId&&<div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">Existing NFR contract: {docs.find(d=>d.id===linkedNfr.agreementDocumentId)?.name||'Linked source document'} <button type="button" onClick={()=>void downloadContract(linkedNfr.agreementDocumentId!)} className="text-[#17365D] underline">Download</button></div>}
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex-1 min-w-[180px]"><Field label="Link existing contract"><select name="agreementDocumentId" value={contractId} disabled={uploadingContract||saving} onChange={e=>setContractId(e.target.value)} className={inputStyle}>
+                    <option value="">No document linked</option>{contractId&&!docs.some(d=>d.id===contractId)&&<option value={contractId}>Existing linked document</option>}{docs.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select></Field></div>
+                  <label className={'inline-flex items-center gap-2 rounded-lg border border-[#CBD5E1] bg-white px-4 py-2 text-sm font-semibold text-[#17365D] '+(uploadingContract||saving?'opacity-50':'cursor-pointer')}>
+                    <Upload className="w-4 h-4"/>{uploadingContract?'Uploading…':'Upload Contract'}
+                    <input aria-label="Upload signed contract" type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={uploadingContract||saving} className="sr-only" onChange={uploadContract}/>
+                  </label>
+                  {contractId&&<button type="button" onClick={()=>void downloadContract(contractId)} className="inline-flex items-center gap-1 px-2 py-2 text-sm font-semibold text-[#17365D]"><Download className="w-4 h-4"/> Download</button>}
+                </div>
+                <p className="text-xs text-slate-600">PDF, JPG or PNG · Max 5 MB. A new upload is saved securely in the vault; Save Agreement links it to this record. For linked NFR, this attachment is supplementary to the source lease contract.</p>
+              </section>
               <Field label="Remarks"><textarea name="remarks" className={inputStyle} rows={2} defaultValue={agreementEdit?.remarks || ''} /></Field>
-              <button type="submit" className={buttonStyle} disabled={saving}><Save className="w-4 h-4"/> Save Agreement</button>
+              <button type="submit" className={buttonStyle} disabled={saving||uploadingContract}><Save className="w-4 h-4"/> Save Agreement</button>
             </form>
           )}
           <div className={col}>
@@ -282,7 +365,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-[#F1F5F9] text-[#17365D]">
-                  <tr>{['Type','Agreement','Counterparty','V Code','Customer Code','Valid Until','Action'].map(t=><th key={t} className="p-2 text-left">{t}</th>)}</tr>
+                  <tr>{['Type','Agreement','Counterparty','V Code','Customer Code','Valid Until','Dimensions','Lease Value / Month','Contract','Action'].map(t=><th key={t} className="p-2 text-left">{t}</th>)}</tr>
                 </thead><tbody>
                   {data?.agreements.map(a=>(
                     <tr key={a.id} className="border-b border-[#E2E8F0]">
@@ -291,8 +374,11 @@ export const CocoDocumentationMastersPanel: React.FC<{
                       <td className="p-2">{a.counterpartyName || 'Not Recorded'}</td>
                       <td className="p-2">{a.vendorCode || '—'}</td>
                       <td className="p-2">{a.customerCode || '—'}</td>
-                      <td className="p-2">{a.endDate || 'NFR source'}</td>
-                      <td className="p-2">{canWrite && <button className="text-[#B8530D] font-semibold" onClick={()=>{setAgreementEdit(a);setAgreementType(a.agreementType);setShowAgreementForm(true);}}>Edit</button>}</td>
+                      <td className="p-2">{a.endDate || (a.agreementType==='NFR_METADATA'?data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.leaseEndDate:'Not Recorded')}</td>
+                      <td className="p-2">{isLeaseAgreement(a.agreementType)?formatLeaseDimension(a.leaseTerms):'—'}</td>
+                      <td className="p-2">{a.agreementType==='LAND_LEASE'?(a.leaseTerms?.monthlyLeaseValuePaise!=null?money(a.leaseTerms.monthlyLeaseValuePaise):'Not Recorded'):a.agreementType==='NFR_METADATA'?(data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.monthlyRentPaise!=null?money(data.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)!.monthlyRentPaise):'Not Recorded'):'—'}</td>
+                      <td className="p-2">{(()=>{const id=a.agreementDocumentId||data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.agreementDocumentId;return id?<button type="button" className="text-[#17365D] underline" onClick={()=>void downloadContract(id)}>{docs.find(d=>d.id===id)?.name||'Download contract'}</button>:'Not linked';})()}</td>
+                      <td className="p-2">{canWrite && <button disabled={saving||uploadingContract||showAgreementForm} className="text-[#B8530D] font-semibold" onClick={()=>{setAgreementEdit(a);setAgreementType(a.agreementType);setShowAgreementForm(true);}}>Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>

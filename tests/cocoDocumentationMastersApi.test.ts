@@ -58,7 +58,25 @@ describe('COCO documentation master API / evidence protections', () => {
       };
       expect((await call('/compliance/masters/agreements', 'POST',
         { ...agreement, agreementDocumentId: 'evidence-other' })).status).toBe(403);
-      expect((await call('/compliance/masters/agreements', 'POST', agreement)).status).toBe(201);
+      // A 0036-only environment continues accepting existing agreements, but never silently discards new terms.
+      const leaseTerms={dimensionUnit:'SQYD',areaMilli:1250500,lengthMilliFt:null,widthMilliFt:null,monthlyLeaseValuePaise:8500000};
+      expect((await call('/compliance/masters/agreements','POST',{...agreement,leaseTerms})).status).toBe(503);
+      const legacyAgreement=await call('/compliance/masters/agreements','POST',agreement);
+      expect(legacyAgreement.status).toBe(201);
+      const agreementId=(await legacyAgreement.json() as any).data.id;
+      expect((await (await call('/compliance/masters?outletId=ro-1001')).json() as any).data.leaseTermsAvailable).toBe(false);
+      await local.exec(fs.readFileSync('docs/lease-migration-0037/0037_coco_agreement_lease_terms.sql','utf8'));
+      expect((await call('/compliance/masters/agreements/'+agreementId,'PUT',{...agreement,leaseTerms})).status).toBe(200);
+      expect((await call('/compliance/masters/agreements','POST',{...agreement,agreementType:'SERVICE_PROVIDER',leaseTerms})).status).toBe(400);
+      expect((await call('/compliance/masters/agreements','POST',{...agreement,leaseTerms:{...leaseTerms,areaMilli:-1}})).status).toBe(400);
+      expect((await call('/compliance/masters/agreements','POST',{...agreement,leaseTerms:{...leaseTerms,dimensionUnit:'FT_LXW',areaMilli:null,lengthMilliFt:12000,widthMilliFt:null}})).status).toBe(400);
+      expect((await call('/compliance/masters/agreements','POST',{...agreement,agreementType:'NFR_METADATA',linkedNfrLeaseId:'invalid',leaseTerms})).status).toBe(400);
+      // Old clients can edit other fields without dropping saved terms.
+      expect((await call('/compliance/masters/agreements/'+agreementId,'PUT',{...agreement,remarks:'Reviewed'})).status).toBe(200);
+      const retained=(await (await call('/compliance/masters?outletId=ro-1001')).json() as any).data;
+      expect(retained.leaseTermsAvailable).toBe(true);
+      expect(retained.agreements[0].leaseTerms).toMatchObject(leaseTerms);
+      expect(retained.agreements[0].agreementDocumentId).toBe('evidence-one');
       const claimRes = await call('/compliance/masters/claims', 'POST', {
         outletId: 'ro-1001', claimCategory: 'UNIFORM_CHARGES', title: 'Uniform Expense',
         amountPaise: 10000, invoiceDocumentId: 'evidence-one',
@@ -115,6 +133,10 @@ describe('COCO documentation master API / evidence protections', () => {
       expect(preview.status).toBe(200);
       const report = (await preview.json() as any).data;
       expect(report.sections[0].tables[1].rows[0][2]).toBe('V-77');
+      expect(report.sections[0].tables[2].rows[0][2]).toBe('1250.5 sq yd');
+      expect(report.sections[0].tables[2].rows[0][3]).toContain('85,000');
+      expect(report.sections[0].tables[2].rows[0][4]).toBe('Monthly');
+      expect(report.sections[0].tables[2].rows[0][5]).toBe('Saved document');
       expect(report.sections[3].tables[0].rows[2][2]).toBe('Partially Inspected');
       expect(report.sections[3].tables[0].rows[2][6]).toContain('Needs repair');
       expect(report.sections[4].tables[0].rows.some((row: string[]) =>
