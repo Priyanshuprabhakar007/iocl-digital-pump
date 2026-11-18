@@ -539,7 +539,7 @@ export const OutletsPage: React.FC = () => {
                 <p className="text-xs text-[#64748B] max-w-md mx-auto">
                   {showHidden
                     ? `No retail outlets match your assigned organizational scope (${userCtx?.primaryScope}).`
-                    : `No active visible retail outlets match your assigned organizational scope (${userCtx?.primaryScope}). Turn on "Show Hidden Outlets" to view hidden outlets.`}
+                    : `No active visible retail outlets match your assigned organizational scope (${userCtx?.primaryScope}). Turn on "Show Archived Outlets" to include archived outlets.`}
                 </p>
               </div>
             ) : (
@@ -547,7 +547,7 @@ export const OutletsPage: React.FC = () => {
                 {displayedOutlets.map((ro) => (
                   <div
                     key={ro.id}
-                    className={`outlet-directory-card bg-white border rounded-2xl p-5 space-y-4 shadow-sm transition-all ${
+                    className={`outlet-directory-card bg-white border rounded-2xl p-4 space-y-3 shadow-sm transition-all ${
                       ro.directoryHidden
                         ? 'border-rose-900/40 bg-white/90'
                         : 'border-[#E2E8F0] hover:border-[#D7E0EA]'
@@ -618,7 +618,7 @@ export const OutletsPage: React.FC = () => {
                     </div>
 
                     {/* User Assignments & Actions */}
-                    <div className="pt-3 border-t border-[#E2E8F0] flex items-center justify-between">
+                    <div className="pt-3 border-t border-[#E2E8F0] flex flex-wrap gap-2 items-center justify-between">
                       <div className="text-xs font-mono text-[#64748B]">
                         Assigned Personnel:{' '}
                         <span className="text-[#17365D] font-bold">{ro.assignedUsersCount || 0}</span>
@@ -654,7 +654,7 @@ export const OutletsPage: React.FC = () => {
                             {isOutletArchived(ro) ? (
                               <button
                                 onClick={() => handleRestoreOutlet(ro)}
-                                className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 hover:text-emerald-200 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 hover:text-emerald-900 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                                 title="Restore Retail Outlet"
                               >
                                 <RefreshCw className="w-3.5 h-3.5 text-emerald-700" />
@@ -663,11 +663,11 @@ export const OutletsPage: React.FC = () => {
                             ) : (
                               <button
                                 onClick={() => openHideConfirm(ro)}
-                                className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-800 hover:text-rose-200 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-800 hover:text-rose-900 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                                 title="Archive Retail Outlet"
                               >
                                 <Trash2 className="w-3.5 h-3.5 text-rose-700" />
-                                <span>Delete</span>
+                                <span>Archive</span>
                               </button>
                             )}
                           </>
