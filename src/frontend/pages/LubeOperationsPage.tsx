@@ -297,7 +297,10 @@ export const LubeOperationsPage: React.FC = () => {
         setShiftSummary(null);
       }
 
-      if(hasShiftContext) setShiftRecordsReady(errorAccumulator.length===0);
+      if(hasShiftContext){
+        const shiftResult=results[5], salesResult=results[6], summaryResult=results[7];
+        setShiftRecordsReady(shiftResult?.status==='fulfilled'&&shiftResult.value.success&&shiftResult.value.data?.id===reqShiftId&&shiftResult.value.data.outletId===reqOutletId&&salesResult?.status==='fulfilled'&&salesResult.value.success&&Array.isArray(salesResult.value.data)&&summaryResult?.status==='fulfilled'&&summaryResult.value.success&&!!summaryResult.value.data&&skusRes.status==='fulfilled'&&skusRes.value.success&&Array.isArray(skusRes.value.data));
+      }
       if (errorAccumulator.length > 0) {
         setActionError(errorAccumulator.join(' | '));
       }
