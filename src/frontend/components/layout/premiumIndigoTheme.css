@@ -306,3 +306,161 @@
   .enterprise-shell.iocl-vibrant main .iocl-mobile-stack select { width:100%; min-width:0; }
   .enterprise-shell.iocl-vibrant main .iocl-scroll-panel :is(.flex.justify-end,.flex.justify-between) { flex-wrap:wrap; }
 }
+
+/* Phase 6A — premium enterprise foundation. Deliberately scoped to the
+   authenticated shell, navigation and work-desk presentation. */
+.enterprise-shell.iocl-vibrant {
+  --iocl-canvas:#f3f6fa;
+  --iocl-navy:#183454;
+  --iocl-orange:#c45118;
+  --iocl-text:#172b46;
+  --iocl-muted:#52647a;
+  --iocl-border:#dce4ee;
+  --phase6-shadow:0 2px 4px rgb(20 43 76 / .035),0 10px 30px rgb(20 43 76 / .045);
+  color:var(--iocl-text);
+  background:var(--iocl-canvas);
+}
+.enterprise-shell.iocl-vibrant main { background:var(--iocl-canvas); }
+.enterprise-shell.iocl-vibrant > header {
+  background:#fff;
+  border-bottom:1px solid #dce4ee;
+  box-shadow:0 3px 14px rgb(20 43 76 / .06);
+}
+.enterprise-shell.iocl-vibrant .iocl-header-title {
+  letter-spacing:-.025em;
+}
+.enterprise-shell.iocl-vibrant :is(aside,.iocl-mobile-drawer) .iocl-sidebar-content {
+  background:linear-gradient(165deg,#193550 0%,#122b47 55%,#10243d 100%);
+  border-color:#2b4662;
+  box-shadow:none;
+}
+.enterprise-shell.iocl-vibrant :is(aside,.iocl-mobile-drawer) nav {
+  scrollbar-color:#6c8198 #122b47;
+}
+.enterprise-shell.iocl-vibrant :is(aside,.iocl-mobile-drawer) nav button {
+  border-radius:9px;
+  letter-spacing:.005em;
+}
+.enterprise-shell.iocl-vibrant :is(aside,.iocl-mobile-drawer) nav button[aria-current="page"] {
+  background:#fff2e7;
+  color:#183454;
+  border-left-color:#ed793a;
+  box-shadow:0 3px 12px rgb(0 0 0 / .12);
+}
+.enterprise-shell.iocl-vibrant :is(aside,.iocl-mobile-drawer) nav button[aria-current="page"] svg {
+  color:#b94a12;
+}
+.enterprise-shell.iocl-vibrant :is(aside,.iocl-mobile-drawer) nav button:not([aria-current="page"]):hover {
+  background:rgb(255 255 255 / .10);
+}
+.enterprise-shell.iocl-vibrant main :is(.option4-panel,.option4-hero) {
+  border-color:#dce4ee;
+  box-shadow:var(--phase6-shadow);
+  border-radius:16px;
+}
+.enterprise-shell.iocl-vibrant main .option4-hero {
+  border-inline-start:3px solid #e77a3b;
+}
+.enterprise-shell.iocl-vibrant .option4-dashboard .phase6-desk-hero {
+  position:relative;
+  overflow:hidden;
+  border-color:#d6e1ee;
+  border-inline-start:4px solid #e77a3b;
+  background:linear-gradient(115deg,#fff 25%,#f1f6fc 100%);
+  box-shadow:var(--phase6-shadow);
+}
+.enterprise-shell.iocl-vibrant .phase6-desk-hero h1 {
+  font-size:clamp(1.4rem,2.15vw,2rem);
+  line-height:1.22;
+  letter-spacing:-.04em;
+}
+.enterprise-shell.iocl-vibrant .phase6-outlet-context {
+  min-width:0;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  background:#fff;
+  border:1px solid #dce4ee;
+}
+.enterprise-shell.iocl-vibrant .option4-dashboard h2 {
+  letter-spacing:-.025em;
+}
+.enterprise-shell.iocl-vibrant main .phase6-task {
+  min-height:96px;
+  border:1px solid #dce4ee;
+  border-radius:13px;
+  box-shadow:0 2px 6px rgb(20 43 76 / .04);
+  transition:background-color 160ms ease,border-color 160ms ease,box-shadow 160ms ease,transform 160ms ease;
+}
+.enterprise-shell.iocl-vibrant .phase6-task .phase6-task-icon {
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  background:#e9f1fc;
+  color:#21558d;
+}
+.enterprise-shell.iocl-vibrant .phase6-task[data-work-area="reports"] .phase6-task-icon {
+  background:#fff1e6;color:#a84413;
+}
+.enterprise-shell.iocl-vibrant .phase6-task[data-work-area="support"] .phase6-task-icon {
+  background:#e5f4ef;color:#176c55;
+}
+.enterprise-shell.iocl-vibrant .phase6-task[data-work-area="setup"] .phase6-task-icon {
+  background:#eeeafb;color:#574296;
+}
+.enterprise-shell.iocl-vibrant .phase6-task .phase6-task-icon + span {
+  overflow-wrap:anywhere;
+}
+.enterprise-shell.iocl-vibrant .phase6-status-summary {
+  padding:10px 12px;
+  border-radius:10px;
+  background:#f1f5fa;
+  border:1px solid #e1e8f1;
+}
+.enterprise-shell.iocl-vibrant .phase6-indicator {
+  min-width:0;
+  flex-wrap:wrap;
+  border-color:#dce4ee;
+  background:#fff;
+  border-radius:11px;
+}
+.enterprise-shell.iocl-vibrant .phase6-indicator > div { min-width:0;overflow-wrap:anywhere; }
+.enterprise-shell.iocl-vibrant .phase6-status-pill {
+  display:inline-flex;
+  align-items:center;
+  padding:4px 8px;
+  border-radius:6px;
+  white-space:nowrap;
+  background:#eef2f6;
+  color:#475569;
+}
+.enterprise-shell.iocl-vibrant .phase6-status-pill[data-state="complete"] {
+  background:#e3f5eb;color:#12613f;
+}
+.enterprise-shell.iocl-vibrant .phase6-status-pill[data-state="pending"] {
+  background:#fff2d8;color:#854d0e;
+}
+.enterprise-shell.iocl-vibrant .phase6-primary {
+  background:#183454;
+  box-shadow:0 3px 9px rgb(24 52 84 / .18);
+}
+.enterprise-shell.iocl-vibrant .phase6-primary:hover { background:#244b74; }
+.enterprise-shell.iocl-vibrant :is(.phase6-task,.phase6-primary):focus-visible {
+  outline:2px solid #a84413;
+  outline-offset:3px;
+}
+@media (hover:hover) and (pointer:fine) {
+  .enterprise-shell.iocl-vibrant main .phase6-task:not(:disabled):hover {
+    border-color:#d99b73;
+    background:#fffdfa;
+    box-shadow:0 8px 20px rgb(20 43 76 / .09);
+    transform:translateY(-2px);
+  }
+}
+@media (max-width:639px) {
+  .enterprise-shell.iocl-vibrant .phase6-outlet-context { width:100%; }
+  .enterprise-shell.iocl-vibrant .phase6-task { min-height:84px; }
+  .enterprise-shell.iocl-vibrant .phase6-primary { width:100%;min-height:44px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .enterprise-shell.iocl-vibrant main .phase6-task:not(:disabled):hover { transform:none; }
+}
