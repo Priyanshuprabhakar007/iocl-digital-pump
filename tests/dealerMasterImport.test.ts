@@ -38,13 +38,37 @@ describe('Dealer master Excel synchronization safeguards',()=>{
   it('blocks unknown new outlet city and pincode, even with known hierarchy',()=>{
     const item=buildDealerImportPlan(parseDealerMasterRows([excel(123456)]),[],[div],[area])[0];
     expect(item.action).toBe('REVIEW');
-    expect(item.messages.some(x=>x.includes('City and PIN'))).toBe(true);
+    expect(item.messages.some(x=>x.includes('PIN code required'))).toBe(true);
   });
   it('flags duplicate codes in the upload and missing hierarchy',()=>{
     const duplicate=buildDealerImportPlan(parseDealerMasterRows([excel(),excel()]),[current],[div],[area]);
     expect(duplicate[1].action).toBe('REVIEW');
     const missing=buildDealerImportPlan(parseDealerMasterRows([excel()]),[current],[],[]);
     expect(missing[0].action).toBe('REVIEW');
+  });
+  it('supports explicit verified hierarchy aliases while respecting division lineage',()=>{
+    const mismatchedDivision={...div,name:'Chandigarh State Office'} as Division;
+    const mismatchedArea={...area,name:'CHANDIGARH SOUTH'} as SalesArea;
+    const rows=parseDealerMasterRows([excel()]);
+    expect(buildDealerImportPlan(rows,[current],[mismatchedDivision],[mismatchedArea])[0].action).toBe('REVIEW');
+    const mapped={
+      divisionIdsByOffice:{'CHANDIGARH DO':'div1'},
+      areaIdsByName:{'CHANDIGARH SOUTH RSA':'sa1'}
+    };
+    expect(buildDealerImportPlan(rows,[current],[mismatchedDivision],[mismatchedArea],mapped)[0].action).toBe('UNCHANGED');
+    expect(buildDealerImportPlan(rows,[current],[mismatchedDivision],[{...mismatchedArea,divisionId:'other'} as SalesArea],mapped)[0].action).toBe('REVIEW');
+  });
+  it('refuses every duplicate row in a single file',()=>{
+    const plan=buildDealerImportPlan(parseDealerMasterRows([excel(),excel()]),[current],[div],[area]);
+    expect(plan.map(p=>p.action)).toEqual(['REVIEW','REVIEW']);
+  });
+  it('permits explicit site classification mapping but never invents City/PIN',()=>{
+    const unknown=excel(111222);
+    unknown['PRICE GROUP DESCRIPTION(SITE)']='KSK-A';
+    const rows=parseDealerMasterRows([unknown]);
+    const plan=buildDealerImportPlan(rows,[],[div],[area],{outletTypesBySite:{'KSK-A':'A_SITE'}});
+    expect(plan[0].action).toBe('REVIEW');
+    expect(plan[0].messages.some(x=>x.includes('PIN'))).toBe(true);
   });
   it('does not modify archived outlets without separate approval',()=>{
     const item=buildDealerImportPlan(parseDealerMasterRows([excel()]),[{...current,lifecycleStatus:'ARCHIVED'} as RetailOutlet],[div],[area])[0];

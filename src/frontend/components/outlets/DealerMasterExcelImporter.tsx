@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, RefreshCw, UploadCloud } from 'lucide-react';
 import { apiFetch } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../../shared/constants';
 import type { Division, RetailOutlet, SalesArea } from '../../../shared/types';
-import { buildDealerImportPlan, parseDealerMasterRows, type DealerMasterRow, type ImportPlan } from '../../../shared/dealerMasterImport';
+import { buildDealerImportPlan, classifyDealerSite, dealerMappingKey, parseDealerMasterRows, type DealerImportMappings, type DealerMasterRow, type ImportPlan } from '../../../shared/dealerMasterImport';
 
 type Action = ImportPlan['action'];
 type UploadResult = { roCode: string; status: 'SUCCESS' | 'FAILED'; message: string };
@@ -23,6 +23,35 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
   const [reviewed, setReviewed] = useState(false);
   const [results, setResults] = useState<UploadResult[]>([]);
   const [showOnlyProblems, setShowOnlyProblems] = useState(false);
+  const [mappings, setMappings] = useState<DealerImportMappings>({});
+  type Environment = {outlets:RetailOutlet[];divisions:Division[];areas:SalesArea[]};
+  const environmentRef = useRef<Environment|null>(null);
+  const [options, setOptions] = useState<Environment|null>(null);
+  const sourceOffices = useMemo(()=>[...new Set(sourceRows.map(r=>dealerMappingKey(r.salesOffice)))].filter(Boolean),[sourceRows]);
+  const sourceAreas = useMemo(()=>[...new Set(sourceRows.map(r=>dealerMappingKey(r.salesArea)))].filter(Boolean),[sourceRows]);
+  const unknownSites = useMemo(()=>[...new Set(sourceRows.map(r=>dealerMappingKey(r.siteDescription)))].filter(site=>site && !classifyDealerSite(site)),[sourceRows]);
+
+  function changeMapping(kind:keyof DealerImportMappings, key:string, value:string) {
+    const next = {...mappings,[kind]:{...(mappings[kind]||{}),[key]:value}};
+    setMappings(next);setReviewed(false);setResults([]);
+    if(environmentRef.current) {
+      const env=environmentRef.current;
+      setPlan(buildDealerImportPlan(sourceRows,env.outlets,env.divisions,env.areas,next));
+    }
+  }
+  function getDivisionId(office:string) {
+    const key=dealerMappingKey(office);
+    return mappings.divisionIdsByOffice?.[key] ||
+      (options?.divisions.filter(d=>dealerMappingKey(d.name)===key).length===1
+        ? options.divisions.find(d=>dealerMappingKey(d.name)===key)?.id : '') || '';
+  }
+  function exportCorrectionWorkbook() {
+    if(!sourceRows.length)return;
+    const edited=sourceRows.map(r=>({...r.sourceDetails,CITY:r.city||'',PINCODE:r.pincode||''}));
+    const workbook=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(edited), 'Dealer Master');
+    XLSX.writeFile(workbook,'IOCL_Dealer_Master_City_PIN_Review.xlsx');
+  }
 
   const totals = useMemo(() => ({
     create: plan.filter(p => p.action === 'CREATE').length,
@@ -44,9 +73,10 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     return {outlets:outletRes.data, divisions:divisionRes.data, areas:areaRes.data};
   }
 
-  async function preview(rows: DealerMasterRow[]) {
+  async function preview(rows: DealerMasterRow[], currentMappings:DealerImportMappings=mappings) {
     const env = await loadEnvironment();
-    const next = buildDealerImportPlan(rows, env.outlets, env.divisions, env.areas);
+    environmentRef.current=env;setOptions(env);
+    const next = buildDealerImportPlan(rows, env.outlets, env.divisions, env.areas,currentMappings);
     setPlan(next); setReviewed(false); setResults([]);
     return next;
   }
@@ -55,7 +85,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    setError(''); setPlan([]); setSourceRows([]); setReviewed(false); setResults([]);
+    setError(''); setPlan([]); setSourceRows([]); setReviewed(false); setResults([]);setMappings({});setOptions(null);environmentRef.current=null;
     if (!/\.(xlsx|xls)$/i.test(file.name) || file.size > 5 * 1024 * 1024) {
       setError('Choose an Excel .xlsx or .xls workbook smaller than 5 MB.'); return;
     }
@@ -70,7 +100,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
       const rows = parseDealerMasterRows(raw);
       if (!rows.some(r => r.roCode && r.name)) throw Error('CUSTCODE and CUSTOMER NAME columns could not be detected. Please use the dealer master format.');
       setSourceRows(rows); setFileName(file.name);
-      await preview(rows);
+      await preview(rows,{});
     } catch(e) {setError(e instanceof Error ? e.message:'Unable to read workbook');}
     finally {setBusy(false);}
   }
@@ -92,7 +122,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     try {
       // Re-read DB and require a fresh identical preview to avoid importing against stale data.
       const env = await loadEnvironment();
-      const fresh = buildDealerImportPlan(sourceRows, env.outlets, env.divisions, env.areas);
+      const fresh = buildDealerImportPlan(sourceRows, env.outlets, env.divisions, env.areas,mappings);
       if (fresh.length !== plan.length || fresh.some((item,i) => fingerprint(item) !== fingerprint(plan[i]))) {
         setPlan(fresh);setReviewed(false);
         throw Error('Outlet data changed since preview. Review the refreshed plan and approve again.');
@@ -129,7 +159,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
       setReviewed(false);
       // Refresh to show which records were applied; complete records will become UNCHANGED.
       const current = await loadEnvironment();
-      setPlan(buildDealerImportPlan(sourceRows, current.outlets, current.divisions, current.areas));
+      setPlan(buildDealerImportPlan(sourceRows, current.outlets, current.divisions, current.areas,mappings));
       if (outcome.some(r=>r.status==='SUCCESS')) onCompleted();
     } catch(e) {setError(e instanceof Error?e.message:'Import failed');}
     finally {setBusy(false);}
@@ -152,6 +182,48 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
       </div>
       {error && <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs"><AlertTriangle className="inline h-4 w-4 mr-2"/>{error}</div>}
       {plan.length > 0 && <>
+        <details open className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3" data-testid="dealer-master-mapping">
+          <summary className="font-bold text-sm text-[#17365D] cursor-pointer">Resolve Excel hierarchy labels once for all outlets</summary>
+          <p className="text-xs text-slate-600 my-2">Your Excel uses names such as Chandigarh DO / Chandigarh South RSA. Select the corresponding existing organizational units. These choices affect only the import preview until you explicitly approve a sync.</p>
+          <div className="grid md:grid-cols-2 gap-3 my-3">
+            {sourceOffices.map(office=><label key={office} className="text-xs font-semibold text-slate-700 flex flex-col gap-1">
+              Sales Office in Excel: {office}
+              <select aria-label={'Map Sales Office '+office} className="border rounded-lg bg-white p-2" value={mappings.divisionIdsByOffice?.[office]||''} onChange={e=>changeMapping('divisionIdsByOffice',office,e.target.value)}>
+                <option value="">Use exact name (or choose match)</option>
+                {options?.divisions.filter(d=>d.status!=='INACTIVE').map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>)}
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            {sourceAreas.map(area=>{
+              const corresponding=sourceRows.find(r=>dealerMappingKey(r.salesArea)===area);
+              const divisionId=getDivisionId(corresponding?.salesOffice||'');
+              return <label key={area} className="text-xs font-semibold text-slate-700 flex flex-col gap-1">
+                Sales Area in Excel: {area}
+                <select aria-label={'Map Sales Area '+area} disabled={!divisionId} className="border rounded-lg bg-white p-2 disabled:opacity-50" value={mappings.areaIdsByName?.[area]||''} onChange={e=>changeMapping('areaIdsByName',area,e.target.value)}>
+                  <option value="">{divisionId?'Use exact name (or choose match)':'Select Sales Office mapping first'}</option>
+                  {options?.areas.filter(a=>a.divisionId===divisionId&&a.status!=='INACTIVE').map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </label>;
+            })}
+          </div>
+          {unknownSites.length>0 && <>
+            <p className="text-xs font-semibold text-slate-700 mt-3">Unrecognized site classifications — choose only after checking IOCL definitions:</p>
+            <div className="grid md:grid-cols-2 gap-3">
+              {unknownSites.map(site=><label key={site} className="text-xs font-semibold text-slate-700 flex flex-col gap-1">
+                {site}
+                <select aria-label={'Map site type '+site} className="border rounded-lg bg-white p-2" value={mappings.outletTypesBySite?.[site]||''} onChange={e=>changeMapping('outletTypesBySite',site,e.target.value)}>
+                  <option value="">Needs review — do not guess</option>
+                  <option value="A_SITE">A Site</option><option value="COCO">COCO</option><option value="CODO">CODO</option>
+                </select>
+              </label>)}
+            </div>
+          </>}
+          <div className="flex flex-wrap items-center gap-3 mt-3">
+            <button type="button" onClick={exportCorrectionWorkbook} className="border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white">Download Excel with City &amp; PIN columns</button>
+            <p className="text-xs text-slate-600">New outlets must have verified City and six-digit PIN. Fill those columns using authoritative address details, then re-upload.</p>
+          </div>
+        </details>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {([['Create',totals.create],['Update',totals.update],['Unchanged',totals.unchanged],['Needs review',totals.review]] as const).map(([label,count])=>
             <div key={label} className="bg-slate-50 border border-slate-200 rounded-lg p-3"><div className="text-xs text-slate-500">{label}</div><div className="text-xl font-bold text-[#17365D]">{count}</div></div>

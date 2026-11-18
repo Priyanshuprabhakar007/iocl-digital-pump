@@ -7,6 +7,12 @@ export type DealerMasterRow = {
   sourceDetails: Record<string, string>;
 };
 export type ImportAction = 'CREATE' | 'UPDATE' | 'UNCHANGED' | 'REVIEW';
+export type DealerImportMappings = {
+  divisionIdsByOffice?: Record<string,string>;
+  areaIdsByName?: Record<string,string>;
+  outletTypesBySite?: Record<string,'COCO'|'CODO'|'A_SITE'>;
+};
+export const dealerMappingKey = (value:string) => value.trim().replace(/\s+/g,' ').toUpperCase();
 export type ImportPlan = {
   row: DealerMasterRow; action: ImportAction; messages: string[];
   existingId?: string;
@@ -54,27 +60,30 @@ export function buildDealerImportPlan(
   existing: RetailOutlet[],
   divisions: Division[],
   areas: SalesArea[],
+  mappings: DealerImportMappings = {},
 ): ImportPlan[] {
   const byCode = new Map(existing.map(o => [normalized(o.roCode), o]));
-  const seen = new Set<string>();
+  const counts = new Map<string,number>();
+  rows.forEach(r=>{const k=normalized(r.roCode);counts.set(k,(counts.get(k)||0)+1);});
   return rows.map(row => {
     const messages: string[] = []; const changes: string[] = [];
     const code = normalized(row.roCode);
     const current = byCode.get(code);
     if (!/^\d{4,12}$/.test(code)) messages.push('Missing or invalid numeric customer/RO code');
-    if (seen.has(code)) messages.push('Duplicate RO code within uploaded file');
-    seen.add(code);
+    if ((counts.get(code)||0)>1) messages.push('Duplicate RO code within uploaded file');
     if (!row.name || !row.address || !row.district) messages.push('Outlet name, address and district are required');
-    const matchedDivisions = divisions.filter(d => normalized(d.name) === normalized(row.salesOffice));
-    const division = matchedDivisions.length === 1 ? matchedDivisions[0] : null;
-    if (!division) messages.push('Sales Office does not uniquely match an existing Division');
-    const matchedAreas = areas.filter(a => normalized(a.name) === normalized(row.salesArea) && a.divisionId === division?.id);
-    const area = matchedAreas.length === 1 ? matchedAreas[0] : null;
-    if (!area) messages.push('Sales Area does not uniquely match the selected Division');
-    const inferredType = classifyDealerSite(row.siteDescription);
+    const mappedDivisionId=mappings.divisionIdsByOffice?.[dealerMappingKey(row.salesOffice)];
+    const matchedDivisions=divisions.filter(d=>mappedDivisionId?d.id===mappedDivisionId:normalized(d.name)===normalized(row.salesOffice));
+    const division=matchedDivisions.length===1&&matchedDivisions[0].status!=='INACTIVE'?matchedDivisions[0]:null;
+    if(!division)messages.push('Sales Office not matched to an active Division: choose mapping');
+    const mappedAreaId=mappings.areaIdsByName?.[dealerMappingKey(row.salesArea)];
+    const matchedAreas=areas.filter(a=>(mappedAreaId?a.id===mappedAreaId:normalized(a.name)===normalized(row.salesArea))&&a.divisionId===division?.id);
+    const area=matchedAreas.length===1&&matchedAreas[0].status!=='INACTIVE'?matchedAreas[0]:null;
+    if(!area)messages.push('Sales Area not matched within selected Division: choose mapping');
+    const inferredType=mappings.outletTypesBySite?.[dealerMappingKey(row.siteDescription)]||classifyDealerSite(row.siteDescription);
     if (!inferredType && !current) messages.push('Site classification needs manual review before creating outlet');
     if (current?.lifecycleStatus === 'ARCHIVED' || current?.isArchived || current?.directoryHidden) messages.push('Archived or hidden outlet requires separate review');
-    if (!current && (!row.city || !row.pincode)) messages.push('City and PIN code missing for new outlet; supply verified values in Excel');
+    if (!current && (!row.city || !/^\d{6}$/.test(row.pincode))) messages.push('Verified City and six-digit PIN code required for new outlet; supply in Excel');
     // Do not change outlet type on existing records: classification changes need explicit review.
     if (current && inferredType && inferredType !== current.outletType) messages.push('Outlet type differs from existing record; review separately');
     if (messages.length || !division || !area) return {row, action:'REVIEW', messages, changes, existingId:current?.id};
