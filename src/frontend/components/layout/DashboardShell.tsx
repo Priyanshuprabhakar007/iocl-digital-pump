@@ -20,7 +20,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
   return (
     <div className="enterprise-shell iocl-vibrant min-h-screen bg-[#F7F5F1] text-[#172B4D] flex flex-col font-sans">
-      <Header onToggleMobileSidebar={() => setMobileOpen(!mobileOpen)} />
+      <a href="#main-workspace" className="iocl-skip-link">Skip to workspace</a>
+      <Header mobileOpen={mobileOpen} onToggleMobileSidebar={() => setMobileOpen(previous=>!previous)} />
 
       <div className="flex min-w-0 flex-1 items-stretch">
         <Sidebar
@@ -30,7 +31,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           onCloseMobile={() => setMobileOpen(false)}
         />
 
-        <main className="min-w-0 flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-7 xl:p-8">
+        <main id="main-workspace" tabIndex={-1} className="min-w-0 flex-1 overflow-x-hidden p-3 sm:p-5 lg:p-6 xl:p-8">
           {children}
         </main>
       </div>
