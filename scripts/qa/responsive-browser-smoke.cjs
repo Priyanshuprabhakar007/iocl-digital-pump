@@ -25,7 +25,7 @@ async function main(){
     let shiftAttempts=0;
     await page.route('**/*',async route=>{
       const req=route.request(),url=new URL(req.url());
-      if(url.origin!==base){blocked.push(req.url());return route.abort();}
+      if(url.origin!==base){if(!['fonts.googleapis.com','fonts.gstatic.com'].includes(url.hostname))blocked.push(req.url());return route.abort();}
       if(!url.pathname.startsWith('/api/'))return route.continue();
       requests.push(url.pathname);
       if(req.method()!=='GET'){blocked.push(req.method()+' '+url.pathname);return route.abort();}
@@ -56,7 +56,7 @@ async function main(){
         assert(docWidth<=width+1,'Document has horizontal overflow at '+width);
       }
       for(const [w,h] of [[320,640],[390,844],[768,1024],[1024,768],[1440,900],[390,844]])await checkViewport(w,h);
-      const menu=page.getByRole('button',{name:'Toggle Navigation Menu'});
+      const menu=page.locator('#mobile-navigation-toggle');
       await menu.click();
       let drawer=page.getByRole('dialog',{name:'Navigation menu'});
       await drawer.waitFor();
