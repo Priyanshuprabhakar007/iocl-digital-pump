@@ -43,7 +43,7 @@ describe('Option 4 — Vibrant Modern SaaS actual UI implementation', () => {
 
   it('keeps stock tab handlers and existing receipts while surfacing actual counts', () => {
     expect(stock).toContain('aria-label="Stock operations sections"');
-    expect(stock).toContain('setActiveTab(tab.id as any)');
+    expect(stock).toContain('changeStage(tab.id as StockStage)');
     expect(stock).toContain('tankSnapshots.length');
     expect(stock).toContain('tankReadings.length');
     expect(stock).toContain('shiftReceiptSummary.pendingReceipts.length');
