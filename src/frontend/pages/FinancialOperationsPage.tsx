@@ -61,6 +61,7 @@ export const FinancialOperationsPage: React.FC = () => {
   const requestRef = useRef(0);
   const [shiftListLoading,setShiftListLoading] = useState(true);
   const [shiftListError,setShiftListError] = useState('');
+  const [shiftListRevision,setShiftListRevision] = useState(0);
   const [shiftsList, setShiftsList] = useState<OperationalShift[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
   const [selectedShift, setSelectedShift] = useState<OperationalShift | null>(null);
@@ -114,14 +115,16 @@ export const FinancialOperationsPage: React.FC = () => {
         if(!res.success||!res.data){setShiftsList([]);chooseShift(null);setShiftListError(res.error?.message||'Could not verify shifts.');return;}
         const available=res.data.filter(s=>s.outletId===selectedOutletId);
         setShiftsList(available);
-        const chosen=resolveWorkbenchShift(available,selectedOutletId,initialSelection.current,'latest');
+        const currentChoice=selectedRef.current ? available.find(s=>s.id===selectedRef.current) || null : resolveWorkbenchShift(available,selectedOutletId,initialSelection.current,'latest');
+        const chosen=currentChoice;
         if(!chosen&&initialSelection.current?.outletId===selectedOutletId)setShiftListError('Selected shift is unavailable for this outlet and date. Choose a shift explicitly.');
         chooseShift(chosen);
+        if(chosen)initialSelection.current=toWorkbenchSelection(chosen);
       } finally {if(!cancelled)setShiftListLoading(false);}
     };
     if(selectedOutletId)loadShifts();
     return ()=>{cancelled=true;mounted.current=false;requestRef.current++;};
-  },[selectedOutletId]);
+  },[selectedOutletId,shiftListRevision]);
 
   const refreshData = async () => {
     if (!selectedOutletId || !mounted.current || selectedRef.current!==selectedShiftId) return;
@@ -321,6 +324,7 @@ export const FinancialOperationsPage: React.FC = () => {
           <div className="flex flex-wrap items-center gap-3">
             <select
               value={selectedOutletId}
+              disabled={workflowBusy}
               onChange={(e) => setSelectedOutletId(e.target.value)}
               className="bg-[#F1F5F9] border border-[#D7E0EA] text-[#17365D] rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none"
             >
@@ -342,7 +346,8 @@ export const FinancialOperationsPage: React.FC = () => {
             </select>
 
             <button
-              onClick={refreshData}
+              disabled={workflowBusy}
+              onClick={() => {if(!selectedShiftId)setShiftListRevision(v=>v+1);refreshData();}}
               aria-label="Refresh financial data"
               className="p-2 bg-[#F1F5F9] text-[#64748B] hover:text-[#17365D] rounded-xl border border-[#D7E0EA] transition-colors"
             >
