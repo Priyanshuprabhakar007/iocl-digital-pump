@@ -181,7 +181,7 @@ function MainAppContent() {
         {activeTab === 'org-masters' && <OrganizationMastersPage />}
         {activeTab === 'rbac' && <RbacPage />}
         {activeTab === 'audit' && <AuditPage />}
-        {activeTab === 'documents' && <DocumentsPage />}
+        {activeTab === 'documents' && <OutletScopedPage><DocumentsPage /></OutletScopedPage>}
       </DashboardShell>
       </ShiftWorkbenchProvider>
     </ActiveOutletProvider>
