@@ -1281,9 +1281,10 @@ export const PumpInfrastructurePage: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="iocl-mobile-stack flex items-center gap-3 min-w-0">
             <span className="text-xs font-mono font-semibold text-[#64748B]">Select Outlet:</span>
             <select
+              aria-label="Pump infrastructure retail outlet"
               value={selectedOutletId}
               onChange={(e) => setSelectedOutletId(e.target.value)}
               className="bg-[#F1F5F9] border border-[#D7E0EA] text-[#17365D] rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold focus:outline-none focus:border-orange-500"
@@ -2039,7 +2040,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {modalType === 'mapProduct' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
+          <div className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-2">Map Fuel Product to Outlet</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleMapProduct} className="space-y-4">
@@ -2072,7 +2073,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {modalType === 'addTank' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
+          <div className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-2">Register Underground Storage Tank</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleAddTank} className="space-y-3">
@@ -2154,7 +2155,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {modalType === 'addDispenser' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
+          <div className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-2">Register Dispensing Unit (DU)</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleAddDispenser} className="space-y-3">
@@ -2272,7 +2273,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {modalType === 'editDispenser' && editingDispenser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
+          <div className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-2">Configure Dispensing Unit (DU #{editingDispenser.dispenserNumber})</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleEditDispenser} className="space-y-3">
@@ -2403,7 +2404,7 @@ export const PumpInfrastructurePage: React.FC = () => {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
-            <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
               <h2 className="text-lg font-bold text-[#17365D]">Configure Fuel Nozzle</h2>
               {modalError && <div className="p-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
 
@@ -2521,7 +2522,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {modalType === 'addShift' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
+          <div className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-[#17365D] mb-2">Create Shift Template</h2>
             {modalError && <div className="p-3 mb-3 bg-rose-500/10 text-rose-700 text-xs rounded-xl">{modalError}</div>}
             <form onSubmit={handleAddShift} className="space-y-3">
@@ -2593,7 +2594,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {modalType === 'editShift' && editingShift && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+          <div className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold text-[#17365D]">Edit Shift Template ({editingShift.code})</h2>
@@ -2708,7 +2709,7 @@ export const PumpInfrastructurePage: React.FC = () => {
       {modalType === 'editTank' && editingTank && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
-          <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+          <div className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold text-[#17365D]">Edit Tank #{editingTank.tankNumber}</h2>
@@ -2844,7 +2845,7 @@ export const PumpInfrastructurePage: React.FC = () => {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setModalType(null)} />
-            <div className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-[#17365D]">Edit Nozzle Mapping</h2>
@@ -3015,7 +3016,7 @@ export const PumpInfrastructurePage: React.FC = () => {
               className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
               onClick={() => setModalType(null)}
             />
-            <div className="relative z-10 w-full max-w-4xl max-h-[92vh] overflow-y-auto bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-5">
+            <div className="iocl-scroll-panel relative z-10 w-full max-w-4xl max-h-[92vh] overflow-y-auto bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-5">
               {/* Header */}
               <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] pb-4">
                 <div className="flex-1">
