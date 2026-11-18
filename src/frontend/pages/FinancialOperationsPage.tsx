@@ -538,7 +538,7 @@ export const FinancialOperationsPage: React.FC = () => {
               {/* Sales Revenue */}
               <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-[#17365D] uppercase tracking-wider font-mono">Authoritative Sales Revenue</h3>
+                  <h3 className="text-sm font-bold text-[#17365D] uppercase tracking-wider font-mono" >{provisional?'Sales revenue (provisional)':'Authoritative Sales Revenue'}</h3>
                   <TrendingUp className="w-4 h-4 text-emerald-500" />
                 </div>
                 <div className="space-y-3">
@@ -598,8 +598,8 @@ export const FinancialOperationsPage: React.FC = () => {
                       </div>
                     )}
                     <div className="flex items-center justify-between font-bold text-[#17365D] text-base pt-1.5 border-t border-[#E2E8F0]">
-                      <span>Authoritative Sales Total:</span>
-                      <span className="text-emerald-700">₹{summary.salesRevenue.authoritativeTotalStr}</span>
+                      <span>{provisional?'Recorded sales subtotal (provisional):':'Authoritative Sales Total:'}</span>
+                      <span className={provisional?"text-amber-800":"text-emerald-700"}>₹{summary.salesRevenue.authoritativeTotalStr}</span>
                     </div>
                   </div>
 
