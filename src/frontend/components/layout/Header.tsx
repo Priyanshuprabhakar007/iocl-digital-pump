@@ -52,7 +52,8 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, mobileOpe
             type="button"
             onClick={onToggleMobileSidebar}
             aria-expanded={mobileOpen}
-            aria-controls="mobile-navigation-dialog"
+            id="mobile-navigation-toggle"
+            aria-controls={mobileOpen?"mobile-navigation-dialog":undefined}
             className="p-2 text-[#526477] hover:text-[#17365D] rounded-lg hover:bg-[#F1F5F9] lg:hidden"
             aria-label="Toggle Navigation Menu"
           >
