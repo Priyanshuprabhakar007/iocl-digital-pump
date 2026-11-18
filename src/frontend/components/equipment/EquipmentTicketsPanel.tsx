@@ -192,7 +192,7 @@ export const EquipmentTicketsPanel: React.FC<EquipmentTicketsPanelProps> = ({
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             {hasActiveFilters
               ? 'Try clearing active status, priority, or equipment type filters.'
-              : 'All dispensers and equipment at this outlet are running without active breakdown reports.'}
+              : 'No breakdown tickets are recorded for this outlet. Equipment condition must be verified separately.'}
           </p>
           {canCreateTicket && !hasActiveFilters && (
             <button
