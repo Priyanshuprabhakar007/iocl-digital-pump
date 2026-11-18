@@ -6,9 +6,10 @@ import { GlobalOutletSelector } from '../../context/ActiveOutletContext';
 
 interface HeaderProps {
   onToggleMobileSidebar: () => void;
+  mobileOpen?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
+export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, mobileOpen=false }) => {
   const { userCtx, logout, switchDemoUser } = useAuth();
   const [demoDropdownOpen, setDemoDropdownOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -44,41 +45,46 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
 
   return (
     <header className="sticky top-0 z-30 min-h-[64px] bg-white/95 backdrop-blur-md border-b-2 border-[#F47721] px-4 sm:px-6 py-2 shadow-[0_6px_22px_rgba(17,43,73,0.08)]">
-      <div className="flex items-center justify-between gap-4">
+      <div className="iocl-header-grid">
         {/* Left branding */}
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        <div className="iocl-header-brand flex min-w-0 items-center gap-2 sm:gap-3">
           <button
+            type="button"
             onClick={onToggleMobileSidebar}
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-navigation-dialog"
             className="p-2 text-[#526477] hover:text-[#17365D] rounded-lg hover:bg-[#F1F5F9] lg:hidden"
             aria-label="Toggle Navigation Menu"
           >
             <Menu className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <img
               src="/indianoil-logo.svg"
               alt="IndianOil"
               className="h-9 sm:h-10 w-auto object-contain shrink-0"
             />
-            <div>
-              <div className="flex items-center gap-1.5 font-bold text-[#17365D] tracking-wide text-sm sm:text-base">
+            <div className="min-w-0">
+              <div className="iocl-header-title font-bold text-[#17365D] tracking-wide text-sm sm:text-base">
                 IOCL <span className="text-[#D86514]">Digital Outlet Manager</span>
               </div>
-              <div className="text-[11px] text-[#64748B] hidden sm:block">
+              <div className="text-[11px] text-[#64748B] hidden xl:block truncate">
                 Indian Oil Corporation Limited • Enterprise Gateway
               </div>
             </div>
           </div>
         </div>
 
-        {/* Center / Right Scope & User info */}
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          {/* Global Active Outlet Selector */}
-          <GlobalOutletSelector />
+        {/* One outlet selector, with a dedicated full-width row on small screens. */}
+        <div className="iocl-header-outlet min-w-0">
+          <GlobalOutletSelector className="min-w-0 w-full" />
+        </div>
+        {/* Right Scope & User info */}
+        <div className="iocl-header-account flex min-w-0 items-center justify-end gap-1 sm:gap-2">
 
           {/* Active Scope Badge */}
-          <div className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-medium border ${getScopeBadgeColor(userCtx.primaryScope)}`}>
+          <div className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-medium border ${getScopeBadgeColor(userCtx.primaryScope)}`}>
             <MapPin className="w-3.5 h-3.5 opacity-70" />
             <span>SCOPE: {userCtx.primaryScope}</span>
           </div>
@@ -124,14 +130,14 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
 
           {/* Active User Badge & Logout */}
           <div className="flex items-center gap-2 pl-2 border-l border-[#E2E8F0]">
-            <div className="text-right hidden sm:block">
+            <div className="text-right hidden xl:block">
               <div className="text-xs font-semibold text-[#17365D]">{userCtx.user.name}</div>
               <div className="text-[10px] text-[#B8530D]">
                 {userCtx.roles.join(', ')}
               </div>
             </div>
 
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#17365D] to-[#275B84] border border-[#17365D] flex items-center justify-center text-white font-bold text-xs">
+            <div className="hidden sm:flex w-9 h-9 rounded-full bg-gradient-to-br from-[#17365D] to-[#275B84] border border-[#17365D] items-center justify-center text-white font-bold text-xs">
               {userCtx.user.name.charAt(0)}
             </div>
 
