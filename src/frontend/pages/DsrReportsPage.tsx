@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Calendar, Download, Eye, FileText, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { useShiftWorkbench } from '../context/ShiftWorkbenchContext';
 import { apiFetch } from '../services/api';
 import { PERMISSIONS } from '../../shared/constants';
 import type { DailyFuelSummary } from '../../shared/types';
@@ -119,8 +120,9 @@ function RetrievedReport({outletId, outletName, roCode, dates, period, canExport
 export const DsrReportsPage: React.FC = () => {
   const {hasPermission,userCtx}=useAuth();
   const {activeOutletId,activeOutlet,accessibleOutlets,setActiveOutletId}=useActiveOutlet();
+  const {selection, navigate}=useShiftWorkbench();
   const [mode,setMode]=useState<DsrPeriod>('DAY');
-  const [anchor,setAnchor]=useState(today);
+  const [anchor,setAnchor]=useState(() => selection?.businessDate || today());
   const [month,setMonth]=useState(getLocalMonthInputValue);
   const [from,setFrom]=useState(today);
   const [to,setTo]=useState(today);
@@ -132,6 +134,7 @@ export const DsrReportsPage: React.FC = () => {
     <div className="rounded-xl border border-slate-200 bg-white p-5">
       <h1 className="flex items-center gap-2 text-xl font-bold text-[#17365D]"><FileText className="w-5 h-5 text-orange-500"/>Daily Sales Reports (DSR)</h1>
       <p className="mt-1 text-sm text-slate-500">Retrieve historical daily operations, stock and nozzle sales by date. Preview or download one combined PDF.</p>
+      {selection && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><span>Workbench business date: {selection.businessDate}. DSR includes all shifts for the selected business dates.</span><button type="button" onClick={()=>navigate('daily-ops')} className="font-semibold text-[#17365D] underline">Return to shift workbench</button></div>}
     </div>
     <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
       <div className="flex flex-wrap gap-2" role="group" aria-label="Report period">{(Object.keys(labels) as DsrPeriod[]).map(p=><button key={p} type="button" aria-pressed={mode===p} onClick={()=>setMode(p)} className={mode===p?primary:secondary}>{labels[p]}</button>)}</div>

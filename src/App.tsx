@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './frontend/context/AuthContext';
-import { ActiveOutletProvider } from './frontend/context/ActiveOutletContext';
+import { ActiveOutletProvider, useActiveOutlet } from './frontend/context/ActiveOutletContext';
+import { ShiftWorkbenchProvider } from './frontend/context/ShiftWorkbenchContext';
 import { LoginPage } from './frontend/pages/LoginPage';
 import { DashboardShell } from './frontend/components/layout/DashboardShell';
 import { DashboardPage } from './frontend/pages/DashboardPage';
@@ -69,6 +70,12 @@ function getTabFromLocation(): string {
   if (typeof window === 'undefined') return 'dashboard';
   const path = window.location.pathname;
   return ROUTE_TAB_MAP[path] || 'dashboard';
+}
+
+function OutletScopedPage({children}: {children: React.ReactNode}) {
+  const {activeOutletId, activeOutlet, loading} = useActiveOutlet();
+  if(loading || !activeOutletId || activeOutlet?.id !== activeOutletId) return <p className="p-5 text-sm text-slate-600">{loading?'Loading accessible outlets…':'Select an accessible active outlet.'}</p>;
+  return <React.Fragment key={activeOutletId}>{children}</React.Fragment>;
 }
 
 function MainAppContent() {
@@ -149,24 +156,25 @@ function MainAppContent() {
   }
 
   return (
-    <ActiveOutletProvider>
+    <ActiveOutletProvider key={userCtx.user.id}>
+      <ShiftWorkbenchProvider onNavigate={handleSetActiveTab}>
       <DashboardShell activeTab={activeTab} setActiveTab={handleSetActiveTab}>
         {activeTab === 'dashboard' && <DashboardPage onNavigate={handleSetActiveTab} />}
-        {activeTab === 'daily-ops' && <DailyOperationsPage />}
+        {activeTab === 'daily-ops' && <OutletScopedPage><DailyOperationsPage /></OutletScopedPage>}
         {activeTab === 'outlets' && <OutletsPage />}
         {activeTab === 'products' && <ProductsPage />}
         {activeTab === 'pump-infra' && <PumpInfrastructurePage />}
         {activeTab === 'hr-workforce' && <WorkforceOperationsPage />}
-        {activeTab === 'stock-ops' && <StockOperationsPage />}
+        {activeTab === 'stock-ops' && <OutletScopedPage><StockOperationsPage /></OutletScopedPage>}
         {activeTab === 'cng-ops' && <CngOperationsPage />}
         {activeTab === 'lube-ops' && <LubeOperationsPage />}
         {activeTab === 'equipment-ops' && <EquipmentOperationsPage />}
         {activeTab === 'utilities-ops' && <UtilitiesOperationsPage />}
         {activeTab === 'municipal-taxes' && <MunicipalTaxesPage />}
         {activeTab === 'nfr-ops' && <NfrOperationsPage />}
-        {activeTab === 'financials' && <FinancialOperationsPage />}
+        {activeTab === 'financials' && <OutletScopedPage><FinancialOperationsPage /></OutletScopedPage>}
         {activeTab === 'reports' && <ReportsPage />}
-        {activeTab === 'dsr-reports' && <DsrReportsPage />}
+        {activeTab === 'dsr-reports' && <OutletScopedPage><DsrReportsPage /></OutletScopedPage>}
         {activeTab === 'users' && <UsersPage />}
         {activeTab === 'scopes' && <ScopesPage />}
         {activeTab === 'hierarchy' && <HierarchyPage />}
@@ -175,6 +183,7 @@ function MainAppContent() {
         {activeTab === 'audit' && <AuditPage />}
         {activeTab === 'documents' && <DocumentsPage />}
       </DashboardShell>
+      </ShiftWorkbenchProvider>
     </ActiveOutletProvider>
   );
 }

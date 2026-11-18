@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -44,6 +44,8 @@ import { formatPaiseToMoney } from '../../shared/financialUtils';
 import { PERMISSIONS } from '../../shared/constants';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { useShiftWorkbench } from '../context/ShiftWorkbenchContext';
+import { resolveWorkbenchShift, toWorkbenchSelection } from '../utils/shiftWorkbench';
 import { getLocalDateInputValue } from '../../shared/utils/dateUtils';
 import './financialReportsModern.css';
 
@@ -52,7 +54,14 @@ export const FinancialOperationsPage: React.FC = () => {
   const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
   const selectedOutletId = activeOutletId || '';
   const setSelectedOutletId = setActiveOutletId;
-
+  const {selection, remember, navigate} = useShiftWorkbench();
+  const initialSelection = useRef(selection);
+  const mounted = useRef(true);
+  const selectedRef = useRef('');
+  const requestRef = useRef(0);
+  const [shiftListLoading,setShiftListLoading] = useState(true);
+  const [shiftListError,setShiftListError] = useState('');
+  const [shiftListRevision,setShiftListRevision] = useState(0);
   const [shiftsList, setShiftsList] = useState<OperationalShift[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
   const [selectedShift, setSelectedShift] = useState<OperationalShift | null>(null);
@@ -82,63 +91,87 @@ export const FinancialOperationsPage: React.FC = () => {
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [varianceReason, setVarianceReason] = useState('');
 
-  // Load shifts for selected outlet
+  const chooseShift = (shift: OperationalShift | null) => {
+    if(shift && shift.outletId!==selectedOutletId)return;
+    const id=shift?.id || '';
+    if(selectedRef.current!==id) {
+      selectedRef.current=id;requestRef.current++;
+      setSelectedShift(null);setCollections([]);setHandovers([]);setDeposits([]);setSummary(null);
+      setShowCollectionModal(false);setShowHandoverModal(false);setShowDepositModal(false);
+      setVarianceReason('');setActionError(null);setActionSuccess(null);
+    }
+    setSelectedShiftId(id);
+    if(shift){initialSelection.current=toWorkbenchSelection(shift);remember(toWorkbenchSelection(shift));}
+  };
+  // Resolve exact remembered shift only against this outlet's authorized shift list.
   useEffect(() => {
-    if (!selectedOutletId) return;
+    mounted.current=true;
+    let cancelled=false;
     const loadShifts = async () => {
-      const res = await apiFetch<OperationalShift[]>(`/api/v1/outlets/${selectedOutletId}/shifts`);
-      if (res.success && res.data) {
-        setShiftsList(res.data);
-        if (res.data.length > 0 && !selectedShiftId) {
-          setSelectedShiftId(res.data[0].id);
-        }
-      }
+      setShiftListLoading(true);setShiftListError('');
+      try {
+        const res=await apiFetch<OperationalShift[]>(`/api/v1/outlets/${selectedOutletId}/shifts`,{cache:'no-store'});
+        if(cancelled)return;
+        if(!res.success||!res.data){setShiftsList([]);chooseShift(null);setShiftListError(res.error?.message||'Could not verify shifts.');return;}
+        const available=res.data.filter(s=>s.outletId===selectedOutletId);
+        setShiftsList(available);
+        const currentChoice=selectedRef.current ? available.find(s=>s.id===selectedRef.current) || null : resolveWorkbenchShift(available,selectedOutletId,initialSelection.current,'latest');
+        const chosen=currentChoice;
+        if(!chosen&&initialSelection.current?.outletId===selectedOutletId)setShiftListError('Selected shift is unavailable for this outlet and date. Choose a shift explicitly.');
+        chooseShift(chosen);
+        if(chosen)initialSelection.current=toWorkbenchSelection(chosen);
+      } finally {if(!cancelled)setShiftListLoading(false);}
     };
-    loadShifts();
-  }, [selectedOutletId]);
+    if(selectedOutletId)loadShifts();
+    return ()=>{cancelled=true;mounted.current=false;requestRef.current++;};
+  },[selectedOutletId,shiftListRevision]);
 
   const refreshData = async () => {
-    if (!selectedOutletId) return;
+    if (!selectedOutletId || !mounted.current || selectedRef.current!==selectedShiftId) return;
+    const request=++requestRef.current;
+    const current=()=>mounted.current && request===requestRef.current && selectedRef.current===selectedShiftId;
     setLoadingData(true);
     setActionError(null);
 
     const promises: Promise<any>[] = [];
-    
-    // Master data
     promises.push(apiFetch<ProductPrice[]>(`/api/v1/outlets/${selectedOutletId}/product-prices`));
     promises.push(apiFetch<CreditParty[]>(`/api/v1/outlets/${selectedOutletId}/credit-parties`));
     promises.push(apiFetch<OutletProduct[]>(`/api/v1/outlets/${selectedOutletId}/products`));
-
     if (selectedShiftId) {
-      promises.push(apiFetch<OperationalShift>(`/api/v1/shifts/${selectedShiftId}`));
+      promises.push(apiFetch<OperationalShift>(`/api/v1/shifts/${selectedShiftId}`,{cache:'no-store'}));
       promises.push(apiFetch<ShiftCollection[]>(`/api/v1/shifts/${selectedShiftId}/collections`));
       promises.push(apiFetch<CashHandover[]>(`/api/v1/shifts/${selectedShiftId}/cash-handovers`));
       promises.push(apiFetch<BankDeposit[]>(`/api/v1/shifts/${selectedShiftId}/bank-deposits`));
       promises.push(apiFetch<ShiftFinancialSummary>(`/api/v1/shifts/${selectedShiftId}/financial-summary`));
     }
-
-    const results = await Promise.all(promises);
-    
-    if (results[0].success) setPrices(results[0].data);
-    if (results[1].success) setCreditParties(results[1].data);
-    if (results[2].success && results[2].data) {
-      setOutletProducts(results[2].data);
-      const activeMapped = results[2].data
-        .filter((op: OutletProduct) => op.status === 'ACTIVE' && op.product && op.product.status === 'ACTIVE')
-        .map((op: OutletProduct) => op.product)
-        .filter((p: Product) => p && ((p.unit === 'LITRE' && p.category !== 'CNG') || (p.category === 'CNG' && p.unit === 'KG')));
-      setProducts(activeMapped);
-    }
-
-    if (selectedShiftId && results[3]) {
-      if (results[3].success) setSelectedShift(results[3].data);
-      if (results[4].success) setCollections(results[4].data);
-      if (results[5].success) setHandovers(results[5].data);
-      if (results[6].success) setDeposits(results[6].data);
-      if (results[7].success) setSummary(results[7].data);
-    }
-
-    setLoadingData(false);
+    try {
+      const results = await Promise.all(promises);
+      if(!current())return;
+      setPrices(results[0].success && results[0].data ? results[0].data : []);
+      setCreditParties(results[1].success && results[1].data ? results[1].data : []);
+      const mapped:OutletProduct[]=results[2].success && results[2].data ? results[2].data : [];
+      setOutletProducts(mapped);
+      setProducts(mapped.filter(op=>op.status==='ACTIVE' && op.product && op.product.status==='ACTIVE')
+        .map(op=>op.product).filter((p):p is Product=>Boolean(p && ((p.unit==='LITRE' && p.category!=='CNG') || (p.category==='CNG' && p.unit==='KG')))));
+      if (selectedShiftId) {
+        const verified=results[3]?.success && results[3].data?.id===selectedShiftId && results[3].data?.outletId===selectedOutletId
+          && shiftsList.some(s=>s.id===selectedShiftId && s.businessDate===results[3].data.businessDate);
+        if(!verified) {
+          setSelectedShift(null);setCollections([]);setHandovers([]);setDeposits([]);setSummary(null);
+          setActionError('Could not verify selected shift. No shift records can be edited until refreshed.');
+          return;
+        }
+        const shift=results[3].data as OperationalShift;
+        setSelectedShift(shift);
+        setCollections(results[4].success && results[4].data ? results[4].data : []);
+        setHandovers(results[5].success && results[5].data ? results[5].data : []);
+        setDeposits(results[6].success && results[6].data ? results[6].data : []);
+        setSummary(results[7].success ? results[7].data : null);
+        if(!results.slice(4,8).every(r=>r.success))setActionError('Some financial records could not be loaded. Review permissions and refresh before relying on these figures.');
+      }
+    } catch(err) {
+      if(current()){setSelectedShift(null);setCollections([]);setHandovers([]);setDeposits([]);setSummary(null);setActionError('Could not load financial data. Refresh and try again.');}
+    } finally {if(current())setLoadingData(false);}
   };
 
   const handleUpdatePrice = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -271,6 +304,8 @@ export const FinancialOperationsPage: React.FC = () => {
     }
   };
 
+  const workflowBusy = loadingData || shiftListLoading || showCollectionModal || showHandoverModal || showDepositModal || showPartyModal || showPriceModal || showEditPriceModal;
+  const goBackToShift = () => { if(!workflowBusy && selectedShift){remember(toWorkbenchSelection(selectedShift));navigate('daily-ops');} };
   return (
     <div className="finance-modern space-y-6 pb-10">
       {/* Header & Selectors */}
@@ -289,6 +324,7 @@ export const FinancialOperationsPage: React.FC = () => {
           <div className="flex flex-wrap items-center gap-3">
             <select
               value={selectedOutletId}
+              disabled={workflowBusy}
               onChange={(e) => setSelectedOutletId(e.target.value)}
               className="bg-[#F1F5F9] border border-[#D7E0EA] text-[#17365D] rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none"
             >
@@ -299,17 +335,19 @@ export const FinancialOperationsPage: React.FC = () => {
 
             <select
               value={selectedShiftId}
-              onChange={(e) => setSelectedShiftId(e.target.value)}
+              disabled={workflowBusy}
+              onChange={(e) => {setShiftListError('');chooseShift(shiftsList.find(s=>s.id===e.target.value)||null);}}
               className="bg-[#F1F5F9] border border-[#D7E0EA] text-[#17365D] rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none"
             >
-              <option value="">Select Shift...</option>
+              <option value="">{shiftListLoading?'Loading shifts…':'Select Shift...'}</option>
               {shiftsList.map(s => (
-                <option key={s.id} value={s.id}>{s.businessDate} ({s.shiftTemplateCode})</option>
+                <option key={s.id} value={s.id}>{s.businessDate} · {s.shiftTemplateName || s.shiftTemplateCode || s.shiftTemplateId} ({s.status})</option>
               ))}
             </select>
 
             <button
-              onClick={refreshData}
+              disabled={workflowBusy}
+              onClick={() => {if(!selectedShiftId)setShiftListRevision(v=>v+1);else refreshData();}}
               aria-label="Refresh financial data"
               className="p-2 bg-[#F1F5F9] text-[#64748B] hover:text-[#17365D] rounded-xl border border-[#D7E0EA] transition-colors"
             >
@@ -318,6 +356,8 @@ export const FinancialOperationsPage: React.FC = () => {
           </div>
         </div>
 
+        {hasPermission(PERMISSIONS.SHIFTS_READ) && <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="text-xs text-slate-600">{selectedShift ? 'Working on '+selectedShift.businessDate+' · '+(selectedShift.shiftTemplateName||selectedShift.shiftTemplateCode||selectedShift.shiftTemplateId) : 'Choose a verified shift to continue.'}</span><button type="button" disabled={workflowBusy||!selectedShift} onClick={goBackToShift} className="text-sm font-semibold text-[#17365D] underline disabled:opacity-50">Return to shift workbench</button></div>}
+        {shiftListError&&<p role="alert" className="mt-3 text-sm text-amber-800">{shiftListError}</p>}
         {/* Tab Switcher */}
         <div className="mt-6 flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar border-t border-[#E2E8F0] pt-4">
           <button

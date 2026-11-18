@@ -1,5 +1,5 @@
 import './operationsModern.css';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../services/api';
 import {
   OperationalShift,
@@ -27,6 +27,10 @@ import {
 } from 'lucide-react';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { useShiftWorkbench } from '../context/ShiftWorkbenchContext';
+import { resolveWorkbenchShift, toWorkbenchSelection } from '../utils/shiftWorkbench';
+import { useAuth } from '../context/AuthContext';
+import { PERMISSIONS } from '../../shared/constants';
 import { getLocalDateInputValue, getLocalDateTimeInputValue } from '../../shared/utils/dateUtils';
 
 export interface ReceiptLineReadiness {
@@ -324,10 +328,18 @@ export const StockOperationsPage: React.FC = () => {
   const { activeOutletId, accessibleOutlets: outlets, setActiveOutletId } = useActiveOutlet();
   const selectedOutletId = activeOutletId || '';
   const setSelectedOutletId = setActiveOutletId;
-
+  const {selection, remember, navigate} = useShiftWorkbench();
+  const {hasPermission} = useAuth();
+  const initialSelection = useRef(selection);
+  const selectedRef = useRef('');
+  const mounted = useRef(true);
+  const listRequest = useRef(0);
+  const dataRequest = useRef(0);
+  const [shiftListLoading,setShiftListLoading] = useState(true);
+  const [readyShiftId,setReadyShiftId] = useState('');
   const [shifts, setShifts] = useState<OperationalShift[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'OPENING' | 'RECEIPTS' | 'CLOSING' | 'RECONCILIATION'>('OPENING');
+  const [activeTab, setActiveTab] = useState<'OPENING' | 'RECEIPTS' | 'CLOSING' | 'RECONCILIATION'>(selection?.shiftId ? 'RECEIPTS' : 'OPENING');
 
   const [tankSnapshots, setTankSnapshots] = useState<OperationalShiftTankSnapshot[]>([]);
   const [tankReadings, setTankReadings] = useState<TankStockReading[]>([]);
@@ -388,63 +400,78 @@ export const StockOperationsPage: React.FC = () => {
   const [cancellationReasonInput, setCancellationReasonInput] = useState<string>('');
   const [lineForms, setLineForms] = useState<Record<string, LineDipFormState>>({});
 
-  // Fetch Shifts when Outlet changes
-  useEffect(() => {
-    if (selectedOutletId) {
-      loadShifts(selectedOutletId);
-    } else {
-      setShifts([]);
-      setSelectedShiftId('');
+  const chooseShift = (shift: OperationalShift | null) => {
+    const id = shift?.id || '';
+    if (shift && shift.outletId !== selectedOutletId) return;
+    if (selectedRef.current !== id) {
+      selectedRef.current = id; dataRequest.current++;
+      setReadyShiftId(''); setLoading(false);
+      setTankSnapshots([]); setTankReadings([]); setReceipts([]); setReconciliation(null);
+      setShowReceiptModal(false); setManagingReceiptId(null); setSuccessMsg(null);
+      setDipForm({tankId:'',readingType:'OPENING',source:'MANUAL',productDipMm:'',waterDipMm:'0.000'});
     }
+    setSelectedShiftId(id);
+    if(shift) {initialSelection.current=toWorkbenchSelection(shift);remember(toWorkbenchSelection(shift));}
+  };
+  useEffect(() => {
+    mounted.current = true;
+    if (selectedOutletId) loadShifts(selectedOutletId);
+    return () => { mounted.current=false; listRequest.current++; dataRequest.current++; };
   }, [selectedOutletId]);
 
-  // Fetch Shift Data when Shift changes
   useEffect(() => {
-    if (selectedShiftId) {
-      loadShiftData(selectedShiftId);
-    }
+    if (selectedShiftId) loadShiftData(selectedShiftId);
   }, [selectedShiftId]);
 
   const loadShifts = async (outletId: string, preserveShiftId?: string) => {
-    const res = await apiFetch<OperationalShift[]>(`/api/v1/outlets/${outletId}/shifts`);
-    if (res.success && res.data) {
-      setShifts(res.data);
-      if (preserveShiftId && res.data.some(s => s.id === preserveShiftId)) {
-        setSelectedShiftId(preserveShiftId);
-        return;
+    if (!mounted.current || outletId !== selectedOutletId) return;
+    const request = ++listRequest.current;
+    setShiftListLoading(true);
+    try {
+      const res = await apiFetch<OperationalShift[]>(`/api/v1/outlets/${outletId}/shifts`, {cache:'no-store'});
+      if (!mounted.current || request !== listRequest.current) return;
+      if (!res.success || !res.data) {
+        setErrorMsg(res.error?.message || 'Could not verify shifts.'); chooseShift(null); setShifts([]); return;
       }
-      const openShift = res.data.find(s => s.status === 'OPEN');
-      if (openShift) {
-        setSelectedShiftId(openShift.id);
-      } else if (res.data.length > 0) {
-        setSelectedShiftId(res.data[0].id);
-      } else {
-        setSelectedShiftId('');
+      const available = res.data.filter(s=>s.outletId===outletId);
+      setShifts(available);
+      const preferredId = preserveShiftId || selectedRef.current;
+      const preferred = preferredId ? available.find(s=>s.id===preferredId) : undefined;
+      const chosen = preferredId ? preferred || null : resolveWorkbenchShift(available,outletId,initialSelection.current);
+      if (!chosen && (preferredId || initialSelection.current?.outletId===outletId)) {
+        setErrorMsg('Selected shift is unavailable for this outlet and date. Choose a shift explicitly.');
       }
+      chooseShift(chosen);
+      if(!chosen && !initialSelection.current?.shiftId)initialSelection.current=null;
+    } finally {
+      if(mounted.current && request===listRequest.current)setShiftListLoading(false);
     }
   };
 
   const loadShiftData = async (shiftId: string) => {
+    if(!mounted.current || selectedRef.current!==shiftId) return {readings:[],receipts:[]};
+    const request=++dataRequest.current;
     setLoading(true);
     setErrorMsg(null);
-
     const [snapsRes, readingsRes, receiptsRes, reconRes] = await Promise.all([
       apiFetch<OperationalShiftTankSnapshot[]>(`/api/v1/shifts/${shiftId}/tank-snapshots`),
       apiFetch<TankStockReading[]>(`/api/v1/shifts/${shiftId}/tank-readings`),
       apiFetch<FuelReceipt[]>(`/api/v1/shifts/${shiftId}/fuel-receipts`),
       apiFetch<ShiftStockSummary>(`/api/v1/shifts/${shiftId}/stock-reconciliation`),
     ]);
-
-    if (snapsRes.success && snapsRes.data) setTankSnapshots(snapsRes.data);
-    if (readingsRes.success && readingsRes.data) setTankReadings(readingsRes.data);
-    if (receiptsRes.success && receiptsRes.data) setReceipts(receiptsRes.data);
-    if (reconRes.success && reconRes.data) setReconciliation(reconRes.data);
-
-    setLoading(false);
-    return {
-      readings: readingsRes.data || [],
-      receipts: receiptsRes.data || [],
-    };
+    const readings=readingsRes.data || [];
+    const received=receiptsRes.data || [];
+    if (mounted.current && request===dataRequest.current && selectedRef.current===shiftId) {
+      setTankSnapshots(snapsRes.success && snapsRes.data ? snapsRes.data : []);
+      setTankReadings(readingsRes.success ? readings : []);
+      setReceipts(receiptsRes.success ? received : []);
+      setReconciliation(reconRes.success ? reconRes.data : null);
+      const verified=snapsRes.success && readingsRes.success && receiptsRes.success;
+      setReadyShiftId(verified?shiftId:'');
+      if(!verified)setErrorMsg('Could not load all saved shift records. Refresh before entering data.');
+      setLoading(false);
+    }
+    return {readings,receipts:received};
   };
 
   const initializeLineForms = (rcpt: FuelReceipt) => {
@@ -924,7 +951,13 @@ export const StockOperationsPage: React.FC = () => {
     }
   };
 
-  const currentShift = shifts.find(s => s.id === selectedShiftId);
+  const currentShift = readyShiftId === selectedShiftId ? shifts.find(s => s.id === selectedShiftId) : undefined;
+  const workflowBusy = loading || shiftListLoading || dipSubmitting || receiptSubmitting || computeSubmitting || manageActionBusy || showReceiptModal || !!managingReceiptId;
+  const goBackToShift = () => {
+    if(workflowBusy || !currentShift) return;
+    if(dipForm.productDipMm && !window.confirm('Leave the unsaved dip entry?')) return;
+    remember(toWorkbenchSelection(currentShift)); navigate('daily-ops');
+  };
   const shiftReceiptSummary = summarizeShiftReceiptReadiness(receipts);
   const receiptDateWarning = evaluateReceiptBusinessDateAlignment(
     currentShift?.businessDate,
@@ -968,7 +1001,8 @@ export const StockOperationsPage: React.FC = () => {
         </div>
 
         <button
-          onClick={() => selectedShiftId && loadShiftData(selectedShiftId)}
+          disabled={workflowBusy}
+          onClick={() => { if(selectedShiftId)loadShiftData(selectedShiftId);else loadShifts(selectedOutletId); }}
           className="self-start sm:self-auto px-3 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] text-xs font-bold rounded-lg border border-[#D7E0EA] flex items-center gap-1.5 transition-colors"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -984,7 +1018,8 @@ export const StockOperationsPage: React.FC = () => {
           </label>
           <select
             value={selectedOutletId}
-            onChange={e => setSelectedOutletId(e.target.value)}
+            disabled={workflowBusy}
+            onChange={e => {if(dipForm.productDipMm && !window.confirm('Discard the unsaved dip entry and change outlet?'))return;setSelectedOutletId(e.target.value);}}
             className="w-full bg-[#F1F5F9] text-[#17365D] text-sm font-semibold rounded-lg p-2.5 border border-[#D7E0EA] focus:border-orange-500 focus:outline-none"
           >
             {outlets.map(o => (
@@ -1001,17 +1036,18 @@ export const StockOperationsPage: React.FC = () => {
           </label>
           <select
             value={selectedShiftId}
-            onChange={e => setSelectedShiftId(e.target.value)}
+            disabled={workflowBusy}
+            onChange={e => { if(dipForm.productDipMm && !window.confirm('Discard the unsaved dip entry and switch shift?')) return; setErrorMsg(null); chooseShift(shifts.find(s=>s.id===e.target.value)||null); }}
             className="w-full bg-[#F1F5F9] text-[#17365D] text-sm font-semibold rounded-lg p-2.5 border border-[#D7E0EA] focus:border-orange-500 focus:outline-none"
           >
             {shifts.length === 0 ? (
-              <option value="">No shifts available</option>
+              <option value="">{shiftListLoading?'Loading shifts…':'No shifts available'}</option>
             ) : (
-              shifts.map(s => (
+              <><option value="">Choose shift</option>{shifts.map(s => (
                 <option key={s.id} value={s.id}>
-                  {s.businessDate} ({s.status})
+                  {s.businessDate} · {s.shiftTemplateName || s.shiftTemplateCode || s.shiftTemplateId} ({s.status})
                 </option>
-              ))
+              ))}</>
             )}
           </select>
         </div>
@@ -1046,6 +1082,7 @@ export const StockOperationsPage: React.FC = () => {
         )}
       </div>
 
+      {hasPermission(PERMISSIONS.SHIFTS_READ) && <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"><span className="text-xs text-slate-600">{currentShift ? 'Working on '+currentShift.businessDate+' · '+(currentShift.shiftTemplateName || currentShift.shiftTemplateCode || currentShift.shiftTemplateId) : 'Choose a verified shift to continue.'}</span><button type="button" disabled={workflowBusy || !currentShift} onClick={goBackToShift} className="text-sm font-semibold text-[#17365D] underline disabled:opacity-50">Return to shift workbench</button></div>}
       {/* Error & Success Messages */}
       {errorMsg && (
         <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
@@ -1110,7 +1147,8 @@ export const StockOperationsPage: React.FC = () => {
       </section>
 
       {/* Read-only record counts from the currently selected operational shift. */}
-      <section aria-label="Shift stock snapshot" className="option4-panel p-4 sm:p-5">
+      {!currentShift && <p role="status" className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">{loading||shiftListLoading?'Loading the selected shift…':'Select a verified shift to view saved stock and receipts.'}</p>}
+      {currentShift && <section aria-label="Shift stock snapshot" className="option4-panel p-4 sm:p-5">
         <div className="mb-3">
           <h2 className="text-base font-bold text-[#17365D]">Shift stock overview</h2>
           <p className="text-xs text-[#64748B]">Current records for the selected shift — no sample data</p>
@@ -1128,10 +1166,10 @@ export const StockOperationsPage: React.FC = () => {
             </div>
           ))}
         </div>
-      </section>
+      </section>}
 
       {/* Tab Content: OPENING & CLOSING STOCK */}
-      {(activeTab === 'OPENING' || activeTab === 'CLOSING') && (
+      {currentShift && (activeTab === 'OPENING' || activeTab === 'CLOSING') && (
         <div className="space-y-6">
           {/* Record Dip Form */}
           {currentShift?.status === 'OPEN' && (
@@ -1257,7 +1295,7 @@ export const StockOperationsPage: React.FC = () => {
       )}
 
       {/* Tab Content: FUEL RECEIPTS */}
-      {activeTab === 'RECEIPTS' && (
+      {currentShift && activeTab === 'RECEIPTS' && (
         <div className="space-y-6">
           <div className="flex flex-wrap justify-between items-center gap-3">
             <div>
@@ -1513,7 +1551,7 @@ export const StockOperationsPage: React.FC = () => {
       )}
 
       {/* Tab Content: RECONCILIATION */}
-      {activeTab === 'RECONCILIATION' && (
+      {currentShift && activeTab === 'RECONCILIATION' && (
         <div className="space-y-6">
           <div className="flex flex-wrap justify-between items-center gap-4">
             <div>
