@@ -390,7 +390,7 @@ export const DailyOperationsPage: React.FC = () => {
         const preferred = preserveActiveShift && activeShiftId
           ? {outletId, businessDate:date, shiftId:activeShiftId} : requested;
         const chosen = resolveWorkbenchShift(data.shifts.map(s=>s.shift), outletId, preferred || {outletId,businessDate:date,shiftId:null});
-        initialSelection.current = null;
+        initialSelection.current = chosen || !preferred?.shiftId ? null : preferred;
         setActiveShiftId(chosen?.id || '');
         if (chosen) remember(toWorkbenchSelection(chosen));
         else if (preferred?.shiftId) setPageError('Previously selected shift is no longer available. Choose a shift explicitly.');
@@ -1213,7 +1213,8 @@ export const DailyOperationsPage: React.FC = () => {
               </label>
               <select
                 value={selectedOutletId}
-                onChange={(e) => setSelectedOutletId(e.target.value)}
+                disabled={navigationBusy}
+                onChange={(e) => {if(hasUnsaved && !window.confirm('Unsaved entries may be lost. Change outlet?'))return;setSelectedOutletId(e.target.value);}}
                 className="h-9 px-3 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
               >
                 {outlets.map((o) => (
@@ -1470,7 +1471,7 @@ export const DailyOperationsPage: React.FC = () => {
                     <button
                       key={ws.shift.id}
                       type="button"
-                      onClick={() => { if(navigationBusy) return; setActiveShiftId(ws.shift.id); remember(toWorkbenchSelection(ws.shift)); }}
+                      onClick={() => { if(navigationBusy) return; initialSelection.current=null; setActiveShiftId(ws.shift.id); remember(toWorkbenchSelection(ws.shift)); }}
                       className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors flex items-center gap-2 ${
                         isSelected
                           ? 'bg-[#003366] text-white border-[#003366]'
@@ -1541,7 +1542,7 @@ export const DailyOperationsPage: React.FC = () => {
                 </div>
               )}
             </div>
-          ) : (
+          ) : loading ? <p role="status" className="text-sm text-slate-600">Loading saved shifts…</p> : (
             <div className="bg-white border border-slate-200 rounded-xl p-8 text-center shadow-xs">
               <Fuel className="w-10 h-10 text-slate-400 mx-auto mb-2" />
               <h3 className="text-base font-bold text-slate-900">
