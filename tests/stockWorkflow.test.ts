@@ -5,7 +5,7 @@ import { stockStageOrder, tankDipCoverage, filterStockReceipts, stockReconciliat
 
 const tanks=['t1','t2'].map(tankId=>({tankId,outletId:'ro-a',operationalShiftId:'s-a'} as OperationalShiftTankSnapshot));
 const reading=(tankId:string,readingType:TankStockReading['readingType'],operationalShiftId='s-a',outletId='ro-a')=>({tankId,readingType,operationalShiftId,outletId} as TankStockReading);
-const receipt=(ttNumber:string,status:FuelReceipt['status'],arrivalAt:string,invoiceNumber:string)=>({ttNumber,status,arrivalAt,invoiceNumber,invoiceDate:'2026-11-18',lines:[]} as FuelReceipt);
+const receipt=(ttNumber:string,status:FuelReceipt['status'],arrivalAt:string,invoiceNumber:string) :FuelReceipt=>({id:invoiceNumber,outletId:'ro-a',operationalShiftId:'s-a',ttNumber,status,arrivalAt,invoiceNumber,invoiceDate:'2026-11-18',sealVerified:true,recordedByUserId:'test-user',createdAt:arrivalAt,updatedAt:arrivalAt,lines:[]});
 
 describe('Stock workflow simplification',()=>{
   it('keeps four navigable stock stages',()=>{
