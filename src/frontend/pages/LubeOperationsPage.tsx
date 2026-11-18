@@ -33,6 +33,8 @@ import { LubeDailySummaryPanel } from '../components/lube/LubeDailySummaryPanel'
 import { LubeSummaryPanel } from '../components/lube/LubeSummaryPanel';
 
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { useShiftWorkbench } from '../context/ShiftWorkbenchContext';
+import { resolveWorkbenchShift, toWorkbenchSelection } from '../utils/shiftWorkbench';
 import { getLocalDateInputValue } from '../../shared/utils/dateUtils';
 
 export const LubeOperationsPage: React.FC = () => {
@@ -44,6 +46,9 @@ export const LubeOperationsPage: React.FC = () => {
   const { activeOutletId, accessibleOutlets: outlets, loading: loadingOutlets, setActiveOutletId } = useActiveOutlet();
   const selectedOutletId = activeOutletId || '';
   const setSelectedOutletId = setActiveOutletId;
+  const {selection,remember,navigate} = useShiftWorkbench();
+  const initialSelection = React.useRef(selection);
+  const shiftChoice = React.useRef('');
 
   const [shiftsList, setShiftsList] = useState<OperationalShift[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
@@ -122,9 +127,14 @@ export const LubeOperationsPage: React.FC = () => {
         }
 
         if (res.success && res.data) {
-          setShiftsList(res.data);
-          if (res.data.length > 0) {
-            setSelectedShiftId(res.data[0].id);
+          const available=res.data.filter(s=>s.outletId===selectedOutletId);
+          setShiftsList(available);
+          const requested=initialSelection.current;
+          const chosen=resolveWorkbenchShift(available,selectedOutletId,requested || {outletId:selectedOutletId,businessDate:getLocalDateInputValue(),shiftId:null});
+          if (chosen) {
+            shiftChoice.current=chosen.id;
+            setSelectedShiftId(chosen.id);
+            remember(toWorkbenchSelection(chosen));
           } else {
             setSelectedShiftId('');
             setSelectedShift(null);
@@ -249,7 +259,7 @@ export const LubeOperationsPage: React.FC = () => {
       if (hasShiftContext && results[5] && results[6] && results[7]) {
         // 5. Shift Details
         const shiftRes = results[5];
-        if (shiftRes.status === 'fulfilled' && shiftRes.value.success) {
+        if (shiftRes.status === 'fulfilled' && shiftRes.value.success && shiftRes.value.data?.id===reqShiftId && shiftRes.value.data.outletId===reqOutletId) {
           setSelectedShift(shiftRes.value.data);
         } else {
           setSelectedShift(null);
@@ -378,7 +388,14 @@ export const LubeOperationsPage: React.FC = () => {
             <Clock className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-[#64748B] pointer-events-none" />
             <select
               value={selectedShiftId}
-              onChange={(e) => setSelectedShiftId(e.target.value)}
+              onChange={(e) => {
+                const next=shiftsList.find(s=>s.id===e.target.value);
+                shiftChoice.current=next?.id||'';
+                setSelectedShift(null);
+                setSales([]);setShiftSummary(null);currentCtxRef.current={outletId:selectedOutletId,shiftId:next?.id||''};
+                setSelectedShiftId(next?.id||'');
+                if(next)remember(toWorkbenchSelection(next));
+              }}
               disabled={loadingOutlets || loadingShifts || loadingData || shiftsList.length === 0 || !hasShiftsRead}
               className="pl-8 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] text-[#17365D] rounded-lg text-xs font-semibold focus:outline-none focus:border-orange-500 w-56 disabled:opacity-50 font-mono"
             >
@@ -389,11 +406,11 @@ export const LubeOperationsPage: React.FC = () => {
               ) : shiftsList.length === 0 ? (
                 <option>No operational shifts</option>
               ) : (
-                shiftsList.map((s) => (
+                <><option value="">Select operational shift</option>{shiftsList.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.businessDate} · Shift {s.shiftTemplateId.split('-').pop()?.toUpperCase()} ({s.status})
+                    {s.businessDate} · {s.shiftTemplateName || s.shiftTemplateCode || 'Shift'} ({s.status})
                   </option>
-                ))
+                ))}</>
               )}
             </select>
           </div>
@@ -408,6 +425,7 @@ export const LubeOperationsPage: React.FC = () => {
         </div>
       </div>
 
+      {hasShiftsRead&&<button type="button" disabled={loadingData||loadingShifts} onClick={()=>navigate('daily-ops')} className="text-xs font-semibold text-[#17365D] underline disabled:opacity-50">Return to shift workbench</button>}
       {/* Global Status/Context Banner */}
       {hasShiftsRead && selectedShift && (
         <div className={`p-4 rounded-xl flex items-center justify-between border text-xs ${
@@ -431,7 +449,7 @@ export const LubeOperationsPage: React.FC = () => {
             </div>
           </div>
           <div className="hidden sm:block font-mono text-[10px] text-[#64748B] uppercase tracking-wide">
-            ID: {selectedShift.id}
+            {selectedShift.businessDate} · {selectedShift.shiftTemplateName || selectedShift.shiftTemplateCode || 'Shift'}
           </div>
         </div>
       )}
@@ -460,7 +478,7 @@ export const LubeOperationsPage: React.FC = () => {
       )}
 
       {/* Segmented Workspace Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-[#F8FAFC] border border-slate-900 rounded-xl overflow-x-auto">
+      <div className="flex items-center gap-1 p-1 bg-[#F8FAFC] border border-slate-200 rounded-xl overflow-x-auto">
         <button
           onClick={() => setActiveTab('sales')}
           className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
