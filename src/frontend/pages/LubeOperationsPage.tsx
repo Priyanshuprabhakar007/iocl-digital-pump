@@ -360,11 +360,12 @@ export const LubeOperationsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="iocl-mobile-stack flex flex-wrap items-center gap-3 min-w-0">
           {/* Outlet Selector */}
           <div className="relative">
             <Building2 className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-[#64748B] pointer-events-none" />
             <select
+              aria-label="Lube retail outlet"
               value={selectedOutletId}
               onChange={(e) => setSelectedOutletId(e.target.value)}
               disabled={loadingOutlets || loadingShifts || loadingData}
@@ -388,6 +389,7 @@ export const LubeOperationsPage: React.FC = () => {
           <div className="relative">
             <Clock className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-[#64748B] pointer-events-none" />
             <select
+              aria-label="Lube operational shift"
               value={selectedShiftId}
               onChange={(e) => {
                 const next=shiftsList.find(s=>s.id===e.target.value);
@@ -418,7 +420,8 @@ export const LubeOperationsPage: React.FC = () => {
 
           <button
             onClick={handleRefresh}
-            disabled={loadingData}
+            aria-label="Refresh lube records"
+            disabled={loadingData||loadingShifts}
             className="p-2 text-[#64748B] hover:text-[#17365D] bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] rounded-lg transition-all disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingData ? 'animate-spin' : ''}`} />
