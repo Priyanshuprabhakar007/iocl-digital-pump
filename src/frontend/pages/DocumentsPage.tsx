@@ -159,6 +159,7 @@ export const DocumentsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('REGISTER');
   const [masterEditor, setMasterEditor] = useState<'agreements' | 'claims' | 'inspections'>('agreements');
   const [refreshRevision, setRefreshRevision] = useState(0);
+  const [masterPreset, setMasterPreset] = useState<'LAND_LEASE' | 'SERVICE_PROVIDER' | 'WAGES_INCENTIVES_MISC' | null>(null);
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
   const [showCocoOnly, setShowCocoOnly] = useState<boolean>(true);
   const [selectedOutletId, setSelectedOutletId] = useState<string>('');
@@ -456,7 +457,10 @@ export const DocumentsPage: React.FC = () => {
     if (item && !item.id) {
       const editor = item.categoryCode === 'SERVICE_PROVIDER_CONTRACT' || item.categoryCode === 'LAND_LEASE'
         ? 'agreements' : item.categoryCode === 'WAGES_INCENTIVES_MISC' ? 'claims' : null;
-      if (editor) { setMasterEditor(editor); setIsEditorOpen(false); setActiveTab('MASTERS'); return; }
+      if (editor) {
+        setMasterPreset(item.categoryCode === 'WAGES_INCENTIVES_MISC' ? 'WAGES_INCENTIVES_MISC' : item.categoryCode === 'SERVICE_PROVIDER_CONTRACT' ? 'SERVICE_PROVIDER' : 'LAND_LEASE');
+        setMasterEditor(editor); setIsEditorOpen(false); setActiveTab('MASTERS'); return;
+      }
     }
 
     if (item) {
@@ -1056,7 +1060,7 @@ export const DocumentsPage: React.FC = () => {
         ] as const).map(({ id, label, Icon }) => {
           const selected = activeTab === id || (id === 'SECTION_WISE' && activeTab === 'ONE_PAGER');
           return <button key={id} type="button" aria-pressed={selected}
-            onClick={() => setActiveTab(id)}
+            onClick={() => { if (id === 'MASTERS' && activeTab !== 'MASTERS') { setMasterPreset(null); setMasterEditor('agreements'); } setActiveTab(id); }}
             className={'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer ' +
               (selected ? 'border-orange-500 text-[#B8530D] bg-orange-500/5' : 'border-transparent text-[#64748B] hover:text-[#334155]')}>
             <Icon className="w-4 h-4" />{label}
@@ -1618,6 +1622,9 @@ export const DocumentsPage: React.FC = () => {
           outletId={selectedOutletId}
           vaultDocs={vaultDocs}
           initialEditor={masterEditor}
+          initialCreate={masterPreset !== null}
+          initialAgreementType={masterPreset === 'SERVICE_PROVIDER' ? 'SERVICE_PROVIDER' : 'LAND_LEASE'}
+          initialClaimCategory={masterPreset === 'WAGES_INCENTIVES_MISC' ? masterPreset : undefined}
           refreshRevision={refreshRevision}
           onSaved={() => { setSectionWiseReport(null); fetchOutletComplianceData(selectedOutletId, reportDate); }}
         />
