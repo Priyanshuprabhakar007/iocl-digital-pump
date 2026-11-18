@@ -24,6 +24,7 @@ import { NfrOperationsPage } from './frontend/pages/NfrOperationsPage';
 import { WorkforceOperationsPage } from './frontend/pages/WorkforceOperationsPage';
 import { OrganizationMastersPage } from './frontend/pages/OrganizationMastersPage';
 import { ReportsPage } from './frontend/pages/ReportsPage';
+import { DsrReportsPage } from './frontend/pages/DsrReportsPage';
 import { DailyOperationsPage } from './frontend/pages/DailyOperationsPage';
 import { PERMISSIONS } from './shared/constants';
 
@@ -45,6 +46,7 @@ const ROUTE_TAB_MAP: Record<string, string> = {
   '/nfr': 'nfr-ops',
   '/financials': 'financials',
   '/reports': 'reports',
+  '/dsr-reports': 'dsr-reports',
   '/users': 'users',
   '/scopes': 'scopes',
   '/hierarchy': 'hierarchy',
@@ -111,6 +113,7 @@ function MainAppContent() {
       'nfr-ops': PERMISSIONS.NFR_READ,
       financials: PERMISSIONS.FINANCIAL_RECONCILIATION_READ,
       reports: PERMISSIONS.REPORTS_READ,
+      'dsr-reports': PERMISSIONS.REPORTS_READ,
       users: PERMISSIONS.USERS_READ,
       scopes: PERMISSIONS.SCOPES_READ,
       hierarchy: PERMISSIONS.HIERARCHY_READ,
@@ -120,7 +123,7 @@ function MainAppContent() {
     };
 
     const requiredPerm = tabToPermMap[activeTab];
-    if (requiredPerm && !hasPermission(requiredPerm)) {
+    if ((requiredPerm && !hasPermission(requiredPerm)) || (activeTab === 'dsr-reports' && !hasPermission(PERMISSIONS.SHIFTS_READ))) {
       handleSetActiveTab('dashboard');
     }
   }, [activeTab, userCtx, hasPermission]);
@@ -163,6 +166,7 @@ function MainAppContent() {
         {activeTab === 'nfr-ops' && <NfrOperationsPage />}
         {activeTab === 'financials' && <FinancialOperationsPage />}
         {activeTab === 'reports' && <ReportsPage />}
+        {activeTab === 'dsr-reports' && <DsrReportsPage />}
         {activeTab === 'users' && <UsersPage />}
         {activeTab === 'scopes' && <ScopesPage />}
         {activeTab === 'hierarchy' && <HierarchyPage />}
