@@ -164,3 +164,83 @@
 @media (prefers-reduced-motion: reduce) {
   .enterprise-shell.iocl-vibrant .option4-action:hover { transform: none; }
 }
+
+
+/* Phase 5: unified compact workspace. Only main-page surfaces, not dialogs,
+   sidebar, destructive actions or status-specific colors. */
+.enterprise-shell.iocl-vibrant main {
+  background: #f4f7fb;
+}
+.enterprise-shell.iocl-vibrant main > :is(.operations-modern,.admin-modern,.daily-ops-modern,.finance-modern,.reports-modern) {
+  width: 100%;
+  max-width: 1500px;
+  margin-inline: auto;
+  padding: 0 0 2rem;
+}
+.enterprise-shell.iocl-vibrant main .option4-hero {
+  background: #fff;
+  border: 1px solid #d7e0ea;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(23,54,93,.045);
+  padding: 18px 20px;
+}
+.enterprise-shell.iocl-vibrant main .option4-hero::before,
+.enterprise-shell.iocl-vibrant main .option4-hero::after,
+.enterprise-shell.iocl-vibrant main .option4-hero .option4-station-art {
+  display: none;
+}
+.enterprise-shell.iocl-vibrant main .option4-hero h1,
+.enterprise-shell.iocl-vibrant main .option4-hero h1.text-\[\#17365D\],
+.enterprise-shell.iocl-vibrant main .option4-hero h1 span {
+  color: #17365d;
+  font-size: 1.45rem;
+  line-height: 1.3;
+}
+.enterprise-shell.iocl-vibrant main .option4-hero p { color: #475569; }
+.enterprise-shell.iocl-vibrant main .option4-hero .option4-eyebrow {
+  background: transparent;
+  border: 0;
+  color: #9a4310;
+  padding: 0;
+}
+.enterprise-shell.iocl-vibrant main .option4-hero .option4-hero-content > div {
+  background: transparent;
+  border-color: transparent;
+  color: #17365d;
+  backdrop-filter: none;
+}
+.enterprise-shell.iocl-vibrant main .option4-panel {
+  border-color: #d7e0ea;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(23,54,93,.045);
+}
+.enterprise-shell.iocl-vibrant main .option4-progress {
+  background: #f8fafc;
+  border-radius: 12px;
+}
+.enterprise-shell.iocl-vibrant main .option4-step {
+  min-height: 84px;
+  box-shadow: none;
+}
+.enterprise-shell.iocl-vibrant main .option4-action:hover {
+  transform: none;
+  box-shadow: 0 2px 7px rgba(23,54,93,.065);
+}
+/* Legacy organization panels: this scope excludes the app navigation.
+   Keep modal scrims and intentional strong action fills intact. */
+.enterprise-shell.iocl-vibrant main .org-light :is([class~="bg-slate-900"],[class~="bg-slate-900/60"],[class~="bg-slate-900/40"],[class~="bg-slate-900/80"],[class~="bg-slate-950"],[class~="bg-slate-950/60"],[class~="bg-slate-950/40"]) {
+  background-color: #fff;
+}
+.enterprise-shell.iocl-vibrant main .org-light :is([class~="bg-slate-800"],[class~="bg-slate-800/50"],[class~="bg-slate-700"]) { background-color: #f1f5f9; }
+.enterprise-shell.iocl-vibrant main .org-light :is([class~="border-slate-800"],[class~="border-slate-700"],[class~="border-slate-800/60"]) { border-color: #d7e0ea; }
+.enterprise-shell.iocl-vibrant main .org-light :is([class~="text-slate-300"],[class~="text-slate-400"],[class~="text-slate-500"]) { color: #475569; }
+.enterprise-shell.iocl-vibrant main .org-light :is([class~="text-white"],[class~="text-slate-200"]):not(button):not([class*="bg-orange"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-blue"]) { color: #17365d; }
+.enterprise-shell.iocl-vibrant main .org-light :is([class~="text-orange-400"],[class~="text-amber-400"]) { color: #9a4b0d; }
+.enterprise-shell.iocl-vibrant main .org-light :is([class~="text-emerald-400"],[class~="text-emerald-300"]) { color: #047857; }
+.enterprise-shell.iocl-vibrant main .org-light :is([class~="text-rose-400"],[class~="text-red-400"]) { color: #be123c; }
+.enterprise-shell.iocl-vibrant main .org-light [class~="fixed"][class~="inset-0"][class*="backdrop-blur"] { background: rgb(15 23 42 / .60); }
+.enterprise-shell.iocl-vibrant main .org-light tbody tr:hover { background: #f8fafc; }
+@media (max-width: 767px) {
+  .enterprise-shell.iocl-vibrant main .option4-hero { padding: 14px; }
+  .enterprise-shell.iocl-vibrant main .option4-hero h1 { font-size: 1.25rem; }
+}
