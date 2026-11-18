@@ -1,7 +1,8 @@
 import './adminModern.css';
 import { CocoDocumentationMastersPanel } from '../components/CocoDocumentationMastersPanel';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useActiveOutlet } from '../context/ActiveOutletContext';
 import { apiFetch, apiFetchBlob } from '../services/api';
 import { PERMISSIONS } from '../../shared/constants';
 import {
@@ -42,13 +43,6 @@ import {
   Link2,
   ClipboardCheck,
 } from 'lucide-react';
-
-interface OutletOption {
-  id: string;
-  roCode: string;
-  name: string;
-  outletType?: string;
-}
 
 interface VaultDocumentRecord {
   id: string;
@@ -160,9 +154,9 @@ export const DocumentsPage: React.FC = () => {
   const [masterEditor, setMasterEditor] = useState<'agreements' | 'claims' | 'inspections'>('agreements');
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [masterPreset, setMasterPreset] = useState<'LAND_LEASE' | 'SERVICE_PROVIDER' | 'WAGES_INCENTIVES_MISC' | null>(null);
-  const [outlets, setOutlets] = useState<OutletOption[]>([]);
+  const { activeOutletId, activeOutlet: selectedOutlet, accessibleOutlets: outlets, setActiveOutletId: setSelectedOutletId } = useActiveOutlet();
+  const selectedOutletId = activeOutletId || '';
   const [showCocoOnly, setShowCocoOnly] = useState<boolean>(true);
-  const [selectedOutletId, setSelectedOutletId] = useState<string>('');
   const [reportDate, setReportDate] = useState<string>(() =>
     new Date().toISOString().slice(0, 10)
   );
@@ -191,7 +185,11 @@ export const DocumentsPage: React.FC = () => {
     discrepancyCount: 0,
   };
   const [summary, setSummary] = useState<CocoOnePagerReport['summary']>(EMPTY_SUMMARY);
-  const [outletLoadError, setOutletLoadError] = useState<string | null>(null);
+  const [registerReady, setRegisterReady] = useState(false);
+  const requestRef = useRef(0);
+  const scopeRef = useRef({outletId:selectedOutletId,date:reportDate});
+  scopeRef.current = {outletId:selectedOutletId,date:reportDate};
+  useEffect(() => () => { requestRef.current++; }, []);
   const [onePagerReport, setOnePagerReport] = useState<CocoOnePagerReport | null>(null);
   const [sectionWiseReport, setSectionWiseReport] = useState<SectionWisePreview | null>(null);
   const [isSectionWiseLoading, setIsSectionWiseLoading] = useState(false);
@@ -244,84 +242,19 @@ export const DocumentsPage: React.FC = () => {
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState<boolean>(false);
 
-  // Filter outlets for COCO selector
+  // Prioritization only reorders options; it never hides or changes the active outlet.
   const displayedOutlets = useMemo(() => {
     if (!showCocoOnly) return outlets;
-    const cocoList = outlets.filter(
-      (o) =>
-        o.outletType === 'COCO' ||
-        /coco/i.test(o.name)
-    );
-    return cocoList.length > 0 ? cocoList : outlets;
+    const isCoco = (o: typeof outlets[number]) => o.outletType === 'COCO' || /coco/i.test(o.name);
+    return [...outlets].sort((a,b)=>Number(isCoco(b))-Number(isCoco(a)));
   }, [outlets, showCocoOnly]);
-
-  const selectedOutlet = useMemo(
-    () => outlets.find((o) => o.id === selectedOutletId) || null,
-    [outlets, selectedOutletId]
-  );
-
-  // Load accessible outlets on mount using apiFetch
-  const loadOutlets = useCallback(async () => {
-    if (!canRead) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    setOutletLoadError(null);
-    setBannerError(null);
-    try {
-      const res = await apiFetch<OutletOption[]>('/api/v1/outlets');
-      if (res.success && Array.isArray(res.data)) {
-        const list: OutletOption[] = res.data;
-        setOutlets(list);
-        setOutletLoadError(null);
-        if (list.length === 0) {
-          setSelectedOutletId('');
-          setRegisterItems([]);
-          setSummary(EMPTY_SUMMARY);
-          setIsLoading(false);
-          return;
-        }
-        // Default to first COCO outlet (e.g. COCO IT Park / COCO 22) or first accessible outlet
-        const cocoDefault =
-          list.find((o) => /it park/i.test(o.name) || o.roCode === '373196') ||
-          list.find((o) => o.outletType === 'COCO' || /coco/i.test(o.name)) ||
-          list[0];
-        if (cocoDefault) {
-          setSelectedOutletId(cocoDefault.id);
-        } else {
-          setSelectedOutletId('');
-          setIsLoading(false);
-        }
-      } else {
-        const errorMsg = res.error?.message || 'Failed to load accessible retail outlets.';
-        setOutletLoadError(errorMsg);
-        setBannerError(errorMsg);
-        setOutlets([]);
-        setSelectedOutletId('');
-        setRegisterItems([]);
-        setSummary(EMPTY_SUMMARY);
-        setIsLoading(false);
-      }
-    } catch (err: any) {
-      const errorMsg = err?.message || 'Failed to load accessible retail outlets.';
-      setOutletLoadError(errorMsg);
-      setBannerError(errorMsg);
-      setOutlets([]);
-      setSelectedOutletId('');
-      setRegisterItems([]);
-      setSummary(EMPTY_SUMMARY);
-      setIsLoading(false);
-    }
-  }, [canRead]);
-
-  useEffect(() => {
-    loadOutlets();
-  }, [loadOutlets]);
 
   // Load compliance register, One-Pager preview, and outlet R2 documents whenever outlet or reportDate changes
   const fetchOutletComplianceData = async (outletId: string, dateStr: string) => {
-    if (!outletId || !canRead) return;
+    if (!outletId || !canRead || scopeRef.current.outletId!==outletId || scopeRef.current.date!==dateStr) return;
+    const request = ++requestRef.current;
+    const current = () => requestRef.current===request && scopeRef.current.outletId===outletId && scopeRef.current.date===dateStr;
+    setRegisterReady(false);
     setIsLoading(true);
     setBannerError(null);
     try {
@@ -340,7 +273,9 @@ export const DocumentsPage: React.FC = () => {
         ),
       ]);
 
+      if (!current()) return;
       if (regRes.success && regRes.data) {
+        setRegisterReady(true);
         setRegisterItems(regRes.data.items || []);
         setDueDatesAndActions(
           regRes.data.dueDatesAndActions || {
@@ -357,18 +292,20 @@ export const DocumentsPage: React.FC = () => {
           setSummary(regRes.data.summary);
         }
       } else {
+        setRegisterItems([]); setSummary(EMPTY_SUMMARY);
         setBannerError(regRes.error?.message || 'Failed to load compliance register.');
       }
 
       if (docsRes.success && Array.isArray(docsRes.data)) {
         setVaultDocs(docsRes.data);
-      } else if (docsRes.error?.message && regRes.success) {
-        setBannerError(docsRes.error.message);
+      } else {
+        setVaultDocs([]);
+        if(regRes.success) setBannerError(docsRes.error?.message || 'Failed to load supporting files.');
       }
     } catch (err: any) {
-      setBannerError(err?.message || 'Network error while loading COCO compliance data.');
+      if(current()) setBannerError(err?.message || 'Network error while loading COCO compliance data.');
     } finally {
-      setIsLoading(false);
+      if(current()) setIsLoading(false);
     }
   };
 
@@ -907,9 +844,7 @@ export const DocumentsPage: React.FC = () => {
               >
                 {displayedOutlets.length === 0 ? (
                   <option value="">
-                    {outletLoadError
-                      ? 'Error loading outlets — see details below'
-                      : 'No accessible retail outlets found'}
+                    No accessible retail outlets found
                   </option>
                 ) : (
                   displayedOutlets.map((o) => (
@@ -935,7 +870,7 @@ export const DocumentsPage: React.FC = () => {
                 id="coco-report-date"
                 type="date"
                 value={reportDate}
-                onChange={(e) => setReportDate(e.target.value)}
+                onChange={(e) => {const date=e.target.value;if(!date)return;scopeRef.current={outletId:selectedOutletId,date};requestRef.current++;setRegisterReady(false);setOnePagerReport(null);setSectionWiseReport(null);setReportDate(date);}}
                 className="w-full pl-9 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#17365D] focus:outline-none focus:border-orange-500"
               />
             </div>
@@ -956,31 +891,8 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Outlet Load Error State */}
-      {outletLoadError && (
-        <div className="p-5 bg-red-500/10 border border-red-500/25 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3">
-            <AlertCircle className="w-6 h-6 text-red-700 shrink-0 mt-0.5 sm:mt-0" />
-            <div>
-              <div className="font-semibold text-[#17365D] text-sm">
-                Failed to load accessible retail outlets
-              </div>
-              <div className="text-xs text-red-800 mt-0.5">{outletLoadError}</div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={loadOutlets}
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#17365D] rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Retry
-          </button>
-        </div>
-      )}
-
       {/* Feedback Banners */}
-      {bannerError && !outletLoadError && (
+      {bannerError && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between gap-3 text-red-700 text-sm">
           <div className="flex items-center gap-2.5">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1013,7 +925,7 @@ export const DocumentsPage: React.FC = () => {
       )}
 
       {/* Legacy compliance summary is relevant only to its register and due-date view. */}
-      {(activeTab === 'REGISTER' || activeTab === 'DUE_DATES') && <div className="space-y-2">
+      {registerReady && (activeTab === 'REGISTER' || activeTab === 'DUE_DATES') && <div className="space-y-2">
       <p className="text-xs font-medium text-[#64748B]">Compliance register summary · excludes dedicated agreement, claim and inspection records</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5">
@@ -1071,7 +983,8 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {/* TAB 1 — DOCUMENT REGISTER                                             */}
       {/* ===================================================================== */}
-      {activeTab === 'REGISTER' && (
+      {(activeTab==='REGISTER'||activeTab==='DUE_DATES')&&!registerReady && <div role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">{isLoading?'Loading compliance records…':'Compliance records unavailable. Refresh status to retry.'}</div>}
+      {activeTab === 'REGISTER' && registerReady && (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-[#64748B]">Statutory records and recurring compliance. Use Masters &amp; Evidence for dedicated agreements, expense claims and equipment inspections.</p>
@@ -1392,9 +1305,7 @@ export const DocumentsPage: React.FC = () => {
                     {filteredRegisterItems.length === 0 && (
                       <tr>
                         <td colSpan={8} className="py-8 text-center text-[#64748B] text-xs">
-                          {outletLoadError
-                            ? 'Cannot display compliance register: accessible retail outlets failed to load.'
-                            : !selectedOutletId
+                          {!selectedOutletId
                             ? 'Please select an accessible retail outlet to view its compliance register.'
                             : 'No compliance records match the selected filter.'}
                         </td>
@@ -1578,9 +1489,7 @@ export const DocumentsPage: React.FC = () => {
                   {(onePagerReport?.rows || []).length === 0 && (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-[#64748B] text-xs">
-                        {outletLoadError
-                          ? 'Cannot generate preview: accessible retail outlets failed to load.'
-                          : !selectedOutletId
+                        {!selectedOutletId
                           ? 'Please select an accessible retail outlet to preview the COCO One-Pager report.'
                           : 'No compliance rows available for preview.'}
                       </td>
@@ -1714,7 +1623,7 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {/* TAB 3 — DUE DATES & PENDING ACTIONS                                   */}
       {/* ===================================================================== */}
-      {activeTab === 'DUE_DATES' && (
+      {activeTab === 'DUE_DATES' && registerReady && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* 1. Expired Documents */}
