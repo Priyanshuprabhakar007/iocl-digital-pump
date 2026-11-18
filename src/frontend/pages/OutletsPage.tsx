@@ -475,6 +475,7 @@ export const OutletsPage: React.FC = () => {
         </div>
 
         {hasPermission(PERMISSIONS.OUTLETS_CREATE) && (
+          <>
           <button type="button" onClick={() => setShowExcelImporter(v => !v)} className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-[#17365D] text-xs font-bold self-start sm:self-auto">
             {showExcelImporter ? 'Hide Excel Import' : 'Excel Import & Sync'}
           </button>
@@ -485,6 +486,7 @@ export const OutletsPage: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>Register New Outlet</span>
           </button>
+          </>
         )}
       </div>
 
