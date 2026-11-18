@@ -194,15 +194,6 @@ export const EquipmentTicketsPanel: React.FC<EquipmentTicketsPanelProps> = ({
               ? 'Try clearing active status, priority, or equipment type filters.'
               : 'No breakdown tickets are recorded for this outlet. Equipment condition must be verified separately.'}
           </p>
-          {canCreateTicket && !hasActiveFilters && (
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="mt-4 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors inline-flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4 text-orange-400" />
-              <span>Report First Breakdown</span>
-            </button>
-          )}
         </div>
       ) : (
         <>
