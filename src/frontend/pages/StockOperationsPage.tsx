@@ -30,6 +30,7 @@ import { useActiveOutlet } from '../context/ActiveOutletContext';
 import { useShiftWorkbench } from '../context/ShiftWorkbenchContext';
 import { resolveWorkbenchShift, toWorkbenchSelection } from '../utils/shiftWorkbench';
 import { useAuth } from '../context/AuthContext';
+import { stockStageOrder, tankDipCoverage, filterStockReceipts, isFinalizedReceipt, stockReconciliationLabel, type ReceiptFilter, type StockStage } from '../utils/stockWorkflow';
 import { PERMISSIONS } from '../../shared/constants';
 import { getLocalDateInputValue, getLocalDateTimeInputValue } from '../../shared/utils/dateUtils';
 
@@ -339,7 +340,11 @@ export const StockOperationsPage: React.FC = () => {
   const [readyShiftId,setReadyShiftId] = useState('');
   const [shifts, setShifts] = useState<OperationalShift[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'OPENING' | 'RECEIPTS' | 'CLOSING' | 'RECONCILIATION'>(selection?.shiftId ? 'RECEIPTS' : 'OPENING');
+  const [activeTab, setActiveTab] = useState<StockStage>(selection?.shiftId ? 'RECEIPTS' : 'OPENING');
+  const [receiptFilter,setReceiptFilter]=useState<ReceiptFilter>('PENDING');
+  const [receiptSearch,setReceiptSearch]=useState('');
+  const [showDipForm,setShowDipForm]=useState(false);
+  const [reconciliationAvailable,setReconciliationAvailable]=useState(false);
 
   const [tankSnapshots, setTankSnapshots] = useState<OperationalShiftTankSnapshot[]>([]);
   const [tankReadings, setTankReadings] = useState<TankStockReading[]>([]);
@@ -407,6 +412,7 @@ export const StockOperationsPage: React.FC = () => {
       selectedRef.current = id; dataRequest.current++;
       setReadyShiftId(''); setLoading(false);
       setTankSnapshots([]); setTankReadings([]); setReceipts([]); setReconciliation(null);
+      setReconciliationAvailable(false); setReceiptFilter('PENDING'); setReceiptSearch(''); setShowDipForm(false);
       setShowReceiptModal(false); setManagingReceiptId(null); setSuccessMsg(null);
       setDipForm({tankId:'',readingType:'OPENING',source:'MANUAL',productDipMm:'',waterDipMm:'0.000'});
     }
@@ -465,8 +471,11 @@ export const StockOperationsPage: React.FC = () => {
       setTankSnapshots(snapsRes.success && snapsRes.data ? snapsRes.data : []);
       setTankReadings(readingsRes.success ? readings : []);
       setReceipts(receiptsRes.success ? received : []);
-      setReconciliation(reconRes.success ? reconRes.data : null);
-      const verified=snapsRes.success && readingsRes.success && receiptsRes.success;
+      const validReconciliation=!!reconRes.success && !!reconRes.data && reconRes.data.operationalShiftId===shiftId && reconRes.data.outletId===selectedOutletId;
+      setReconciliation(validReconciliation ? reconRes.data : null);
+      setReconciliationAvailable(validReconciliation);
+      const scoped = (rows: {operationalShiftId:string;outletId:string}[]) => rows.every(r=>r.operationalShiftId===shiftId && r.outletId===selectedOutletId);
+      const verified=snapsRes.success && readingsRes.success && receiptsRes.success && !!snapsRes.data && !!readingsRes.data && !!receiptsRes.data && scoped(snapsRes.data) && scoped(readings) && scoped(received);
       setReadyShiftId(verified?shiftId:'');
       if(!verified)setErrorMsg('Could not load all saved shift records. Refresh before entering data.');
       setLoading(false);
@@ -784,7 +793,7 @@ export const StockOperationsPage: React.FC = () => {
 
   const handleRecordDip = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedShiftId || !dipForm.tankId || !dipForm.productDipMm || dipSubmitting) return;
+    if (!selectedShiftId || !dipForm.tankId || !dipForm.productDipMm || dipSubmitting || loading || currentShift?.status !== 'OPEN' || !hasPermission(PERMISSIONS.TANK_STOCK_WRITE)) return;
 
     setDipSubmitting(true);
     setErrorMsg(null);
@@ -804,6 +813,7 @@ export const StockOperationsPage: React.FC = () => {
 
       if (res.success) {
         setSuccessMsg(`Recorded ${activeTab} stock dip successfully.`);
+        setShowDipForm(false);
         setDipForm({ tankId: '', readingType: 'OPENING', source: 'MANUAL', productDipMm: '', waterDipMm: '0.000' });
         await loadShiftData(selectedShiftId);
       } else {
@@ -829,7 +839,7 @@ export const StockOperationsPage: React.FC = () => {
 
   const handleCreateReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedShiftId || !receiptForm.lineTankId || receiptSubmitting) return;
+    if (!selectedShiftId || !receiptForm.lineTankId || receiptSubmitting || loading || currentShift?.status !== 'OPEN' || !hasPermission(PERMISSIONS.FUEL_RECEIPTS_WRITE)) return;
 
     const tank = tankSnapshots.find(t => t.tankId === receiptForm.lineTankId);
     if (!tank) return;
@@ -927,7 +937,7 @@ export const StockOperationsPage: React.FC = () => {
   };
 
   const handleComputeReconciliation = async () => {
-    if (!selectedShiftId || computeSubmitting) return;
+    if (!selectedShiftId || computeSubmitting || loading || currentShift?.status !== 'OPEN' || !hasPermission(PERMISSIONS.STOCK_RECONCILIATION_READ)) return;
     setComputeSubmitting(true);
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -959,6 +969,20 @@ export const StockOperationsPage: React.FC = () => {
     remember(toWorkbenchSelection(currentShift)); navigate('daily-ops');
   };
   const shiftReceiptSummary = summarizeShiftReceiptReadiness(receipts);
+  const openingCoverage=tankDipCoverage(tankSnapshots,tankReadings,'OPENING');
+  const closingCoverage=tankDipCoverage(tankSnapshots,tankReadings,'CLOSING');
+  const visibleReceipts=filterStockReceipts(receipts,receiptFilter,receiptSearch);
+  const stageIndex=stockStageOrder.indexOf(activeTab);
+  const stageLabels:Record<StockStage,string>={OPENING:'Opening Stock',RECEIPTS:'Fuel Receipts',CLOSING:'Closing Stock',RECONCILIATION:'Reconciliation'};
+  const changeStage=(next:StockStage)=>{
+    if(workflowBusy)return;
+    if(next!==activeTab){
+      if(dipForm.productDipMm && !window.confirm('Discard the unsaved tank reading before switching tasks?'))return;
+      setDipForm({tankId:'',readingType:'OPENING',source:'MANUAL',productDipMm:'',waterDipMm:'0.000'});
+      setShowDipForm(false); setActiveTab(next);
+    }
+  };
+  const startDip=(tankId='')=>{setDipForm({tankId,readingType:activeTab==='CLOSING'?'CLOSING':'OPENING',source:'MANUAL',productDipMm:'',waterDipMm:'0.000'});setShowDipForm(true);};
   const receiptDateWarning = evaluateReceiptBusinessDateAlignment(
     currentShift?.businessDate,
     receiptForm.invoiceDate,
@@ -1101,29 +1125,27 @@ export const StockOperationsPage: React.FC = () => {
       <section aria-label="Stock operations sections" className="option4-panel space-y-4 p-4 sm:p-5">
         <div>
           <h2 className="text-lg font-bold text-[#17365D]">Stock workflow</h2>
-          <p className="text-xs text-[#64748B]">Select any section to view existing readings and receipt records.</p>
+          <p className="text-xs text-[#64748B]">Choose an applicable task for this shift. Saved progress is shown below; this is not a shift-close clearance.</p>
         </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          { id: 'OPENING', label: 'Opening Stock', icon: Droplets, hint: 'Initial tank readings' },
+          { id: 'OPENING', label: 'Opening Stock', icon: Droplets, hint: 'Initial tank readings', progress:openingCoverage.label },
           {
             id: 'RECEIPTS',
-            label:
-              shiftReceiptSummary.pendingReceipts.length > 0
-                ? `2. Fuel Receipts (${shiftReceiptSummary.pendingReceipts.length} Pending)`
-                : 'Fuel Receipts',
+            label:'Fuel Receipts',
             icon: Fuel,
-            hint: 'Tankers & decantation',
+            hint: 'Tankers & decantation', progress:receipts.length?shiftReceiptSummary.pendingReceipts.length+' pending · '+receipts.length+' total':'No receipts recorded',
           },
-          { id: 'CLOSING', label: 'Closing Stock', icon: Droplets, hint: 'Final tank readings' },
-          { id: 'RECONCILIATION', label: 'Reconciliation', icon: Calculator, hint: 'Stock comparison' },
+          { id: 'CLOSING', label: 'Closing Stock', icon: Droplets, hint: 'Final tank readings', progress:closingCoverage.label },
+          { id: 'RECONCILIATION', label: 'Reconciliation', icon: Calculator, hint: 'Stock comparison', progress:stockReconciliationLabel(reconciliation,reconciliationAvailable) },
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              disabled={workflowBusy}
+              onClick={() => changeStage(tab.id as StockStage)}
               type="button"
               aria-current={isActive ? 'step' : undefined}
               data-active={isActive}
@@ -1139,6 +1161,7 @@ export const StockOperationsPage: React.FC = () => {
               <span>
                 <span className="block text-sm font-bold text-[#17365D]">{tab.label}</span>
                 <span className="mt-1 block text-xs text-[#64748B]">{tab.hint}</span>
+                <span className="mt-2 block text-xs font-semibold text-[#17365D]">{loading?'Loading…':currentShift?tab.progress:'Select shift'}</span>
               </span>
             </button>
           );
@@ -1172,7 +1195,8 @@ export const StockOperationsPage: React.FC = () => {
       {currentShift && (activeTab === 'OPENING' || activeTab === 'CLOSING') && (
         <div className="space-y-6">
           {/* Record Dip Form */}
-          {currentShift?.status === 'OPEN' && (
+          {currentShift.status==='OPEN' && hasPermission(PERMISSIONS.TANK_STOCK_WRITE) && !showDipForm && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-600">Select a tank to record a reading, or use the shared Shift &amp; Readings workbench.</p><button type="button" disabled={workflowBusy} onClick={()=>startDip()} className="rounded-lg bg-[#17365D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">+ Record {activeTab==='OPENING'?'opening':'closing'} dip</button></div>}
+          {currentShift?.status === 'OPEN' && hasPermission(PERMISSIONS.TANK_STOCK_WRITE) && showDipForm && (
             <form onSubmit={handleRecordDip} className="bg-white p-4 md:p-5 rounded-xl border border-[#E2E8F0] space-y-4">
               <h3 className="text-sm font-bold text-[#17365D] uppercase tracking-wider flex items-center gap-2">
                 <Droplets className="w-4 h-4 text-orange-500" />
@@ -1235,10 +1259,11 @@ export const StockOperationsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-3">
+                <button type="button" disabled={dipSubmitting} onClick={()=>{if(dipForm.productDipMm&&!window.confirm('Discard unsaved dip reading?'))return;setDipForm({tankId:'',readingType:'OPENING',source:'MANUAL',productDipMm:'',waterDipMm:'0.000'});setShowDipForm(false);}} className="text-sm text-slate-600 underline">Cancel</button>
                 <button
                   type="submit"
-                  disabled={dipSubmitting}
+                  disabled={dipSubmitting || loading}
                   className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-orange-500/20 disabled:opacity-50"
                 >
                   {dipSubmitting ? 'Saving...' : `Save ${activeTab} Reading`}
@@ -1267,9 +1292,10 @@ export const StockOperationsPage: React.FC = () => {
                     <th className="p-3 text-right">Gross Vol (L)</th>
                     <th className="p-3 text-right">Water Vol (L)</th>
                     <th className="p-3 text-right">Net Product Stock (L)</th>
+                    <th className="p-3">Reading status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800 font-mono">
+                <tbody className="divide-y divide-slate-200 font-mono">
                   {tankSnapshots.map(ts => {
                     const reading = tankReadings.find(r => r.tankId === ts.tankId && r.readingType === activeTab);
                     return (
@@ -1284,6 +1310,7 @@ export const StockOperationsPage: React.FC = () => {
                         <td className="p-3 text-right font-bold text-[#B8530D]">
                           {reading ? `${reading.netProductVolumeStr} L` : <span className="text-red-700 font-normal">MISSING</span>}
                         </td>
+                        <td className="p-3">{reading?<span className="text-emerald-700">Recorded</span>:currentShift.status==='OPEN'&&hasPermission(PERMISSIONS.TANK_STOCK_WRITE)?<button type="button" disabled={workflowBusy} onClick={()=>{if(dipForm.productDipMm&&!window.confirm('Discard unsaved dip reading?'))return;startDip(ts.tankId);}} className="font-semibold text-[#17365D] underline">Record dip</button>:<span className="text-slate-500">Not recorded</span>}</td>
                       </tr>
                     );
                   })}
@@ -1307,8 +1334,9 @@ export const StockOperationsPage: React.FC = () => {
                 Every tanker receipt must reach COMPLETED (with verified PRE & POST tank dips) or CANCELLED before shift closing.
               </p>
             </div>
-            {currentShift?.status === 'OPEN' && (
+            {currentShift?.status === 'OPEN' && hasPermission(PERMISSIONS.FUEL_RECEIPTS_WRITE) && (
               <button
+                disabled={workflowBusy}
                 onClick={openCreateReceiptModal}
                 className="px-3.5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-orange-500/20 flex items-center gap-1.5"
               >
@@ -1323,8 +1351,8 @@ export const StockOperationsPage: React.FC = () => {
             <div
               className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${
                 shiftReceiptSummary.shiftCloseBlockedByReceipts
-                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
-                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-900'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
               }`}
             >
               <div className="space-y-1">
@@ -1351,32 +1379,33 @@ export const StockOperationsPage: React.FC = () => {
                   {shiftReceiptSummary.shiftCloseBlockedByReceipts
                     ? `Pending receipts: ${shiftReceiptSummary.pendingReceipts
                         .map(r => `TT ${r.ttNumber} (Inv ${r.invoiceNumber} — ${r.status})`)
-                        .join(', ')}. Click "Manage Receipt" below to complete decantation dips or cancel undelivered receipts.`
+                        .join(', ')}. Click "Continue Receipt" below to complete decantation dips or cancel undelivered receipts.`
                     : 'Shift receipt completeness checks are satisfied. Recompute stock reconciliation to include completed tanker volumes before closing the shift.'}
                 </p>
               </div>
 
-              {currentShift?.status === 'OPEN' && shiftReceiptSummary.allReceiptsFinalized && (
+              {currentShift?.status === 'OPEN' && shiftReceiptSummary.allReceiptsFinalized && hasPermission(PERMISSIONS.STOCK_RECONCILIATION_READ) && (
                 <button
                   type="button"
-                  disabled={computeSubmitting}
-                  onClick={handleComputeReconciliation}
+                  disabled={workflowBusy}
+                  onClick={()=>changeStage('RECONCILIATION')}
                   className="self-start sm:self-center shrink-0 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50"
                 >
                   <Calculator className="w-3.5 h-3.5" />
-                  {computeSubmitting ? 'Recomputing...' : 'Recompute Stock Reconciliation'}
+                  Review Stock Reconciliation
                 </button>
               )}
             </div>
           )}
 
-          {receipts.length === 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"><div className="flex flex-wrap gap-2" role="group" aria-label="Filter receipts">{(['PENDING','FINALIZED','ALL'] as const).map(filter=><button key={filter} aria-pressed={receiptFilter===filter} type="button" disabled={workflowBusy} onClick={()=>setReceiptFilter(filter)} className={'rounded-lg border px-3 py-2 text-xs font-semibold '+(receiptFilter===filter?'bg-[#17365D] text-white border-[#17365D]':'bg-white text-[#17365D] border-slate-200')}>{filter==='PENDING'?'Pending ('+shiftReceiptSummary.pendingReceipts.length+')':filter==='FINALIZED'?'Finalized ('+(receipts.length-shiftReceiptSummary.pendingReceipts.length)+')':'All ('+receipts.length+')'}</button>)}</div><input aria-label="Search tanker receipts" placeholder="Search tanker, invoice or product" value={receiptSearch} onChange={e=>setReceiptSearch(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"/></div>
+          {visibleReceipts.length === 0 ? (
             <div className="p-8 text-center bg-white rounded-xl border border-[#E2E8F0] text-[#64748B] text-xs font-mono">
-              No fuel receipts recorded for this shift.
+              {receipts.length===0?'No fuel receipts recorded for this shift.':receiptSearch?'No receipts match this search.':'No receipts in this filter. Select All to view receipt history.'}
             </div>
           ) : (
-            receipts.map(rcpt => {
-              const isFinalized = rcpt.status === 'COMPLETED' || rcpt.status === 'CANCELLED';
+            visibleReceipts.map(rcpt => {
+              const isFinalized = isFinalizedReceipt(rcpt);
               const readiness = evaluateReceiptCompletionReadiness(rcpt, tankReadings);
 
               return (
@@ -1394,9 +1423,9 @@ export const StockOperationsPage: React.FC = () => {
                               : rcpt.status === 'CANCELLED'
                               ? 'bg-red-500/20 text-red-700 border border-red-500/30'
                               : rcpt.status === 'DECANTED'
-                              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                              ? 'bg-blue-500/20 text-blue-800 border border-blue-500/30'
                               : rcpt.status === 'VERIFIED'
-                              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                              ? 'bg-cyan-500/20 text-cyan-800 border border-cyan-500/30'
                               : 'bg-amber-500/20 text-amber-700 border border-amber-500/30'
                           }`}
                         >
@@ -1429,7 +1458,7 @@ export const StockOperationsPage: React.FC = () => {
                       )}
                     </div>
 
-                    {!isFinalized && currentShift?.status === 'OPEN' && (
+                    {!isFinalized && currentShift?.status === 'OPEN' && hasPermission(PERMISSIONS.FUEL_RECEIPTS_WRITE) && (
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
@@ -1437,7 +1466,7 @@ export const StockOperationsPage: React.FC = () => {
                           className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors shadow shadow-orange-500/20 flex items-center gap-1.5"
                         >
                           <Settings2 className="w-3.5 h-3.5" />
-                          Manage Receipt
+                          Continue Receipt
                         </button>
                         <button
                           type="button"
@@ -1466,6 +1495,8 @@ export const StockOperationsPage: React.FC = () => {
                   )}
 
                   {/* Lines Table */}
+                  <details open={!isFinalized || undefined} className="rounded-lg border border-slate-200">
+                    <summary className="cursor-pointer p-3 text-xs font-semibold text-[#17365D]">Tank quantities, dip readings and quality details ({rcpt.lines?.length||0} lines)</summary>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs text-[#475569] font-mono">
                       <thead className="bg-[#F1F5F9] text-[10px] text-[#64748B] uppercase">
@@ -1482,7 +1513,7 @@ export const StockOperationsPage: React.FC = () => {
                           <th className="p-2.5">Quality Status</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-800">
+                      <tbody className="divide-y divide-slate-200">
                         {rcpt.lines?.map(l => {
                           const preR = l.preDecantReadingId
                             ? tankReadings.find(r => r.id === l.preDecantReadingId)
@@ -1543,6 +1574,7 @@ export const StockOperationsPage: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
+                  </details>
                 </div>
               );
             })
@@ -1564,9 +1596,9 @@ export const StockOperationsPage: React.FC = () => {
               </p>
             </div>
 
-            {currentShift?.status === 'OPEN' && (
+            {currentShift?.status === 'OPEN' && hasPermission(PERMISSIONS.STOCK_RECONCILIATION_READ) && (
               <button
-                disabled={computeSubmitting}
+                disabled={workflowBusy}
                 onClick={handleComputeReconciliation}
                 className="px-3.5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-orange-500/20 flex items-center gap-1.5 disabled:opacity-50"
               >
@@ -1578,7 +1610,7 @@ export const StockOperationsPage: React.FC = () => {
 
           {!reconciliation ? (
             <div className="p-8 text-center bg-white rounded-xl border border-[#E2E8F0] text-[#64748B] text-xs font-mono">
-              No reconciliation report available yet. Enter Opening/Closing dips and click Compute.
+              {reconciliationAvailable?'No reconciliation report available yet. Enter Opening/Closing dips and click Compute.':'Stock reconciliation is unavailable. Refresh or check access before relying on this view.'}
             </div>
           ) : (
             <div className="space-y-6">
@@ -1602,7 +1634,7 @@ export const StockOperationsPage: React.FC = () => {
                         <th className="p-3 text-center">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800">
+                    <tbody className="divide-y divide-slate-200">
                       {reconciliation.byTank.map(t => (
                         <tr key={t.tankId} className="hover:bg-[#F1F5F9]/30">
                           <td className="p-3 font-bold text-[#17365D]">Tank #{t.tankNumber}</td>
@@ -1656,7 +1688,7 @@ export const StockOperationsPage: React.FC = () => {
                         <th className="p-3 text-center">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800">
+                    <tbody className="divide-y divide-slate-200">
                       {reconciliation.byProduct.map(p => (
                         <tr key={p.productId} className="hover:bg-[#F1F5F9]/30">
                           <td className="p-3 font-bold text-[#17365D]">{p.productCode} - {p.productName}</td>
@@ -1693,6 +1725,8 @@ export const StockOperationsPage: React.FC = () => {
           )}
         </div>
       )}
+
+      {currentShift&&<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4"><button type="button" disabled={workflowBusy||stageIndex===0} onClick={()=>changeStage(stockStageOrder[stageIndex-1])} className="text-sm font-semibold text-[#17365D] disabled:opacity-40">Previous task</button><span className="text-xs text-slate-500">{stageLabels[activeTab]} · {stageIndex+1} of 4</span>{stageIndex<stockStageOrder.length-1?<button type="button" disabled={workflowBusy} onClick={()=>changeStage(stockStageOrder[stageIndex+1])} className="rounded-lg bg-[#17365D] px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">Next: {stageLabels[stockStageOrder[stageIndex+1]]}</button>:hasPermission(PERMISSIONS.SHIFTS_READ)?<button type="button" disabled={workflowBusy} onClick={goBackToShift} className="rounded-lg bg-[#17365D] px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">Return to shift workbench</button>:<span/>}</div>}
 
       {/* Manage Fuel Receipt Lifecycle & Decantation Modal */}
       {managingReceipt && managingReceiptReadiness && (
@@ -1774,7 +1808,7 @@ export const StockOperationsPage: React.FC = () => {
             {managingReceipt.status === 'ARRIVED' && (
               <div className="bg-[#F8FAFC]/70 border border-cyan-500/30 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-800">
                     Step 1: Tanker Seal & Invoice Verification (ARRIVED → VERIFIED)
                   </h4>
                 </div>
@@ -2220,7 +2254,7 @@ export const StockOperationsPage: React.FC = () => {
             {/* Step 3: Transition VERIFIED -> DECANTED */}
             {managingReceipt.status === 'VERIFIED' && (
               <div className="bg-[#F8FAFC]/70 border border-blue-500/30 rounded-xl p-4 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-blue-300">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-blue-800">
                   Step 2: Record Physical Decantation (VERIFIED → DECANTED)
                 </h4>
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
@@ -2266,7 +2300,7 @@ export const StockOperationsPage: React.FC = () => {
               </div>
 
               {managingReceiptReadiness.missingRequirements.length > 0 ? (
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 space-y-1">
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-900 space-y-1">
                   <div className="font-bold text-[11px] uppercase">
                     Cannot Complete Fuel Receipt Yet — Missing Information:
                   </div>
@@ -2415,7 +2449,7 @@ export const StockOperationsPage: React.FC = () => {
               <div
                 role="status"
                 data-testid="receipt-date-warning"
-                className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-xs flex items-start gap-2"
+                className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-900 text-xs flex items-start gap-2"
               >
                 <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                 <span>{receiptDateWarning.warningMessage}</span>
