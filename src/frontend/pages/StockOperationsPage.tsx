@@ -442,7 +442,7 @@ export const StockOperationsPage: React.FC = () => {
         setErrorMsg('Selected shift is unavailable for this outlet and date. Choose a shift explicitly.');
       }
       chooseShift(chosen);
-      initialSelection.current=null;
+      if(chosen || !initialSelection.current?.shiftId)initialSelection.current=null;
     } finally {
       if(mounted.current && request===listRequest.current)setShiftListLoading(false);
     }
@@ -1001,7 +1001,8 @@ export const StockOperationsPage: React.FC = () => {
         </div>
 
         <button
-          onClick={() => selectedShiftId && loadShiftData(selectedShiftId)}
+          disabled={workflowBusy}
+          onClick={() => { if(selectedShiftId)loadShiftData(selectedShiftId);else loadShifts(selectedOutletId); }}
           className="self-start sm:self-auto px-3 py-2 bg-[#F1F5F9] hover:bg-[#E8EEF5] text-[#334155] text-xs font-bold rounded-lg border border-[#D7E0EA] flex items-center gap-1.5 transition-colors"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -1017,7 +1018,8 @@ export const StockOperationsPage: React.FC = () => {
           </label>
           <select
             value={selectedOutletId}
-            onChange={e => setSelectedOutletId(e.target.value)}
+            disabled={workflowBusy}
+            onChange={e => {if(dipForm.productDipMm && !window.confirm('Discard the unsaved dip entry and change outlet?'))return;setSelectedOutletId(e.target.value);}}
             className="w-full bg-[#F1F5F9] text-[#17365D] text-sm font-semibold rounded-lg p-2.5 border border-[#D7E0EA] focus:border-orange-500 focus:outline-none"
           >
             {outlets.map(o => (
@@ -1145,7 +1147,8 @@ export const StockOperationsPage: React.FC = () => {
       </section>
 
       {/* Read-only record counts from the currently selected operational shift. */}
-      <section aria-label="Shift stock snapshot" className="option4-panel p-4 sm:p-5">
+      {!currentShift && <p role="status" className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">{loading||shiftListLoading?'Loading the selected shift…':'Select a verified shift to view saved stock and receipts.'}</p>}
+      {currentShift && <section aria-label="Shift stock snapshot" className="option4-panel p-4 sm:p-5">
         <div className="mb-3">
           <h2 className="text-base font-bold text-[#17365D]">Shift stock overview</h2>
           <p className="text-xs text-[#64748B]">Current records for the selected shift — no sample data</p>
@@ -1163,10 +1166,10 @@ export const StockOperationsPage: React.FC = () => {
             </div>
           ))}
         </div>
-      </section>
+      </section>}
 
       {/* Tab Content: OPENING & CLOSING STOCK */}
-      {(activeTab === 'OPENING' || activeTab === 'CLOSING') && (
+      {currentShift && (activeTab === 'OPENING' || activeTab === 'CLOSING') && (
         <div className="space-y-6">
           {/* Record Dip Form */}
           {currentShift?.status === 'OPEN' && (
@@ -1292,7 +1295,7 @@ export const StockOperationsPage: React.FC = () => {
       )}
 
       {/* Tab Content: FUEL RECEIPTS */}
-      {activeTab === 'RECEIPTS' && (
+      {currentShift && activeTab === 'RECEIPTS' && (
         <div className="space-y-6">
           <div className="flex flex-wrap justify-between items-center gap-3">
             <div>
@@ -1548,7 +1551,7 @@ export const StockOperationsPage: React.FC = () => {
       )}
 
       {/* Tab Content: RECONCILIATION */}
-      {activeTab === 'RECONCILIATION' && (
+      {currentShift && activeTab === 'RECONCILIATION' && (
         <div className="space-y-6">
           <div className="flex flex-wrap justify-between items-center gap-4">
             <div>
