@@ -361,8 +361,9 @@ export const FinancialOperationsPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="iocl-mobile-stack flex flex-wrap items-center gap-3 min-w-0">
             <select
+              aria-label="Finance retail outlet"
               value={selectedOutletId}
               disabled={workflowBusy}
               onChange={(e) => setSelectedOutletId(e.target.value)}
@@ -374,6 +375,7 @@ export const FinancialOperationsPage: React.FC = () => {
             </select>
 
             <select
+              aria-label="Finance operational shift"
               value={selectedShiftId}
               disabled={workflowBusy}
               onChange={(e) => {setShiftListError('');chooseShift(shiftsList.find(s=>s.id===e.target.value)||null);}}
@@ -1013,7 +1015,7 @@ export const FinancialOperationsPage: React.FC = () => {
       {showCollectionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => {if(!actionLock.current)setShowCollectionModal(false);}} />
-          <form onSubmit={handleCreateCollection} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+          <form onSubmit={handleCreateCollection} className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">Record Shift Collection</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>{actionError&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">{actionError}</p>}
             <div className="space-y-3">
               <div>
@@ -1040,7 +1042,7 @@ export const FinancialOperationsPage: React.FC = () => {
                   ))}
                 </select>
               </div>}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#64748B] mb-1">Provider (e.g. HDFC)</label>
                   <input type="text" name="provider" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
@@ -1066,7 +1068,7 @@ export const FinancialOperationsPage: React.FC = () => {
       {showHandoverModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => {if(!actionLock.current)setShowHandoverModal(false);}} />
-          <form onSubmit={handleCreateHandover} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+          <form onSubmit={handleCreateHandover} className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">Log Cash Handover</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>{actionError&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">{actionError}</p>}
             <p className="text-xs text-[#64748B]">Record physical custody transfer of cash to supervisor or next staff.</p>
             <div className="space-y-3">
@@ -1090,7 +1092,7 @@ export const FinancialOperationsPage: React.FC = () => {
       {showDepositModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => {if(!actionLock.current)setShowDepositModal(false);}} />
-          <form onSubmit={handleCreateDeposit} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+          <form onSubmit={handleCreateDeposit} className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">New Bank Deposit Submission</h2><p className="text-xs font-semibold text-slate-600">{shiftLabel}</p>{actionError&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">{actionError}</p>}
             <div className="space-y-3">
               <div>
@@ -1100,7 +1102,7 @@ export const FinancialOperationsPage: React.FC = () => {
                   <option value="CASH_DROP_BOX">Cash Drop Box / CMS</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                  <div>
                   <label className="block text-xs text-[#64748B] mb-1">Amount (₹)</label>
                   <input type="text" name="amount" inputMode="decimal" required placeholder="0.00" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D] font-mono" />
@@ -1147,11 +1149,11 @@ export const FinancialOperationsPage: React.FC = () => {
               });
               if (res.success) { setShowPartyModal(false); refreshData(); }
             }}
-            className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4"
+            className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4"
           >
             <h2 className="text-lg font-bold text-[#17365D]">Register Credit Party</h2>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#64748B] mb-1">Party Code</label>
                   <input name="partyCode" required className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D]" />
@@ -1196,7 +1198,7 @@ export const FinancialOperationsPage: React.FC = () => {
               });
               if (res.success) { setShowPriceModal(false); refreshData(); } else { setActionError(res.error?.message || 'Failed to configure price'); }
             }}
-            className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4"
+            className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4"
           >
             <h2 className="text-lg font-bold text-[#17365D]">Configure Product Price</h2>
             <div className="space-y-3">
@@ -1213,7 +1215,7 @@ export const FinancialOperationsPage: React.FC = () => {
                 <input name="price" type="text" inputMode="decimal" required placeholder="0.00" className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D] font-mono" />
                 <span className="text-[10px] text-[#64748B] mt-1 block">Specify ₹/LITRE for liquid fuels or ₹/KG for CNG</span>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#64748B] mb-1">Effective From</label>
                   <input name="effectiveFrom" type="date" required defaultValue={getLocalDateInputValue()} className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-xs text-[#17365D]" />
@@ -1235,7 +1237,7 @@ export const FinancialOperationsPage: React.FC = () => {
       {showEditPriceModal && editingPrice && hasPermission(PERMISSIONS.PRODUCT_PRICES_WRITE) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => { setShowEditPriceModal(false); setEditingPrice(null); }} />
-          <form onSubmit={handleUpdatePrice} className="relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
+          <form onSubmit={handleUpdatePrice} className="iocl-scroll-panel relative z-10 w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-2xl space-y-4">
             <h2 className="text-lg font-bold text-[#17365D]">Edit Product Price</h2>
             <div className="space-y-3">
               <div>
@@ -1258,7 +1260,7 @@ export const FinancialOperationsPage: React.FC = () => {
                   className="w-full bg-[#F1F5F9] border border-[#D7E0EA] rounded-xl px-3 py-2 text-[#17365D] font-mono"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#64748B] mb-1">Effective From</label>
                   <input

@@ -1,0 +1,43 @@
+name: Responsive browser smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/qa/responsive-browser-smoke.cjs'
+      - '.github/workflows/responsive-browser-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixture-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      VITE_API_BASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install application dependencies
+        run: bun install --frozen-lockfile
+      - name: Build isolated frontend
+        run: bun run build
+      - name: Install pinned browser runner outside the project
+        run: |
+          npm install --prefix "$RUNNER_TEMP/iocl-browser-qa" --no-save --no-package-lock playwright@1.56.1
+          "$RUNNER_TEMP/iocl-browser-qa/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Exercise frontend using intercepted fixture-only requests
+        run: |
+          export NODE_PATH="$RUNNER_TEMP/iocl-browser-qa/node_modules"
+          bun run preview --host 127.0.0.1 --port 4173 --strictPort > "$RUNNER_TEMP/iocl-preview.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4173/ > /dev/null
+          node scripts/qa/responsive-browser-smoke.cjs

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { PERMISSIONS, PermissionCode } from '../../../shared/constants';
 import {
@@ -45,6 +45,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { hasPermission, userCtx } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [navSearch, setNavSearch] = useState('');
+  const drawerRef=useRef<HTMLDialogElement>(null);
+  const closeRef=useRef(onCloseMobile);
+  closeRef.current=onCloseMobile;
+  useEffect(()=>{
+    if(!mobileOpen)return;
+    const dialog=drawerRef.current;
+    const desktop=window.matchMedia('(min-width: 1024px)');
+    if(desktop.matches){closeRef.current();return;}
+    if(dialog&&!dialog.open)dialog.showModal();
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    const onResize=()=>{if(desktop.matches)closeRef.current();};
+    desktop.addEventListener('change',onResize);
+    return ()=>{
+      desktop.removeEventListener('change',onResize);
+      document.body.style.overflow=previousOverflow;
+      if(dialog?.open)dialog.close();
+    };
+  },[mobileOpen]);
   const navigationGroups = [
     { id: 'overview', label: 'Home', ids: ['dashboard'] },
     { id: 'operations', label: 'Daily Work', ids: ['daily-ops', 'stock-ops', 'cng-ops', 'lube-ops'] },
@@ -216,7 +235,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const searchedNav = filteredNav.filter(item => (item.label + ' ' + (searchAliases[item.id] || '')).toLowerCase().includes(navSearch.trim().toLowerCase()));
 
   const content = (
-    <div className={`flex h-full min-h-0 ${collapsed ? 'w-64 lg:w-[72px]' : 'w-64'} flex-col overflow-hidden border-r border-[#153F9B] bg-gradient-to-b from-[#1646B1] via-[#103991] to-[#092767] p-3 text-white shadow-[8px_0_22px_rgba(11,30,52,0.09)] transition-[width] duration-200`}>
+    <div className={`iocl-sidebar-content flex h-full min-h-0 ${collapsed ? 'w-64 lg:w-[72px]' : 'w-64'} flex-col overflow-hidden border-r border-[#153F9B] bg-gradient-to-b from-[#1646B1] via-[#103991] to-[#092767] p-3 text-white shadow-[8px_0_22px_rgba(11,30,52,0.09)] transition-[width] duration-200`}>
       {/* Mobile Close Button & Brand */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/15 pb-3 lg:hidden">
         <div className="flex items-center gap-2.5">
@@ -335,12 +354,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Mobile Drawer Overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={onCloseMobile} />
-          <div className="relative z-10 h-full min-h-0 w-64 overflow-hidden">
-            {content}
-          </div>
-        </div>
+        <dialog id="mobile-navigation-dialog" ref={drawerRef} aria-label="Navigation menu" aria-modal="true"
+          className="iocl-mobile-drawer"
+          onCancel={event=>{event.preventDefault();onCloseMobile();}}
+          onClick={event=>{if(event.target===event.currentTarget)onCloseMobile();}}>
+          {content}
+        </dialog>
       )}
     </>
   );

@@ -1850,7 +1850,7 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {isEditorOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-[#D7E0EA] rounded-xl max-w-2xl w-full p-6 space-y-5 my-8 max-h-[92vh] overflow-y-auto">
+          <div className="iocl-scroll-panel bg-white border border-[#D7E0EA] rounded-xl max-w-2xl w-full p-6 space-y-5 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div>
                 <h3 className="text-lg font-bold text-[#17365D]">
@@ -2205,7 +2205,7 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {isVaultUploadOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
-          <div className="bg-white border border-[#D7E0EA] rounded-xl max-w-md w-full p-6 space-y-4">
+          <div className="iocl-scroll-panel bg-white border border-[#D7E0EA] rounded-xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <h3 className="text-base font-bold text-[#17365D] flex items-center gap-2">
                 <Upload className="w-4 h-4 text-orange-500" />
@@ -2267,7 +2267,7 @@ export const DocumentsPage: React.FC = () => {
       {/* ===================================================================== */}
       {previewAttachment && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-white border border-[#D7E0EA] rounded-xl max-w-4xl w-full p-5 space-y-4">
+          <div className="iocl-scroll-panel bg-white border border-[#D7E0EA] rounded-xl max-w-4xl w-full p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div className="flex items-center gap-2">
                 {getFileIcon(previewAttachment.mimeType)}

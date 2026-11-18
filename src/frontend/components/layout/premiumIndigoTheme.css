@@ -244,3 +244,65 @@
   .enterprise-shell.iocl-vibrant main .option4-hero { padding: 14px; }
   .enterprise-shell.iocl-vibrant main .option4-hero h1 { font-size: 1.25rem; }
 }
+
+
+/* Phase 5C — responsive app frame. One global outlet selector at every viewport. */
+.enterprise-shell.iocl-vibrant .iocl-header-grid {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(160px,320px) auto;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+}
+.enterprise-shell.iocl-vibrant .iocl-header-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.enterprise-shell.iocl-vibrant .iocl-header-outlet select { min-width:0; max-width:100%; min-height:40px; }
+.enterprise-shell.iocl-vibrant .iocl-skip-link { position:fixed; left:12px; top:8px; z-index:100; transform:translateY(-150%); border-radius:8px; padding:10px 14px; background:#17365d; color:#fff; }
+.enterprise-shell.iocl-vibrant .iocl-skip-link:focus { transform:none; }
+.enterprise-shell.iocl-vibrant .iocl-mobile-drawer {
+  position:fixed; inset:0 auto 0 0; margin:0; padding:0; border:0;
+  height:100dvh; max-height:100dvh; width:min(18rem,90vw); max-width:90vw;
+  background:#192454; color:#fff; overflow:hidden;
+}
+.enterprise-shell.iocl-vibrant .iocl-mobile-drawer::backdrop { background:rgb(15 23 42 / .72); }
+.enterprise-shell.iocl-vibrant .iocl-mobile-drawer .iocl-sidebar-content {
+  width:100%; background:linear-gradient(167deg,#1b2755,#18234c 45%,#101b3b);
+  border-color:#313c6b;
+}
+.enterprise-shell.iocl-vibrant .iocl-mobile-drawer nav button[aria-current="page"] { background:#fff3e9; color:#172550; border-left-color:#fc6941; }
+.enterprise-shell.iocl-vibrant .iocl-mobile-drawer nav button[aria-current="page"] svg { color:#e9572f; }
+
+/* Keep horizontal scrolling inside data grids, not the document. */
+.enterprise-shell.iocl-vibrant main :is(.operations-modern,.admin-modern,.daily-ops-modern,.finance-modern,.reports-modern) {
+  min-width:0;
+}
+.enterprise-shell.iocl-vibrant main :is(.overflow-x-auto,.ops-table-scroll,.admin-table-scroll) {
+  max-width:100%; min-width:0; overscroll-behavior-x:contain;
+}
+.enterprise-shell.iocl-vibrant main :is(input,select,textarea) { max-width:100%; }
+.enterprise-shell.iocl-vibrant main .iocl-scroll-panel {
+  max-height:calc(100dvh - 2rem); overflow-y:auto; overscroll-behavior:contain;
+}
+.enterprise-shell.iocl-vibrant main [aria-label="Outlet directory overview"] > div {
+  border-top:0; background:transparent; box-shadow:none;
+}
+@media (max-width:1023px) {
+  .enterprise-shell.iocl-vibrant .iocl-header-grid { grid-template-columns:minmax(0,1fr) auto; gap:6px 8px; }
+  .enterprise-shell.iocl-vibrant .iocl-header-brand { grid-column:1; grid-row:1; }
+  .enterprise-shell.iocl-vibrant .iocl-header-account { grid-column:2; grid-row:1; }
+  .enterprise-shell.iocl-vibrant .iocl-header-outlet { grid-column:1/-1; grid-row:2; }
+  .enterprise-shell.iocl-vibrant .iocl-header-outlet:empty { display:none; }
+  .enterprise-shell.iocl-vibrant > header { padding:8px 12px; }
+}
+@media (max-width:639px) {
+  .enterprise-shell.iocl-vibrant main { padding:12px; }
+  .enterprise-shell.iocl-vibrant .iocl-header-title { white-space:normal; font-size:.8rem; line-height:1.2; }
+  .enterprise-shell.iocl-vibrant .iocl-header-brand img { height:30px; }
+  .enterprise-shell.iocl-vibrant .iocl-header-brand button,
+  .enterprise-shell.iocl-vibrant .iocl-header-account button { min-height:44px; min-width:40px; }
+  .enterprise-shell.iocl-vibrant main :is(.operations-modern,.admin-modern,.daily-ops-modern,.finance-modern,.reports-modern) :is(select,input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),textarea) { font-size:16px; }
+  .enterprise-shell.iocl-vibrant main .iocl-scroll-panel { max-height:calc(100dvh - 1.5rem); padding:16px; }
+  .enterprise-shell.iocl-vibrant main .iocl-mobile-stack { flex-direction:column; align-items:stretch; min-width:0; }
+  .enterprise-shell.iocl-vibrant main .iocl-mobile-stack > * { min-width:0; max-width:100%; }
+  .enterprise-shell.iocl-vibrant main .iocl-mobile-stack select { width:100%; min-width:0; }
+  .enterprise-shell.iocl-vibrant main .iocl-scroll-panel :is(.flex.justify-end,.flex.justify-between) { flex-wrap:wrap; }
+}

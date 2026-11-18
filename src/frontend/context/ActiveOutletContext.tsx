@@ -151,7 +151,9 @@ export const useActiveOutlet = () => {
 };
 
 export const GlobalOutletSelector: React.FC<{ className?: string }> = ({ className = '' }) => {
-  const { activeOutletId, accessibleOutlets, setActiveOutletId, loading } = useActiveOutlet();
+  const { activeOutletId, accessibleOutlets, setActiveOutletId, loading, outletLoadError } = useActiveOutlet();
+  if(loading)return <span role="status" className="text-xs text-slate-600">Loading outlets…</span>;
+  if(outletLoadError)return <span role="status" className="text-xs text-red-800">Outlet selection unavailable</span>;
 
   if (accessibleOutlets.length <= 1) {
     if (accessibleOutlets.length === 1) {
@@ -169,10 +171,11 @@ export const GlobalOutletSelector: React.FC<{ className?: string }> = ({ classNa
     <div className={`flex items-center gap-2 ${className}`}>
       <Building2 className="w-3.5 h-3.5 text-[#D86514] shrink-0" />
       <select
+        aria-label="Active retail outlet"
         value={activeOutletId || ''}
         onChange={(e) => setActiveOutletId(e.target.value)}
         disabled={loading}
-        className="bg-[#F8FAFC] border border-[#D7E0EA] hover:border-[#F47721] text-[#17365D] text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+        className="min-w-0 w-full bg-[#F8FAFC] border border-[#D7E0EA] hover:border-[#F47721] text-[#17365D] text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
       >
         {accessibleOutlets.map((outlet) => (
           <option key={outlet.id} value={outlet.id}>

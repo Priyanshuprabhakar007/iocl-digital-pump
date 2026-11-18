@@ -2613,7 +2613,7 @@ export const DailyOperationsPage: React.FC = () => {
       {isGlobalAdmin && adminEmptyCloseOpen && activeWorkspace?.shift.status === 'OPEN' && (
         <div role="dialog" aria-modal="true" aria-labelledby="admin-empty-close-title"
              className="fixed inset-0 z-50 bg-slate-900/70 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-amber-300 bg-white p-6 shadow-xl space-y-4">
+          <div className="iocl-scroll-panel w-full max-w-lg rounded-2xl border border-amber-300 bg-white p-6 shadow-xl space-y-4">
             <div className="flex items-center gap-2 text-amber-800">
               <ShieldAlert className="w-6 h-6" />
               <h3 id="admin-empty-close-title" className="font-bold text-lg">Admin: Close Empty Shift</h3>
@@ -2664,7 +2664,7 @@ export const DailyOperationsPage: React.FC = () => {
       {canRecordUnavailability && unavailableNozzle && activeWorkspace?.shift.status === 'OPEN' && (
         <div role="dialog" aria-modal="true" aria-labelledby="nozzle-unavailable-title"
              className="fixed inset-0 z-50 bg-slate-900/70 flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-xl space-y-4">
+          <div className="iocl-scroll-panel w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-xl space-y-4">
             <h3 id="nozzle-unavailable-title" className="text-lg font-bold text-slate-900">
               Mark Nozzle Unavailable
             </h3>
@@ -2700,7 +2700,7 @@ export const DailyOperationsPage: React.FC = () => {
           data-testid="nozzle-testing-confirm-modal"
           className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
         >
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+          <div className="iocl-scroll-panel bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
             <div className="flex items-start gap-3">
               <div className="p-2 rounded-lg bg-amber-100 text-amber-800 shrink-0">
                 <AlertTriangle className="w-5 h-5" />

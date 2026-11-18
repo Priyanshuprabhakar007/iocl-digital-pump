@@ -55,6 +55,9 @@ export const LubeOperationsPage: React.FC = () => {
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
   const [selectedShift, setSelectedShift] = useState<OperationalShift | null>(null);
   const [loadingShifts, setLoadingShifts] = useState(false);
+  const [shiftListError,setShiftListError]=useState<string|null>(null);
+  const [shiftListRevision,setShiftListRevision]=useState(0);
+  const [shiftRecordsReady,setShiftRecordsReady]=useState(false);
 
   // Lube state
   const [skus, setSkus] = useState<LubeSku[]>([]);
@@ -115,7 +118,7 @@ export const LubeOperationsPage: React.FC = () => {
 
     const loadShifts = async () => {
       setLoadingShifts(true);
-      setActionError(null);
+      setShiftListError(null);
       const reqOutletId = selectedOutletId;
       shiftsRequestRef.current = reqOutletId;
 
@@ -148,7 +151,7 @@ export const LubeOperationsPage: React.FC = () => {
           setSelectedShift(null);
           setSales([]);
           setShiftSummary(null);
-          setActionError(res.error?.message || 'Failed to load operational shifts');
+          setShiftListError(res.error?.message || 'Failed to load operational shifts');
         }
       } catch (err: any) {
         if (shiftsRequestRef.current !== reqOutletId) {
@@ -159,7 +162,7 @@ export const LubeOperationsPage: React.FC = () => {
         setSelectedShift(null);
         setSales([]);
         setShiftSummary(null);
-        setActionError(err.message || 'Failed to load operational shifts');
+        setShiftListError(err.message || 'Failed to load operational shifts');
       } finally {
         if (shiftsRequestRef.current === reqOutletId) {
           setLoadingShifts(false);
@@ -168,13 +171,14 @@ export const LubeOperationsPage: React.FC = () => {
     };
 
     loadShifts();
-  }, [selectedOutletId, hasShiftsRead]);
+  }, [selectedOutletId, hasShiftsRead,shiftListRevision]);
 
   // Main data fetching function
   const loadOutletLubeData = async () => {
     if (!selectedOutletId) return;
 
     setLoadingData(true);
+    setShiftRecordsReady(false);
     setActionError(null);
 
     const reqOutletId = selectedOutletId;
@@ -293,6 +297,10 @@ export const LubeOperationsPage: React.FC = () => {
         setShiftSummary(null);
       }
 
+      if(hasShiftContext){
+        const shiftResult=results[5], salesResult=results[6], summaryResult=results[7];
+        setShiftRecordsReady(shiftResult?.status==='fulfilled'&&shiftResult.value.success&&shiftResult.value.data?.id===reqShiftId&&shiftResult.value.data.outletId===reqOutletId&&salesResult?.status==='fulfilled'&&salesResult.value.success&&Array.isArray(salesResult.value.data)&&summaryResult?.status==='fulfilled'&&summaryResult.value.success&&!!summaryResult.value.data&&skusRes.status==='fulfilled'&&skusRes.value.success&&Array.isArray(skusRes.value.data));
+      }
       if (errorAccumulator.length > 0) {
         setActionError(errorAccumulator.join(' | '));
       }
@@ -313,6 +321,7 @@ export const LubeOperationsPage: React.FC = () => {
   }, [selectedOutletId, selectedShiftId, hasShiftsRead]);
 
   const handleRefresh = async () => {
+    if(hasShiftsRead&&shiftListError)setShiftListRevision(v=>v+1);
     await loadOutletLubeData();
   };
 
@@ -360,11 +369,12 @@ export const LubeOperationsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="iocl-mobile-stack flex flex-wrap items-center gap-3 min-w-0">
           {/* Outlet Selector */}
           <div className="relative">
             <Building2 className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-[#64748B] pointer-events-none" />
             <select
+              aria-label="Lube retail outlet"
               value={selectedOutletId}
               onChange={(e) => setSelectedOutletId(e.target.value)}
               disabled={loadingOutlets || loadingShifts || loadingData}
@@ -388,6 +398,7 @@ export const LubeOperationsPage: React.FC = () => {
           <div className="relative">
             <Clock className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-[#64748B] pointer-events-none" />
             <select
+              aria-label="Lube operational shift"
               value={selectedShiftId}
               onChange={(e) => {
                 const next=shiftsList.find(s=>s.id===e.target.value);
@@ -418,7 +429,8 @@ export const LubeOperationsPage: React.FC = () => {
 
           <button
             onClick={handleRefresh}
-            disabled={loadingData}
+            aria-label="Refresh lube records"
+            disabled={loadingData||loadingShifts}
             className="p-2 text-[#64748B] hover:text-[#17365D] bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] rounded-lg transition-all disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingData ? 'animate-spin' : ''}`} />
@@ -488,6 +500,7 @@ export const LubeOperationsPage: React.FC = () => {
           {id:'setup',label:'Product Setup',items:[{id:'skus',label:'SKU Catalog'},{id:'prices',label:'Selling Prices'}]},
         ]}/>
 
+      {shiftListError&&<div role="alert" className="rounded-xl border border-red-200 bg-white p-4 text-sm text-red-800"><p>{shiftListError}</p><button type="button" disabled={loadingShifts} onClick={()=>setShiftListRevision(v=>v+1)} className="mt-3 rounded-lg bg-[#17365D] px-4 py-2 text-white disabled:opacity-50">Retry shift list</button></div>}
       {/* Main Tab Viewports */}
       <div className="p-3 sm:p-5 bg-white border border-[#E2E8F0] rounded-xl">
         {(activeTab === 'sales' || activeTab === 'summary') && !hasShiftsRead ? (
@@ -498,6 +511,8 @@ export const LubeOperationsPage: React.FC = () => {
               Shift operational features are not available because you do not have shift read permissions (shifts.read).
             </p>
           </div>
+        ) : (activeTab==='sales'||activeTab==='summary')&&(loadingShifts||loadingData||!!shiftListError||!!selectedShiftId&&!shiftRecordsReady) ? (
+          <div role="status" className="p-4 text-sm text-slate-600">{loadingShifts||loadingData?'Loading saved lubricant records…':'Shift records could not be fully verified. Refresh before recording sales.'}</div>
         ) : (
           <>
             {activeTab === 'sales' && (

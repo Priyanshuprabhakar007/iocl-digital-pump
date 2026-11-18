@@ -20,7 +20,13 @@ describe('Sidebar navigation scrolling', () => {
 
   it('works in both desktop and mobile layouts', () => {
     expect(source).toContain('h-[calc(100vh-64px)] shrink-0 overflow-hidden lg:block');
-    expect(source).toContain('h-full min-h-0 w-64 overflow-hidden');
+    const theme = fs.readFileSync('src/frontend/components/layout/premiumIndigoTheme.css', 'utf8');
+    expect(source).toContain('<dialog id="mobile-navigation-dialog"');
+    expect(source).toContain('dialog.showModal()');
+    expect(source).toContain('document.body.style.overflow=\'hidden\'');
+    expect(source).toContain('document.body.style.overflow=previousOverflow');
+    expect(theme).toMatch(/\.iocl-mobile-drawer\s*\{[^}]*height:100dvh;[^}]*overflow:hidden;/);
+    expect(theme).toMatch(/\.iocl-mobile-drawer\s+\.iocl-sidebar-content\s*\{[^}]*width:100%/);
     expect(source).toContain('{content}');
   });
 });
