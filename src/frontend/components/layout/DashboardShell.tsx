@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import './vibrantTheme.css';
@@ -17,6 +17,14 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   children,
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const wasMobileOpen=useRef(false);
+  useEffect(()=>{
+    if(wasMobileOpen.current&&!mobileOpen){
+      const toggle=document.getElementById('mobile-navigation-toggle');
+      if(toggle?.getClientRects().length)toggle.focus();
+    }
+    wasMobileOpen.current=mobileOpen;
+  },[mobileOpen]);
 
   return (
     <div className="enterprise-shell iocl-vibrant min-h-screen bg-[#F7F5F1] text-[#172B4D] flex flex-col font-sans">
