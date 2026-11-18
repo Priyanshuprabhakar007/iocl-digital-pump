@@ -11,7 +11,10 @@ describe('Task-first user-friendly workspace redesign', () => {
 
   it('offers permission-gated task shortcuts connected to existing navigation', () => {
     expect(dashboard).toContain('What would you like to do');
-    expect(dashboard).toContain("tasks.filter(task => ['daily-ops', 'stock-ops', 'outlets', 'reports']");
+    for (const group of ['daily', 'reports']) expect(dashboard).toContain("tasks.filter(task=>task.group==='"+group+"')");
+    expect(dashboard).toContain("getWorkDeskIndicators(summary)");
+    expect(dashboard).toContain("if (!governanceOpen || !userCtx) return;");
+    expect(dashboard).toContain("task.id !== 'dsr-reports' || canViewDaily");
     expect(dashboard).toContain('hasPermission(task.permission as PermissionCode)');
     expect(dashboard).toContain('onNavigate?.(task.id)');
     expect(app).toContain('<DashboardPage onNavigate={handleSetActiveTab} />');
