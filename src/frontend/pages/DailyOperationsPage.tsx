@@ -16,6 +16,8 @@ import {
   saveTankReadingsBatch,
 } from '../services/api';
 import { useActiveOutlet } from '../context/ActiveOutletContext';
+import { useShiftWorkbench } from '../context/ShiftWorkbenchContext';
+import { resolveWorkbenchShift, toWorkbenchSelection, type WorkbenchPage } from '../utils/shiftWorkbench';
 import { useAuth } from '../context/AuthContext';
 import { PERMISSIONS } from '../../shared/constants';
 import { DailyOperationsTestDataResetPanel } from '../components/pump/DailyOperationsTestDataResetPanel';
@@ -286,7 +288,14 @@ export const DailyOperationsPage: React.FC = () => {
     activeOutlet: selectedOutlet,
   } = useActiveOutlet();
   const selectedOutletId = activeOutletId || '';
-  const [businessDate, setBusinessDate] = useState<string>(getLocalTodayIso);
+  const {selection, remember, navigate} = useShiftWorkbench();
+  const initialSelection = useRef(selection);
+  const [businessDate, setBusinessDate] = useState<string>(() => selection?.businessDate || getLocalTodayIso());
+  const scopeRef = useRef({outletId:selectedOutletId,date:businessDate});
+  scopeRef.current = {outletId:selectedOutletId,date:businessDate};
+  const requests = useRef(0);
+  const mounted = useRef(true);
+  useEffect(()=>{ mounted.current=true; return ()=>{mounted.current=false; requests.current++;}; },[]);
   const [viewMode, setViewMode] = useState<'WORKSPACE' | 'DSR'>('WORKSPACE');
 
   const [bootstrap, setBootstrap] = useState<DailyOperationsBootstrapResponse | null>(null);
@@ -354,13 +363,17 @@ export const DailyOperationsPage: React.FC = () => {
 
   const loadBootstrap = useCallback(
     async (outletId: string, date: string, preserveActiveShift = false) => {
-      if (!outletId || !date) return;
+      if (!outletId || !date || !mounted.current || scopeRef.current.outletId !== outletId || scopeRef.current.date !== date) return;
+      const request = ++requests.current;
+      const current = () => mounted.current && request === requests.current && scopeRef.current.outletId === outletId && scopeRef.current.date === date;
       setLoading(true);
       setPageError(null);
       try {
         const res = await fetchDailyOperationsBootstrap(outletId, date);
-        if (!res.success || !res.data) {
-          setPageError(res.error?.message || 'Failed to load daily operations');
+        if (!current()) return;
+        if (!res.success || !res.data || res.data.outletId !== outletId || res.data.businessDate !== date || res.data.shifts.some(s=>s.shift.outletId!==outletId || s.shift.businessDate!==date)) {
+          setBootstrap(null); setDailySummary(null); setActiveShiftId('');
+          setPageError(res.error?.message || 'Failed to verify daily operations for this outlet and date');
           setLoading(false);
           return;
         }
@@ -369,27 +382,26 @@ export const DailyOperationsPage: React.FC = () => {
         setDailySummary(data.dailySummary);
         hydrateDraftsFromWorkspaces(data.shifts);
 
-        if (data.shiftTemplates.length > 0 && !selectedTemplateId) {
+        if (data.shiftTemplates.length > 0 && !data.shiftTemplates.some(t=>t.id===selectedTemplateId)) {
           setSelectedTemplateId(data.shiftTemplates[0].id);
         }
 
-        if (data.shifts.length > 0) {
-          if (preserveActiveShift && data.shifts.some((s) => s.shift.id === activeShiftId)) {
-            // keep current activeShiftId
-          } else {
-            const openShift = data.shifts.find((s) => s.shift.status === 'OPEN');
-            setActiveShiftId(openShift ? openShift.shift.id : data.shifts[data.shifts.length - 1].shift.id);
-          }
-        } else {
-          setActiveShiftId('');
-        }
+        const requested = initialSelection.current?.outletId === outletId && initialSelection.current.businessDate === date ? initialSelection.current : null;
+        const preferred = preserveActiveShift && activeShiftId
+          ? {outletId, businessDate:date, shiftId:activeShiftId} : requested;
+        const chosen = resolveWorkbenchShift(data.shifts.map(s=>s.shift), outletId, preferred || {outletId,businessDate:date,shiftId:null});
+        initialSelection.current = null;
+        setActiveShiftId(chosen?.id || '');
+        if (chosen) remember(toWorkbenchSelection(chosen));
+        else if (preferred?.shiftId) setPageError('Previously selected shift is no longer available. Choose a shift explicitly.');
+        else remember({outletId,businessDate:date,shiftId:null});
       } catch (err: any) {
-        setPageError(err.message || 'Unexpected error loading daily operations');
+        if(current()) {setBootstrap(null); setDailySummary(null); setActiveShiftId(''); setPageError(err.message || 'Unexpected error loading daily operations');}
       } finally {
-        setLoading(false);
+        if(current()) setLoading(false);
       }
     },
-    [activeShiftId, hydrateDraftsFromWorkspaces, selectedTemplateId]
+    [activeShiftId, hydrateDraftsFromWorkspaces, selectedTemplateId, remember]
   );
 
   // Background revalidation of summary only (no full page reload)
@@ -398,7 +410,7 @@ export const DailyOperationsPage: React.FC = () => {
     setBackgroundRefreshing(true);
     try {
       const res = await fetchDailyFuelSummary(selectedOutletId, businessDate);
-      if (res.success && res.data) {
+      if (mounted.current && scopeRef.current.outletId === selectedOutletId && scopeRef.current.date === businessDate && res.success && res.data?.outletId===selectedOutletId && res.data?.businessDate===businessDate) {
         setDailySummary(res.data);
       }
     } finally {
@@ -424,9 +436,18 @@ export const DailyOperationsPage: React.FC = () => {
   }, [selectedOutletId, businessDate, loadBootstrap]);
 
   const activeWorkspace: DailyOperationsShiftWorkspace | null =
-    bootstrap?.shifts.find((s) => s.shift.id === activeShiftId) ||
-    (bootstrap?.shifts && bootstrap.shifts.length > 0 ? bootstrap.shifts[0] : null);
+    bootstrap?.outletId===selectedOutletId && bootstrap.businessDate===businessDate
+      ? bootstrap.shifts.find((s) => s.shift.id === activeShiftId) || null : null;
 
+  const hasUnsaved = Object.values(tankDrafts).some(d=>d.saveStatus==='DIRTY'||d.saveStatus==='SAVING'||d.saveStatus==='ERROR') ||
+    Object.values(nozzleDrafts).some(d=>d.saveStatus==='DIRTY'||d.saveStatus==='SAVING'||d.saveStatus==='ERROR') || Boolean(newShiftNotes.trim());
+  const navigationBusy = loading || savingAllTanks || savingAllNozzles || openingShift || closingShiftBusy || runningReconciliation || savingUnavailable || !!pendingTestingConfirm || !!unavailableNozzle || adminEmptyCloseOpen;
+  const followTask = (page: WorkbenchPage) => {
+    if (!activeWorkspace || navigationBusy) return;
+    if(hasUnsaved && !window.confirm('Some entries or notes are unsaved. Leave this workspace without saving them?')) return;
+    remember(toWorkbenchSelection(activeWorkspace.shift));
+    navigate(page);
+  };
   const isShiftReadOnly =
     !activeWorkspace ||
     activeWorkspace.shift.status === 'CLOSED' ||
@@ -1212,7 +1233,7 @@ export const DailyOperationsPage: React.FC = () => {
                 <input
                   type="date"
                   value={businessDate}
-                  onChange={(e) => setBusinessDate(e.target.value)}
+                  onChange={(e) => { if(navigationBusy || (hasUnsaved && !window.confirm('Unsaved entries or notes may be lost. Change business date?'))) return; const date=e.target.value; if(!date)return; scopeRef.current={outletId:selectedOutletId,date}; requests.current++; initialSelection.current=null; setBootstrap(null); setDailySummary(null); setActiveShiftId(''); setBusinessDate(date); remember({outletId:selectedOutletId,businessDate:date,shiftId:null}); }}
                   className="h-9 pl-3 pr-3 rounded-lg border border-slate-300 bg-white text-sm font-mono font-medium text-slate-900 caret-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003366] disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                 />
               </div>
@@ -1449,7 +1470,7 @@ export const DailyOperationsPage: React.FC = () => {
                     <button
                       key={ws.shift.id}
                       type="button"
-                      onClick={() => setActiveShiftId(ws.shift.id)}
+                      onClick={() => { if(navigationBusy) return; setActiveShiftId(ws.shift.id); remember(toWorkbenchSelection(ws.shift)); }}
                       className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors flex items-center gap-2 ${
                         isSelected
                           ? 'bg-[#003366] text-white border-[#003366]'
@@ -1538,14 +1559,14 @@ export const DailyOperationsPage: React.FC = () => {
               <nav aria-label="Jump to daily entry task" className="rounded-2xl border border-[#DCE6F1] bg-white p-4 sm:p-5">
                 <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
                   <div>
-                    <h2 className="text-base font-bold text-[#17365D]">Choose the task you need</h2>
-                    <p className="mt-1 text-xs text-[#64748B]">Jump to any section without changing the required workflow.</p>
+                    <h2 className="text-base font-bold text-[#17365D]">Shift workbench</h2>
+                    <p className="mt-1 text-xs text-[#64748B]">Work in the same outlet, date and shift. Use any applicable task; existing closure rules still apply.</p>
                   </div>
                   <span className="rounded-lg bg-[#F1F5F9] px-2.5 py-1 text-xs font-medium text-[#526477]">
                     {activeWorkspace.shift.status === 'OPEN' ? 'Shift open' : 'Read-only shift'}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
                   {[
                     { label: 'Tank readings', target: 'daily-tank-readings', subtitle: 'Opening & closing dips', icon: Layers },
                     { label: 'Nozzle readings', target: 'daily-nozzle-readings', subtitle: 'Meters & testing', icon: Gauge },
@@ -1558,6 +1579,8 @@ export const DailyOperationsPage: React.FC = () => {
                       <span className="text-[11px] leading-relaxed text-[#64748B]">{task.subtitle}</span>
                     </a>;
                   })}
+                  {hasPermission(PERMISSIONS.TANK_STOCK_READ) && <button type="button" disabled={navigationBusy} onClick={()=>followTask('stock-ops')} className="option4-action flex flex-col items-start gap-2 p-3 text-left disabled:opacity-50"><Fuel className="h-5 w-5 text-[#D86514]"/><span className="text-xs font-bold text-[#17365D]">Fuel receipts</span><span className="text-[11px] text-[#64748B]">Same shift · tanker &amp; decantation</span></button>}
+                  {hasPermission(PERMISSIONS.FINANCIAL_RECONCILIATION_READ) && <button type="button" disabled={navigationBusy} onClick={()=>followTask('financials')} className="option4-action flex flex-col items-start gap-2 p-3 text-left disabled:opacity-50"><Calculator className="h-5 w-5 text-[#D86514]"/><span className="text-xs font-bold text-[#17365D]">Collections &amp; finance</span><span className="text-[11px] text-[#64748B]">Same shift · payments &amp; reconciliation</span></button>}
                   <button type="button" onClick={() => setViewMode('DSR')} className="option4-action flex flex-col items-start gap-2 p-3 text-left transition focus-visible:outline-2 focus-visible:outline-[#2354C6]">
                     <FileSpreadsheet className="h-5 w-5 text-[#D86514]" />
                     <span className="text-xs font-bold text-[#17365D]">View DSR</span>
@@ -1565,6 +1588,7 @@ export const DailyOperationsPage: React.FC = () => {
                   </button>
                 </div>
               </nav>
+              {hasPermission(PERMISSIONS.REPORTS_READ) && <button type="button" disabled={navigationBusy} onClick={()=>followTask('dsr-reports')} className="text-xs font-semibold text-[#17365D] underline disabled:opacity-50">Open DSR Reports for this business date</button>}
               {/* 3. TANK DIP ENTRY GRID */}
               <div id="daily-tank-readings" className="scroll-mt-24 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
                 <div className="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
