@@ -464,3 +464,109 @@
 @media (prefers-reduced-motion:reduce) {
   .enterprise-shell.iocl-vibrant main .phase6-task:not(:disabled):hover { transform:none; }
 }
+
+/* Phase 6B — consistent data entry and table readability.
+   Scope only to established page modules; never alter validation or business states.
+   Preserve existing sticky first-column, scroll, warning and disabled behavior. */
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.operations-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),select,textarea) {
+  border-radius:10px;
+  min-height:42px;
+  accent-color:#24527e;
+  transition:border-color 140ms ease,box-shadow 140ms ease;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.operations-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),select,textarea):not(:disabled):focus-visible {
+  border-color:#326a9f;
+  outline:2px solid #326a9f;
+  outline-offset:1px;
+  box-shadow:0 0 0 4px rgb(50 106 159 / .10);
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.operations-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(input,select,textarea):disabled {
+  cursor:not-allowed;
+  opacity:.68;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.operations-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(input,select,textarea)::placeholder {
+  color:#64748b;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.operations-modern,.finance-modern,.reports-modern,.admin-modern
+) label {
+  overflow-wrap:anywhere;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.operations-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(.daily-ops-surface,.phase3-surface,.option4-panel) {
+  border-color:#dce4ee;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.operations-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(.daily-ops-data-table,.phase3-data-table,.admin-data-table) {
+  font-variant-numeric:tabular-nums;
+  line-height:1.45;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(.daily-ops-data-table,.phase3-data-table,.admin-data-table) :is(th,td) {
+  padding-block:11px;
+  padding-inline:12px;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(.daily-ops-data-table,.phase3-data-table,.admin-data-table) thead th {
+  background:#edf2f8;
+  color:#213c58;
+  font-size:.76rem;
+  font-weight:700;
+  border-bottom:1px solid #d9e3ed;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(.daily-ops-data-table,.phase3-data-table,.admin-data-table) tbody tr {
+  transition:background-color 120ms ease;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(.daily-ops-data-table,.phase3-data-table,.admin-data-table) tbody tr:hover td {
+  background:#f4f8fd;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(.daily-ops-data-table,.phase3-data-table,.admin-data-table) tbody tr:hover td:first-child {
+  background:#f4f8fd;
+}
+.enterprise-shell.iocl-vibrant main :is(
+  .daily-ops-modern,.operations-modern,.finance-modern,.reports-modern,.admin-modern
+) :is(.daily-ops-table-scroll,.ops-table-scroll,.phase3-table-scroll,.admin-table-scroll) {
+  max-width:100%;
+  overscroll-behavior-x:contain;
+  scrollbar-width:thin;
+  scrollbar-color:#9cafc1 #f1f5f9;
+}
+@media (max-width:639px) {
+  .enterprise-shell.iocl-vibrant main :is(
+    .daily-ops-modern,.operations-modern,.finance-modern,.reports-modern,.admin-modern
+  ) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),select,textarea) {
+    min-height:44px;
+    font-size:16px;
+  }
+  .enterprise-shell.iocl-vibrant main :is(
+    .daily-ops-modern,.finance-modern,.reports-modern,.admin-modern
+  ) :is(.daily-ops-data-table,.phase3-data-table,.admin-data-table) :is(th,td) {
+    padding-inline:10px;
+  }
+}
+@media (prefers-reduced-motion:reduce) {
+  .enterprise-shell.iocl-vibrant main :is(
+    .daily-ops-modern,.operations-modern,.finance-modern,.reports-modern,.admin-modern
+  ) :is(input,select,textarea) { transition:none; }
+  .enterprise-shell.iocl-vibrant main :is(
+    .daily-ops-modern,.finance-modern,.reports-modern,.admin-modern
+  ) :is(.daily-ops-data-table,.phase3-data-table,.admin-data-table) tbody tr { transition:none; }
+}
