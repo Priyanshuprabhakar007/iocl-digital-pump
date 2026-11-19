@@ -38,6 +38,19 @@ export const dealerLeaseSourceInputSchema = z.object({
   message:'Source lease end date cannot be before start date.',
 });
 
+export const dealerLeaseSourcePatchSchema = z.object({
+  orderNumber: optionalText(120),
+  startDate: isoDate.optional(),
+  endDate: isoDate.optional(),
+  rentMonthlySource: optionalText(100),
+  gstChargesSource: optionalText(180),
+  durationYearsSource: optionalText(40),
+  durationMonthsSource: optionalText(40),
+  escalationSource: optionalText(180),
+  escalationIntervalYearsSource: optionalText(40),
+  remarksSource: optionalText(2000),
+}).strict().refine(d=>!d.startDate||!d.endDate||d.startDate<=d.endDate,{message:'Lease source end date must be after start date.'});
+
 export const dealerAgreementLinkInputSchema = z.object({
   agreementId: z.string().trim().min(3).max(128),
   confirmedSourceAndDocument: z.literal(true),
