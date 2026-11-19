@@ -1,5 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {dealerMasterFieldCatalog, normalizedDealerHeader, readYellowCellProtection, summarizeDealerFieldCoverage} from '../src/shared/dealerMasterFieldCoverage';
+import {parseDealerMasterRows} from '../src/shared/dealerMasterImport';
 
 describe('IOCL 26-column source mapping and yellow protection',()=>{
   it('covers exactly all 26 business columns across 4 destinations with no duplicate headings',()=>{
@@ -28,6 +29,17 @@ describe('IOCL 26-column source mapping and yellow protection',()=>{
     const output=readYellowCellProtection({}, {'A2':{s:2}}, ['CUSTCODE'],1);
     expect(output.verified).toBe(false);
     expect(output.reason).toContain('unavailable');
+  });
+  it('matches yellow cells using real sheet row numbers even after skipped blank rows',()=>{
+    const row:Record<string,unknown>={CUSTCODE:'369460',EMAIL:'already@iocl.in'};
+    // SheetJS attaches physical __rowNum__ non-enumerably (zero-indexed).
+    Object.defineProperty(row,'__rowNum__',{value:7,enumerable:false});
+    const parsed=parseDealerMasterRows([row]);
+    expect(parsed[0].sourceRow).toBe(8);
+    const coverage=summarizeDealerFieldCoverage([row],{8:['EMAIL']});
+    expect(coverage.find(f=>f.header==='EMAIL')?.protectedCount).toBe(1);
+    expect(coverage.find(f=>f.header==='EMAIL')?.remainingCount).toBe(0);
+    expect(parsed[0].sourceDetails).not.toHaveProperty('__rowNum__');
   });
   it('keeps empty source cells distinct from remaining non-highlighted cells',()=>{
     const rows=[{EMAIL:'',ADDRESS:'Mohali'},{EMAIL:'a@example.com',ADDRESS:null}];
