@@ -96,7 +96,9 @@ export function summarizeDealerFieldCoverage(
       const value=Object.entries(row).find(([name])=>normalizedDealerHeader(name)===header)?.[1];
       const populated=value!==undefined&&value!==null&&String(value).trim()!=='';
       if(!populated){blankCount++;return;}
-      if((protectedBySourceRow[index+2]||[]).includes(header))protectedCount++;
+      const physicalRow=typeof (row as {__rowNum__?:number}).__rowNum__ === 'number'
+        ? (row as {__rowNum__?:number}).__rowNum__! + 1 : index+2;
+      if((protectedBySourceRow[physicalRow]||[]).includes(header))protectedCount++;
       else remainingCount++;
     });
     return {...field,protectedCount,remainingCount,blankCount};
