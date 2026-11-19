@@ -163,6 +163,20 @@ export function buildDealerStage4Plan(
         else if(module==='LEASE_SOURCE')leasePayload[field]=parsed;
       }
     }
+    // Organization labels and immutable RO Code are previewed but never overwritten here.
+    for(const [header,field] of [['CUSTCODE','roCode'],['SALESOFFICE','divisionId'],['SALES AREA NAME','salesAreaId']] as const){
+      const value=readSource(row,header);if(!value)continue;
+      const yellow=isProtected(protectedHeaders,header);
+      const existing=outlet?.[field];
+      let status:Stage4Status='REVIEW',note='RO or organization mapping requires review';
+      if(yellow){status='PROTECTED';note='Already highlighted in source — never overwrite';}
+      else if(!outlet&&canCreate){status='CREATE';note='Part of verified new outlet registration';}
+      else if(outlet&&field==='roCode'&&comparable(existing)===comparable(value)){status='UNCHANGED';note='Immutable RO Code matched';}
+      else if(outlet&&field!=='roCode'&&base?.action!=='REVIEW'&&base?.payload?.[field]&&comparable(existing)===comparable(base.payload[field])){
+        status='UNCHANGED';note='Existing verified organizational assignment retained';
+      }
+      fields.push({row:row.sourceRow,roCode:row.roCode,module:'OUTLET',header,field,source:value,stored:normalized(existing),status,note});
+    }
     for(const [header,field] of [
       ['CUSTOMER  NAME (NAME OF  RO)','name'],['ADDRESS','address'],['DISTRICT','district'],
     ] as const){
