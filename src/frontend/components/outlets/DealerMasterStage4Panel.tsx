@@ -18,6 +18,7 @@ type Props={
   verified:boolean;
   fileName:string;
   fileSha256:string;
+  supplementSha256?:string;
   outletPlans:ImportPlan[];
   onCompleted:()=>void;
 };
@@ -47,7 +48,7 @@ function fingerprint(plan:Stage4Plan){
   })));
 }
 export function DealerMasterStage4Panel({
-  sourceRows,protectedBySourceRow,protectedCount,verified,fileName,fileSha256,
+  sourceRows,protectedBySourceRow,protectedCount,verified,fileName,fileSha256,supplementSha256,
   outletPlans,onCompleted,
 }:Props){
   const {userCtx,hasPermission}=useAuth();
@@ -116,8 +117,12 @@ export function DealerMasterStage4Panel({
         setSnapshot(check.data);setApproved(false);
         throw Error('Database changed after preview. Results refreshed; review and approve again.');
       }
+      const planBytes=new TextEncoder().encode(fingerprint(plan));
+      const planDigest=await crypto.subtle.digest('SHA-256',planBytes);
+      const planSha256=Array.from(new Uint8Array(planDigest)).map(n=>n.toString(16).padStart(2,'0')).join('');
       const start=await write<{batchId:string}>('/api/v1/outlets/dealer-master/batches','POST',{
-        fileName,sha256:fileSha256,totalRows:sourceRows.length,
+        fileName,sha256:fileSha256,supplementSha256:supplementSha256||undefined,
+        planSha256,totalRows:sourceRows.length,
         protectedCells:protectedCount,eligibleRows:safeRows.length,confirmed:true,
       });
       activeBatch=start.batchId;setBatchId(activeBatch);
