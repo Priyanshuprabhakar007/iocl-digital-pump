@@ -215,6 +215,13 @@ export function buildDealerStage4Plan(
       }
       for(const key of Object.keys(leasePayload))delete leasePayload[key];
     }
+    // A source already linked to a signed legal lease is not a bulk-editable source.
+    if(source?.linkedAgreementId){
+      for(const f of fields.filter(f=>f.module==='LEASE_SOURCE'&&(f.status==='CREATE'||f.status==='FILL_MISSING'))){
+        f.status='REVIEW';f.note='This source is linked to a signed agreement; changes need legal review';
+      }
+      for(const key of Object.keys(leasePayload))delete leasePayload[key];
+    }
     // Do not create a lease source without a stable legal/document reference.
     if(hasLeaseEvidence && !readSource(row,'ORDER NO.') &&
       !(normalizeSourceDate(readSource(row,'FROM'))&&normalizeSourceDate(readSource(row,'TO')))){
