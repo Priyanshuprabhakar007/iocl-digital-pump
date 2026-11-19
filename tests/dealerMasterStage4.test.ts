@@ -46,6 +46,23 @@ describe('Dealer Master Stage4 source→module dry-run',()=>{
     expect(plan.rows[0].fields.find(f=>f.header==='CONTACT NO')?.status).toBe('CONFLICT');
     expect(plan.rows[0].roDetailsPayload.contactPhone).toBeUndefined();
   });
+  it('does not let conflicting saved RO fields block independent missing Land data',()=>{
+    const altered={...snapshot,outlets:[{...outlet,name:'Legacy short name'} as RetailOutlet],
+      roDetails:[{outletId:'ro-79',contactPhone:'0000000000'}]};
+    const plan=buildDealerStage4Plan([row],{},[normal],altered);
+    expect(plan.rows[0].fields.find(f=>f.header==='CUSTOMER  NAME (NAME OF  RO)')?.status).toBe('CONFLICT');
+    expect(plan.rows[0].fields.find(f=>f.header==='CONTACT NO')?.status).toBe('CONFLICT');
+    expect(plan.rows[0].roDetailsPayload).toEqual({});
+    expect(plan.rows[0].landPayload).toEqual({landStatus:'Leased Land',landOwner:'Unconfirmed Owner'});
+    expect(plan.rows[0].review).toEqual([]);
+  });
+  it('blocks lease source creation without order or a complete verified date period',()=>{
+    const evidenceOnly={...row,sourceDetails:{...row.sourceDetails,'ORDER NO.':'',FROM:'',TO:''}};
+    const plan=buildDealerStage4Plan([evidenceOnly],{},[{...normal,row:evidenceOnly}],snapshot);
+    expect(plan.rows[0].leasePayload).toEqual({});
+    expect(plan.rows[0].fields.some(f=>f.module==='LEASE_SOURCE'&&f.status==='REVIEW')).toBe(true);
+    expect(plan.rows[0].roDetailsPayload.contactPhone).toBe('9876543210');
+  });
   it('finds legal agreements by order/date but never auto-links a signed agreement',()=>{
     const revised={...snapshot,existingLandLeaseAgreements:[{
       id:'signed-1',outletId:'ro-79',agreementNumber:'TEST-ORDER',
