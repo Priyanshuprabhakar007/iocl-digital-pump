@@ -18,7 +18,7 @@ export type YellowFormatAudit = {
  * "No styles found" must NEVER be treated as "no yellow cells".
  */
 export function readYellowProtectionFromXlsx(
-  bytes:ArrayBuffer | Uint8Array, headers:string[], rowCount:number, firstSheetIndex=0,
+  bytes:ArrayBuffer | Uint8Array, headers:string[], rowCount:number, firstSheetIndex=0, headerRowNumber=1,
 ):YellowFormatAudit {
   const blocked=(reason:string):YellowFormatAudit=>({
     verified:false,protectedBySourceRow:{},protectedCellCount:0,protectedRowCount:0,reason,
@@ -86,7 +86,7 @@ export function readYellowProtectionFromXlsx(
       const address=attribute(cell[1],'r').toUpperCase();
       const match=/^([A-Z]{1,3})([1-9]\d*)$/.exec(address);
       if(!match)continue;
-      const row=Number(match[2]); if(row<2||row>limit)continue;
+      const row=Number(match[2]); if(row<=headerRowNumber||row>limit)continue;
       const style=Number(attribute(cell[1],'s')||0);
       if(!yellowStyleIds.has(style))continue;
       let index=0;
