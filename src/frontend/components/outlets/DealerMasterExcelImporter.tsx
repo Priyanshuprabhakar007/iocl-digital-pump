@@ -97,13 +97,13 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     setBusy(true);
     try {
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, {type:'array', cellDates:true, cellStyles:true, bookStyles:true});
+      const workbook = XLSX.read(data, {type:'array', cellDates:true, cellStyles:true, bookStyles:true} as XLSX.ParsingOptions);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       if (!sheet) throw Error('Workbook has no worksheet');
       const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {defval:'', raw:false});
       const headers = (XLSX.utils.sheet_to_json<unknown[]>(sheet, {header:1,defval:'',raw:false})[0] || []).map(String);
       const detectedFullMaster=dealerMasterFieldCatalog.every(f=>headers.some(h=>normalizedDealerHeader(h)===normalizedDealerHeader(f.header)));
-      const protections=readYellowCellProtection(workbook,sheet,headers,raw.length);
+      const protections=readYellowCellProtection(workbook as unknown as Parameters<typeof readYellowCellProtection>[0],sheet,headers,raw.length);
       setFullMasterWorkbook(detectedFullMaster);
       setProtectedFormatVerified(protections.verified);
       setFormatWarning(protections.reason||'');
