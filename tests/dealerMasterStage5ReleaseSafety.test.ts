@@ -38,6 +38,9 @@ describe('Stage 5 Cloudflare D1 isolation and Vercel Free budget',()=>{
     expect(workflow).not.toContain('--remote');
     expect(workflow).toContain('permissions:\n  contents: read');
     expect(local).not.toContain('wrangler deploy');
+    // D1 sandbox denies PRAGMA integrity_check (SQLITE_AUTH); use supported checks.
+    expect(local).not.toContain('PRAGMA integrity_check');
+    expect(local).toContain('SELECT COUNT(*) AS applied FROM d1_migrations;');
   });
   it('documentation and scripts never invoke a hosted database implicitly',()=>{
     expect(local).toContain('rm -rf "$DEST"');

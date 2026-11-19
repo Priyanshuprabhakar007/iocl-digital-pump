@@ -2,7 +2,7 @@
 
 ## Scope and verdict
 
-**Local D1 rehearsal:** implemented as a **dedicated GitHub Actions job**, using official Wrangler's **disposable local D1**. This validates the frozen 35 base migrations plus proposed 0036/0037/0038, schema/triggers, foreign keys, and integration tests.
+**Local D1 rehearsal:** implemented as a **dedicated GitHub Actions job**, using official Wrangler's **disposable local D1**. Cloudflare's local D1 sandbox rejects `PRAGMA integrity_check` with `SQLITE_AUTH`, so that unsupported operation is **not claimed** as a passed test; verify supported foreign-key, migration-ledger, schema and business integrity checks instead. This validates the frozen 35 base migrations plus proposed 0036/0037/0038, schema/triggers, foreign keys, a 35-row migration ledger, and integration tests.
 
 **Hosted staging:** NO-GO until a demonstrably separate staging D1 ID, Worker, and fully isolated authentication/permissions are established and reviewed. Prior project documentation flags hosted-D1 migration incompatibilities in the baseline (especially 0007/0032, with foreign-key behavior differing from a disposable SQLite test). A successful local rehearsal is **not proof of hosted-D1 compatibility**.
 
@@ -19,7 +19,7 @@ The user has a restricted free Vercel build allowance. Implement Stage 5 in **on
 - synthetic `database_id` on a completely isolated `.stage5-local/state`;
 - frozen migrations 0001–0035 unchanged;
 - proposal 0036, then 0037, then 0038, with official Wrangler in `--local` mode;
-- table/trigger/index existence, `PRAGMA foreign_key_check`, `PRAGMA integrity_check`;
+- table/trigger/index existence, `PRAGMA foreign_key_check`, and exactly 35 applied baseline migrations (`d1_migrations`);
 - Stage 4 authorized/scope/fill-only/duplicate/batch-audit regression tests;
 - a sanitized, seven-day GitHub Actions artifact (object names, no customer or business records).
 

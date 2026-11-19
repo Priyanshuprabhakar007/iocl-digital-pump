@@ -37,13 +37,14 @@ const missing=required.filter(name=>!names.has(name));
 if(missing.length)throw Error('Expected migration objects missing: '+missing.join(', '));
 const fk=parse('foreign-keys.json');
 if(fk.length)throw Error('Foreign key violation(s): '+fk.length);
-const integrity=parse('integrity.json');
-if(integrity.length!==1||String(Object.values(integrity[0])[0]).toLowerCase()!=='ok')
-  throw Error('SQLite integrity_check did not return exactly ok');
+const applied=parse('migrations.json');
+if(applied.length!==1||Number(applied[0].applied)!==35)
+  throw Error('Expected exactly 35 baseline migration ledger entries; got '+JSON.stringify(applied));
 const evidence={
   result:'PASS_LOCAL_ONLY',baselineMigrations:35,
   rehearsedProposedMigrations:['0036','0037','0038'],
-  checkedObjects:required.length,foreignKeyViolations:0,integrity:'ok',
+  checkedObjects:required.length,foreignKeyViolations:0,appliedBaselineMigrations:35,
+  integrityCheck:'UNSUPPORTED_BY_D1_SANDBOX_NOT_CLAIMED',
   hostedStagingVerified:false,productionChanges:false,
 };
 fs.writeFileSync(path.join(destination,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');

@@ -47,7 +47,7 @@ bunx wrangler d1 execute "$DB" --config "$CFG" --local --persist-to "$STATE" --f
 
 bunx wrangler d1 execute "$DB" --config "$CFG" --local --persist-to "$STATE" --command "SELECT name,type FROM sqlite_master WHERE type IN ('table','trigger','index') ORDER BY name;" --json > "$DEST/objects.json"
 bunx wrangler d1 execute "$DB" --config "$CFG" --local --persist-to "$STATE" --command "PRAGMA foreign_key_check;" --json > "$DEST/foreign-keys.json"
-bunx wrangler d1 execute "$DB" --config "$CFG" --local --persist-to "$STATE" --command "PRAGMA integrity_check;" --json > "$DEST/integrity.json"
+bunx wrangler d1 execute "$DB" --config "$CFG" --local --persist-to "$STATE" --command "SELECT COUNT(*) AS applied FROM d1_migrations;" --json > "$DEST/migrations.json"
 
 node scripts/dealer-master-stage5/verify-local-results.mjs "$DEST"
 echo "PASS: disposable Cloudflare Wrangler local D1 rehearsal. Remote targets not accessed."

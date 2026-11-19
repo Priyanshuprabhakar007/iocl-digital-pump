@@ -46,7 +46,7 @@ jobs:
           path: |
             .stage5-local/objects.json
             .stage5-local/foreign-keys.json
-            .stage5-local/integrity.json
+            .stage5-local/migrations.json
             .stage5-local/evidence.json
           if-no-files-found: ignore
           retention-days: 7
