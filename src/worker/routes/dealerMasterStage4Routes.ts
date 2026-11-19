@@ -84,6 +84,7 @@ const completeSchema=z.object({
 /** Batch audit events are persisted in existing audit_logs; no extra migration required. */
 dealerMasterStage4Routes.post('/dealer-master/batches',
   permissionWriter,permissionLeaseWrite,async(c:AppContext)=>{
+    if(c.env.ENVIRONMENT==='production')return fail(c,'LIVE_READ_ONLY_TRIAL','Batch imports are disabled on production during the live test.',403);
     if(!onlyGlobal(c))return fail(c,'GLOBAL_SCOPE_REQUIRED','Only global administrators may approve master imports.',403);
     const parsed=startSchema.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success)return fail(c,'VALIDATION_ERROR',parsed.error.issues[0]?.message||'Invalid import approval.',400);
@@ -99,6 +100,7 @@ dealerMasterStage4Routes.post('/dealer-master/batches',
 );
 dealerMasterStage4Routes.post('/dealer-master/batches/:batchId/complete',
   permissionWriter,permissionLeaseWrite,async(c:AppContext)=>{
+    if(c.env.ENVIRONMENT==='production')return fail(c,'LIVE_READ_ONLY_TRIAL','Batch imports are disabled on production during the live test.',403);
     if(!onlyGlobal(c))return fail(c,'GLOBAL_SCOPE_REQUIRED','Only global administrators may finish master imports.',403);
     const parsed=completeSchema.safeParse(await c.req.json().catch(()=>null));
     const batchId=c.req.param('batchId')||'';

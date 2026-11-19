@@ -18,6 +18,7 @@ const ok=(c:AppContext,data:unknown,status=200)=>c.json({success:true,data,error
 const denied=(c:AppContext,code:string,message:string,status=400)=>
   c.json({success:false,data:null,error:{code,message}},status as any);
 const globalWrite=(c:AppContext)=>Boolean(c.var.user.isGlobalScope);
+const productionImportBlocked=(c:AppContext)=>c.env.ENVIRONMENT==='production';
 const isMissingTable=(error:unknown)=>{
   const e=String(error)+' '+(error instanceof Error && 'cause' in error?String((error as Error & {cause?:unknown}).cause):'');
   return /no such table:|SQLITE_ERROR.*no such table/i.test(e);
@@ -59,6 +60,7 @@ dealerMasterRoutes.get('/:id/dealer-master-extension',
 dealerMasterRoutes.patch('/:id/dealer-master-extension/ro',
   requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any,requireOutletAccess('id') as any,
   async(c:AppContext)=>{
+    if(productionImportBlocked(c))return denied(c,'LIVE_READ_ONLY_TRIAL','Dealer import writes are disabled on production during live testing.',403);
     if(!globalWrite(c))return denied(c,'GLOBAL_ADMIN_REQUIRED','Global administration required for master imports.',403);
     const parsed=dealerRoMasterInputSchema.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success)return denied(c,'VALIDATION_ERROR',parsed.error.issues[0]?.message||'Invalid dealer RO source.',400);
@@ -83,6 +85,7 @@ dealerMasterRoutes.patch('/:id/dealer-master-extension/ro',
 dealerMasterRoutes.patch('/:id/dealer-master-extension/land',
   requirePermission(PERMISSIONS.OUTLETS_UPDATE) as any,requireOutletAccess('id') as any,
   async(c:AppContext)=>{
+    if(productionImportBlocked(c))return denied(c,'LIVE_READ_ONLY_TRIAL','Dealer import writes are disabled on production during live testing.',403);
     if(!globalWrite(c))return denied(c,'GLOBAL_ADMIN_REQUIRED','Global administration required for master imports.',403);
     const parsed=dealerLandMasterInputSchema.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success)return denied(c,'VALIDATION_ERROR',parsed.error.issues[0]?.message||'Invalid dealer land source.',400);
@@ -109,6 +112,7 @@ dealerMasterRoutes.patch('/:id/dealer-master-extension/land',
 dealerMasterRoutes.post('/:id/dealer-master-extension/lease-sources',
   requirePermission(PERMISSIONS.DOCUMENTS_WRITE) as any,requireOutletAccess('id') as any,
   async(c:AppContext)=>{
+    if(productionImportBlocked(c))return denied(c,'LIVE_READ_ONLY_TRIAL','Dealer import writes are disabled on production during live testing.',403);
     if(!globalWrite(c))return denied(c,'GLOBAL_ADMIN_REQUIRED','Global administration required for lease source creation.',403);
     const parsed=dealerLeaseSourceInputSchema.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success)return denied(c,'VALIDATION_ERROR',parsed.error.issues[0]?.message||'Invalid lease source.',400);
@@ -136,6 +140,7 @@ dealerMasterRoutes.post('/:id/dealer-master-extension/lease-sources',
 dealerMasterRoutes.patch('/:id/dealer-master-extension/lease-sources/:sourceId',
   requirePermission(PERMISSIONS.DOCUMENTS_WRITE) as any,requireOutletAccess('id') as any,
   async(c:AppContext)=>{
+    if(productionImportBlocked(c))return denied(c,'LIVE_READ_ONLY_TRIAL','Dealer import writes are disabled on production during live testing.',403);
     if(!globalWrite(c))return denied(c,'GLOBAL_ADMIN_REQUIRED','Global administration required for lease source updates.',403);
     const parsed=dealerLeaseSourcePatchSchema.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success)return denied(c,'VALIDATION_ERROR',parsed.error.issues[0]?.message||'Invalid lease source.',400);
@@ -167,6 +172,7 @@ dealerMasterRoutes.patch('/:id/dealer-master-extension/lease-sources/:sourceId',
 dealerMasterRoutes.post('/:id/dealer-master-extension/lease-sources/:sourceId/link',
   requirePermission(PERMISSIONS.DOCUMENTS_WRITE) as any,requireOutletAccess('id') as any,
   async(c:AppContext)=>{
+    if(productionImportBlocked(c))return denied(c,'LIVE_READ_ONLY_TRIAL','Dealer import writes are disabled on production during live testing.',403);
     if(!globalWrite(c))return denied(c,'GLOBAL_ADMIN_REQUIRED','Global administration required for verified lease linking.',403);
     const parsed=dealerAgreementLinkInputSchema.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success)return denied(c,'VALIDATION_ERROR','Explicit signed-document verification is required.',400);

@@ -47,6 +47,8 @@ function fingerprint(plan:Stage4Plan){
     decisions:r.fields.map(f=>[f.header,f.status,f.stored,f.source]),
   })));
 }
+const DEALER_LIVE_READ_ONLY_TRIAL = true;
+
 export function DealerMasterStage4Panel({
   sourceRows,protectedBySourceRow,protectedCount,verified,fileName,fileSha256,supplementSha256,
   outletPlans,onCompleted,
@@ -104,6 +106,7 @@ export function DealerMasterStage4Panel({
     return response.data;
   }
   async function approveAndSync(){
+    if (DEALER_LIVE_READ_ONLY_TRIAL) return; // No master imports in production live trial.
     if(!plan||!verified||protectedCount<1||!fileSha256||!approved||busy||loading||!permitted||safeRows.length===0)return;
     setBusy(true);setError('');setResults([]);setBatchId('');
     let activeBatch='';
@@ -185,7 +188,18 @@ export function DealerMasterStage4Panel({
     }finally{setBusy(false);}
   }
   function exportResult(){
-    if(!plan)return;
+    if(!plan){
+      // Production has not applied 0038; export a truthful RO-only dry-run.
+      const workbook=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(outletPlans.map(p=>({
+        ExcelRow:p.row.sourceRow,ROCode:p.row.roCode,Outlet:p.row.name,
+        ROStatus:p.action,MatchingOutletId:p.existingId||'',
+        ReviewReasons:p.messages.join('; '),
+        Note:'RO-only validation. Land and lease storage not verified; NO DATA WRITTEN.',
+      }))),'Live RO Preview');
+      XLSX.writeFile(workbook,'IOCL_Live_Readonly_RO_Preview.xlsx');
+      return;
+    }
     const report=plan.rows.flatMap(r=>r.fields.map(f=>({
       ExcelRow:f.row,ROCode:f.roCode,Module:destinationLabels[f.module],
       ExcelField:f.header,StoredValue:f.stored,ExcelValue:f.source,Decision:f.status,
@@ -207,8 +221,17 @@ export function DealerMasterStage4Panel({
       </div>
       <div className="flex gap-2">
         <button type="button" disabled={loading||busy} onClick={()=>void loadSnapshot()} className="border border-slate-300 rounded-lg bg-white p-2 text-xs flex items-center gap-1"><RefreshCcw className="w-4 h-4"/>Refresh</button>
-        <button type="button" disabled={!plan} onClick={exportResult} className="border border-slate-300 rounded-lg bg-white p-2 text-xs">Export field review</button>
+        <button type="button" disabled={!plan && outletPlans.length===0} onClick={exportResult} className="border border-slate-300 rounded-lg bg-white p-2 text-xs">Export field review</button>
       </div>
+    </div>
+    {DEALER_LIVE_READ_ONLY_TRIAL && <div role="status" className="rounded-lg border border-indigo-300 bg-indigo-50 p-3 text-xs font-semibold text-indigo-900">
+      Production live read-only trial: the file is inspected in your browser. All sync actions are disabled.
+      Lease/ownership comparisons are shown only if the required D1 schema already exists; otherwise this is RO-only validation.
+    </div>}
+    <div className="rounded-lg border bg-white p-3 text-xs space-y-1" data-testid="dealer-master-live-ro-status">
+      <div className="font-semibold">Live RO Code Match Preview (existing outlet directory)</div>
+      <div>{outletPlans.filter(p=>!!p.existingId).length} RO codes matched existing outlets · {outletPlans.filter(p=>!p.existingId).length} not matched · {outletPlans.filter(p=>p.action==='REVIEW').length} require review</div>
+      <p className="text-amber-800">These counts are RO-directory checks, NOT confirmation that ownership or signed lease details are present. Export the RO-only report if the full database snapshot is unavailable.</p>
     </div>
     {!permitted&&<p role="alert" className="text-sm text-rose-800">Global admin role with Outlet Create/Update and Documents Read/Write permissions is required.</p>}
     {(!verified||protectedCount<1)&&<p role="alert" className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-700">Excel yellow-cell styles could not be confirmed. No import is permitted.</p>}
@@ -258,10 +281,10 @@ export function DealerMasterStage4Panel({
       <p className="text-xs text-amber-800">Lease-source records are only supporting data. They do not create signed legal leases, update canonical rent, or link agreements automatically. Missing/mismatched signed agreements require separate document verification.</p>
       <div className="flex flex-col md:flex-row gap-3 md:justify-between md:items-center border-t pt-3">
         <label className="flex gap-2 items-start text-xs max-w-2xl">
-          <input type="checkbox" checked={approved} disabled={busy||loading||safeRows.length===0||!permitted||!verified||!fileSha256} onChange={e=>setApproved(e.target.checked)}/>
+          <input type="checkbox" checked={approved} disabled={DEALER_LIVE_READ_ONLY_TRIAL||busy||loading||safeRows.length===0||!permitted||!verified||!fileSha256} onChange={e=>setApproved(e.target.checked)}/>
           I reviewed the exported field decisions. I authorize only safe, non-yellow missing-field writes to the currently selected database. Only missing fields are written. Conflicting or review-required modules are skipped; blocked outlets are skipped entirely.
         </label>
-        <button type="button" disabled={!approved||busy||loading||safeRows.length===0||!verified||protectedCount<1||!permitted||!fileSha256} onClick={()=>void approveAndSync()}
+        <button type="button" disabled={DEALER_LIVE_READ_ONLY_TRIAL||!approved||busy||loading||safeRows.length===0||!verified||protectedCount<1||!permitted||!fileSha256} onClick={()=>void approveAndSync()}
           className="bg-[#E66B13] disabled:opacity-40 text-white rounded-lg px-4 py-2 text-sm font-semibold whitespace-nowrap">
           {busy?'Writing verified records…':'Approve '+safeRows.length+' Safe Outlet Row(s)'}
         </button>

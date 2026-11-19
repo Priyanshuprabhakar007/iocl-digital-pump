@@ -13,6 +13,8 @@ import {DealerMasterStage4Panel} from './DealerMasterStage4Panel';
 type Action = ImportPlan['action'];
 type UploadResult = { roCode: string; status: 'SUCCESS' | 'FAILED'; message: string };
 
+const DEALER_LIVE_READ_ONLY_TRIAL = true;
+
 export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => void }) {
   const { userCtx, hasPermission } = useAuth();
   const authorized = !!userCtx?.isGlobalScope
@@ -182,6 +184,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
   }
 
   async function apply() {
+    if (DEALER_LIVE_READ_ONLY_TRIAL) return; // Production live preview must never write source records.
     if (busy || !reviewed || !authorized || !plan.length || fullMasterWorkbook || !protectedFormatVerified) return;
     setBusy(true);setError('');setResults([]);
     try {
@@ -237,6 +240,9 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
         <h2 className="text-lg font-bold text-[#17365D] flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-orange-500"/>Excel Import & Master Synchronization</h2>
         <p className="text-xs text-slate-600 mt-1">First-time create + future updates. Preview is read-only. Only approved, supported fields are written.</p>
       </div>
+      {DEALER_LIVE_READ_ONLY_TRIAL && <div role="status" className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs font-semibold text-indigo-900">
+        LIVE WEBSITE TEST · READ ONLY. Upload Excel and inspect all 26 columns, original yellow-cell protection and matched RO codes. No outlet, owner or agreement will be changed. Approve & Sync is disabled for this release.
+      </div>}
       <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 flex flex-wrap items-center gap-3">
         <label className="cursor-pointer inline-flex items-center gap-2 rounded-lg bg-[#17365D] text-white px-4 py-2 text-sm font-semibold">
           <UploadCloud className="w-4 h-4"/>Choose Excel File
@@ -343,8 +349,8 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
           </table>
         </div>
         <div className="flex flex-col md:flex-row justify-between gap-3 items-start md:items-center">
-          <label className="text-xs text-slate-700 flex items-start gap-2 max-w-xl"><input type="checkbox" checked={reviewed} disabled={busy || fullMasterWorkbook || !protectedFormatVerified || totals.create+totals.update===0} onChange={e=>setReviewed(e.target.checked)}/>I reviewed the change list and authorize the proposed outlet creates/updates. Skipped rows remain unchanged.</label>
-          <button type="button" disabled={busy||!reviewed||fullMasterWorkbook||!protectedFormatVerified||totals.create+totals.update===0} onClick={apply} className="px-4 py-2 rounded-lg bg-orange-600 disabled:opacity-40 text-white text-sm font-bold">{busy?'Processing…': 'Approve & Sync '+(totals.create+totals.update)+' Outlet(s)'}</button>
+          <label className="text-xs text-slate-700 flex items-start gap-2 max-w-xl"><input type="checkbox" checked={reviewed} disabled={DEALER_LIVE_READ_ONLY_TRIAL || busy || fullMasterWorkbook || !protectedFormatVerified || totals.create+totals.update===0} onChange={e=>setReviewed(e.target.checked)}/>I reviewed the change list and authorize the proposed outlet creates/updates. Skipped rows remain unchanged.</label>
+          <button type="button" disabled={DEALER_LIVE_READ_ONLY_TRIAL||busy||!reviewed||fullMasterWorkbook||!protectedFormatVerified||totals.create+totals.update===0} onClick={apply} className="px-4 py-2 rounded-lg bg-orange-600 disabled:opacity-40 text-white text-sm font-bold">{busy?'Processing…': 'Approve & Sync '+(totals.create+totals.update)+' Outlet(s)'}</button>
         </div>
         </>}
       </>}
