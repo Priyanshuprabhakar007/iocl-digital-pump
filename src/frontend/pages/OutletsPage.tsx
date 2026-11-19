@@ -6,6 +6,7 @@ import { RetailOutlet, User, State, Division, SalesArea } from '../../shared/typ
 import { PERMISSIONS } from '../../shared/constants';
 import { SectionSearchBar } from '../components/common/SectionSearchBar';
 import { DealerMasterExcelImporter } from '../components/outlets/DealerMasterExcelImporter';
+import { reconcilePendingDealerRows } from '../../shared/dealerMasterPendingSetup';
 import type {DealerDraftContents,DealerDraftMeta,DealerDraftRow} from '../../shared/dealerMasterDraft';
 import {classifyDealerSite} from '../../shared/dealerMasterImport';
 import { filterOutletsForSearch } from '../utils/sectionSearchHelpers';
@@ -515,9 +516,10 @@ export const OutletsPage: React.FC = () => {
 
   // The authoritative directory includes archived/hidden matches for global admins.
   // Never count an existing RO Code as a new pending record.
-  const existingCodes=new Set(outlets.map(o=>o.roCode.trim()));
-  const pendingRows=(pendingDraft?.contents.rows||[]).filter(row=>
-    /^\\d{4,12}$/.test(row.roCode.trim())&&!existingCodes.has(row.roCode.trim()));
+  const {pendingRows,existingMatches,invalidRows,duplicateRows} = reconcilePendingDealerRows(
+    pendingDraft?.contents.rows||[],
+    new Set(outlets.map(o=>o.roCode.trim())),
+  );
   const pendingShown=pendingRows.filter(row=>{
     const q=pendingSearch.trim().toLowerCase();
     return !q||[row.roCode,row.fields['CUSTOMER  NAME (NAME OF  RO)'],row.fields.DISTRICT,
@@ -589,9 +591,14 @@ export const OutletsPage: React.FC = () => {
               </option>)}
             </select>
             {pendingDraft&&<span className="text-slate-500">
-              {pendingDraft.contents.rows.length-pendingRows.length} existing RO Code matches excluded
+              {existingMatches} existing RO Code matches excluded
             </span>}
           </div>}
+          {pendingDraft&&(invalidRows>0||duplicateRows>0)&&
+            <p role="alert" className="text-xs text-amber-800">
+              {invalidRows} invalid RO Code rows and {duplicateRows} duplicate source rows require review.
+              These are not counted as existing outlet matches.
+            </p>}
           {!pendingLoading&&!pendingError&&!pendingDraft&&
             <p className="text-xs text-slate-500">Save a 26-column Excel draft first in Excel Import &amp; Sync.</p>}
           {pendingDraft&&pendingRows.length>0&&<>
