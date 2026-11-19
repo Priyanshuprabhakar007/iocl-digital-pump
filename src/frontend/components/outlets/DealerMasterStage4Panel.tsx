@@ -297,7 +297,7 @@ export function DealerMasterStage4Panel({
         <div className="mt-2 max-h-40 overflow-auto">{liveAudit.yellowUnmatched.slice(0,20).map(x=>
           <p key={x.ExcelRow} className="border-b py-1">Excel row {x.ExcelRow} · RO {x.ROCode} · {x.OutletName} · {x.ProtectedBusinessCells} protected cells</p>)}</div>
         <p className="text-slate-600">Download the full 26-column report; never auto-create these ROs without verifying earlier manual records.</p>
-      </details>
+      </details>}
     </div>
     {!permitted&&<p role="alert" className="text-sm text-rose-800">Global admin role with Outlet Create/Update and Documents Read/Write permissions is required.</p>}
     {(!verified||protectedCount<1)&&<p role="alert" className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-700">Excel yellow-cell styles could not be confirmed. No import is permitted.</p>}
