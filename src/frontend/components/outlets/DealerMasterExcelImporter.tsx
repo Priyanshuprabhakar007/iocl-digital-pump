@@ -6,7 +6,9 @@ import { useAuth } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../../shared/constants';
 import type { Division, RetailOutlet, SalesArea } from '../../../shared/types';
 import { buildDealerImportPlan, classifyDealerSite, dealerMappingKey, parseDealerMasterRows, type DealerImportMappings, type DealerMasterRow, type ImportPlan } from '../../../shared/dealerMasterImport';
-import { dealerMasterFieldCatalog, normalizedDealerHeader, readYellowCellProtection, summarizeDealerFieldCoverage, type DealerFieldCoverage } from '../../../shared/dealerMasterFieldCoverage';
+import { dealerMasterFieldCatalog, normalizedDealerHeader, summarizeDealerFieldCoverage, type DealerFieldCoverage } from '../../../shared/dealerMasterFieldCoverage';
+import {readYellowProtectionFromXlsx} from '../../../shared/dealerMasterXlsxColors';
+import {DealerMasterStage4Panel} from './DealerMasterStage4Panel';
 
 type Action = ImportPlan['action'];
 type UploadResult = { roCode: string; status: 'SUCCESS' | 'FAILED'; message: string };
@@ -28,6 +30,10 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
   const [fullMasterWorkbook,setFullMasterWorkbook]=useState(false);
   const [protectedFormatVerified,setProtectedFormatVerified]=useState(false);
   const [formatWarning,setFormatWarning]=useState('');
+  const [protectedCells,setProtectedCells]=useState<Record<number,string[]>>({});
+  const [yellowCellCount,setYellowCellCount]=useState(0);
+  const [fileSha256,setFileSha256]=useState('');
+  const originalWorkbookRef=useRef<ArrayBuffer|null>(null);
   const [mappings, setMappings] = useState<DealerImportMappings>({});
   type Environment = {outlets:RetailOutlet[];divisions:Division[];areas:SalesArea[]};
   const environmentRef = useRef<Environment|null>(null);
@@ -52,10 +58,42 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
   }
   function exportCorrectionWorkbook() {
     if(!sourceRows.length)return;
-    const edited=sourceRows.map(r=>({...r.sourceDetails,CITY:r.city||'',PINCODE:r.pincode||''}));
+    // A standalone supplement preserves the ORIGINAL workbook's yellow formatting.
+    // Never re-export the master using community SheetJS: cell fills may be lost.
+    const supplemental=sourceRows.map(r=>({CUSTCODE:r.roCode,CITY:r.city||'',PINCODE:r.pincode||''}));
     const workbook=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(edited), 'Dealer Master');
-    XLSX.writeFile(workbook,'IOCL_Dealer_Master_City_PIN_Review.xlsx');
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(supplemental),'City_PIN_Supplement');
+    XLSX.writeFile(workbook,'IOCL_Dealer_City_PIN_Supplement.xlsx');
+  }
+  async function loadCityPinSupplement(event:React.ChangeEvent<HTMLInputElement>) {
+    const file=event.target.files?.[0];event.target.value='';
+    if(!file)return;
+    setError('');
+    try {
+      if(!originalWorkbookRef.current)throw Error('Upload the original highlighted master workbook first.');
+      if(!file.name.toLowerCase().endsWith('.xlsx')||file.size>2*1024*1024)
+        throw Error('Select the completed City/PIN supplement (.xlsx, under 2 MB).');
+      const workbook=XLSX.read(await file.arrayBuffer(),{type:'array'});
+      const rows=XLSX.utils.sheet_to_json<Record<string,unknown>>(workbook.Sheets[workbook.SheetNames[0]],{defval:'',raw:false});
+      const amended=new Map<string,{city:string;pincode:string}>();
+      for(const item of rows){
+        const code=String(item.CUSTCODE||'').trim();
+        if(!code)continue;
+        if(amended.has(code))throw Error('Duplicate RO code in City/PIN supplement: '+code);
+        const city=String(item.CITY||'').trim(),pin=String(item.PINCODE||'').trim();
+        if((city||pin)&&(!city||!/^\\d{6}$/.test(pin)))
+          throw Error('Complete the verified City and six-digit PIN for RO '+code);
+        if(city)amended.set(code,{city,pincode:pin});
+      }
+      const unknown=[...amended.keys()].filter(code=>!sourceRows.some(r=>r.roCode===code));
+      if(unknown.length)throw Error('Supplement contains unknown RO codes: '+unknown.slice(0,5).join(', '));
+      const combined=sourceRows.map(r=>{
+        const matched=amended.get(r.roCode);
+        return matched?{...r,city:matched.city,pincode:matched.pincode}:r;
+      });
+      setSourceRows(combined);
+      await preview(combined,mappings);
+    }catch(e){setError(e instanceof Error?e.message:'City/PIN supplement could not be read');}
   }
 
   const totals = useMemo(() => ({
@@ -90,7 +128,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    setError(''); setPlan([]); setSourceRows([]); setReviewed(false); setResults([]);setMappings({});setOptions(null);environmentRef.current=null;setFieldCoverage([]);setFullMasterWorkbook(false);setProtectedFormatVerified(false);setFormatWarning('');
+    setError(''); setPlan([]); setSourceRows([]); setReviewed(false); setResults([]);setMappings({});setOptions(null);environmentRef.current=null;setFieldCoverage([]);setFullMasterWorkbook(false);setProtectedFormatVerified(false);setFormatWarning('');setProtectedCells({});setYellowCellCount(0);setFileSha256('');originalWorkbookRef.current=null;
     if (!/\.(xlsx|xls)$/i.test(file.name) || file.size > 5 * 1024 * 1024) {
       setError('Choose an Excel .xlsx or .xls workbook smaller than 5 MB.'); return;
     }
@@ -103,8 +141,16 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
       const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {defval:'', raw:false});
       const headers = (XLSX.utils.sheet_to_json<unknown[]>(sheet, {header:1,defval:'',raw:false})[0] || []).map(String);
       const detectedFullMaster=dealerMasterFieldCatalog.every(f=>headers.some(h=>normalizedDealerHeader(h)===normalizedDealerHeader(f.header)));
-      const protections=readYellowCellProtection(workbook as unknown as Parameters<typeof readYellowCellProtection>[0],sheet,headers,raw.length);
+      const protections=file.name.toLowerCase().endsWith('.xlsx')
+        ? readYellowProtectionFromXlsx(data,headers,raw.length)
+        : {verified:false,protectedBySourceRow:{},protectedCellCount:0,
+            reason:'Full Dealer Master import requires .xlsx with original formatting.'};
       setFullMasterWorkbook(detectedFullMaster);
+      originalWorkbookRef.current=data;
+      const digest=await crypto.subtle.digest('SHA-256',data);
+      setFileSha256(Array.from(new Uint8Array(digest)).map(n=>n.toString(16).padStart(2,'0')).join(''));
+      setProtectedCells(protections.protectedBySourceRow);
+      setYellowCellCount(protections.protectedCellCount);
       setProtectedFormatVerified(protections.verified);
       setFormatWarning(protections.reason||'');
       setFieldCoverage(summarizeDealerFieldCoverage(raw,protections.protectedBySourceRow));
@@ -215,7 +261,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
             </tr>)}</tbody>
           </table>
         </div>
-        <p className="text-xs font-semibold text-amber-800">Full 26-column mode is REVIEW ONLY until the separate ownership and lease storage, per-field no-overwrite guards and agreement deduplication are implemented and verified. The normal outlet-only sync button remains disabled for this workbook.</p>
+        <p className="text-xs font-semibold text-amber-800">For this full 26-column file, the old outlet-only Sync is disabled. Use Stage 4 below after verified storage migration 0038 and an administrator-reviewed dry run. Yellow protection is extracted from original XLSX XML, not assumed from formatting-free exports.</p>
       </section>}
       {plan.length > 0 && <>
         <details open className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3" data-testid="dealer-master-mapping">
@@ -256,10 +302,21 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
             </div>
           </>}
           <div className="flex flex-wrap items-center gap-3 mt-3">
-            <button type="button" onClick={exportCorrectionWorkbook} className="border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white">Download Excel with City &amp; PIN columns</button>
-            <p className="text-xs text-slate-600">New outlets must have verified City and six-digit PIN. Fill those columns using authoritative address details, then re-upload.</p>
+            <button type="button" onClick={exportCorrectionWorkbook} className="border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold bg-white">Download City/PIN Supplement</button>
+            <label className="border border-slate-300 bg-white px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer">
+              Upload completed City/PIN Supplement
+              <input type="file" accept=".xlsx" className="sr-only" onChange={loadCityPinSupplement}/>
+            </label>
+            <p className="text-xs text-slate-600">Supplement adds verified City/PIN by RO Code without destroying the original workbook's protected yellow colours.</p>
           </div>
         </details>
+        {fullMasterWorkbook&&<DealerMasterStage4Panel
+          sourceRows={sourceRows} protectedBySourceRow={protectedCells}
+          protectedCount={yellowCellCount} verified={protectedFormatVerified}
+          fileName={fileName} fileSha256={fileSha256} outletPlans={plan}
+          onCompleted={onCompleted}
+        />}
+        {!fullMasterWorkbook&&<>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {([['Create',totals.create],['Update',totals.update],['Unchanged',totals.unchanged],['Needs review',totals.review]] as const).map(([label,count])=>
             <div key={label} className="bg-slate-50 border border-slate-200 rounded-lg p-3"><div className="text-xs text-slate-500">{label}</div><div className="text-xl font-bold text-[#17365D]">{count}</div></div>
@@ -281,6 +338,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
           <label className="text-xs text-slate-700 flex items-start gap-2 max-w-xl"><input type="checkbox" checked={reviewed} disabled={busy || fullMasterWorkbook || !protectedFormatVerified || totals.create+totals.update===0} onChange={e=>setReviewed(e.target.checked)}/>I reviewed the change list and authorize the proposed outlet creates/updates. Skipped rows remain unchanged.</label>
           <button type="button" disabled={busy||!reviewed||fullMasterWorkbook||!protectedFormatVerified||totals.create+totals.update===0} onClick={apply} className="px-4 py-2 rounded-lg bg-orange-600 disabled:opacity-40 text-white text-sm font-bold">{busy?'Processing…': 'Approve & Sync '+(totals.create+totals.update)+' Outlet(s)'}</button>
         </div>
+        </>}
       </>}
       {results.length>0 && <div className="p-3 border rounded-xl text-xs space-y-2" aria-live="polite"><div className="font-semibold">Last attempt: {results.filter(r=>r.status==='SUCCESS').length} successful, {results.filter(r=>r.status==='FAILED').length} failed.</div>
         {results.filter(r=>r.status==='FAILED').map(r=><div key={r.roCode} className="text-rose-700">{r.roCode}: {r.message}</div>)}
