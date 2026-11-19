@@ -4,6 +4,8 @@ import { type LeaseTerms, formatLeaseDimension, displayMeasure, parseLeaseMeasur
 import { useAuth } from '../context/AuthContext';
 import { PERMISSIONS } from '../../shared/constants';
 import { DealerLeaseSourceReviewPanel } from './DealerLeaseSourceReviewPanel';
+import type {DealerDraftRow} from '../../shared/dealerMasterDraft';
+import {dealerLeaseFormSuggestions} from '../../shared/dealerExcelLeasePrefill';
 import { CheckCircle2, ClipboardList, Save, ShieldCheck, Upload, Download } from 'lucide-react';
 
 interface Agreement {
@@ -65,13 +67,14 @@ const dateValue = (value?: string | null) => value || '';
 export const CocoDocumentationMastersPanel: React.FC<{
   outletId: string;
   vaultDocs: VaultDocument[];
+  dealerSourceRow?: DealerDraftRow | null;
   onSaved?: () => void;
   initialEditor?: 'agreements' | 'claims' | 'inspections';
   initialAgreementType?: 'LAND_LEASE' | 'SERVICE_PROVIDER';
   initialClaimCategory?: string;
   initialCreate?: boolean;
   refreshRevision?: number;
-}> = ({ outletId, vaultDocs, onSaved, initialEditor = 'agreements', initialAgreementType = 'LAND_LEASE', initialClaimCategory, initialCreate = false, refreshRevision = 0 }) => {
+}> = ({ outletId, vaultDocs, dealerSourceRow, onSaved, initialEditor = 'agreements', initialAgreementType = 'LAND_LEASE', initialClaimCategory, initialCreate = false, refreshRevision = 0 }) => {
   const { userCtx, hasPermission } = useAuth();
   const canWrite = hasPermission(PERMISSIONS.DOCUMENTS_WRITE);
   const canInspect = canWrite && hasPermission(PERMISSIONS.EQUIPMENT_ASSETS_WRITE);
@@ -84,6 +87,9 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const [success, setSuccess] = useState('');
   const [activeEditor, setActiveEditor] = useState<'agreements'|'claims'|'inspections'>(initialEditor);
   const [agreementEdit, setAgreementEdit] = useState<Agreement | null>(null);
+  const [sourcePrefillActive,setSourcePrefillActive]=useState(false);
+  const [sourceVerified,setSourceVerified]=useState(false);
+  const sourceSuggestions=dealerSourceRow?dealerLeaseFormSuggestions(dealerSourceRow):null;
   const [claimEdit, setClaimEdit] = useState<Claim | null>(null);
   const [settleClaim, setSettleClaim] = useState<Claim | null>(null);
   const [agreementType, setAgreementType] = useState<string>(initialAgreementType);
@@ -100,10 +106,10 @@ export const CocoDocumentationMastersPanel: React.FC<{
   useEffect(()=>{setUploadedContracts([]);},[outletId]);
   useEffect(()=>{
     if(!showAgreementForm)return;
-    setDimensionUnit(agreementEdit?.leaseTerms?.dimensionUnit||null);
+    setDimensionUnit(agreementEdit?.leaseTerms?.dimensionUnit||(sourcePrefillActive?sourceSuggestions?.dimensionUnit:null)||null);
     setLinkedLeaseId(agreementEdit?.linkedNfrLeaseId||'');
     setContractId(agreementEdit?.agreementDocumentId||'');
-  },[showAgreementForm,agreementEdit,outletId]);
+  },[showAgreementForm,agreementEdit,outletId,sourcePrefillActive,dealerSourceRow]);
   const [showClaimForm, setShowClaimForm] = useState(initialCreate && initialEditor === 'claims');
   const [showInspectionForm, setShowInspectionForm] = useState(initialCreate && initialEditor === 'inspections');
 
@@ -122,7 +128,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
     return () => { alive = false; };
   }, [outletId, rev, refreshRevision]);
   useEffect(() => {
-    setAgreementEdit(null); setClaimEdit(null); setSettleClaim(null); setAgreementType(initialAgreementType);
+    setAgreementEdit(null);setSourcePrefillActive(false);setSourceVerified(false);setClaimEdit(null);setSettleClaim(null);setAgreementType(initialAgreementType);
     setShowAgreementForm(initialCreate && initialEditor === 'agreements');
     setShowClaimForm(initialCreate && initialEditor === 'claims');
     setShowInspectionForm(initialCreate && initialEditor === 'inspections');
@@ -142,6 +148,10 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const onAgreementSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if(!canWrite||saving||contractLock.current||agreementSaveLock.current)return;
+    if(sourcePrefillActive&&(!contractId||!sourceVerified)){
+      setError('Excel source cannot become a legal agreement until the signed contract is linked and all terms verified.');
+      return;
+    }
     const f = new FormData(e.currentTarget);
     let leaseTerms:LeaseTerms|null|undefined;
     try {
@@ -276,13 +286,28 @@ export const CocoDocumentationMastersPanel: React.FC<{
 
       {activeEditor === 'agreements' && (
         <div className="space-y-4">
-          {canWrite && data && !showAgreementForm && <button type="button" disabled={saving||uploadingContract} className={buttonStyle} onClick={() => { setAgreementEdit(null); setAgreementType('LAND_LEASE'); setShowAgreementForm(true); }}>+ Add Agreement</button>}
+          {canWrite&&data&&!showAgreementForm&&<div className="flex flex-wrap gap-2">
+            <button type="button" disabled={saving||uploadingContract} className={buttonStyle}
+              onClick={()=>{setSourcePrefillActive(false);setSourceVerified(false);setAgreementEdit(null);setAgreementType('LAND_LEASE');setShowAgreementForm(true);}}>
+              + Add Agreement
+            </button>
+            {dealerSourceRow&&<button type="button" disabled={saving||uploadingContract} className={buttonStyle}
+              onClick={()=>{setSourceVerified(false);setSourcePrefillActive(true);setAgreementEdit(null);setAgreementType('LAND_LEASE');setShowAgreementForm(true);}}>
+              Use Excel Details (Review &amp; Save)
+            </button>}
+          </div>}
           {canWrite && data && showAgreementForm && (
-            <form key={agreementEdit?.id || 'new-agreement'} onSubmit={onAgreementSubmit} className={col}>
+            <form key={agreementEdit?.id||(sourcePrefillActive?'excel-suggestions':'new-agreement')} onSubmit={onAgreementSubmit} className={col}>
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-[#17365D]">{agreementEdit ? 'Edit Agreement' : 'Register Agreement'}</h4>
-                <button type="button" disabled={saving||uploadingContract} onClick={() => { setAgreementEdit(null); setShowAgreementForm(false); }} className="text-sm underline text-[#64748B]">Cancel</button>
+                <button type="button" disabled={saving||uploadingContract} onClick={() => { setAgreementEdit(null);setSourcePrefillActive(false);setSourceVerified(false); setShowAgreementForm(false); }} className="text-sm underline text-[#64748B]">Cancel</button>
               </div>
+              {sourcePrefillActive&&sourceSuggestions&&<div className="text-xs border border-amber-200 bg-amber-50 rounded-lg p-3 text-amber-900 space-y-1">
+                <strong>Excel source suggestions — NOT a signed agreement</strong>
+                <p>Land owner is not assumed to be a legal counterparty. Ambiguous dates and unsupported units are not converted.
+                  Verify all terms against the signed contract before saving.</p>
+                <pre className="whitespace-pre-wrap break-words max-h-32 overflow-y-auto">{sourceSuggestions.reviewNotes}</pre>
+              </div>}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <Field label="Agreement Type">
                   <select name="agreementType" className={inputStyle} value={agreementType}
@@ -295,7 +320,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
                     defaultValue={agreementEdit?.agreementName || (agreementType === 'LAND_LEASE' ? 'Land Lease' : agreementType === 'SERVICE_PROVIDER' ? 'Service Provider Contract Agreement' : '')} />
                 </Field>
                 <Field label="Agreement Number">
-                  <input name="agreementNumber" maxLength={100} className={inputStyle} defaultValue={agreementEdit?.agreementNumber || ''}/>
+                  <input name="agreementNumber" maxLength={100} className={inputStyle} defaultValue={agreementEdit?.agreementNumber||(sourcePrefillActive?sourceSuggestions?.agreementNumber:'')||''}/>
                 </Field>
                 {agreementType === 'NFR_METADATA' ? (
                   <Field label="Existing NFR Lease">
@@ -306,17 +331,17 @@ export const CocoDocumentationMastersPanel: React.FC<{
                   </Field>
                 ) : (
                   <>
-                    <Field label="Agreement Start Date"><input name="startDate" type="date" className={inputStyle} defaultValue={dateValue(agreementEdit?.startDate)}/></Field>
-                    <Field label="Agreement End Date"><input name="endDate" type="date" className={inputStyle} defaultValue={dateValue(agreementEdit?.endDate)}/></Field>
+                    <Field label="Agreement Start Date"><input name="startDate" type="date" className={inputStyle} defaultValue={dateValue(agreementEdit?.startDate)||(sourcePrefillActive?sourceSuggestions?.startDate:'')||''}/></Field>
+                    <Field label="Agreement End Date"><input name="endDate" type="date" className={inputStyle} defaultValue={dateValue(agreementEdit?.endDate)||(sourcePrefillActive?sourceSuggestions?.endDate:'')||''}/></Field>
                   </>
                 )}
                 <Field label="Agreement With / Counterparty">
                   <input name="counterpartyName" className={inputStyle} defaultValue={agreementEdit?.counterpartyName || ''}/>
                 </Field>
                 <Field label="V Code"><input name="vendorCode" maxLength={64} className={inputStyle} defaultValue={agreementEdit?.vendorCode || ''}/></Field>
-                <Field label="Customer Code"><input name="customerCode" maxLength={64} className={inputStyle} defaultValue={agreementEdit?.customerCode || ''}/></Field>
+                <Field label="Customer Code"><input name="customerCode" maxLength={64} className={inputStyle} defaultValue={agreementEdit?.customerCode||(sourcePrefillActive?sourceSuggestions?.customerCode:'')||''}/></Field>
                 <Field label="Site Category">
-                  <select name="siteClass" className={inputStyle} defaultValue={agreementEdit?.siteClass || ''}>
+                  <select name="siteClass" className={inputStyle} defaultValue={agreementEdit?.siteClass||(sourcePrefillActive?sourceSuggestions?.siteClass:'')||''}>
                     <option value="">Not Recorded</option><option value="A">A Site</option><option value="B">B Site</option><option value="C">C Site</option>
                   </select>
                 </Field>
@@ -333,10 +358,10 @@ export const CocoDocumentationMastersPanel: React.FC<{
                   {dimensionUnit==='FT_LXW'?<>
                     <Field label="Length (ft)"><input name="lengthFt" required inputMode="decimal" className={inputStyle} defaultValue={displayMeasure(currentTerms?.lengthMilliFt)}/></Field>
                     <Field label="Width (ft)"><input name="widthFt" required inputMode="decimal" className={inputStyle} defaultValue={displayMeasure(currentTerms?.widthMilliFt)}/></Field>
-                  </>:dimensionUnit&&<Field label={dimensionUnit==='SQYD'?'Area (sq yd)':'Area (sq ft)'}><input name="area" required inputMode="decimal" className={inputStyle} defaultValue={currentTerms?.dimensionUnit===dimensionUnit?displayMeasure(currentTerms.areaMilli):''}/></Field>}
+                  </>:dimensionUnit&&<Field label={dimensionUnit==='SQYD'?'Area (sq yd)':'Area (sq ft)'}><input name="area" required inputMode="decimal" className={inputStyle} defaultValue={currentTerms?.dimensionUnit===dimensionUnit?displayMeasure(currentTerms.areaMilli):(sourcePrefillActive?sourceSuggestions?.area:'')||''}/></Field>}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3" key={agreementType+':'+linkedLeaseId}>
-                  {agreementType==='LAND_LEASE'?<Field label="Lease Value (₹ per month)"><input name="monthlyLeaseValue" inputMode="decimal" disabled={!data.leaseTermsAvailable||saving} className={inputStyle} defaultValue={currentTerms?.monthlyLeaseValuePaise!=null?(currentTerms.monthlyLeaseValuePaise/100).toFixed(2):''} placeholder="Enter monthly rent"/></Field>:
+                  {agreementType==='LAND_LEASE'?<Field label="Lease Value (₹ per month)"><input name="monthlyLeaseValue" inputMode="decimal" disabled={!data.leaseTermsAvailable||saving} className={inputStyle} defaultValue={currentTerms?.monthlyLeaseValuePaise!=null?(currentTerms.monthlyLeaseValuePaise/100).toFixed(2):(sourcePrefillActive?sourceSuggestions?.rentMonthly:'')||''} placeholder="Enter monthly rent"/></Field>:
                     <Field label="Lease Value (₹ per month) — NFR source"><input className={inputStyle} readOnly value={linkedNfr?.monthlyRentPaise!=null?money(linkedNfr.monthlyRentPaise):'Select NFR lease'}/></Field>}
                   <Field label="Lease Basis"><input className={inputStyle} readOnly value="Monthly"/></Field>
                 </div>
@@ -357,8 +382,14 @@ export const CocoDocumentationMastersPanel: React.FC<{
                 </div>
                 <p className="text-xs text-slate-600">PDF, JPG or PNG · Max 5 MB. A new upload is saved securely in the vault; Save Agreement links it to this record. For linked NFR, this attachment is supplementary to the source lease contract.</p>
               </section>
-              <Field label="Remarks"><textarea name="remarks" className={inputStyle} rows={2} defaultValue={agreementEdit?.remarks || ''} /></Field>
-              <button type="submit" className={buttonStyle} disabled={saving||uploadingContract}><Save className="w-4 h-4"/> Save Agreement</button>
+              <Field label="Remarks"><textarea name="remarks" className={inputStyle} rows={2}
+                defaultValue={agreementEdit?.remarks||(sourcePrefillActive?'Excel Dealer Master evidence reviewed; original 26 fields retained in saved source.':'')}/></Field>
+              {sourcePrefillActive&&<label className="flex items-start gap-2 text-xs p-3 border border-amber-200 bg-amber-50 rounded-lg">
+                <input type="checkbox" checked={sourceVerified} onChange={e=>setSourceVerified(e.target.checked)}/>
+                I verified the RO Code, legal counterparty, dates, dimensions, rent and other terms against the linked signed contract.
+              </label>}
+              <button type="submit" className={buttonStyle}
+                disabled={saving||uploadingContract||(sourcePrefillActive&&(!contractId||!sourceVerified))}><Save className="w-4 h-4"/> Save Agreement</button>
             </form>
           )}
           <div className={col}>
