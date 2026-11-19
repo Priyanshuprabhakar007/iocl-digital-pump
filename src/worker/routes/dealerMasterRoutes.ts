@@ -40,7 +40,7 @@ const makeAudit=(c:AppContext,action:string,id:string,oldValue:unknown,newValue:
 dealerMasterRoutes.get('/:id/dealer-master-extension',
   requirePermission(PERMISSIONS.OUTLETS_READ) as any,requireOutletAccess('id') as any,
   async(c:AppContext)=>{
-    const id=c.req.param('id');const db=getDb(c.env.DB);
+    const id=(c.req.param('id') || '');const db=getDb(c.env.DB);
     try{
       const [ro,land,leaseSources,agreements]=await Promise.all([
         db.select().from(dealerRoMasterDetails).where(eq(dealerRoMasterDetails.outletId,id)).get(),
@@ -62,7 +62,7 @@ dealerMasterRoutes.patch('/:id/dealer-master-extension/ro',
     if(!globalWrite(c))return denied(c,'GLOBAL_ADMIN_REQUIRED','Global administration required for master imports.',403);
     const parsed=dealerRoMasterInputSchema.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success)return denied(c,'VALIDATION_ERROR',parsed.error.issues[0]?.message||'Invalid dealer RO source.',400);
-    const id=c.req.param('id');const db=getDb(c.env.DB);
+    const id=(c.req.param('id') || '');const db=getDb(c.env.DB);
     try{
       const existing=await db.select().from(dealerRoMasterDetails).where(eq(dealerRoMasterDetails.outletId,id)).get()||null;
       const candidate=fillOnlyMissing(existing as Record<string,unknown>|null,parsed.data);
@@ -86,7 +86,7 @@ dealerMasterRoutes.patch('/:id/dealer-master-extension/land',
     if(!globalWrite(c))return denied(c,'GLOBAL_ADMIN_REQUIRED','Global administration required for master imports.',403);
     const parsed=dealerLandMasterInputSchema.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success)return denied(c,'VALIDATION_ERROR',parsed.error.issues[0]?.message||'Invalid dealer land source.',400);
-    const id=c.req.param('id');const db=getDb(c.env.DB);
+    const id=(c.req.param('id') || '');const db=getDb(c.env.DB);
     try{
       const existing=await db.select().from(dealerLandMasterDetails).where(eq(dealerLandMasterDetails.outletId,id)).get()||null;
       const candidate=fillOnlyMissing(existing as Record<string,unknown>|null,parsed.data);
@@ -112,7 +112,7 @@ dealerMasterRoutes.post('/:id/dealer-master-extension/lease-sources',
     if(!globalWrite(c))return denied(c,'GLOBAL_ADMIN_REQUIRED','Global administration required for lease source creation.',403);
     const parsed=dealerLeaseSourceInputSchema.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success)return denied(c,'VALIDATION_ERROR',parsed.error.issues[0]?.message||'Invalid lease source.',400);
-    const id=c.req.param('id');const db=getDb(c.env.DB);const data=parsed.data;
+    const id=(c.req.param('id') || '');const db=getDb(c.env.DB);const data=parsed.data;
     try{
       const existing=await db.select().from(dealerLeaseSourceRecords)
         .where(and(eq(dealerLeaseSourceRecords.outletId,id),eq(dealerLeaseSourceRecords.sourceKey,data.sourceKey))).get();
@@ -139,7 +139,7 @@ dealerMasterRoutes.post('/:id/dealer-master-extension/lease-sources/:sourceId/li
     if(!globalWrite(c))return denied(c,'GLOBAL_ADMIN_REQUIRED','Global administration required for verified lease linking.',403);
     const parsed=dealerAgreementLinkInputSchema.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success)return denied(c,'VALIDATION_ERROR','Explicit signed-document verification is required.',400);
-    const id=c.req.param('id');const sourceId=c.req.param('sourceId');const db=getDb(c.env.DB);
+    const id=(c.req.param('id') || '');const sourceId=(c.req.param('sourceId') || '');const db=getDb(c.env.DB);
     try{
       const source=await db.select().from(dealerLeaseSourceRecords)
         .where(and(eq(dealerLeaseSourceRecords.id,sourceId),eq(dealerLeaseSourceRecords.outletId,id))).get();
