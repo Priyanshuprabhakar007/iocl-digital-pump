@@ -150,11 +150,13 @@ export const OutletsPage: React.FC = () => {
     }
     const fields=row.fields,classified=classifyDealerSite(fields['PRICE GROUP DESCRIPTION(SITE)']||'');
     setErrorMsg(null);setSuccessMsg(null);
+    const saved=pendingEdits[row.roCode]?.values;
     setForm({...initialFormState,roCode:row.roCode,
-      name:fields['CUSTOMER  NAME (NAME OF  RO)']||'',
-      address:fields.ADDRESS||'',district:fields.DISTRICT||'',
-      city:row.city||'',pincode:row.pincode||'',
-      outletType:classified||'',...(pendingEdits[row.roCode]?.values||{})});
+      name:saved?.name||fields['CUSTOMER  NAME (NAME OF  RO)']||'',
+      address:saved?.address||fields.ADDRESS||'',district:saved?.district||fields.DISTRICT||'',
+      city:saved?.city??row.city??'',pincode:saved?.pincode??row.pincode??'',
+      outletType:saved?.outletType||classified||'',
+      stateId:saved?.stateId||'',divisionId:saved?.divisionId||'',salesAreaId:saved?.salesAreaId||''});
     setDivisions([]);setSalesAreas([]);setModalOpen(true);
   };
 
