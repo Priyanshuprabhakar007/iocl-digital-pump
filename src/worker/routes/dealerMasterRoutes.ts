@@ -8,7 +8,7 @@ import {requireOutletAccess} from '../middleware/scope';
 import {PERMISSIONS} from '../../shared/constants';
 import {
   dealerAgreementLinkInputSchema,dealerLandMasterInputSchema,dealerLeaseSourceInputSchema,
-  dealerRoMasterInputSchema,fillOnlyMissing,matchesVerifiedLeaseSource,
+  dealerRoMasterInputSchema,dealerLeaseSourcePatchSchema,fillOnlyMissing,matchesVerifiedLeaseSource,
 } from '../../shared/dealerMasterStorage';
 
 export const dealerMasterRoutes = new Hono<{Bindings:EnvBindings}>();
@@ -133,6 +133,37 @@ dealerMasterRoutes.post('/:id/dealer-master-extension/lease-sources',
   }
 );
 
+dealerMasterRoutes.patch('/:id/dealer-master-extension/lease-sources/:sourceId',
+  requirePermission(PERMISSIONS.DOCUMENTS_WRITE) as any,requireOutletAccess('id') as any,
+  async(c:AppContext)=>{
+    if(!globalWrite(c))return denied(c,'GLOBAL_ADMIN_REQUIRED','Global administration required for lease source updates.',403);
+    const parsed=dealerLeaseSourcePatchSchema.safeParse(await c.req.json().catch(()=>null));
+    if(!parsed.success)return denied(c,'VALIDATION_ERROR',parsed.error.issues[0]?.message||'Invalid lease source.',400);
+    const id=c.req.param('id')||'',sourceId=c.req.param('sourceId')||'';
+    const db=getDb(c.env.DB);
+    try{
+      const existing=await db.select().from(dealerLeaseSourceRecords).where(and(
+        eq(dealerLeaseSourceRecords.id,sourceId),eq(dealerLeaseSourceRecords.outletId,id))).get();
+      if(!existing)return denied(c,'SOURCE_NOT_FOUND','Lease source not found in selected outlet.',404);
+      if(existing.linkedAgreementId)return denied(c,'ALREADY_LINKED','Linked lease sources require separate legal review before changes.',409);
+      const candidate=fillOnlyMissing(existing as Record<string,unknown>,parsed.data);
+      if(candidate.conflicts.length)return denied(c,'EXISTING_VALUES_PROTECTED',
+        'Previously entered lease fields are protected: '+candidate.conflicts.join(', '),409);
+      if(!Object.keys(candidate.updates).length)return ok(c,{action:'UNCHANGED',sourceId});
+      const start=candidate.updates.startDate||existing.startDate;
+      const end=candidate.updates.endDate||existing.endDate;
+      if(start&&end&&end<start)return denied(c,'INVALID_PERIOD','Lease end date cannot precede start date.',400);
+      const now=new Date().toISOString();
+      const updated={...candidate.updates,updatedAt:now,updatedBy:c.var.user.user.id};
+      await db.batch([
+        db.update(dealerLeaseSourceRecords).set(updated).where(and(
+          eq(dealerLeaseSourceRecords.id,sourceId),eq(dealerLeaseSourceRecords.outletId,id))),
+        db.insert(auditLogs).values(makeAudit(c,'DEALER_LEASE_SOURCE_FILL_MISSING',sourceId,existing,updated)),
+      ]);
+      return ok(c,{action:'FILL_MISSING',sourceId,fields:Object.keys(candidate.updates)});
+    }catch(e){return safeFailure(c,e);}
+  }
+);
 dealerMasterRoutes.post('/:id/dealer-master-extension/lease-sources/:sourceId/link',
   requirePermission(PERMISSIONS.DOCUMENTS_WRITE) as any,requireOutletAccess('id') as any,
   async(c:AppContext)=>{
