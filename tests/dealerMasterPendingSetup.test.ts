@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import type { DealerDraftRow } from '../src/shared/dealerMasterDraft';
 import { reconcilePendingDealerRows } from '../src/shared/dealerMasterPendingSetup';
 
