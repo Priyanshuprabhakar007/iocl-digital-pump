@@ -10,6 +10,7 @@ import { dealerMasterFieldCatalog, normalizedDealerHeader, summarizeDealerFieldC
 import {readYellowProtectionFromXlsx} from '../../../shared/dealerMasterXlsxColors';
 import {DealerMasterStage4Panel} from './DealerMasterStage4Panel';
 import {DealerMasterFullImportPanel} from './DealerMasterFullImportPanel';
+import {selectDealerMasterDataSheet} from '../../../shared/dealerMasterSheetSelection';
 
 type Action = ImportPlan['action'];
 type UploadResult = { roCode: string; status: 'SUCCESS' | 'FAILED'; message: string };
@@ -22,6 +23,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     && hasPermission(PERMISSIONS.OUTLETS_CREATE)
     && hasPermission(PERMISSIONS.OUTLETS_UPDATE);
   const [fileName, setFileName] = useState('');
+  const [selectedDataSheet,setSelectedDataSheet]=useState('');
   const [importMode,setImportMode]=useState<'FULL'|'YELLOW_PROTECTED'>('FULL');
   const [sourceRows, setSourceRows] = useState<DealerMasterRow[]>([]);
   const [plan, setPlan] = useState<ImportPlan[]>([]);
@@ -136,6 +138,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    setFileName(file.name);setSelectedDataSheet('');
     setError(''); setPlan([]); setSourceRows([]); setReviewed(false); setResults([]);setMappings({});setOptions(null);environmentRef.current=null;setFieldCoverage([]);setFullMasterWorkbook(false);setProtectedFormatVerified(false);setFormatWarning('');setProtectedCells({});setYellowCellCount(0);setFileSha256('');setSupplementSha256('');originalWorkbookRef.current=null;
     if (!/\.(xlsx|xls)$/i.test(file.name) || file.size > 5 * 1024 * 1024) {
       setError('Choose an Excel .xlsx or .xls workbook smaller than 5 MB.'); return;
@@ -144,16 +147,17 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, {type:'array', cellDates:true, cellStyles:true, bookStyles:true} as XLSX.ParsingOptions);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      if (!sheet) throw Error('Workbook has no worksheet');
-      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {defval:'', raw:false});
-      const headers = (XLSX.utils.sheet_to_json<unknown[]>(sheet, {header:1,defval:'',raw:false})[0] || []).map(String);
-      const detectedFullMaster=dealerMasterFieldCatalog.every(f=>headers.some(h=>normalizedDealerHeader(h)===normalizedDealerHeader(f.header)));
-      const actualLastRow=sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref']).e.r+1 : raw.length+1;
+      // Review workbooks may have a cover sheet. Locate CUSTCODE + CUSTOMER NAME
+      // on the best data worksheet instead of blindly parsing SheetNames[0].
+      const selected=selectDealerMasterDataSheet(workbook);
+      const {sheet,raw,headers,sheetIndex,headerRowNumber}=selected;
+      const detectedFullMaster=selected.fullMaster;
+      const actualLastRow=sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref']).e.r+1 : raw.length+headerRowNumber;
+      setSelectedDataSheet(selected.name);
       // A blank Excel row must not shift subsequent yellow-cell protection.
       const scannedRowCount=Math.max(raw.length,actualLastRow-1);
       const protections=file.name.toLowerCase().endsWith('.xlsx')
-        ? readYellowProtectionFromXlsx(data,headers,scannedRowCount)
+        ? readYellowProtectionFromXlsx(data,headers,scannedRowCount,sheetIndex,headerRowNumber)
         : {verified:false,protectedBySourceRow:{},protectedCellCount:0,
             reason:'Full Dealer Master import requires .xlsx with original formatting.'};
       setFullMasterWorkbook(detectedFullMaster);
@@ -168,7 +172,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
       if (raw.length === 0 || raw.length > 1000) throw Error('Workbook must have 1 to 1000 outlet rows.');
       const rows = parseDealerMasterRows(raw);
       if (!rows.some(r => r.roCode && r.name)) throw Error('CUSTCODE and CUSTOMER NAME columns could not be detected. Please use the dealer master format.');
-      setSourceRows(rows); setFileName(file.name);
+      setSourceRows(rows);
       await preview(rows,{});
     } catch(e) {setError(e instanceof Error ? e.message:'Unable to read workbook');}
     finally {setBusy(false);}
@@ -261,6 +265,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
           <input aria-label="Choose dealer master Excel" type="file" accept=".xlsx,.xls" className="sr-only" disabled={busy} onChange={onFileChange}/>
         </label>
         <span className="text-xs text-slate-600">{fileName || 'Select the IOCL Dealer Master workbook (.xlsx)'}</span>
+        {selectedDataSheet&&<p role="status" className="text-xs font-semibold text-emerald-700">Data worksheet detected: {selectedDataSheet} · {sourceRows.length} records</p>}
         {sourceRows.length > 0 && <button type="button" disabled={busy} onClick={refreshPreview} className="ml-auto flex items-center gap-1 border border-slate-300 px-3 py-2 rounded-lg text-xs font-semibold"><RefreshCw className="w-3.5 h-3.5"/>Refresh DB Preview</button>}
       </div>
       {error && <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs"><AlertTriangle className="inline h-4 w-4 mr-2"/>{error}</div>}
