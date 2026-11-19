@@ -1,10 +1,11 @@
-import React, {useEffect,useMemo,useState} from 'react';
+import React, {useEffect,useMemo,useRef,useState} from 'react';
 import * as XLSX from 'xlsx';
 import {CheckCircle2,FileCheck2,RefreshCcw,ShieldAlert} from 'lucide-react';
 import {apiFetch} from '../../services/api';
 import {useAuth} from '../../context/AuthContext';
 import {PERMISSIONS} from '../../../shared/constants';
 import type {DealerMasterRow,ImportPlan} from '../../../shared/dealerMasterImport';
+import {dealerMasterFieldCatalog,normalizedDealerHeader} from '../../../shared/dealerMasterFieldCoverage';
 import {
   buildDealerStage4Plan,type Stage4Module,type Stage4Status,type Stage4Snapshot,type Stage4Plan,
 } from '../../../shared/dealerMasterStage4';
@@ -63,6 +64,8 @@ export function DealerMasterStage4Panel({
   const [loading,setLoading]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
+  const [sourceOnlyNotice,setSourceOnlyNotice]=useState('');
+  const snapshot404Ref=useRef(false);
   const [approved,setApproved]=useState(false);
   const [module,setModule]=useState<Stage4Module|'ALL'>('ALL');
   const [status,setStatus]=useState<Stage4Status|'ALL'>('ALL');
@@ -73,23 +76,73 @@ export function DealerMasterStage4Panel({
     sourceRows,protectedBySourceRow,outletPlans,snapshot):null,
     [snapshot,sourceRows,protectedBySourceRow,outletPlans]);
   const safeRows=useMemo(()=>plan?.rows.filter(r=>rowIsSafe(r)&&rowHasWrites(r))||[],[plan]);
+  const liveAudit=useMemo(()=>{
+    const planByRow=new Map(outletPlans.map(p=>[p.row.sourceRow,p]));
+    const validHeaders=new Set(dealerMasterFieldCatalog.map(f=>normalizedDealerHeader(f.header)));
+    const records=sourceRows.map(r=>{
+      const match=planByRow.get(r.sourceRow);
+      const yellows=(protectedBySourceRow[r.sourceRow]||[]).filter(h=>validHeaders.has(normalizedDealerHeader(h)));
+      return {ExcelRow:r.sourceRow,ROCode:r.roCode,OutletName:r.name,
+        MatchInLiveDirectory:match?.existingId?'YES':'NO',
+        MatchOutletId:match?.existingId||'',ProtectedBusinessCells:yellows.length,
+        ReviewReasons:match?.messages.join('; ')||'',
+        SavedLandAndLease:'NOT_VERIFIED'};
+    });
+    const fields=sourceRows.flatMap(r=>{
+      const lookup=new Map(Object.entries(r.sourceDetails).map(([k,v])=>[normalizedDealerHeader(k),v]));
+      const yellow=new Set((protectedBySourceRow[r.sourceRow]||[]).map(normalizedDealerHeader));
+      return dealerMasterFieldCatalog.map(f=>{
+        const key=normalizedDealerHeader(f.header);
+        const value=String(lookup.get(key)||'');
+        const protectedCell=yellow.has(key);
+        return {ExcelRow:r.sourceRow,ROCode:r.roCode,OutletName:r.name,
+          ExcelColumn:f.header,Destination:f.destination,DestinationField:f.target,
+          SourceValue:value,YellowProtected:protectedCell?'YES':'NO',
+          SourceDecision:!value?'BLANK_SOURCE':protectedCell?'PROTECTED_YELLOW':'NON_YELLOW_NOT_VERIFIED',
+          SavedFieldValue:'NOT_VERIFIED',ImportPerformed:'NO'};
+      });
+    });
+    const yellowRows=records.filter(x=>x.ProtectedBusinessCells>0);
+    return {records,fields,yellowRows,
+      yellowUnmatched:yellowRows.filter(x=>x.MatchInLiveDirectory==='NO'),
+      nonYellowFields:fields.filter(x=>x.SourceDecision==='NON_YELLOW_NOT_VERIFIED').length};
+  },[sourceRows,protectedBySourceRow,outletPlans]);
+
   const visible=useMemo(()=>plan?.rows.flatMap(r=>r.fields).filter(f=>
     (module==='ALL'||module===f.module)&&(status==='ALL'||status===f.status)
   ).slice(0,220)||[],[plan,module,status]);
 
-  async function loadSnapshot(){
+  async function loadSnapshot(force=false){
     if(!permitted)return;
-    setLoading(true);setError('');setApproved(false);
+    if(DEALER_LIVE_READ_ONLY_TRIAL&&snapshot404Ref.current&&!force){
+      setSnapshot(null);return;
+    }
+    setLoading(true);setError('');setSourceOnlyNotice('');setApproved(false);
     try{
-      const response=await apiFetch<Stage4Snapshot>('/api/v1/outlets/dealer-master/batch-snapshot');
-      if(!response.success||!response.data)throw Error(response.error?.message||
-        'Complete RO/Land/Lease snapshot is unavailable. Do not import.');
-      setSnapshot(response.data);
-    }catch(e){setSnapshot(null);setError(e instanceof Error?e.message:'Snapshot failed');}
-    finally{setLoading(false);}
+      const response=await apiFetch<Stage4Snapshot>('/api/v1/outlets/dealer-master/batch-snapshot',{cache:'no-store'});
+      if(!response.success||!response.data){
+        const msg=response.error?.message||'Snapshot unavailable';
+        if(DEALER_LIVE_READ_ONLY_TRIAL){
+          const missing=/endpoint.+not found|\\b404\\b/i.test(msg)||response.error?.code==='NOT_FOUND';
+          if(missing)snapshot404Ref.current=true;
+          setSnapshot(null);
+          setSourceOnlyNotice(missing
+            ? 'Live backend does not currently expose the Stage 4 snapshot API. You can review all 26 Excel columns and existing RO Codes, but saved Land/Lease details have NOT been checked. This does not mean those records are missing.'
+            : 'Full saved RO/Land/Lease values could not be verified: '+msg+'. Source-only preview is still available.');
+          return;
+        }
+        throw Error(msg);
+      }
+      snapshot404Ref.current=false;setSnapshot(response.data);
+    }catch(e){
+      setSnapshot(null);
+      const msg=e instanceof Error?e.message:'Snapshot unavailable';
+      if(DEALER_LIVE_READ_ONLY_TRIAL)setSourceOnlyNotice('Saved Land/Lease comparison unavailable: '+msg);
+      else setError(msg);
+    }finally{setLoading(false);}
   }
   async function loadHistory(){
-    if(!permitted)return;
+    if(!permitted||DEALER_LIVE_READ_ONLY_TRIAL)return;
     const response=await apiFetch<AuditEvent[]>('/api/v1/outlets/dealer-master/batches');
     if(response.success&&Array.isArray(response.data))setHistory(response.data);
   }
@@ -189,15 +242,21 @@ export function DealerMasterStage4Panel({
   }
   function exportResult(){
     if(!plan){
-      // Production has not applied 0038; export a truthful RO-only dry-run.
+      // RO-only validation. Land and lease storage not verified. NO DATA WRITTEN.
       const workbook=XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(outletPlans.map(p=>({
-        ExcelRow:p.row.sourceRow,ROCode:p.row.roCode,Outlet:p.row.name,
-        ROStatus:p.action,MatchingOutletId:p.existingId||'',
-        ReviewReasons:p.messages.join('; '),
-        Note:'RO-only validation. Land and lease storage not verified; NO DATA WRITTEN.',
-      }))),'Live RO Preview');
-      XLSX.writeFile(workbook,'IOCL_Live_Readonly_RO_Preview.xlsx');
+      XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
+        ['Read-only Excel audit: NO DATA IMPORTED'],
+        ['Full Land/Lease saved values','NOT VERIFIED: live snapshot API unavailable'],
+        ['Yellow cells','Protected source values; not proof of an existing database record'],
+        ['Non-yellow populated cells','Candidates only; NOT verified missing in database'],
+        ['Unmatched RO Code','Not proof a new outlet should be created'],
+        ['Yellow-marked ROs with no directory match',liveAudit.yellowUnmatched.length],
+      ]),'Read First');
+      XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(liveAudit.records),'RO Directory');
+      XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(liveAudit.fields),'All 26 Fields');
+      if(liveAudit.yellowUnmatched.length)
+        XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(liveAudit.yellowUnmatched),'Yellow Not Matched');
+      XLSX.writeFile(workbook,'IOCL_Live_Readonly_26_Column_Audit.xlsx');
       return;
     }
     const report=plan.rows.flatMap(r=>r.fields.map(f=>({
@@ -220,8 +279,8 @@ export function DealerMasterStage4Panel({
         <p className="text-xs text-slate-600 mt-1">Protect yellow cells, fill only blank saved fields, and hold conflicts/uncertain lease matches for review.</p>
       </div>
       <div className="flex gap-2">
-        <button type="button" disabled={loading||busy} onClick={()=>void loadSnapshot()} className="border border-slate-300 rounded-lg bg-white p-2 text-xs flex items-center gap-1"><RefreshCcw className="w-4 h-4"/>Refresh</button>
-        <button type="button" disabled={!plan && outletPlans.length===0} onClick={exportResult} className="border border-slate-300 rounded-lg bg-white p-2 text-xs">Export field review</button>
+        <button type="button" disabled={loading||busy} onClick={()=>void loadSnapshot(true)} className="border border-slate-300 rounded-lg bg-white p-2 text-xs flex items-center gap-1"><RefreshCcw className="w-4 h-4"/>Refresh</button>
+        <button type="button" disabled={!plan && outletPlans.length===0} onClick={exportResult} className="border border-slate-300 rounded-lg bg-white p-2 text-xs">{!plan?'Export all 26 fields':'Export field review'}</button>
       </div>
     </div>
     {DEALER_LIVE_READ_ONLY_TRIAL && <div role="status" className="rounded-lg border border-indigo-300 bg-indigo-50 p-3 text-xs font-semibold text-indigo-900">
@@ -231,10 +290,18 @@ export function DealerMasterStage4Panel({
     <div className="rounded-lg border bg-white p-3 text-xs space-y-1" data-testid="dealer-master-live-ro-status">
       <div className="font-semibold">Live RO Code Match Preview (existing outlet directory)</div>
       <div>{outletPlans.filter(p=>!!p.existingId).length} RO codes matched existing outlets · {outletPlans.filter(p=>!p.existingId).length} not matched · {outletPlans.filter(p=>p.action==='REVIEW').length} require review</div>
-      <p className="text-amber-800">These counts are RO-directory checks, NOT confirmation that ownership or signed lease details are present. Export the RO-only report if the full database snapshot is unavailable.</p>
+      <p className="text-amber-800">RO-directory matching is not proof of ownership or signed leases. Yellow-marked cells do not prove corresponding database records exist.</p>
+      <p className="font-semibold">{liveAudit.yellowRows.length} yellow-marked RO rows · {liveAudit.yellowUnmatched.length} yellow-marked RO Codes NOT matched in the live directory · {liveAudit.nonYellowFields} unverified non-yellow values</p>
+      {liveAudit.yellowUnmatched.length>0&&<details className="border-t pt-2">
+        <summary className="cursor-pointer font-semibold">Review yellow-marked ROs with no live directory match</summary>
+        <div className="mt-2 max-h-40 overflow-auto">{liveAudit.yellowUnmatched.slice(0,20).map(x=>
+          <p key={x.ExcelRow} className="border-b py-1">Excel row {x.ExcelRow} · RO {x.ROCode} · {x.OutletName} · {x.ProtectedBusinessCells} protected cells</p>)}</div>
+        <p className="text-slate-600">Download the full 26-column report; never auto-create these ROs without verifying earlier manual records.</p>
+      </details>
     </div>
     {!permitted&&<p role="alert" className="text-sm text-rose-800">Global admin role with Outlet Create/Update and Documents Read/Write permissions is required.</p>}
     {(!verified||protectedCount<1)&&<p role="alert" className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-700">Excel yellow-cell styles could not be confirmed. No import is permitted.</p>}
+    {sourceOnlyNotice&&<p role="status" className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700"><ShieldAlert className="w-4 h-4 inline mr-1"/>{sourceOnlyNotice}</p>}
     {error&&<p role="alert" className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800"><ShieldAlert className="w-4 h-4 inline mr-1"/>{error}</p>}
     {loading&&<p className="text-xs text-slate-600">Checking current RO, land and lease-source master records…</p>}
     {plan&&<>
