@@ -6,6 +6,8 @@ import { RetailOutlet, User, State, Division, SalesArea } from '../../shared/typ
 import { PERMISSIONS } from '../../shared/constants';
 import { SectionSearchBar } from '../components/common/SectionSearchBar';
 import { DealerMasterExcelImporter } from '../components/outlets/DealerMasterExcelImporter';
+import type {DealerDraftContents,DealerDraftMeta,DealerDraftRow} from '../../shared/dealerMasterDraft';
+import {classifyDealerSite} from '../../shared/dealerMasterImport';
 import { filterOutletsForSearch } from '../utils/sectionSearchHelpers';
 import {
   Building2,
@@ -32,6 +34,11 @@ export const OutletsPage: React.FC = () => {
   const [directoryError,setDirectoryError]=useState<string|null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [showExcelImporter, setShowExcelImporter] = useState(false);
+  const [pendingHistory,setPendingHistory]=useState<DealerDraftMeta[]>([]);
+  const [pendingDraft,setPendingDraft]=useState<{draftId:string;contents:DealerDraftContents}|null>(null);
+  const [pendingLoading,setPendingLoading]=useState(false);
+  const [pendingError,setPendingError]=useState('');
+  const [pendingSearch,setPendingSearch]=useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedOutlet, setSelectedOutlet] = useState<RetailOutlet | null>(null);
@@ -54,7 +61,7 @@ export const OutletsPage: React.FC = () => {
   const initialFormState = {
     roCode: '',
     name: '',
-    outletType: 'COCO' as 'COCO' | 'CODO' | 'A_SITE',
+    outletType: 'COCO' as '' | 'COCO' | 'CODO' | 'A_SITE',
     stateId: '',
     divisionId: '',
     salesAreaId: '',
@@ -93,6 +100,49 @@ export const OutletsPage: React.FC = () => {
     userCtx?.isGlobalScope && hasPermission(PERMISSIONS.OUTLETS_UPDATE)
   );
 
+  const canBrowsePending=Boolean(userCtx?.isGlobalScope&&
+    hasPermission(PERMISSIONS.OUTLETS_READ)&&hasPermission(PERMISSIONS.OUTLETS_CREATE)&&
+    hasPermission(PERMISSIONS.OUTLETS_UPDATE));
+
+  // Existing D1 draft APIs restrict these records to the creator/global admin.
+  // This projection is read-only and never creates or edits operational outlets.
+  async function loadPendingDraft(id?:string){
+    setPendingLoading(true);setPendingError('');
+    try{
+      let draftId=id;
+      if(!draftId){
+        const list=await apiFetch<DealerDraftMeta[]>('/api/v1/outlets/dealer-master/drafts',{cache:'no-store'});
+        if(!list.success||!Array.isArray(list.data))
+          throw Error(list.error?.message||'Could not load your saved Dealer Master drafts.');
+        setPendingHistory(list.data);
+        draftId=list.data[0]?.id;
+      }
+      if(!draftId){setPendingDraft(null);return;}
+      const res=await apiFetch<{draftId:string;contents:DealerDraftContents}>(
+        '/api/v1/outlets/dealer-master/drafts/'+encodeURIComponent(draftId),{cache:'no-store'});
+      if(!res.success||!res.data||res.data.contents.schemaVersion!==1||
+          res.data.contents.businessColumns.length!==26||
+          !Array.isArray(res.data.contents.rows))
+        throw Error(res.error?.message||'Saved Dealer Master source could not be verified.');
+      setPendingDraft(res.data);
+    }catch(e){setPendingDraft(null);setPendingError(e instanceof Error?e.message:'Pending data unavailable');}
+    finally{setPendingLoading(false);}
+  }
+
+  const openPendingOutlet=(row:DealerDraftRow)=>{
+    if(outlets.some(o=>o.roCode.trim()===row.roCode.trim())){
+      setPendingError('This RO Code is already registered. Refresh Pending Setup.');return;
+    }
+    const fields=row.fields,classified=classifyDealerSite(fields['PRICE GROUP DESCRIPTION(SITE)']||'');
+    setErrorMsg(null);setSuccessMsg(null);
+    setForm({...initialFormState,roCode:row.roCode,
+      name:fields['CUSTOMER  NAME (NAME OF  RO)']||'',
+      address:fields.ADDRESS||'',district:fields.DISTRICT||'',
+      city:row.city||'',pincode:row.pincode||'',
+      outletType:classified||''});
+    setDivisions([]);setSalesAreas([]);setModalOpen(true);
+  };
+
   const fetchOutlets = async () => {
     setLoading(true);
     const endpoint = canManageArchive ? '/api/v1/outlets?includeArchived=true' : '/api/v1/outlets';
@@ -129,6 +179,8 @@ export const OutletsPage: React.FC = () => {
     fetchUsers();
     fetchStates();
   }, []);
+
+  useEffect(()=>{if(canBrowsePending)void loadPendingDraft();},[canBrowsePending]);
 
   const openCreateModal = () => {
     setErrorMsg(null);
@@ -280,6 +332,10 @@ export const OutletsPage: React.FC = () => {
     if (creatingOutlet) return;
     setErrorMsg(null);
 
+    if (!form.outletType) {
+      setErrorMsg('Please select the verified outlet type before registering.');
+      return;
+    }
     if (!form.stateId || !form.divisionId || !form.salesAreaId) {
       setErrorMsg('Please select State Office, Division Office, and Sales Area.');
       return;
@@ -457,6 +513,18 @@ export const OutletsPage: React.FC = () => {
     );
   }, [visibilityFilteredOutlets, searchQuery, showHidden]);
 
+  // The authoritative directory includes archived/hidden matches for global admins.
+  // Never count an existing RO Code as a new pending record.
+  const existingCodes=new Set(outlets.map(o=>o.roCode.trim()));
+  const pendingRows=(pendingDraft?.contents.rows||[]).filter(row=>
+    /^\\d{4,12}$/.test(row.roCode.trim())&&!existingCodes.has(row.roCode.trim()));
+  const pendingShown=pendingRows.filter(row=>{
+    const q=pendingSearch.trim().toLowerCase();
+    return !q||[row.roCode,row.fields['CUSTOMER  NAME (NAME OF  RO)'],row.fields.DISTRICT,
+      row.fields.SALESOFFICE,row.fields['SALES AREA NAME']]
+      .some(v=>(v||'').toLowerCase().includes(q));
+  });
+
   return (
     <div className="admin-modern space-y-5 pb-10 max-w-[1500px] mx-auto">
       {/* Page Header */}
@@ -491,6 +559,93 @@ export const OutletsPage: React.FC = () => {
       </div>
 
       {showExcelImporter && <DealerMasterExcelImporter onCompleted={() => void fetchOutlets()} />}
+
+      {canBrowsePending&&!loading&&!directoryError&&(
+        <section data-testid="dealer-pending-setup" aria-label="Pending Setup retail outlets"
+          className="option4-panel p-4 space-y-3">
+          <div className="flex flex-wrap justify-between items-start gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-[#17365D]">
+                Pending Setup · {pendingLoading?'Loading…':pendingRows.length} new RO candidates
+              </h2>
+              <p className="text-xs text-slate-600 mt-1">
+                Source-only records saved in D1. Not yet operational, and no lease, rent or
+                existing outlet record is changed. Verify City/PIN and hierarchy later to register.
+              </p>
+            </div>
+            <button type="button" disabled={pendingLoading} onClick={()=>void loadPendingDraft()}
+              className="rounded-lg px-3 py-2 border text-xs font-semibold bg-white">
+              Refresh Pending Setup
+            </button>
+          </div>
+          {pendingError&&<p role="alert" className="text-xs text-red-700">{pendingError}</p>}
+          {pendingHistory.length>0&&<div className="flex flex-wrap gap-2 items-center text-xs">
+            <label htmlFor="pending-source">Saved Excel draft</label>
+            <select id="pending-source" value={pendingDraft?.draftId||''}
+              disabled={pendingLoading} onChange={e=>void loadPendingDraft(e.target.value)}
+              className="bg-white border rounded-md p-2 max-w-full">
+              {pendingHistory.map(d=><option key={d.id} value={d.id}>
+                {d.fileName} · {d.rowCount} rows · {new Date(d.createdAt).toLocaleString()}
+              </option>)}
+            </select>
+            {pendingDraft&&<span className="text-slate-500">
+              {pendingDraft.contents.rows.length-pendingRows.length} existing RO Code matches excluded
+            </span>}
+          </div>}
+          {!pendingLoading&&!pendingError&&!pendingDraft&&
+            <p className="text-xs text-slate-500">Save a 26-column Excel draft first in Excel Import &amp; Sync.</p>}
+          {pendingDraft&&pendingRows.length>0&&<>
+            <label className="block text-xs text-slate-600">
+              Search Pending Setup
+              <input value={pendingSearch} onChange={e=>setPendingSearch(e.target.value)}
+                placeholder="RO Code, outlet, district, office, area"
+                className="block w-full rounded-md border px-3 py-2 mt-1 bg-white"/>
+            </label>
+            <p className="text-xs text-slate-500">
+              {pendingShown.length} matching rows · All 26 original fields remain available in the saved draft.
+              Complete Setup opens the existing registration form; it never registers automatically.
+            </p>
+            <div className="rounded-xl border max-h-[450px] overflow-auto">
+              <table className="w-full min-w-[800px] text-xs text-left">
+                <thead className="bg-[#E8EEF8] sticky top-0">
+                  <tr><th className="p-2">RO Code</th><th className="p-2">Outlet / Source fields</th>
+                    <th className="p-2">Office / Area</th><th className="p-2">City / PIN</th>
+                    <th className="p-2">Status / Action</th></tr>
+                </thead>
+                <tbody className="divide-y">
+                {pendingShown.map(row=><tr key={row.roCode} className="align-top">
+                  <td className="p-2 font-bold font-mono">{row.roCode}</td>
+                  <td className="p-2 max-w-[360px]">
+                    <div className="font-semibold">{row.fields['CUSTOMER  NAME (NAME OF  RO)']}</div>
+                    <div className="text-slate-500">{row.fields.DISTRICT||'District not provided'}</div>
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-blue-700">View 26 fields</summary>
+                      <dl className="bg-slate-50 border rounded-md p-2 mt-1">
+                        {pendingDraft.contents.businessColumns.map(key=><div key={key} className="grid grid-cols-2 gap-2 py-1 border-b">
+                          <dt className="font-semibold">{key}</dt>
+                          <dd className="break-words">{row.fields[key]||'—'}</dd>
+                        </div>)}
+                      </dl>
+                    </details>
+                  </td>
+                  <td className="p-2">{row.fields.SALESOFFICE||'—'}<div className="text-slate-500">
+                    {row.fields['SALES AREA NAME']||'—'}</div></td>
+                  <td className="p-2">{row.city&&row.pincode?row.city+' / '+row.pincode:'Pending verification'}</td>
+                  <td className="p-2"><span className="block text-amber-800 font-bold mb-2">PENDING SETUP</span>
+                    <button type="button" onClick={()=>openPendingOutlet(row)}
+                      className="bg-[#17365D] text-white font-semibold rounded-lg px-3 py-2">
+                      Complete Setup
+                    </button>
+                  </td>
+                </tr>)}
+                </tbody>
+              </table>
+            </div>
+          </>}
+          {pendingDraft&&!pendingRows.length&&!pendingLoading&&
+            <p className="text-xs text-slate-500">No unmatched RO Codes remain in this saved draft.</p>}
+        </section>
+      )}
 
       {/* Success Banner */}
       {successMsg && (
@@ -719,10 +874,12 @@ export const OutletsPage: React.FC = () => {
                 <div>
                   <label className="block text-[#475569] font-semibold mb-1">Outlet Type</label>
                   <select
+                    required
                     value={form.outletType}
                     onChange={(e) => setForm({ ...form, outletType: e.target.value as any })}
                     className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
                   >
+                    <option value="">-- Select Outlet Type --</option>
                     <option value="COCO">COCO (Company Owned)</option>
                     <option value="CODO">CODO (Company Owned Dealer Operated)</option>
                     <option value="A_SITE">A-Site (A-Site Franchisee)</option>
