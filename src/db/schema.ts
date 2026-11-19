@@ -2000,5 +2000,5 @@ export const dealerLeaseSourceRecords = sqliteTable('dealer_lease_source_records
 }, (table) => [
   uniqueIndex('uq_dealer_lease_source_outlet_key').on(table.outletId,table.sourceKey),
   index('idx_dealer_lease_sources_outlet').on(table.outletId),
-  index('idx_dealer_lease_sources_agreement').on(table.linkedAgreementId),
+  uniqueIndex('uq_dealer_lease_sources_one_per_agreement').on(table.linkedAgreementId),
 ]);
