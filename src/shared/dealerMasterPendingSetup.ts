@@ -1,3 +1,4 @@
+import {z} from 'zod';
 import type { DealerDraftRow } from './dealerMasterDraft';
 
 /**
@@ -41,3 +42,26 @@ export function reconcilePendingDealerRows(
 
   return { pendingRows, existingMatches, invalidRows, duplicateRows };
 }
+
+/** Editable setup metadata, stored separately from immutable 26-field Excel evidence.
+ * Blank City/PIN and partial hierarchy are explicitly allowed during setup.
+ */
+export const pendingSetupValuesSchema=z.object({
+  name:z.string().trim().min(1).max(200),
+  outletType:z.union([z.enum(['COCO','CODO','A_SITE']),z.literal('')]),
+  address:z.string().trim().min(1).max(1000),
+  district:z.string().trim().min(1).max(120),
+  stateId:z.string().trim().max(100),
+  divisionId:z.string().trim().max(100),
+  salesAreaId:z.string().trim().max(100),
+  city:z.string().trim().max(120),
+  pincode:z.string().trim().refine(v=>!v||/^\d{6}$/.test(v),'PIN must contain exactly 6 digits if entered'),
+}).strict();
+export const pendingSetupSaveSchema=z.object({
+  values:pendingSetupValuesSchema,
+  expectedRevision:z.number().int().min(0),
+}).strict();
+export type PendingSetupValues=z.infer<typeof pendingSetupValuesSchema>;
+export type PendingSetupRecord={
+  roCode:string;values:PendingSetupValues;revision:number;updatedAt:string;
+};
