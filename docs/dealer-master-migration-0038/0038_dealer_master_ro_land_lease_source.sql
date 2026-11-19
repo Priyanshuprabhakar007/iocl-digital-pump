@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS dealer_lease_source_records (
 );
 CREATE INDEX IF NOT EXISTS idx_dealer_lease_sources_outlet ON dealer_lease_source_records(outlet_id);
 CREATE INDEX IF NOT EXISTS idx_dealer_lease_sources_agreement ON dealer_lease_source_records(linked_agreement_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dealer_lease_sources_one_per_agreement ON dealer_lease_source_records(linked_agreement_id);
 
 -- This blocks cross-outlet linking even if application checks are accidentally bypassed.
 CREATE TRIGGER IF NOT EXISTS trg_dealer_lease_same_outlet_insert
