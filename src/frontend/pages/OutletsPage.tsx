@@ -7,6 +7,8 @@ import { PERMISSIONS } from '../../shared/constants';
 import { SectionSearchBar } from '../components/common/SectionSearchBar';
 import { DealerMasterExcelImporter } from '../components/outlets/DealerMasterExcelImporter';
 import { reconcilePendingDealerRows } from '../../shared/dealerMasterPendingSetup';
+import type {PendingSetupRecord} from '../../shared/dealerMasterPendingSetup';
+import {DealerPendingSetupEditor} from '../components/outlets/DealerPendingSetupEditor';
 import type {DealerDraftContents,DealerDraftMeta,DealerDraftRow} from '../../shared/dealerMasterDraft';
 import {classifyDealerSite} from '../../shared/dealerMasterImport';
 import { filterOutletsForSearch } from '../utils/sectionSearchHelpers';
@@ -40,6 +42,8 @@ export const OutletsPage: React.FC = () => {
   const [pendingLoading,setPendingLoading]=useState(false);
   const [pendingError,setPendingError]=useState('');
   const [pendingSearch,setPendingSearch]=useState('');
+  const [pendingEdits,setPendingEdits]=useState<Record<string,PendingSetupRecord>>({});
+  const [pendingSelected,setPendingSelected]=useState<DealerDraftRow|null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedOutlet, setSelectedOutlet] = useState<RetailOutlet | null>(null);
@@ -118,7 +122,7 @@ export const OutletsPage: React.FC = () => {
         setPendingHistory(list.data);
         draftId=list.data[0]?.id;
       }
-      if(!draftId){setPendingDraft(null);return;}
+      if(!draftId){setPendingDraft(null);setPendingEdits({});return;}
       const res=await apiFetch<{draftId:string;contents:DealerDraftContents}>(
         '/api/v1/outlets/dealer-master/drafts/'+encodeURIComponent(draftId),{cache:'no-store'});
       if(!res.success||!res.data||res.data.contents.schemaVersion!==1||
@@ -126,7 +130,17 @@ export const OutletsPage: React.FC = () => {
           !Array.isArray(res.data.contents.rows))
         throw Error(res.error?.message||'Saved Dealer Master source could not be verified.');
       setPendingDraft(res.data);
-    }catch(e){setPendingDraft(null);setPendingError(e instanceof Error?e.message:'Pending data unavailable');}
+      const pending=await apiFetch<PendingSetupRecord[]>(
+        '/api/v1/outlets/dealer-master/drafts/'+encodeURIComponent(draftId)+'/pending-setup',
+        {cache:'no-store'});
+      if(pending.success&&Array.isArray(pending.data)){
+        setPendingEdits(Object.fromEntries(pending.data.map(item=>[item.roCode,item])));
+      }else{
+        setPendingEdits({});
+        setPendingError(pending.error?.message||'Pending editing storage is not ready yet.');
+      }
+    }catch(e){setPendingDraft(null);setPendingEdits({});
+      setPendingError(e instanceof Error?e.message:'Pending data unavailable');}
     finally{setPendingLoading(false);}
   }
 
@@ -140,7 +154,7 @@ export const OutletsPage: React.FC = () => {
       name:fields['CUSTOMER  NAME (NAME OF  RO)']||'',
       address:fields.ADDRESS||'',district:fields.DISTRICT||'',
       city:row.city||'',pincode:row.pincode||'',
-      outletType:classified||''});
+      outletType:classified||'',...(pendingEdits[row.roCode]?.values||{})});
     setDivisions([]);setSalesAreas([]);setModalOpen(true);
   };
 
@@ -335,6 +349,10 @@ export const OutletsPage: React.FC = () => {
 
     if (!form.outletType) {
       setErrorMsg('Please select the verified outlet type before registering.');
+      return;
+    }
+    if (!form.city.trim() || !/^\d{6}$/.test(form.pincode.trim())) {
+      setErrorMsg('Verified City and six-digit PIN are required to register an active outlet. Save Pending Setup instead.');
       return;
     }
     if (!form.stateId || !form.divisionId || !form.salesAreaId) {
@@ -572,7 +590,7 @@ export const OutletsPage: React.FC = () => {
               </h2>
               <p className="text-xs text-slate-600 mt-1">
                 Source-only records saved in D1. Not yet operational, and no lease, rent or
-                existing outlet record is changed. Verify City/PIN and hierarchy later to register.
+                existing outlet record is changed. Save known details now; complete City/PIN and hierarchy whenever ready.
               </p>
             </div>
             <button type="button" disabled={pendingLoading} onClick={()=>void loadPendingDraft()}
@@ -610,7 +628,7 @@ export const OutletsPage: React.FC = () => {
             </label>
             <p className="text-xs text-slate-500">
               {pendingShown.length} matching rows · All 26 original fields remain available in the saved draft.
-              Complete Setup opens the existing registration form; it never registers automatically.
+              Save Pending Setup stores edits separately in D1. Register Outlet still requires verified City/PIN and hierarchy.
             </p>
             <div className="rounded-xl border max-h-[450px] overflow-auto">
               <table className="w-full min-w-[800px] text-xs text-left">
@@ -637,11 +655,23 @@ export const OutletsPage: React.FC = () => {
                   </td>
                   <td className="p-2">{row.fields.SALESOFFICE||'—'}<div className="text-slate-500">
                     {row.fields['SALES AREA NAME']||'—'}</div></td>
-                  <td className="p-2">{row.city&&row.pincode?row.city+' / '+row.pincode:'Pending verification'}</td>
-                  <td className="p-2"><span className="block text-amber-800 font-bold mb-2">PENDING SETUP</span>
-                    <button type="button" onClick={()=>openPendingOutlet(row)}
+                  <td className="p-2">
+                    {(pendingEdits[row.roCode]?.values.city||row.city)&&
+                      (pendingEdits[row.roCode]?.values.pincode||row.pincode)
+                        ?(pendingEdits[row.roCode]?.values.city||row.city)+' / '+
+                          (pendingEdits[row.roCode]?.values.pincode||row.pincode)
+                        :'Pending verification'}
+                  </td>
+                  <td className="p-2"><span className="block text-amber-800 font-bold mb-2">
+                    {pendingEdits[row.roCode]?'SETUP SAVED':'PENDING SETUP'}
+                  </span>
+                    <button type="button" onClick={()=>setPendingSelected(row)}
                       className="bg-[#17365D] text-white font-semibold rounded-lg px-3 py-2">
-                      Complete Setup
+                      {pendingEdits[row.roCode]?'Edit Saved Setup':'Save/Edit Pending'}
+                    </button>
+                    <button type="button" onClick={()=>void openPendingOutlet(row)}
+                      className="border border-slate-300 bg-white font-semibold rounded-lg px-3 py-2 mt-1">
+                      Register Outlet
                     </button>
                   </td>
                 </tr>)}
@@ -653,6 +683,20 @@ export const OutletsPage: React.FC = () => {
             <p className="text-xs text-slate-500">No unmatched RO Codes remain in this saved draft.</p>}
         </section>
       )}
+
+      {pendingSelected&&pendingDraft&&
+        <DealerPendingSetupEditor
+          key={pendingDraft.draftId+':'+pendingSelected.roCode}
+          draftId={pendingDraft.draftId} row={pendingSelected}
+          saved={pendingEdits[pendingSelected.roCode]}
+          onClose={()=>setPendingSelected(null)}
+          onSaved={record=>{
+            setPendingEdits(prev=>({...prev,[record.roCode]:record}));
+            setPendingSelected(null);setPendingError('');
+            setSuccessMsg('Pending Setup saved for RO '+record.roCode+
+              '. City/PIN can be edited later; no operational outlet was created.');
+          }}
+        />}
 
       {/* Success Banner */}
       {successMsg && (
@@ -1017,7 +1061,7 @@ export const OutletsPage: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder="Kolkata"
+                    placeholder="Enter verified City"
                     value={form.city}
                     onChange={(e) => setForm({ ...form, city: e.target.value })}
                     className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D]"
@@ -1040,7 +1084,7 @@ export const OutletsPage: React.FC = () => {
                     type="text"
                     required
                     maxLength={6}
-                    placeholder="700001"
+                    placeholder="Enter verified six-digit PIN"
                     value={form.pincode}
                     onChange={(e) => setForm({ ...form, pincode: e.target.value })}
                     className="w-full px-3 py-2 bg-[#F1F5F9] border border-[#D7E0EA] rounded-lg text-[#17365D] font-mono"
