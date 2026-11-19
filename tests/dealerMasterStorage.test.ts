@@ -79,6 +79,18 @@ describe('Dealer Master 0038 D1 SQL migration on disposable SQLite',()=>{
     expect(()=>db.prepare("INSERT INTO dealer_ro_master_details(outlet_id,contact_email,created_at,updated_at,updated_by) VALUES('ro-1','c@b.com','now','now','admin')").run()).toThrow();
     db.close();
   });
+  it('blocks direct SQL overwrites of populated fields at database layer, while allowing missing fields to fill',()=>{
+    const db=setup();
+    db.prepare("INSERT INTO dealer_ro_master_details(outlet_id,contact_email,created_at,updated_at,updated_by) VALUES('ro-1','saved@iocl.in','now','now','admin')").run();
+    expect(()=>db.prepare("UPDATE dealer_ro_master_details SET contact_email='overwrite@iocl.in' WHERE outlet_id='ro-1'").run()).toThrow('DEALER_MASTER_EXISTING_VALUE_PROTECTED');
+    expect(db.prepare("UPDATE dealer_ro_master_details SET contact_phone='9876543210' WHERE outlet_id='ro-1'").run().changes).toBe(1);
+    db.prepare("INSERT INTO dealer_land_master_details(outlet_id,land_status,created_at,updated_at,updated_by) VALUES('ro-1','Leased Land','now','now','admin')").run();
+    expect(()=>db.prepare("UPDATE dealer_land_master_details SET land_status='Owned' WHERE outlet_id='ro-1'").run()).toThrow('DEALER_MASTER_EXISTING_VALUE_PROTECTED');
+    db.prepare("INSERT INTO dealer_lease_source_records(id,outlet_id,source_key,order_number,created_at,updated_at,created_by,updated_by) VALUES('s1','ro-1','order-1','ORDER-1','now','now','admin','admin')").run();
+    expect(()=>db.prepare("UPDATE dealer_lease_source_records SET order_number='ORDER-2' WHERE id='s1'").run()).toThrow('DEALER_MASTER_EXISTING_VALUE_PROTECTED');
+    expect(db.prepare("UPDATE dealer_lease_source_records SET rent_monthly_source='78000' WHERE id='s1'").run().changes).toBe(1);
+    db.close();
+  });
   it('blocks cross-outlet and NFR agreement references in source links',()=>{
     const db=setup();const stmt=db.prepare(`INSERT INTO dealer_lease_source_records(id,outlet_id,source_key,linked_agreement_id,created_at,updated_at,created_by,updated_by)
       VALUES (@id,@outlet_id,@source_key,@linked_agreement_id,@created_at,@updated_at,@created_by,@updated_by)`);
