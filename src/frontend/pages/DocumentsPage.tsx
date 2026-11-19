@@ -1,5 +1,7 @@
 import './adminModern.css';
 import { CocoDocumentationMastersPanel } from '../components/CocoDocumentationMastersPanel';
+import {DealerExcelLeaseSourcesPanel} from '../components/DealerExcelLeaseSourcesPanel';
+import type {DealerDraftRow} from '../../shared/dealerMasterDraft';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useActiveOutlet } from '../context/ActiveOutletContext';
@@ -151,6 +153,7 @@ export const DocumentsPage: React.FC = () => {
   const canWrite = hasPermission(PERMISSIONS.DOCUMENTS_WRITE);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('REGISTER');
+  const [dealerMasterSourceRows,setDealerMasterSourceRows]=useState<DealerDraftRow[]>([]);
   const [masterEditor, setMasterEditor] = useState<'agreements' | 'claims' | 'inspections'>('agreements');
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [masterPreset, setMasterPreset] = useState<'LAND_LEASE' | 'SERVICE_PROVIDER' | 'WAGES_INCENTIVES_MISC' | null>(null);
@@ -1524,12 +1527,23 @@ export const DocumentsPage: React.FC = () => {
       )}
 
 
+      {/* Draft-backed 26-field source available for all 131 ROs, even before active registration. */}
+      {activeTab === 'MASTERS' &&
+        <DealerExcelLeaseSourcesPanel
+          outlets={outlets}
+          activeOutletId={selectedOutletId}
+          onSourceLoaded={setDealerMasterSourceRows}
+          onChooseOutlet={setSelectedOutletId}
+        />
+      }
+
       {/* TAB 5 — AGREEMENTS, EXPENSE EVIDENCE & EQUIPMENT INSPECTIONS */}
       {activeTab === 'MASTERS' && selectedOutletId && (
         <CocoDocumentationMastersPanel
           key={selectedOutletId}
           outletId={selectedOutletId}
           vaultDocs={vaultDocs}
+          dealerSourceRow={dealerMasterSourceRows.find(r=>r.roCode===selectedOutlet?.roCode)||null}
           initialEditor={masterEditor}
           initialCreate={masterPreset !== null}
           initialAgreementType={masterPreset === 'SERVICE_PROVIDER' ? 'SERVICE_PROVIDER' : 'LAND_LEASE'}
