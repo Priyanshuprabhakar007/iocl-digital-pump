@@ -33,7 +33,7 @@ export function readYellowProtectionFromXlsx(
       const normalized=path.toLowerCase().replace(/^\//,'');
       let entry=XLSX.CFB.find(cfb,path)||XLSX.CFB.find(cfb,'/'+path);
       if(!entry?.content){
-        const index=cfb.FullPaths.findIndex(full=>full.toLowerCase().endsWith('/'+normalized));
+        const index=cfb.FullPaths.findIndex((full:string)=>full.toLowerCase().endsWith('/'+normalized));
         if(index>=0)entry=cfb.FileIndex[index];
       }
       return entry?.content?new TextDecoder('utf-8').decode(entry.content as Uint8Array):null;
