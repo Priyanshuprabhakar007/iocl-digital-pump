@@ -118,11 +118,16 @@ describe('Stage 4 authenticated route integration — disposable local D1 only',
     });
     expect(invalid.status).toBe(400);
     const start=await request('POST','/api/v1/outlets/dealer-master/batches',{
-      fileName:'master.xlsx',sha256:'a'.repeat(64),totalRows:131,
+      fileName:'master.xlsx',sha256:'a'.repeat(64),
+      supplementSha256:'b'.repeat(64),planSha256:'c'.repeat(64),totalRows:131,
       protectedCells:214,eligibleRows:12,confirmed:true,
     });
     expect(start.status).toBe(201);
     const batchId=start.data.data.batchId;
+    const startAudit=await getDb(localD1).select().from(auditLogs).where(eq(auditLogs.entityId,batchId));
+    const startMetadata=JSON.parse(startAudit[0].newValueJson||'{}');
+    expect(startMetadata.supplementSha256).toBe('b'.repeat(64));
+    expect(startMetadata.planSha256).toBe('c'.repeat(64));
     const finish=await request('POST',`/api/v1/outlets/dealer-master/batches/${batchId}/complete`,{
       status:'PARTIAL',appliedRows:6,failedRows:1,skippedRows:124,
     });
