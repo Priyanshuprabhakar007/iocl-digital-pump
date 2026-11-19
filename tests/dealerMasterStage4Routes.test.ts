@@ -95,6 +95,22 @@ describe('Stage 4 authenticated route integration — disposable local D1 only',
     expect(sources[0].linkedAgreementId).toBeNull();
   });
 
+  it('re-upload updates only missing lease-source terms and blocks conflicting updates',async()=>{
+    const id='ro-1001';const root=`/api/v1/outlets/${id}/dealer-master-extension/lease-sources`;
+    const newSource=await request('POST',root,{sourceKey:'SOURCE-PATCH-001',orderNumber:'ORDER-001',startDate:'2025-11-20'});
+    expect(newSource.status).toBe(201);
+    const sourceId=newSource.data.data.id;
+    const filled=await request('PATCH',root+'/'+sourceId,{endDate:'2045-10-19',rentMonthlySource:'78000'});
+    expect(filled.status).toBe(200);
+    const retry=await request('PATCH',root+'/'+sourceId,{endDate:'2045-10-19',rentMonthlySource:'78000'});
+    expect(retry.status).toBe(200);
+    expect(retry.data.data.action).toBe('UNCHANGED');
+    const conflict=await request('PATCH',root+'/'+sourceId,{rentMonthlySource:'90000'});
+    expect(conflict.status).toBe(409);
+    const source=await getDb(localD1).select().from(dealerLeaseSourceRecords).where(eq(dealerLeaseSourceRecords.id,sourceId));
+    expect(source).toHaveLength(1);
+    expect(source[0].rentMonthlySource).toBe('78000');
+  });
   it('records required batch approval and completion in audit history, rejecting unauthorized sign-off',async()=>{
     const invalid=await request('POST','/api/v1/outlets/dealer-master/batches',{
       fileName:'master.xlsx',sha256:'not-a-valid-hash',totalRows:131,protectedCells:214,
