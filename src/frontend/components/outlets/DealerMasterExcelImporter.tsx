@@ -9,6 +9,7 @@ import { buildDealerImportPlan, classifyDealerSite, dealerMappingKey, parseDeale
 import { dealerMasterFieldCatalog, normalizedDealerHeader, summarizeDealerFieldCoverage, type DealerFieldCoverage } from '../../../shared/dealerMasterFieldCoverage';
 import {readYellowProtectionFromXlsx} from '../../../shared/dealerMasterXlsxColors';
 import {DealerMasterStage4Panel} from './DealerMasterStage4Panel';
+import {DealerMasterFullImportPanel} from './DealerMasterFullImportPanel';
 
 type Action = ImportPlan['action'];
 type UploadResult = { roCode: string; status: 'SUCCESS' | 'FAILED'; message: string };
@@ -21,6 +22,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     && hasPermission(PERMISSIONS.OUTLETS_CREATE)
     && hasPermission(PERMISSIONS.OUTLETS_UPDATE);
   const [fileName, setFileName] = useState('');
+  const [importMode,setImportMode]=useState<'FULL'|'YELLOW_PROTECTED'>('FULL');
   const [sourceRows, setSourceRows] = useState<DealerMasterRow[]>([]);
   const [plan, setPlan] = useState<ImportPlan[]>([]);
   const [busy, setBusy] = useState(false);
@@ -241,8 +243,18 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
         <p className="text-xs text-slate-600 mt-1">First-time create + future updates. Preview is read-only. Only approved, supported fields are written.</p>
       </div>
       {DEALER_LIVE_READ_ONLY_TRIAL && <div role="status" className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs font-semibold text-indigo-900">
-        LIVE WEBSITE TEST · READ ONLY. Upload Excel and inspect all 26 columns, original yellow-cell protection and matched RO codes. No outlet, owner or agreement will be changed. Approve & Sync is disabled for this release.
+        LIVE WEBSITE TEST · READ ONLY. Full Excel preview uses every populated source cell, including yellow. No outlet, owner, rent or agreement will be changed. Confirm Import stays disabled until production backend/storage and data validations are ready.
       </div>}
+      <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2" role="group" aria-label="Dealer Master Excel import mode">
+        <button type="button" aria-pressed={importMode==='FULL'} onClick={()=>setImportMode('FULL')}
+          className={'rounded-lg px-4 py-2 text-sm font-bold '+(importMode==='FULL'?'bg-[#17365D] text-white':'bg-white border text-[#17365D]')}>
+          Full Excel Import (recommended)
+        </button>
+        <button type="button" aria-pressed={importMode==='YELLOW_PROTECTED'} onClick={()=>setImportMode('YELLOW_PROTECTED')}
+          className={'rounded-lg px-4 py-2 text-sm font-medium '+(importMode==='YELLOW_PROTECTED'?'bg-[#17365D] text-white':'bg-white border text-[#17365D]')}>
+          Previous yellow-protected audit
+        </button>
+      </div>
       <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 flex flex-wrap items-center gap-3">
         <label className="cursor-pointer inline-flex items-center gap-2 rounded-lg bg-[#17365D] text-white px-4 py-2 text-sm font-semibold">
           <UploadCloud className="w-4 h-4"/>Choose Excel File
@@ -252,7 +264,12 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
         {sourceRows.length > 0 && <button type="button" disabled={busy} onClick={refreshPreview} className="ml-auto flex items-center gap-1 border border-slate-300 px-3 py-2 rounded-lg text-xs font-semibold"><RefreshCw className="w-3.5 h-3.5"/>Refresh DB Preview</button>}
       </div>
       {error && <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs"><AlertTriangle className="inline h-4 w-4 mr-2"/>{error}</div>}
-      {fieldCoverage.length>0&&<section className="rounded-xl border border-slate-200 p-4 space-y-3 bg-slate-50" data-testid="dealer-master-26-field-audit">
+      {importMode==='FULL'&&sourceRows.length>0&&options&&<DealerMasterFullImportPanel
+        sourceRows={sourceRows} existingOutlets={options.outlets} protectedBySourceRow={protectedCells}
+        fileName={fileName} fileSha256={fileSha256}
+        onDownloadCityPin={exportCorrectionWorkbook} onUploadCityPin={loadCityPinSupplement}
+      />}
+      {importMode==='YELLOW_PROTECTED'&&fieldCoverage.length>0&&<section className="rounded-xl border border-slate-200 p-4 space-y-3 bg-slate-50" data-testid="dealer-master-26-field-audit">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-bold text-[#17365D]">26-column field coverage: RO Master + Land Ownership + Lease</h3>
           <span className={'text-xs font-bold '+(fullMasterWorkbook?'text-green-700':'text-amber-800')}>{fullMasterWorkbook?'All 26 columns recognized':'Nonstandard workbook: review headings'}</span>
@@ -276,7 +293,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
         </div>
         <p className="text-xs font-semibold text-amber-800">For this full 26-column file, the old outlet-only Sync is disabled. Use Stage 4 below after verified storage migration 0038 and an administrator-reviewed dry run. Yellow protection is extracted from original XLSX XML, not assumed from formatting-free exports.</p>
       </section>}
-      {plan.length > 0 && <>
+      {importMode==='YELLOW_PROTECTED'&&plan.length > 0 && <>
         <details open className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3" data-testid="dealer-master-mapping">
           <summary className="font-bold text-sm text-[#17365D] cursor-pointer">Resolve Excel hierarchy labels once for all outlets</summary>
           <p className="text-xs text-slate-600 my-2">Your Excel uses names such as Chandigarh DO / Chandigarh South RSA. Select the corresponding existing organizational units. These choices affect only the import preview until you explicitly approve a sync.</p>
