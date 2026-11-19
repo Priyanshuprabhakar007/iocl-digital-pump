@@ -9,7 +9,7 @@ import {
   buildDealerStage4Plan,type Stage4Module,type Stage4Status,type Stage4Snapshot,type Stage4Plan,
 } from '../../../shared/dealerMasterStage4';
 
-type RunResult={sourceRow:number;roCode:string;status:'SUCCESS'|'FAILED';actions:string[];message:string};
+type RunResult={sourceRow:number;roCode:string;status:'SUCCESS'|'PARTIAL'|'FAILED';actions:string[];message:string};
 type AuditEvent={batchId:string;action:string;createdAt:string;details:Record<string,unknown>};
 type Props={
   sourceRows:DealerMasterRow[];
@@ -152,16 +152,17 @@ export function DealerMasterStage4Panel({
           }
           outcomes.push({sourceRow:row.sourceRow,roCode:row.roCode,status:'SUCCESS',actions,message:'Imported allowed fields only'});
         }catch(e){
-          outcomes.push({sourceRow:row.sourceRow,roCode:row.roCode,status:'FAILED',actions,
+          outcomes.push({sourceRow:row.sourceRow,roCode:row.roCode,status:actions.length?'PARTIAL':'FAILED',actions,
             message:e instanceof Error?e.message:'Unknown server rejection'});
           setResults([...outcomes]);
           break; // Stop on first error; successful earlier actions remain audited.
         }
         setResults([...outcomes]);
       }
-      const failures=outcomes.filter(x=>x.status==='FAILED').length;
+      const failures=outcomes.filter(x=>x.status!=='SUCCESS').length;
       const applied=outcomes.filter(x=>x.status==='SUCCESS').length;
-      const batchState=failures?(applied?'PARTIAL':'FAILED'):'COMPLETE';
+      const partlyApplied=outcomes.some(x=>x.status==='PARTIAL');
+      const batchState=failures?(applied||partlyApplied?'PARTIAL':'FAILED'):'COMPLETE';
       const finish=await apiFetch('/api/v1/outlets/dealer-master/batches/'+encodeURIComponent(activeBatch)+'/complete',{
         method:'POST',body:JSON.stringify({
           status:batchState,appliedRows:applied,failedRows:failures,
@@ -170,7 +171,7 @@ export function DealerMasterStage4Panel({
       });
       if(!finish.success)setError('Writes completed but batch completion audit could not be confirmed. Check audit history before retrying.');
       setApproved(false);setResults(outcomes);
-      if(applied)onCompleted();
+      if(applied||partlyApplied)onCompleted();
       await loadHistory();
       await loadSnapshot();
     }catch(e){
@@ -218,6 +219,13 @@ export function DealerMasterStage4Panel({
         )}
       </div>
       <p className="text-xs text-slate-700"><strong>{safeRows.length} outlet row(s) eligible</strong> for approved writes; {sourceRows.length-safeRows.length} rows need review, are already complete, or have no pending unprotected values. Yellow cells: {protectedCount} protected.</p>
+      {plan.rows.some(r=>r.review.length>0)&&<details className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
+        <summary className="cursor-pointer font-semibold text-amber-900">Outlet-level blocks ({plan.rows.filter(r=>r.review.length).length})</summary>
+        <div className="mt-2 space-y-1">{plan.rows.filter(r=>r.review.length).slice(0,25).map(r=>
+          <p key={r.sourceRow} className="border-t border-amber-200 pt-1"><strong>{r.roCode} · Excel row {r.sourceRow}:</strong> {r.review.join('; ')}</p>
+        )}</div>
+        <p className="mt-2 text-amber-800">Export full field review for all blocked outlets.</p>
+      </details>}
       <div className="flex flex-wrap gap-2">
         <select aria-label="Filter by module" value={module} onChange={e=>setModule(e.target.value as Stage4Module|'ALL')} className="bg-white border rounded-lg p-2 text-xs">
           <option value="ALL">All modules</option>
@@ -255,8 +263,8 @@ export function DealerMasterStage4Panel({
       </div>
     </>}
     {results.length>0&&<div className="bg-white border rounded-lg p-3 space-y-2 text-xs" aria-live="polite">
-      <div className="font-bold">Batch {batchId||'unknown'} — {results.filter(r=>r.status==='SUCCESS').length} successful, {results.filter(r=>r.status==='FAILED').length} failed</div>
-      {results.filter(r=>r.status==='FAILED').map(r=><p key={r.sourceRow} className="text-rose-700">RO {r.roCode}: {r.message} ({r.actions.join(', ')||'no actions'})</p>)}
+      <div className="font-bold">Batch {batchId||'unknown'} — {results.filter(r=>r.status==='SUCCESS').length} successful, {results.filter(r=>r.status==='FAILED').length} failed, {results.filter(r=>r.status==='PARTIAL').length} partially saved</div>
+      {results.filter(r=>r.status!=='SUCCESS').map(r=><p key={r.sourceRow} className="text-rose-700">RO {r.roCode}: {r.message} ({r.actions.join(', ')||'no actions'})</p>)}
       <p>Import is not all-or-nothing. A failed operation stops the batch; previously successful changes stay audited and can be reviewed on the next upload.</p>
       <button type="button" onClick={exportResult} className="border p-2 rounded-lg">Export results and field decisions</button>
     </div>}
