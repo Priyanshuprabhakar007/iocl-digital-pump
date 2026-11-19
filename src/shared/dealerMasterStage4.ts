@@ -206,6 +206,15 @@ export function buildDealerStage4Plan(
       legalAgreementCheck=matches.length===1&&Boolean(matches[0].agreementDocumentId)
         ?'SIGNED_MATCH_REQUIRES_APPROVAL':'MISSING_OR_AMBIGUOUS';
     }
+    // A changed agreement reference/date may change the source key on re-upload.
+    // Do not create another lease candidate automatically for an outlet with an
+    // existing different candidate: require a human to verify whether it is new.
+    if(hasLeaseEvidence&&outlet&&!source&&snapshot.leaseSources.some(l=>l.outletId===outlet.id)){
+      for(const f of fields.filter(f=>f.module==='LEASE_SOURCE'&&(f.status==='CREATE'||f.status==='FILL_MISSING'))){
+        f.status='REVIEW';f.note='Another lease-source candidate exists for this RO; verify before adding a second agreement';
+      }
+      for(const key of Object.keys(leasePayload))delete leasePayload[key];
+    }
     // Do not create a lease source without a stable legal/document reference.
     if(hasLeaseEvidence && !readSource(row,'ORDER NO.') &&
       !(normalizeSourceDate(readSource(row,'FROM'))&&normalizeSourceDate(readSource(row,'TO')))){
