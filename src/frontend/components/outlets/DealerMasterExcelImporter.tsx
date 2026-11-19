@@ -33,6 +33,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
   const [protectedCells,setProtectedCells]=useState<Record<number,string[]>>({});
   const [yellowCellCount,setYellowCellCount]=useState(0);
   const [fileSha256,setFileSha256]=useState('');
+  const [supplementSha256,setSupplementSha256]=useState('');
   const originalWorkbookRef=useRef<ArrayBuffer|null>(null);
   const [mappings, setMappings] = useState<DealerImportMappings>({});
   type Environment = {outlets:RetailOutlet[];divisions:Division[];areas:SalesArea[]};
@@ -73,7 +74,8 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
       if(!originalWorkbookRef.current)throw Error('Upload the original highlighted master workbook first.');
       if(!file.name.toLowerCase().endsWith('.xlsx')||file.size>2*1024*1024)
         throw Error('Select the completed City/PIN supplement (.xlsx, under 2 MB).');
-      const workbook=XLSX.read(await file.arrayBuffer(),{type:'array'});
+      const supplementBytes=await file.arrayBuffer();
+      const workbook=XLSX.read(supplementBytes,{type:'array'});
       const rows=XLSX.utils.sheet_to_json<Record<string,unknown>>(workbook.Sheets[workbook.SheetNames[0]],{defval:'',raw:false});
       const amended=new Map<string,{city:string;pincode:string}>();
       for(const item of rows){
@@ -91,6 +93,8 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
         const matched=amended.get(r.roCode);
         return matched?{...r,city:matched.city,pincode:matched.pincode}:r;
       });
+      const digest=await crypto.subtle.digest('SHA-256',supplementBytes);
+      setSupplementSha256(Array.from(new Uint8Array(digest)).map(n=>n.toString(16).padStart(2,'0')).join(''));
       setSourceRows(combined);
       await preview(combined,mappings);
     }catch(e){setError(e instanceof Error?e.message:'City/PIN supplement could not be read');}
@@ -128,7 +132,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    setError(''); setPlan([]); setSourceRows([]); setReviewed(false); setResults([]);setMappings({});setOptions(null);environmentRef.current=null;setFieldCoverage([]);setFullMasterWorkbook(false);setProtectedFormatVerified(false);setFormatWarning('');setProtectedCells({});setYellowCellCount(0);setFileSha256('');originalWorkbookRef.current=null;
+    setError(''); setPlan([]); setSourceRows([]); setReviewed(false); setResults([]);setMappings({});setOptions(null);environmentRef.current=null;setFieldCoverage([]);setFullMasterWorkbook(false);setProtectedFormatVerified(false);setFormatWarning('');setProtectedCells({});setYellowCellCount(0);setFileSha256('');setSupplementSha256('');originalWorkbookRef.current=null;
     if (!/\.(xlsx|xls)$/i.test(file.name) || file.size > 5 * 1024 * 1024) {
       setError('Choose an Excel .xlsx or .xls workbook smaller than 5 MB.'); return;
     }
@@ -312,6 +316,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
         </details>
         {fullMasterWorkbook&&<DealerMasterStage4Panel
           sourceRows={sourceRows} protectedBySourceRow={protectedCells}
+          supplementSha256={supplementSha256}
           protectedCount={yellowCellCount} verified={protectedFormatVerified}
           fileName={fileName} fileSha256={fileSha256} outletPlans={plan}
           onCompleted={onCompleted}
