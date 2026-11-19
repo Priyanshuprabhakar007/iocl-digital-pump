@@ -1,0 +1,37 @@
+name: Activate IOCL Pending Setup 0040 on Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/activate-dealer-pending-0040.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iocl-production-pending-0040-release
+  cancel-in-progress: false
+
+jobs:
+  activate:
+    name: Recovery check + isolated pending setup table + Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+      - name: Check Pending Setup backend and protected flows
+        run: |
+          node --check scripts/dealer-master-pending/activate-production-0040.mjs
+          bun run typecheck
+          bun test --timeout 15000 tests/dealerMasterPendingRoutes.test.ts tests/dealerMasterPendingSetup.test.ts tests/dealerMasterDraftRoutes.test.ts
+      - name: Verify Cloudflare recovery + apply only 0040 + deploy Worker
+        run: bun scripts/dealer-master-pending/activate-production-0040.mjs
