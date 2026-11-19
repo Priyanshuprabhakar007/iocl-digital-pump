@@ -30,6 +30,7 @@ export type Stage4RowPlan={
   landPayload:Record<string,string>;
   leasePayload:Record<string,string>;
   leaseSourceKey?:string;
+  existingLeaseSourceId?:string;
   legalAgreementCheck:'NOT_APPLICABLE'|'SIGNED_MATCH_REQUIRES_APPROVAL'|'MISSING_OR_AMBIGUOUS';
 };
 export type Stage4Plan={
@@ -229,6 +230,7 @@ export function buildDealerStage4Plan(
       createOutletPayload:!outlet&&canCreate&&!review.length?base?.payload:undefined,
       fields,review,roDetailsPayload,landPayload,leasePayload,
       leaseSourceKey:hasLeaseEvidence?sourceKey:undefined,
+      existingLeaseSourceId:source?.id,
       legalAgreementCheck,
     };
   });
