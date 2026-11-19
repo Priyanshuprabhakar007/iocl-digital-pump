@@ -6,7 +6,7 @@ describe('Original XLSX ZIP yellow style lookup',()=>{
     const data=Buffer.from(sample,'base64');
     const headers=['CUSTCODE','EMAIL',...Array.from({length:18},(_,i)=>'OTHER'+i)];
     const result=readYellowProtectionFromXlsx(data,headers,2);
-    expect(result.verified).toBe(true);
+    expect(result.verified, 'XLSX XML yellow audit: '+(result.reason||'unknown')).toBe(true);
     expect(result.protectedCellCount).toBe(2);
     expect(result.protectedBySourceRow).toEqual({2:['CUSTCODE'],3:['EMAIL']});
   });
