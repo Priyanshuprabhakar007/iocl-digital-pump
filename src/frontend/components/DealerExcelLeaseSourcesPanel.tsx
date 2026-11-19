@@ -1,10 +1,10 @@
 import React,{useEffect,useMemo,useState} from 'react';
-import {useAuth} from '../../context/AuthContext';
-import {apiFetch} from '../../services/api';
-import type {DealerDraftContents,DealerDraftMeta,DealerDraftRow} from '../../../shared/dealerMasterDraft';
-import {dealerMasterFieldCatalog} from '../../../shared/dealerMasterFieldCoverage';
-import {PERMISSIONS} from '../../../shared/constants';
-import type {RetailOutlet} from '../../../shared/types';
+import {useAuth} from '../context/AuthContext';
+import {apiFetch} from '../services/api';
+import type {DealerDraftContents,DealerDraftMeta,DealerDraftRow} from '../../shared/dealerMasterDraft';
+import {dealerMasterFieldCatalog} from '../../shared/dealerMasterFieldCoverage';
+import {PERMISSIONS} from '../../shared/constants';
+import type {RetailOutlet} from '../../shared/types';
 
 type Props={
   outlets:RetailOutlet[];activeOutletId:string;
