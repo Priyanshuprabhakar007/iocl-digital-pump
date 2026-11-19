@@ -36,13 +36,13 @@ function rowHasWrites(row:Stage4Plan['rows'][number]){
     Object.keys(row.landPayload).length>0||Object.keys(row.leasePayload).length>0;
 }
 function rowIsSafe(row:Stage4Plan['rows'][number]){
-  return !row.review.length&&row.fields.every(f=>f.status!=='CONFLICT'&&f.status!=='REVIEW');
+  return !row.review.length; // Conflicting modules have been independently stripped from payload.
 }
 function fingerprint(plan:Stage4Plan){
   return JSON.stringify(plan.rows.map(r=>({
     sourceRow:r.sourceRow,outletId:r.outletId,create:r.createOutletPayload,
     ro:r.roDetailsPayload,land:r.landPayload,lease:r.leasePayload,
-    key:r.leaseSourceKey,review:r.review,
+    key:r.leaseSourceKey,existingLeaseSourceId:r.existingLeaseSourceId,review:r.review,
     decisions:r.fields.map(f=>[f.header,f.status,f.stored,f.source]),
   })));
 }
@@ -142,10 +142,13 @@ export function DealerMasterStage4Panel({
           }
           if(Object.keys(row.leasePayload).length){
             if(!row.leaseSourceKey)throw Error('Lease source identity is missing');
-            await write(root+'/lease-sources','POST',{
-              sourceKey:row.leaseSourceKey,...row.leasePayload,
-            });
-            actions.push('Lease source recorded for legal agreement review');
+            if(row.existingLeaseSourceId){
+              await write(root+'/lease-sources/'+encodeURIComponent(row.existingLeaseSourceId),'PATCH',row.leasePayload);
+              actions.push('Lease source missing fields filled');
+            }else{
+              await write(root+'/lease-sources','POST',{sourceKey:row.leaseSourceKey,...row.leasePayload});
+              actions.push('Lease source recorded for legal agreement review');
+            }
           }
           outcomes.push({sourceRow:row.sourceRow,roCode:row.roCode,status:'SUCCESS',actions,message:'Imported allowed fields only'});
         }catch(e){
@@ -243,7 +246,7 @@ export function DealerMasterStage4Panel({
       <div className="flex flex-col md:flex-row gap-3 md:justify-between md:items-center border-t pt-3">
         <label className="flex gap-2 items-start text-xs max-w-2xl">
           <input type="checkbox" checked={approved} disabled={busy||loading||safeRows.length===0||!permitted||!verified||!fileSha256} onChange={e=>setApproved(e.target.checked)}/>
-          I reviewed the exported field decisions. I authorize only safe, non-yellow missing-field writes to the currently selected database. Any conflicting or review-required row is skipped.
+          I reviewed the exported field decisions. I authorize only safe, non-yellow missing-field writes to the currently selected database. Only missing fields are written. Conflicting or review-required modules are skipped; blocked outlets are skipped entirely.
         </label>
         <button type="button" disabled={!approved||busy||loading||safeRows.length===0||!verified||protectedCount<1||!permitted||!fileSha256} onClick={()=>void approveAndSync()}
           className="bg-[#E66B13] disabled:opacity-40 text-white rounded-lg px-4 py-2 text-sm font-semibold whitespace-nowrap">
