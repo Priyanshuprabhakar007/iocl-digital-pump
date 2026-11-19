@@ -3,6 +3,7 @@ import { apiFetch, apiFetchBlob } from '../services/api';
 import { type LeaseTerms, formatLeaseDimension, displayMeasure, parseLeaseMeasure, parseMonthlyLeaseValue, isLeaseAgreement } from '../../shared/leaseTerms';
 import { useAuth } from '../context/AuthContext';
 import { PERMISSIONS } from '../../shared/constants';
+import { DealerLeaseSourceReviewPanel } from './DealerLeaseSourceReviewPanel';
 import { CheckCircle2, ClipboardList, Save, ShieldCheck, Upload, Download } from 'lucide-react';
 
 interface Agreement {
@@ -386,6 +387,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
               {data && !data.agreements.length && <p className="p-3 text-sm text-[#64748B]">No dedicated agreement entries yet. Existing NFR leases remain available in the section-wise report.</p>}
             </div>
           </div>
+          <DealerLeaseSourceReviewPanel outletId={outletId} revision={rev}/>
         </div>
       )}
 
