@@ -1,0 +1,28 @@
+name: Dealer Master Stage 4 isolated QA
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/shared/dealerMaster*.ts'
+      - 'src/frontend/components/outlets/DealerMaster*.tsx'
+      - 'src/worker/routes/dealerMaster*.ts'
+      - 'tests/dealerMaster*.test.ts'
+      - '.github/workflows/dealer-master-stage4.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dealer-master-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+      - name: Run isolated dealer-master contract tests (no remote DB)
+        run: bun test tests/dealerMasterImport.test.ts tests/dealerMasterFieldCoverage.test.ts tests/dealerMasterStorage.test.ts tests/dealerMasterStage4.test.ts tests/dealerMasterXlsxColors.test.ts
+      - name: Typecheck Stage 4
+        run: bun run typecheck
