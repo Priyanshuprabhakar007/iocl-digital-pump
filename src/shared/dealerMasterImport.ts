@@ -44,7 +44,9 @@ export function parseDealerMasterRows(rawRows: Record<string, unknown>[]): Deale
     salesArea: readCell(r, 'SALES AREA NAME', 'SALES AREA'),
     siteDescription: readCell(r, 'PRICE GROUP DESCRIPTION(SITE)', 'OUTLET TYPE'),
     city: readCell(r, 'CITY'), pincode: readCell(r, 'PINCODE', 'PIN CODE'),
-    sourceRow: index + 2,
+    // SheetJS __rowNum__ is the zero-based physical Excel row; protect the correct cells even if the sheet has blank rows.
+    sourceRow: typeof (r as {__rowNum__?:number}).__rowNum__ === 'number'
+      ? (r as {__rowNum__?:number}).__rowNum__! + 1 : index + 2,
     sourceDetails: Object.fromEntries(Object.entries(r).map(([k, v]) => [k, clean(v)])),
   }));
 }

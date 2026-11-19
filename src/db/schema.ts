@@ -1951,3 +1951,54 @@ export const cocoAssetInspections = sqliteTable('coco_asset_inspections', {
   index('idx_coco_inspections_outlet_date').on(table.outletId, table.inspectedOn),
   index('idx_coco_inspections_asset_date').on(table.equipmentAssetId, table.inspectedOn, table.createdAt),
 ]);
+
+/** Optional dealer-master extension. Created only by independently approved migration 0038. */
+export const dealerRoMasterDetails = sqliteTable('dealer_ro_master_details', {
+  outletId: text('outlet_id').primaryKey().notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  contactEmail: text('contact_email'),
+  contactPhone: text('contact_phone'),
+  customerGroup: text('customer_group'),
+  siteDescription: text('site_description'),
+  marketClass: text('market_class'),
+  commissionDate: text('commission_date'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  updatedBy: text('updated_by').notNull().references(() => users.id),
+});
+
+export const dealerLandMasterDetails = sqliteTable('dealer_land_master_details', {
+  outletId: text('outlet_id').primaryKey().notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  landStatus: text('land_status'),
+  landOwner: text('land_owner'),
+  sourceArea: text('source_area'),
+  sourceAreaUnit: text('source_area_unit'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  updatedBy: text('updated_by').notNull().references(() => users.id),
+});
+
+/** Source evidence—not a legal lease agreement or payment ledger record. */
+export const dealerLeaseSourceRecords = sqliteTable('dealer_lease_source_records', {
+  id: text('id').primaryKey().notNull(),
+  outletId: text('outlet_id').notNull().references(() => retailOutlets.id, { onDelete: 'cascade' }),
+  sourceKey: text('source_key').notNull(),
+  orderNumber: text('order_number'),
+  startDate: text('start_date'),
+  endDate: text('end_date'),
+  rentMonthlySource: text('rent_monthly_source'),
+  gstChargesSource: text('gst_charges_source'),
+  durationYearsSource: text('duration_years_source'),
+  durationMonthsSource: text('duration_months_source'),
+  escalationSource: text('escalation_source'),
+  escalationIntervalYearsSource: text('escalation_interval_years_source'),
+  remarksSource: text('remarks_source'),
+  linkedAgreementId: text('linked_agreement_id').references(() => cocoAgreementDetails.id, { onDelete: 'set null' }),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  updatedBy: text('updated_by').notNull().references(() => users.id),
+}, (table) => [
+  uniqueIndex('uq_dealer_lease_source_outlet_key').on(table.outletId,table.sourceKey),
+  index('idx_dealer_lease_sources_outlet').on(table.outletId),
+  uniqueIndex('uq_dealer_lease_sources_one_per_agreement').on(table.linkedAgreementId),
+]);

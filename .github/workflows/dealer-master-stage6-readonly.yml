@@ -1,0 +1,62 @@
+name: Dealer Master Stage 6 hosted staging READ ONLY
+
+on:
+  pull_request:
+    branches:
+      - feature/dealer-master-stage5-disposable-d1-gates
+    paths:
+      - '.github/workflows/dealer-master-stage6-readonly.yml'
+      - 'src/shared/dealerMasterStage6Readiness.ts'
+      - 'scripts/dealer-master-stage6/**'
+      - 'tests/dealerMasterStage6Readiness.test.ts'
+  workflow_dispatch:
+    inputs:
+      acknowledge:
+        description: 'I approve READ-ONLY checks of the isolated STAGING D1 (no production)'
+        type: choice
+        required: true
+        options:
+          - do-not-run
+          - confirm-staging-readonly
+        default: do-not-run
+
+permissions:
+  contents: read
+
+jobs:
+  static-safety-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun test tests/dealerMasterStage6Readiness.test.ts
+      - run: bun run typecheck
+
+  hosted-staging-readonly:
+    # NEVER runs on PR code automatically or without manual acknowledgment.
+    if: github.event_name == 'workflow_dispatch' && inputs.acknowledge == 'confirm-staging-readonly'
+    environment: iocl-phase1-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      STAGE6_APPROVED_READONLY: confirm-staging-readonly
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_STAGING_D1_ID: ${{ vars.CLOUDFLARE_STAGING_D1_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Verify identity and query staging schema only
+        run: bun scripts/dealer-master-stage6/hosted-readonly.ts
+      - name: Publish sanitized staging evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage6-hosted-staging-readonly-evidence
+          path: .stage6-readonly/evidence.json
+          retention-days: 7
+          if-no-files-found: ignore

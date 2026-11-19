@@ -1,0 +1,52 @@
+name: Dealer Master Stage 5 — disposable local D1 only
+
+on:
+  pull_request:
+    branches:
+      - feature/dealer-master-stage4-controlled-sync
+    paths:
+      - '.github/workflows/dealer-master-stage5-local-d1.yml'
+      - 'scripts/dealer-master-stage5/**'
+      - 'tests/dealerMasterStage5ReleaseSafety.test.ts'
+      - 'docs/dealer-master-stage5-release-gate.md'
+      - 'docs/dealer-master-migration-0038/**'
+      - 'docs/lease-migration-0037/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-local-d1:
+    name: Baseline + 0036 + 0037 + 0038 (never remote)
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      CLOUDFLARE_SEND_METRICS: 'false'
+      CI: 'true'
+    steps:
+      - name: Check out exactly this PR
+        uses: actions/checkout@v4
+      - name: Set up pinned Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+      - name: Verify local-only guard and immutable baseline
+        run: bun test --timeout 15000 tests/dealerMasterStage5ReleaseSafety.test.ts
+      - name: Apply 0001–0035, 0036, 0037 and 0038 to disposable Wrangler D1
+        shell: bash
+        run: bash scripts/dealer-master-stage5/rehearse-local.sh
+      - name: Run Stage 4 authenticated API integration on separate disposable test DB
+        run: bun test --timeout 15000 tests/dealerMasterStage4Routes.test.ts tests/dealerMasterStorage.test.ts tests/dealerMasterStage4.test.ts tests/dealerMasterXlsxColors.test.ts
+      - name: Save sanitized local proof only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage5-disposable-local-d1-evidence
+          path: |
+            .stage5-local/objects.json
+            .stage5-local/foreign-keys.json
+            .stage5-local/migrations.json
+            .stage5-local/evidence.json
+          if-no-files-found: ignore
+          retention-days: 7
