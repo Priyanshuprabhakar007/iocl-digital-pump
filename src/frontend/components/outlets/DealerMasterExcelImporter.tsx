@@ -145,8 +145,11 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
       const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {defval:'', raw:false});
       const headers = (XLSX.utils.sheet_to_json<unknown[]>(sheet, {header:1,defval:'',raw:false})[0] || []).map(String);
       const detectedFullMaster=dealerMasterFieldCatalog.every(f=>headers.some(h=>normalizedDealerHeader(h)===normalizedDealerHeader(f.header)));
+      const actualLastRow=sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref']).e.r+1 : raw.length+1;
+      // A blank Excel row must not shift subsequent yellow-cell protection.
+      const scannedRowCount=Math.max(raw.length,actualLastRow-1);
       const protections=file.name.toLowerCase().endsWith('.xlsx')
-        ? readYellowProtectionFromXlsx(data,headers,raw.length)
+        ? readYellowProtectionFromXlsx(data,headers,scannedRowCount)
         : {verified:false,protectedBySourceRow:{},protectedCellCount:0,
             reason:'Full Dealer Master import requires .xlsx with original formatting.'};
       setFullMasterWorkbook(detectedFullMaster);
