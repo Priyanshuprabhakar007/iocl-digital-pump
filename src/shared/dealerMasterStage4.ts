@@ -196,7 +196,7 @@ export function buildDealerStage4Plan(
       sourceRow:row.sourceRow,roCode:row.roCode,outletId:outlet?.id,
       createOutletPayload:!outlet&&canCreate&&!review.length?base?.payload:undefined,
       fields,review,roDetailsPayload,landPayload,leasePayload,
-      leasePayload:leasePayload,leaseSourceKey:hasLeaseEvidence?sourceKey:undefined,
+      leaseSourceKey:hasLeaseEvidence?sourceKey:undefined,
       legalAgreementCheck,
     };
   });
