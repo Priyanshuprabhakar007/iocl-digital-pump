@@ -79,6 +79,13 @@ describe('Dealer Master Stage4 source→module dry-run',()=>{
     expect(plan.rows[0].createOutletPayload).toBeUndefined();
     expect(plan.blockedRows).toBe(1);
   });
+  it('flags changed source identity as review instead of duplicating an existing lease candidate',()=>{
+    const prior={id:'prior',outletId:'ro-79',sourceKey:'IOCL_DEALER:369460:ORDER:OLD',linkedAgreementId:null};
+    const plan=buildDealerStage4Plan([row],{},[normal],{...snapshot,leaseSources:[prior]});
+    expect(plan.rows[0].leasePayload).toEqual({});
+    expect(plan.rows[0].fields.some(f=>f.module==='LEASE_SOURCE'&&f.status==='REVIEW')).toBe(true);
+    expect(plan.rows[0].roDetailsPayload.contactPhone).toBe('9876543210');
+  });
   it('returns a deterministic source key on repeated files',()=>{
     expect(getDealerSourceKey(row)).toBe(getDealerSourceKey({...row,sourceRow:29}));
     expect(getDealerSourceKey(row).startsWith('IOCL_DEALER:369460')).toBe(true);
