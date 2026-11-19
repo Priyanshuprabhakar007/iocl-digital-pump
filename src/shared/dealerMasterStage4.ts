@@ -185,7 +185,8 @@ export function buildDealerStage4Plan(
       if(outlet&&item?.module==='OUTLET'&&item?.status==='FILL_MISSING'){
         item.status='REVIEW';item.note='Core outlet changes need separate admin review';
       }
-      if(outlet&&item?.module==='OUTLET'&&item?.status==='CONFLICT')review.push('Outlet identity differs in '+header);
+      // Existing outlet core differences are displayed as conflicts but never overwritten;
+      // they do not prevent filling independent, missing RO/Land metadata.
     }
     for(const [header,field] of roExtended)add('RO_DETAILS',header,field,extensionRo?.[field]);
     for(const [header,field] of land)add('LAND',header,field,extensionLand?.[field]);
@@ -203,6 +204,23 @@ export function buildDealerStage4Plan(
       ));
       legalAgreementCheck=matches.length===1&&Boolean(matches[0].agreementDocumentId)
         ?'SIGNED_MATCH_REQUIRES_APPROVAL':'MISSING_OR_AMBIGUOUS';
+    }
+    // Do not create a lease source without a stable legal/document reference.
+    if(hasLeaseEvidence && !readSource(row,'ORDER NO.') &&
+      !(normalizeSourceDate(readSource(row,'FROM'))&&normalizeSourceDate(readSource(row,'TO')))){
+      for(const f of fields.filter(f=>f.module==='LEASE_SOURCE'&&(f.status==='CREATE'||f.status==='FILL_MISSING'))){
+        f.status='REVIEW';f.note='Lease order number or complete verified start/end dates needed';
+      }
+      for(const key of Object.keys(leasePayload))delete leasePayload[key];
+    }
+    // Independent modules may proceed even when a different module has conflicting data.
+    // Block the *affected module*, not the whole outlet, and never blindly overwrite.
+    for(const [module,payload] of [
+      ['RO_DETAILS',roDetailsPayload],['LAND',landPayload],['LEASE_SOURCE',leasePayload],
+    ] as const){
+      if(fields.some(f=>f.module===module&&(f.status==='CONFLICT'||f.status==='REVIEW'))){
+        for(const key of Object.keys(payload))delete payload[key];
+      }
     }
     if(source?.linkedAgreementId&&legalAgreementCheck==='MISSING_OR_AMBIGUOUS')
       review.push('Existing source/lease link cannot be verified against signed agreements');
