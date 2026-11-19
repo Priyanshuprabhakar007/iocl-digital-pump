@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../../shared/constants';
 import type { Division, RetailOutlet, SalesArea } from '../../../shared/types';
 import { buildDealerImportPlan, classifyDealerSite, dealerMappingKey, parseDealerMasterRows, type DealerImportMappings, type DealerMasterRow, type ImportPlan } from '../../../shared/dealerMasterImport';
+import { dealerMasterFieldCatalog, normalizedDealerHeader, readYellowCellProtection, summarizeDealerFieldCoverage, type DealerFieldCoverage } from '../../../shared/dealerMasterFieldCoverage';
 
 type Action = ImportPlan['action'];
 type UploadResult = { roCode: string; status: 'SUCCESS' | 'FAILED'; message: string };
@@ -23,6 +24,10 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
   const [reviewed, setReviewed] = useState(false);
   const [results, setResults] = useState<UploadResult[]>([]);
   const [showOnlyProblems, setShowOnlyProblems] = useState(false);
+  const [fieldCoverage,setFieldCoverage]=useState<DealerFieldCoverage[]>([]);
+  const [fullMasterWorkbook,setFullMasterWorkbook]=useState(false);
+  const [protectedFormatVerified,setProtectedFormatVerified]=useState(false);
+  const [formatWarning,setFormatWarning]=useState('');
   const [mappings, setMappings] = useState<DealerImportMappings>({});
   type Environment = {outlets:RetailOutlet[];divisions:Division[];areas:SalesArea[]};
   const environmentRef = useRef<Environment|null>(null);
@@ -85,17 +90,24 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    setError(''); setPlan([]); setSourceRows([]); setReviewed(false); setResults([]);setMappings({});setOptions(null);environmentRef.current=null;
+    setError(''); setPlan([]); setSourceRows([]); setReviewed(false); setResults([]);setMappings({});setOptions(null);environmentRef.current=null;setFieldCoverage([]);setFullMasterWorkbook(false);setProtectedFormatVerified(false);setFormatWarning('');
     if (!/\.(xlsx|xls)$/i.test(file.name) || file.size > 5 * 1024 * 1024) {
       setError('Choose an Excel .xlsx or .xls workbook smaller than 5 MB.'); return;
     }
     setBusy(true);
     try {
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, {type:'array', cellDates:true});
+      const workbook = XLSX.read(data, {type:'array', cellDates:true, cellStyles:true, bookStyles:true});
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       if (!sheet) throw Error('Workbook has no worksheet');
       const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {defval:'', raw:false});
+      const headers = (XLSX.utils.sheet_to_json<unknown[]>(sheet, {header:1,defval:'',raw:false})[0] || []).map(String);
+      const detectedFullMaster=dealerMasterFieldCatalog.every(f=>headers.some(h=>normalizedDealerHeader(h)===normalizedDealerHeader(f.header)));
+      const protections=readYellowCellProtection(workbook,sheet,headers,raw.length);
+      setFullMasterWorkbook(detectedFullMaster);
+      setProtectedFormatVerified(protections.verified);
+      setFormatWarning(protections.reason||'');
+      setFieldCoverage(summarizeDealerFieldCoverage(raw,protections.protectedBySourceRow));
       if (raw.length === 0 || raw.length > 1000) throw Error('Workbook must have 1 to 1000 outlet rows.');
       const rows = parseDealerMasterRows(raw);
       if (!rows.some(r => r.roCode && r.name)) throw Error('CUSTCODE and CUSTOMER NAME columns could not be detected. Please use the dealer master format.');
@@ -117,7 +129,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
   }
 
   async function apply() {
-    if (busy || !reviewed || !authorized || !plan.length) return;
+    if (busy || !reviewed || !authorized || !plan.length || fullMasterWorkbook || !protectedFormatVerified) return;
     setBusy(true);setError('');setResults([]);
     try {
       // Re-read DB and require a fresh identical preview to avoid importing against stale data.
@@ -181,6 +193,30 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
         {sourceRows.length > 0 && <button type="button" disabled={busy} onClick={refreshPreview} className="ml-auto flex items-center gap-1 border border-slate-300 px-3 py-2 rounded-lg text-xs font-semibold"><RefreshCw className="w-3.5 h-3.5"/>Refresh DB Preview</button>}
       </div>
       {error && <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs"><AlertTriangle className="inline h-4 w-4 mr-2"/>{error}</div>}
+      {fieldCoverage.length>0&&<section className="rounded-xl border border-slate-200 p-4 space-y-3 bg-slate-50" data-testid="dealer-master-26-field-audit">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-bold text-[#17365D]">26-column field coverage: RO Master + Land Ownership + Lease</h3>
+          <span className={'text-xs font-bold '+(fullMasterWorkbook?'text-green-700':'text-amber-800')}>{fullMasterWorkbook?'All 26 columns recognized':'Nonstandard workbook: review headings'}</span>
+        </div>
+        <p className="text-xs text-slate-600">This audit is read-only. Yellow cells are marked protected; non-yellow populated cells are candidates for import only after validating the correct destination and current database record. Blank source cells stay unknown.</p>
+        {!protectedFormatVerified&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">{formatWarning||'Cell colour verification unavailable.'} All imports are blocked until the original formatting can be verified.</p>}
+        <div className="overflow-auto max-h-[380px] rounded-lg border border-slate-200">
+          <table className="min-w-[850px] w-full text-xs text-left bg-white">
+            <thead className="sticky top-0 bg-slate-200"><tr>
+              <th className="p-2">Excel field</th><th className="p-2">Destination</th><th className="p-2">Protected yellow</th><th className="p-2">Remaining values</th><th className="p-2">Blank</th><th className="p-2">Storage readiness</th>
+            </tr></thead>
+            <tbody>{fieldCoverage.map(f=><tr key={f.header} className="border-t border-slate-100">
+              <td className="p-2 font-semibold">{f.header}</td>
+              <td className="p-2">{f.destination} · {f.target}</td>
+              <td className="p-2 bg-yellow-50 font-semibold">{protectedFormatVerified?f.protectedCount:'—'}</td>
+              <td className="p-2">{f.remainingCount}</td>
+              <td className="p-2 text-slate-500">{f.blankCount}</td>
+              <td className="p-2 text-slate-600">{f.readiness==='EXISTING_FIELD'?'Existing field':f.readiness==='MIGRATION_0037_REQUIRED'?'Schema/units review required':'New structured field required'}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        <p className="text-xs font-semibold text-amber-800">Full 26-column mode is REVIEW ONLY until the separate ownership and lease storage, per-field no-overwrite guards and agreement deduplication are implemented and verified. The normal outlet-only sync button remains disabled for this workbook.</p>
+      </section>}
       {plan.length > 0 && <>
         <details open className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3" data-testid="dealer-master-mapping">
           <summary className="font-bold text-sm text-[#17365D] cursor-pointer">Resolve Excel hierarchy labels once for all outlets</summary>
@@ -242,8 +278,8 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
           </table>
         </div>
         <div className="flex flex-col md:flex-row justify-between gap-3 items-start md:items-center">
-          <label className="text-xs text-slate-700 flex items-start gap-2 max-w-xl"><input type="checkbox" checked={reviewed} disabled={busy || totals.create+totals.update===0} onChange={e=>setReviewed(e.target.checked)}/>I reviewed the change list and authorize the proposed outlet creates/updates. Skipped rows remain unchanged.</label>
-          <button type="button" disabled={busy||!reviewed||totals.create+totals.update===0} onClick={apply} className="px-4 py-2 rounded-lg bg-orange-600 disabled:opacity-40 text-white text-sm font-bold">{busy?'Processing…': 'Approve & Sync '+(totals.create+totals.update)+' Outlet(s)'}</button>
+          <label className="text-xs text-slate-700 flex items-start gap-2 max-w-xl"><input type="checkbox" checked={reviewed} disabled={busy || fullMasterWorkbook || !protectedFormatVerified || totals.create+totals.update===0} onChange={e=>setReviewed(e.target.checked)}/>I reviewed the change list and authorize the proposed outlet creates/updates. Skipped rows remain unchanged.</label>
+          <button type="button" disabled={busy||!reviewed||fullMasterWorkbook||!protectedFormatVerified||totals.create+totals.update===0} onClick={apply} className="px-4 py-2 rounded-lg bg-orange-600 disabled:opacity-40 text-white text-sm font-bold">{busy?'Processing…': 'Approve & Sync '+(totals.create+totals.update)+' Outlet(s)'}</button>
         </div>
       </>}
       {results.length>0 && <div className="p-3 border rounded-xl text-xs space-y-2" aria-live="polite"><div className="font-semibold">Last attempt: {results.filter(r=>r.status==='SUCCESS').length} successful, {results.filter(r=>r.status==='FAILED').length} failed.</div>
