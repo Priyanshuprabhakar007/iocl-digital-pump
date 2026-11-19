@@ -66,6 +66,8 @@ dealerMasterStage4Routes.get('/dealer-master/batch-snapshot',
 const startSchema=z.object({
   fileName:z.string().trim().min(1).max(255),
   sha256:z.string().regex(/^[a-f0-9]{64}$/),
+  supplementSha256:z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  planSha256:z.string().regex(/^[a-f0-9]{64}$/).optional(),
   totalRows:z.number().int().min(1).max(1000),
   protectedCells:z.number().int().min(1).max(100000),
   eligibleRows:z.number().int().min(0).max(1000),
