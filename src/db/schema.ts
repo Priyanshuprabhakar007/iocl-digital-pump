@@ -2002,3 +2002,21 @@ export const dealerLeaseSourceRecords = sqliteTable('dealer_lease_source_records
   index('idx_dealer_lease_sources_outlet').on(table.outletId),
   uniqueIndex('uq_dealer_lease_sources_one_per_agreement').on(table.linkedAgreementId),
 ]);
+
+/** Proposed 0039: immutable 26-column source drafts, independent of 0036/0037/0038. */
+export const dealerMasterDraftUploads=sqliteTable('dealer_master_draft_uploads',{
+  id:text('id').primaryKey().notNull(),
+  createdBy:text('created_by').notNull().references(()=>users.id),
+  sourceFileName:text('source_file_name').notNull(),
+  sourceFileSha256:text('source_file_sha256').notNull(),
+  sourceSheetName:text('source_sheet_name').notNull(),
+  contentSha256:text('content_sha256').notNull(),
+  sourceRowCount:integer('source_row_count').notNull(),
+  businessFieldCount:integer('business_field_count').notNull(),
+  status:text('status',{enum:['DRAFT']}).notNull().default('DRAFT'),
+  sourceDataJson:text('source_data_json').notNull(),
+  createdAt:text('created_at').notNull(),
+},table=>[
+  uniqueIndex('uq_dealer_draft_creator_content').on(table.createdBy,table.contentSha256),
+  index('idx_dealer_drafts_creator_created').on(table.createdBy,table.createdAt),
+]);

@@ -10,6 +10,8 @@ import { dealerMasterFieldCatalog, normalizedDealerHeader, summarizeDealerFieldC
 import {readYellowProtectionFromXlsx} from '../../../shared/dealerMasterXlsxColors';
 import {DealerMasterStage4Panel} from './DealerMasterStage4Panel';
 import {DealerMasterFullImportPanel} from './DealerMasterFullImportPanel';
+import {DealerMasterDraftPanel} from './DealerMasterDraftPanel';
+import type {DealerDraftContents} from '../../../shared/dealerMasterDraft';
 import {selectDealerMasterDataSheet} from '../../../shared/dealerMasterSheetSelection';
 
 type Action = ImportPlan['action'];
@@ -77,7 +79,7 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     if(!file)return;
     setError('');
     try {
-      if(!originalWorkbookRef.current)throw Error('Upload the original highlighted master workbook first.');
+      if(!originalWorkbookRef.current&&!(importMode==='FULL'&&sourceRows.length))throw Error('Upload the original master Excel or resume a Full Import draft first.');
       if(!file.name.toLowerCase().endsWith('.xlsx')||file.size>2*1024*1024)
         throw Error('Select the completed City/PIN supplement (.xlsx, under 2 MB).');
       const supplementBytes=await file.arrayBuffer();
@@ -132,6 +134,34 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
     const next = buildDealerImportPlan(rows, env.outlets, env.divisions, env.areas,currentMappings);
     setPlan(next); setReviewed(false); setResults([]);
     return next;
+  }
+
+  async function resumeDealerDraft(draft:{
+    fileName:string;fileSha256:string;sourceSheetName:string;contents:DealerDraftContents;
+  }){
+    if(busy)return;
+    setBusy(true);setError('');setPlan([]);setOptions(null);setReviewed(false);setResults([]);
+    try{
+      const restored=draft.contents.rows.map(item=>{
+        const parsed=parseDealerMasterRows([item.fields])[0];
+        if(!parsed||parsed.roCode!==item.roCode)throw Error('Saved draft RO Code did not pass validation.');
+        return {...parsed,sourceRow:item.sourceRow,city:item.city,pincode:item.pincode};
+      });
+      const yellow=Object.fromEntries(draft.contents.rows.map(row=>[row.sourceRow,row.yellowHeaders]));
+      setSourceRows(restored);
+      setProtectedCells(yellow);
+      setYellowCellCount(draft.contents.rows.reduce((a,r)=>a+r.yellowHeaders.length,0));
+      setProtectedFormatVerified(false); // No original XLSX styling is reconstructed from a JSON draft.
+      setFormatWarning('Resume source snapshot has no original Excel style XML. Full mode includes all columns.');
+      setFieldCoverage([]);setFullMasterWorkbook(true);setSupplementSha256('');
+      setFileName(draft.fileName);setFileSha256(draft.fileSha256);
+      setSelectedDataSheet(draft.sourceSheetName);
+      originalWorkbookRef.current=null;
+      setImportMode('FULL');
+      setMappings({});
+      await preview(restored,{});
+    }catch(e){setError(e instanceof Error?e.message:'Unable to resume draft');}
+    finally{setBusy(false);}
   }
 
   async function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -247,7 +277,8 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
         <p className="text-xs text-slate-600 mt-1">First-time create + future updates. Preview is read-only. Only approved, supported fields are written.</p>
       </div>
       {DEALER_LIVE_READ_ONLY_TRIAL && <div role="status" className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs font-semibold text-indigo-900">
-        LIVE WEBSITE TEST · READ ONLY. Full Excel preview uses every populated source cell, including yellow. No outlet, owner, rent or agreement will be changed. Confirm Import stays disabled until production backend/storage and data validations are ready.
+        OPERATIONAL DATA PROTECTED. Full Excel includes every populated source cell, including yellow.
+        Draft Save, once backend storage is ready, writes ONLY an independent source draft. Live outlets, owners, rent and legal agreements are never changed here. Final Sync stays disabled.
       </div>}
       <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2" role="group" aria-label="Dealer Master Excel import mode">
         <button type="button" aria-pressed={importMode==='FULL'} onClick={()=>setImportMode('FULL')}
@@ -269,6 +300,11 @@ export function DealerMasterExcelImporter({ onCompleted }: { onCompleted: () => 
         {sourceRows.length > 0 && <button type="button" disabled={busy} onClick={refreshPreview} className="ml-auto flex items-center gap-1 border border-slate-300 px-3 py-2 rounded-lg text-xs font-semibold"><RefreshCw className="w-3.5 h-3.5"/>Refresh DB Preview</button>}
       </div>
       {error && <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs"><AlertTriangle className="inline h-4 w-4 mr-2"/>{error}</div>}
+      {importMode==='FULL'&&<DealerMasterDraftPanel
+        sourceRows={sourceRows} fileName={fileName} fileSha256={fileSha256}
+        sourceSheetName={selectedDataSheet} yellowByRow={protectedCells}
+        adminAuthorized={authorized} onResumeDraft={resumeDealerDraft}
+      />}
       {importMode==='FULL'&&sourceRows.length>0&&options&&<DealerMasterFullImportPanel
         sourceRows={sourceRows} existingOutlets={options.outlets} protectedBySourceRow={protectedCells}
         fileName={fileName} fileSha256={fileSha256}

@@ -1,0 +1,31 @@
+name: Dealer Master Drafts (disposable D1)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/shared/dealerMasterDraft.ts'
+      - 'src/worker/routes/dealerMasterDraftRoutes.ts'
+      - 'src/frontend/components/outlets/DealerMasterDraftPanel.tsx'
+      - 'src/db/schema.ts'
+      - 'docs/dealer-master-draft-0039/**'
+      - 'tests/dealerMasterDraftRoutes.test.ts'
+      - '.github/workflows/dealer-master-drafts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-d1-draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install dependency lockfile
+        run: bun install --frozen-lockfile
+      - name: TypeScript check
+        run: bun run typecheck
+      - name: D1 draft save/resume tests (isolated local DB only)
+        run: bun test --timeout 15000 tests/dealerMasterDraftRoutes.test.ts
