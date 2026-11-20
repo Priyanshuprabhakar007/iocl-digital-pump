@@ -71,6 +71,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
 }) => {
   const [templates, setTemplates] = useState<GlobalTankCalibrationTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('gtct-std-20kl');
+  const [quickPreviewCode, setQuickPreviewCode] = useState<string | null>(null);
   const [selectedTemplateDetail, setSelectedTemplateDetail] =
     useState<GlobalTankCalibrationTemplate | null>(null);
   const [eligibleTanks, setEligibleTanks] = useState<EligibleCocoTankItem[]>([]);
@@ -1050,6 +1051,28 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
   };
 
   const templatePoints = activeTemplate?.points || [];
+
+  // Read-only quick preview of draft 10/15 KL calibration curves.
+  // This never changes engineering status or activates physical tank charts.
+  const startDraftReferencePreview = (code: 'EXCEL_10KL_REFERENCE' | 'EXCEL_15KL_REFERENCE') => {
+    const template = templates.find(item => item.code === code);
+    if (!template || template.pointsCount < 2) {
+      showError('Reference chart is not available with interpolation points.');
+      return;
+    }
+    setInterpResult(null);
+    setInterpError(null);
+    setQuickPreviewCode(code);
+    setSelectedTemplateId(template.id);
+  };
+
+  useEffect(() => {
+    if (!quickPreviewCode || activeTemplate?.code !== quickPreviewCode ||
+        templatePoints.length < 2) return;
+    document.getElementById('draft-calibration-readonly-preview')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setQuickPreviewCode(null);
+  }, [quickPreviewCode, activeTemplate?.code, templatePoints.length]);
   const excelReferenceTemplates = templates.filter(t =>
     ['EXCEL_10KL_REFERENCE', 'EXCEL_15KL_REFERENCE', 'EXCEL_20KL_REFERENCE'].includes(t.code)
   );
@@ -1078,6 +1101,19 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {isGlobalAdmin && (['EXCEL_10KL_REFERENCE','EXCEL_15KL_REFERENCE'] as const).map(code => (
+              <button
+                key={code}
+                type="button"
+                onClick={() => startDraftReferencePreview(code)}
+                disabled={!templates.some(t => t.code === code && t.pointsCount >= 2)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-cyan-500/30 bg-slate-800 hover:bg-cyan-950 text-cyan-300 text-xs font-mono font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                data-testid={code === 'EXCEL_10KL_REFERENCE' ? 'readonly-test-10kl-btn' : 'readonly-test-15kl-btn'}
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                Test {code === 'EXCEL_10KL_REFERENCE' ? '10 KL' : '15 KL'} (No Approval)
+              </button>
+            ))}
             <button
               type="button"
               onClick={() => {
@@ -3190,10 +3226,17 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
 
             {templatePoints.length >= 2 && (
               <form
+                id="draft-calibration-readonly-preview"
                 onSubmit={handleInterpolateTemplate}
                 className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono"
                 data-testid="template-interpolation-calculator"
               >
+                {['EXCEL_10KL_REFERENCE', 'EXCEL_15KL_REFERENCE'].includes(activeTemplate.code) && (
+                  <p className="basis-full text-cyan-300 text-[11px] font-semibold">
+                    READ-ONLY TEST: This draft calibration chart can be interpolated without approval.
+                    It is not certified for live tank stock, shift close or financial reconciliation.
+                  </p>
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <Calculator className="w-4 h-4 text-orange-400" />
                   <span className="text-slate-300 font-bold">
