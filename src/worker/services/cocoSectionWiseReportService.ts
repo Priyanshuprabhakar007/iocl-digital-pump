@@ -170,8 +170,10 @@ export function buildSectionWiseSections(args: {
       : start && start > asOf ? 'Upcoming' : 'Valid';
   const masterLine = (a: SectionWiseAgreement) => ({
     label: a.agreementName,
+    // Recorded means saved in the agreement register; it is not an
+    // assertion that a supporting legal document was uploaded.
     status: a.remarks?.startsWith('EXCEL_SOURCE_UNVERIFIED')
-      ?'Excel Source — Unverified'
+      ?'Recorded'
       :agreementStatus(a.startDate, a.endDate),
     from: date(a.startDate), to: date(a.endDate),
     with: a.counterpartyName || NR, duration: years(a.startDate, a.endDate),
@@ -181,7 +183,9 @@ export function buildSectionWiseSections(args: {
     dimensions:a.agreementType==='LAND_LEASE'?formatLeaseDimension(a.leaseTerms):undefined,
     monthlyLeaseValue:a.agreementType==='LAND_LEASE'&&a.leaseTerms?.monthlyLeaseValuePaise!=null?formatIndianCurrencyFromPaise(a.leaseTerms.monthlyLeaseValuePaise,{asciiPrefix:true}):undefined,
     contract:a.contractName||NR,
-    remarks: printable([a.agreementNumber ? 'Agreement: ' + a.agreementNumber : '', a.remarks || '']
+    remarks: printable([a.agreementNumber ? 'Agreement: ' + a.agreementNumber : '',
+      // Keep immutable source classification internally, not as a PDF field.
+      a.remarks?.replace(/^EXCEL_SOURCE_UNVERIFIED\s*\|\s*/, '') || '']
       .filter(Boolean).join(' | ') || EMPTY),
   });
   const manuals = (type: string) => agreementMasters.filter((a) => a.agreementType === type);
@@ -373,7 +377,7 @@ export function buildSectionWiseSections(args: {
         ...buildDealerExcelSourceTables(args.dealerExcelSource, args.dealerExcelSource?.roCode||''),
       ],
       noteTitle: 'Source / Missing Data',
-      note: 'NFR dates, vendor and monthly rent are sourced from NFR Management. Land lease terms and linked NFR dimensions come from Agreement Details. Contract names identify saved outlet evidence. Excel source tables, if shown, are unverified raw values; they do not prove a legal agreement, property title, GST liability or payment. Canonical missing agreement fields remain Not Recorded.',
+      note: 'NFR dates and monthly rent come from NFR Management. Saved agreement entries and supporting document names come from the Agreement Register and Document Vault. Imported Excel details, when available, are shown separately. Missing fields are left unchanged.',
     },
     {
       title: 'Bills, Taxes & Charges',

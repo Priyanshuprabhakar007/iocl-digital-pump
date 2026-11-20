@@ -23,7 +23,7 @@ export function getExcelLandLeaseRegisterPreview(
   return {
     roCode:row.roCode,
     label:'Land Lease — Excel Source',
-    status:'Excel Source · Not Registered / Not Verified',
+    status:'Excel Import',
     owner:raw('LAND OWNER'),
     landStatus:raw('CUST LAND DESC (LAND STATUS)'),
     orderReference:raw('ORDER NO.'),

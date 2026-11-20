@@ -356,7 +356,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
               {sourcePrefillActive&&sourceSuggestions&&<div className="text-xs border border-amber-200 bg-amber-50 rounded-lg p-3 text-amber-900 space-y-1">
                 <strong>Excel source suggestions for RO {dealerSourceRow?.roCode} — NOT a signed agreement</strong>
                 <p>Land owner is not assumed to be a legal counterparty. Ambiguous dates and unsupported units are not converted.
-                  These values are unverified source data. You can save them with no attachment and add evidence later.</p>
+                  These details were imported from Excel. Review or edit any field before saving; evidence can be attached later.</p>
                 <pre className="whitespace-pre-wrap break-words max-h-32 overflow-y-auto">{sourceSuggestions.reviewNotes}</pre>
               </div>}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -434,12 +434,12 @@ export const CocoDocumentationMastersPanel: React.FC<{
                 <p className="text-xs text-slate-600">Evidence is optional. Save the available fields now, or upload a PDF/JPG/PNG (up to 5 MB) whenever available. Files are kept in the outlet-scoped Document Vault and can be linked, downloaded or replaced later. Uploading is not a verification or approval step.</p>
               </section>
               <Field label="Remarks"><textarea name="remarks" className={inputStyle} rows={2}
-                defaultValue={agreementEdit?.remarks||(sourcePrefillActive
-                  ?'EXCEL_SOURCE_UNVERIFIED | Imported from saved Dealer Master. Supporting evidence may be attached later. '+(sourceSuggestions?.reviewNotes||'').slice(0,1500)
+                defaultValue={agreementEdit?.remarks?.replace(/^EXCEL_SOURCE_UNVERIFIED\s*\|\s*/, '')||(sourcePrefillActive
+                  ?'Imported from saved Dealer Master. Supporting evidence may be attached later. '+(sourceSuggestions?.reviewNotes||'').slice(0,1500)
                   :'')}/></Field>
               {sourcePrefillActive&&<p role="status" className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
-                Saving will create a source-based agreement record marked <strong>Excel Source — Unverified</strong>.
-                A signed contract is NOT required; unsupported units and blank source fields stay unverified.
+                This will save the imported Excel details as an agreement entry.
+                Supporting documents are optional, and any missing values can be entered later.
               </p>}
               <button type="submit" className={buttonStyle}
                 disabled={saving||uploadingContract}><Save className="w-4 h-4"/>
@@ -451,7 +451,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
           <div ref={registeredAgreementsRef} tabIndex={-1} className={col+' scroll-mt-24'}
             data-testid="registered-agreements-target" aria-label="Registered agreements for the selected outlet">
             <h4 className="font-bold text-[#17365D]">Registered Agreements{selectedRoCode?' — RO '+selectedRoCode:''}</h4>
-            <p className="text-xs text-slate-500">This table shows saved agreement records and, where available, an amber Excel source row. Imported values are NOT verified or signed. Document uploads are optional evidence kept for later retrieval.</p>
+            <p className="text-xs text-slate-500">Saved agreement entries and available Excel-imported details for this outlet. Supporting documents can be attached and downloaded whenever needed.</p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-[#F1F5F9] text-[#17365D]">
@@ -461,15 +461,15 @@ export const CocoDocumentationMastersPanel: React.FC<{
                     <td className="p-2">Land Lease<br/><span className="font-bold text-amber-800">EXCEL SOURCE</span></td>
                     <td className="p-2">
                       <span className="font-semibold">{excelSourcePreview.label}</span>
-                      <span className="block text-amber-800">Not registered / not verified</span>
-                      <span className="block text-slate-600">Order ref: {excelSourcePreview.orderReference||'Blank in Excel'}</span>
+                      <span className="block text-slate-600">Excel import preview</span>
+                      <span className="block text-slate-600">Order ref: {excelSourcePreview.orderReference||'—'}</span>
                     </td>
-                    <td className="p-2">{excelSourcePreview.owner||'Blank in Excel'}<span className="block text-amber-800">Land owner (source only; not verified counterparty)</span></td>
+                    <td className="p-2">{excelSourcePreview.owner||'—'}<span className="block text-slate-600">Land owner from Excel</span></td>
                     <td className="p-2">—</td>
                     <td className="p-2">{excelSourcePreview.roCode}</td>
-                    <td className="p-2">{excelSourcePreview.endDate||'Blank in Excel'}<span className="block text-slate-500">From: {excelSourcePreview.startDate||'Blank in Excel'}</span></td>
-                    <td className="p-2">{excelSourcePreview.area||'Blank in Excel'}<span className="block text-slate-500">{excelSourcePreview.landStatus||''} · Duration: {excelSourcePreview.duration||'—'}</span></td>
-                    <td className="p-2">{excelSourcePreview.rentMonthly||'Blank in Excel'}</td>
+                    <td className="p-2">{excelSourcePreview.endDate||'—'}<span className="block text-slate-500">From: {excelSourcePreview.startDate||'—'}</span></td>
+                    <td className="p-2">{excelSourcePreview.area||'—'}<span className="block text-slate-500">{excelSourcePreview.landStatus||''} · Duration: {excelSourcePreview.duration||'—'}</span></td>
+                    <td className="p-2">{excelSourcePreview.rentMonthly||'—'}</td>
                     <td className="p-2">Optional · Not attached</td>
                     <td className="p-2">{canWrite&&<button type="button" className="font-semibold text-[#17365D] underline"
                       onClick={()=>{
@@ -482,20 +482,18 @@ export const CocoDocumentationMastersPanel: React.FC<{
                       <td className="p-2">{a.agreementType.replaceAll('_', ' ')}</td>
                       <td className="p-2">{a.agreementName}
                         {a.remarks?.startsWith('EXCEL_SOURCE_UNVERIFIED')&&
-                          <span className="block text-[11px] font-semibold text-amber-800">
-                            Excel Source — Unverified
-                          </span>}
+                          <span className="block text-[11px] text-slate-600">Imported from Excel</span>}
                       </td>
                       <td className="p-2">{a.counterpartyName || 'Not Recorded'}
                         {a.remarks?.startsWith('EXCEL_SOURCE_UNVERIFIED')&&dealerSourceRow?.fields['LAND OWNER']&&
-                          <span className="block text-[11px] text-amber-800">Excel land owner: {dealerSourceRow.fields['LAND OWNER']} (not verified counterparty)</span>}
+                          <span className="block text-[11px] text-amber-800">Excel land owner: {dealerSourceRow.fields['LAND OWNER']}</span>}
                       </td>
                       <td className="p-2">{a.vendorCode || '—'}</td>
                       <td className="p-2">{a.customerCode || '—'}</td>
                       <td className="p-2">{a.endDate || (a.agreementType==='NFR_METADATA'?data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.leaseEndDate:'Not Recorded')}</td>
                       <td className="p-2">{isLeaseAgreement(a.agreementType)?formatLeaseDimension(a.leaseTerms):'—'}
                         {a.agreementType==='LAND_LEASE'&&a.remarks?.startsWith('EXCEL_SOURCE_UNVERIFIED')&&dealerSourceRow?.fields.AREA&&
-                          <span className="block text-[11px] text-amber-800">Original Excel: {dealerSourceRow.fields.AREA} {dealerSourceRow.fields['measuring unit']||''} (unverified)</span>}
+                          <span className="block text-[11px] text-amber-800">Excel area: {dealerSourceRow.fields.AREA} {dealerSourceRow.fields['measuring unit']||''}</span>}
                       </td>
                       <td className="p-2">{a.agreementType==='LAND_LEASE'?(a.leaseTerms?.monthlyLeaseValuePaise!=null?money(a.leaseTerms.monthlyLeaseValuePaise):'Not Recorded'):a.agreementType==='NFR_METADATA'?(data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.monthlyRentPaise!=null?money(data.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)!.monthlyRentPaise):'Not Recorded'):'—'}</td>
                       <td className="p-2">{(()=>{const id=a.agreementDocumentId||data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.agreementDocumentId;return id?<button type="button" className="text-[#17365D] underline" onClick={()=>void downloadContract(id)}>{docs.find(d=>d.id===id)?.name||'Download evidence'}</button>:'Optional · Not attached';})()}</td>

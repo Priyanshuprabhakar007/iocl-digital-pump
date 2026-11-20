@@ -15,14 +15,16 @@ fields['ORDER NO.']='ORD-1234';
 const source={roCode:'373196',fields};
 
 describe('Immutable Excel sources in Section-wise report and PDF',()=>{
-  it('retains all 26 fields under explicitly unverified source tables',()=>{
+  it('prints only populated Excel fields without unverified/empty presence markers',()=>{
     const groups=buildDealerExcelSourceTables(source,'373196');
-    expect(groups).toHaveLength(4);
+    expect(groups).toHaveLength(3); // No organization fields in this fixture
     const flatten=groups.flatMap(t=>t.rows);
-    expect(flatten).toHaveLength(26);
+    expect(flatten).toHaveLength(5);
     expect(flatten).toContainEqual(['DURATION (YEARS)','33']);
-    expect(flatten).toContainEqual(['RENT (monthly)','Blank in original Excel']);
-    expect(groups.every(t=>t.title.includes('UNVERIFIED SOURCE'))).toBe(true);
+    expect(flatten).toContainEqual(['ORDER NO.','ORD-1234']);
+    expect(flatten.some(row=>row[0]==='RENT (monthly)')).toBe(false);
+    expect(groups.every(t=>!t.title.includes('UNVERIFIED')&&t.headers.join() === 'Field,Details')).toBe(true);
+    expect(groups.every(t=>t.rows.every(([,v])=>Boolean(v)))).toBe(true);
   });
   it('rejects mismatched RO Code and malformed draft, without leaking other outlet values',()=>{
     expect(buildDealerExcelSourceTables(source,'396187')).toEqual([]);
