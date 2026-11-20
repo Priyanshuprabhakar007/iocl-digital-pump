@@ -31,7 +31,7 @@ describe('compact RO 373196 section-wise PDF',()=>{
    expect(printable[1].rows[0].join(' ')).not.toContain('LAND OWNER:');
    expect(printable[1].rows[0].join(' ')).not.toContain('EXCEL_SOURCE_UNVERIFIED');
  });
- it('replaces unused rules and empty sections with compact neutral summary',()=>{
+ it('retains empty sections as blank pages without filler table rows',()=>{
    for(const section of sections.slice(1))expect(printableSectionTables(section)).toEqual([]);
    expect(sections[1].tables[0].rows[0][2]).toBe('Not Recorded');
  });
@@ -43,5 +43,13 @@ describe('compact RO 373196 section-wise PDF',()=>{
    });
    const doc=await PDFDocument.load(bytes);
    expect(doc.getPageCount()).toBe(5);
+   // Each category retains its own page even if there are no saved records.
+   // No body content is rendered on empty section pages (implemented by
+   // startPage(..., hasEntries=false) and the early continue above).
+   const source=await import('node:fs/promises');
+   const ts=await source.readFile(
+     new URL('../src/worker/services/cocoSectionWisePdfService.ts',import.meta.url),'utf8');
+   expect(ts).toContain('if (!hasEntries) continue;');
+   expect(ts).not.toContain('No saved records for this section.');
  });
 });
