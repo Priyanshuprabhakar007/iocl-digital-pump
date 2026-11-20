@@ -13,13 +13,13 @@ describe('Excel preview integrated with Registered Agreements without false sign
     const p=getExcelLandLeaseRegisterPreview(draft,'373196',false);
     expect(p).toMatchObject({area:'0.5 ACR',rentMonthly:'',owner:'CANDIGARH HOUSING BOARD',
       startDate:'2018-01-30',endDate:'2051-01-29'});
-    expect(p?.status).toContain('Not Registered');
+    expect(p?.status).toBe('Excel Import');
   });
   it('does not expose another RO or duplicate an existing registered land lease',()=>{
     expect(getExcelLandLeaseRegisterPreview(draft,'396187',false)).toBeNull();
     expect(getExcelLandLeaseRegisterPreview(draft,'373196',true)).toBeNull();
   });
-  it('marks saved source-based agreement as Unverified in the PDF, even if dates are future',()=>{
+  it('marks saved source-based agreement as Recorded in PDF without claiming signed-contract validity',()=>{
     const sections=buildSectionWiseSections({items:[],leases:[],assets:[],outletType:'COCO',
       agreements:[{id:'a',agreementType:'LAND_LEASE',agreementName:'Land Lease',
         agreementNumber:null,counterpartyName:null,vendorCode:null,customerCode:'373196',
@@ -27,7 +27,7 @@ describe('Excel preview integrated with Registered Agreements without false sign
         startDate:'2018-01-30',endDate:'2051-01-29',linkedNfrLeaseId:null,
         leaseTerms:null,contractName:null}],
       reportDate:'2026-11-20'});
-    expect(sections[0].tables[0].rows[0][2]).toBe('Excel Source — Unverified');
+    expect(sections[0].tables[0].rows[0][2]).toBe('Recorded');
     expect(sections[0].tables[0].rows[0][5]).toBe('Not Recorded');
   });
 });

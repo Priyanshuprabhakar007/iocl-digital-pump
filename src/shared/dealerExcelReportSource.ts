@@ -15,21 +15,26 @@ export function buildDealerExcelSourceTables(
   if(!source||source.roCode.trim()!==reportRoCode.trim())return [];
   const fields=source.fields;
   const destinations=[
-    {kind:'OUTLET',title:'Excel Outlet Details (UNVERIFIED SOURCE)'},
-    {kind:'ORGANIZATION',title:'Excel Organizational Details (UNVERIFIED SOURCE)'},
-    {kind:'LAND',title:'Excel Land Details (UNVERIFIED SOURCE)'},
-    {kind:'LEASE',title:'Excel Lease Terms (UNVERIFIED SOURCE)'},
+    {kind:'OUTLET',title:'Excel Outlet Details'},
+    {kind:'ORGANIZATION',title:'Excel Organizational Details'},
+    {kind:'LAND',title:'Excel Land Details'},
+    {kind:'LEASE',title:'Excel Lease Terms'},
   ] as const;
-  return destinations.map(group=>({
-    title:group.title,
-    source:'Immutable 26-field Excel draft - NOT a signed agreement',
-    headers:['Excel Source Field','Value from Excel'],
-    widths:[200,309],
-    rows:dealerMasterFieldCatalog.filter(f=>f.destination===group.kind).map(f=>[
-      f.header,
-      fields[f.header]?.trim()||'Blank in original Excel',
-    ]),
-  }));
+  return destinations.flatMap(group=>{
+    // The full 26 fields stay in the immutable source database. The PDF
+    // displays populated fields only, without filler rows or presence flags.
+    const rows=dealerMasterFieldCatalog
+      .filter(f=>f.destination===group.kind)
+      .map(f=>[f.header,fields[f.header]?.trim()||''])
+      .filter(([,value])=>Boolean(value));
+    return rows.length?[{
+      title:group.title,
+      source:'Dealer Master Excel',
+      headers:['Field','Details'],
+      widths:[200,309],
+      rows,
+    }]:[];
+  });
 }
 
 /** Safely locate the single requested RO in the administrator's own saved
