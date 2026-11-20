@@ -38,7 +38,7 @@ export class CocoSectionWisePdfService {
     const line = (page: PDFPage, x: number, y: number, x2: number, y2: number, weight = 0.6) =>
       page.drawLine({ start: { x, y }, end: { x: x2, y: y2 }, thickness: weight, color: BORDER });
 
-    const startPage = (section: SectionWiseSection, continued: boolean): {
+    const startPage = (section: SectionWiseSection, continued: boolean, hasEntries: boolean): {
       page: PDFPage; y: number;
     } => {
       const page = pdf.addPage([A4_W, A4_H]);
@@ -68,7 +68,7 @@ export class CocoSectionWisePdfService {
       });
       write(page, fitted(section.title.toUpperCase() + (continued ? ' - CONTINUED' : ''), bold, 8.6, WIDTH - 205),
         LEFT + 9, y - 14.5, 8.6, true);
-      if (!continued) {
+      if (!continued && hasEntries) {
         const mainRows = printableSectionTables(section)[0]?.rows||[];
         // A clean total avoids repeating "Recorded / Not Recorded"
         // scorecards across the printed report.
@@ -77,8 +77,13 @@ export class CocoSectionWisePdfService {
         write(page, label, LEFT + WIDTH - 8 - font.widthOfTextAtSize(label, 7.2),
           y - 14.5, 7.2);
       }
-      write(page, fitted(section.subtitle, font, 8, WIDTH - 3),
-        LEFT + 1, y - 44, 8, false, GREY);
+      // Always print the section page and heading. For sections without
+      // saved rows, intentionally leave the content area entirely blank:
+      // no totals, explanatory subtitle, empty-table grid or placeholder.
+      if (hasEntries) {
+        write(page, fitted(section.subtitle, font, 8, WIDTH - 3),
+          LEFT + 1, y - 44, 8, false, GREY);
+      }
       return { page, y: y - 61 };
     };
 
@@ -156,11 +161,12 @@ export class CocoSectionWisePdfService {
       // The agreement section has three linked tables; tighten vertical padding only.
       // Keep font sizes and wrapping unchanged, and allow continuation for larger registers.
       const compact = section.title === 'Lease & Agreements';
-      let { page, y } = startPage(section, false);
-      if(!printableTables.length){
-        write(page,'No saved records for this section.',LEFT+9,y-15,9,false,GREY);
-        continue;
-      }
+      // A new page is retained for every section, including completely empty
+      // ones. Blank sections show only the standard report header/section
+      // heading and the page footer; populated sections print their records.
+      const hasEntries = printableTables.length > 0;
+      let { page, y } = startPage(section, false, hasEntries);
+      if (!hasEntries) continue;
       for (const table of printableTables) {
         let index = 0;
         const widths = tableWidths(table);
@@ -169,7 +175,7 @@ export class CocoSectionWisePdfService {
         const firstRowHeight = table.rows.length ? rowHeight(table.rows[0].map((value, i) =>
           wrapPdfText(value, i === 1 ? bold : font, 7.35, widths[i] - 9)), false, compact) : 0;
         if (y - (compact ? 23 : 27) - headerHeight - firstRowHeight < FOOTER_TOP + 35)
-          ({ page, y } = startPage(section, true));
+          ({ page, y } = startPage(section, true, true));
         y = drawTableTitle(page, y, table, compact);
         y = drawTableRow(page, y, table, table.headers, true, false, compact);
         while (index < table.rows.length) {
@@ -178,7 +184,7 @@ export class CocoSectionWisePdfService {
             wrapPdfText(value, i === 1 ? bold : font, 7.35, widths[i] - 9));
           const height = rowHeight(cellLines, false, compact);
           if (y - height < FOOTER_TOP + 35) {
-            ({ page, y } = startPage(section, true));
+            ({ page, y } = startPage(section, true, true));
             y = drawTableTitle(page, y, table, compact);
             y = drawTableRow(page, y, table, table.headers, true, false, compact);
           }

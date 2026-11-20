@@ -1,4 +1,4 @@
-name: Release Compact Section-Wise COCO PDF
+name: Release Complete Section-Wise COCO PDF
 
 on:
   push:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Verify and deploy compact PDF Worker
+    name: Verify and deploy PDF with blank empty sections
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
