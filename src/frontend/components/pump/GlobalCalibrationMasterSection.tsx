@@ -38,6 +38,7 @@ import {
   Play,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { compareSuppliedTenKlChart } from '../../utils/suppliedTenKlCalibrationChart';
 import {
   getGlobalTemplateStatusBadge,
   formatGlobalTemplateDimensions,
@@ -71,7 +72,6 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
 }) => {
   const [templates, setTemplates] = useState<GlobalTankCalibrationTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('gtct-std-20kl');
-  const [quickPreviewCode, setQuickPreviewCode] = useState<string | null>(null);
   const [selectedTemplateDetail, setSelectedTemplateDetail] =
     useState<GlobalTankCalibrationTemplate | null>(null);
   const [eligibleTanks, setEligibleTanks] = useState<EligibleCocoTankItem[]>([]);
@@ -482,6 +482,13 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
   // Requirement 4 & 5: Separate authorised approval action after chart verification (including explicit over-capacity confirmation)
   const handleUpdateTemplateStatus = async (nextStatus: 'APPROVED' | 'DRAFT') => {
     if (!activeTemplate || submitting) return;
+    if(nextStatus==='APPROVED' && activeTemplate.code==='EXCEL_10KL_REFERENCE'){
+      const sourceCheck=compareSuppliedTenKlChart(activeTemplate);
+      if(sourceCheck.status!=='MATCH'){
+        showError('10 KL calibration differs from supplied engineer chart. Resolve scanned dip-to-litre points in a reviewed revision before approval.');
+        return;
+      }
+    }
 
     if (nextStatus === 'APPROVED' && isTemplateOverNominalCapacity && !confirmApproveOverCapacity) {
       showError(
@@ -1051,28 +1058,10 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
   };
 
   const templatePoints = activeTemplate?.points || [];
+  const suppliedTenKlComparison = activeTemplate?.code === 'EXCEL_10KL_REFERENCE'
+    ? compareSuppliedTenKlChart(activeTemplate)
+    : null;
 
-  // Read-only quick preview of draft 10/15 KL calibration curves.
-  // This never changes engineering status or activates physical tank charts.
-  const startDraftReferencePreview = (code: 'EXCEL_10KL_REFERENCE' | 'EXCEL_15KL_REFERENCE') => {
-    const template = templates.find(item => item.code === code);
-    if (!template || template.pointsCount < 2) {
-      showError('Reference chart is not available with interpolation points.');
-      return;
-    }
-    setInterpResult(null);
-    setInterpError(null);
-    setQuickPreviewCode(code);
-    setSelectedTemplateId(template.id);
-  };
-
-  useEffect(() => {
-    if (!quickPreviewCode || activeTemplate?.code !== quickPreviewCode ||
-        templatePoints.length < 2) return;
-    document.getElementById('draft-calibration-readonly-preview')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setQuickPreviewCode(null);
-  }, [quickPreviewCode, activeTemplate?.code, templatePoints.length]);
   const excelReferenceTemplates = templates.filter(t =>
     ['EXCEL_10KL_REFERENCE', 'EXCEL_15KL_REFERENCE', 'EXCEL_20KL_REFERENCE'].includes(t.code)
   );
@@ -1101,19 +1090,6 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {isGlobalAdmin && (['EXCEL_10KL_REFERENCE','EXCEL_15KL_REFERENCE'] as const).map(code => (
-              <button
-                key={code}
-                type="button"
-                onClick={() => startDraftReferencePreview(code)}
-                disabled={!templates.some(t => t.code === code && t.pointsCount >= 2)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-cyan-500/30 bg-slate-800 hover:bg-cyan-950 text-cyan-300 text-xs font-mono font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-                data-testid={code === 'EXCEL_10KL_REFERENCE' ? 'readonly-test-10kl-btn' : 'readonly-test-15kl-btn'}
-              >
-                <Calculator className="w-3.5 h-3.5" />
-                Test {code === 'EXCEL_10KL_REFERENCE' ? '10 KL' : '15 KL'} (No Approval)
-              </button>
-            ))}
             <button
               type="button"
               onClick={() => {
@@ -2093,6 +2069,25 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
         </div>
       )}
 
+      {/* Existing 10 KL master geometry is similar, but scan rows may differ. */}
+      {templates.some(t => t.code === 'EXCEL_10KL_REFERENCE') && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3">
+          <div>
+            <p className="text-sm font-bold text-white">10 KL — Existing Calibration Master</p>
+            <p className="text-xs text-slate-300">
+              Compare the stored 195-point master with the supplied engineer chart before any tank assignment. Fix mismatched rows in a reviewed new revision.
+            </p>
+          </div>
+          <button type="button" onClick={() => {
+              const existing=templates.find(t => t.code === 'EXCEL_10KL_REFERENCE');
+              if(existing)setSelectedTemplateId(existing.id);
+            }}
+            className="rounded-lg border border-orange-500/40 bg-orange-500/20 px-4 py-2 text-xs font-bold text-orange-200"
+            data-testid="select-supplied-10kl-reference">
+            Open Existing 10 KL Chart
+          </button>
+        </div>
+      )}
       {/* Requirement 2: Display Global Calibration Master template cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {templates.map(tpl => {
@@ -2186,6 +2181,63 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
       {/* Active Template Workspace */}
       {activeTemplate && (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-6">
+          {suppliedTenKlComparison && (
+            <div className="rounded-xl border border-cyan-500/40 bg-slate-950 p-4 space-y-3"
+              data-testid="supplied-10kl-pdf-chart-verification">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    Supplied Calibration Chart.pdf — Page 1 (10 KL)
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    Nominal 10,000 L · Diameter 1,940 mm · Length 3,750 mm · Maximum dip 1,940 mm.
+                    Printed maximum volume 11,073.41 L.
+                  </p>
+                </div>
+                <span className={'rounded-md border px-2 py-1 text-xs font-bold '+
+                  (suppliedTenKlComparison.status==='MATCH'
+                    ?'border-emerald-600 bg-emerald-950 text-emerald-300'
+                    :'border-rose-600 bg-rose-950 text-rose-300')}>
+                  {suppliedTenKlComparison.status==='MATCH'?'Chart values matched':suppliedTenKlComparison.status==='MISMATCH'?'Review mismatch':'Load points'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300">{suppliedTenKlComparison.summary}</p>
+              {suppliedTenKlComparison.checks.length>0 && (
+                <div className="max-h-48 overflow-auto rounded-lg border border-slate-700">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-800 text-slate-200">
+                      <tr><th className="p-2 text-left">Scan reference</th><th className="p-2 text-left">Expected</th><th className="p-2 text-left">Stored</th><th className="p-2 text-left">Match</th></tr>
+                    </thead>
+                    <tbody>{suppliedTenKlComparison.checks.map(c=>(
+                      <tr key={c.field} className="border-t border-slate-800">
+                        <td className="p-2 text-slate-200">{c.field}</td>
+                        <td className="p-2 text-slate-300">{c.expected}</td>
+                        <td className="p-2 text-slate-300">{c.stored}</td>
+                        <td className={'p-2 font-bold '+(c.pass?'text-emerald-400':'text-rose-400')}>{c.pass?'MATCH':'CHECK'}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+                <p className="max-w-3xl text-xs text-amber-200">
+                  You have reported that an engineer already approved the scanned chart. Record the
+                  actual certificate/document, issuer, signatory and verification date through the
+                  existing Engineering Verification form. This comparison is not a substitute for
+                  that approval record. The chart maximum exceeds the system's 11,000 L policy
+                  ceiling by 73.41 L; any scoped exception must cite authentic engineering authority.
+                </p>
+                {canApproveCalibrationChart && suppliedTenKlComparison.status==='MATCH' && (
+                  <button type="button"
+                    onClick={()=>setShowEngVerifyPanel(true)}
+                    className="rounded-lg border border-cyan-400/40 bg-cyan-900 px-4 py-2 text-xs font-bold text-cyan-100"
+                    data-testid="record-existing-10kl-engineering-approval">
+                    Record Existing Engineer Approval
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           {/* Template Detail Header & Separate Authorised Approval Action */}
           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 border-b border-slate-800 pb-5">
             <div className="space-y-2">
@@ -3226,17 +3278,10 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
 
             {templatePoints.length >= 2 && (
               <form
-                id="draft-calibration-readonly-preview"
                 onSubmit={handleInterpolateTemplate}
                 className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono"
                 data-testid="template-interpolation-calculator"
               >
-                {['EXCEL_10KL_REFERENCE', 'EXCEL_15KL_REFERENCE'].includes(activeTemplate.code) && (
-                  <p className="basis-full text-cyan-300 text-[11px] font-semibold">
-                    READ-ONLY TEST: This draft calibration chart can be interpolated without approval.
-                    It is not certified for live tank stock, shift close or financial reconciliation.
-                  </p>
-                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <Calculator className="w-4 h-4 text-orange-400" />
                   <span className="text-slate-300 font-bold">
