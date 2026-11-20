@@ -21,6 +21,7 @@ import { resolveWorkbenchShift, toWorkbenchSelection, type WorkbenchPage } from 
 import { useAuth } from '../context/AuthContext';
 import { PERMISSIONS } from '../../shared/constants';
 import { DailyOperationsTestDataResetPanel } from '../components/pump/DailyOperationsTestDataResetPanel';
+import { Coco79DailyOperationsTestMode } from '../components/pump/Coco79DailyOperationsTestMode';
 import './dailyOperationsModern.css';
 import { parseMilliunits, formatMilliunits } from '../../shared/precision';
 import { displayDsrProductMetric, displayDsrTotalMetric, displayNozzleMeterMetric, getTankSaveErrorGuidance } from '../utils/dailyReadingPresentation';
@@ -297,6 +298,7 @@ export const DailyOperationsPage: React.FC = () => {
   const mounted = useRef(true);
   useEffect(()=>{ mounted.current=true; return ()=>{mounted.current=false; requests.current++;}; },[]);
   const [viewMode, setViewMode] = useState<'WORKSPACE' | 'DSR'>('WORKSPACE');
+  const [showCoco79Test,setShowCoco79Test] = useState(false);
 
   const [bootstrap, setBootstrap] = useState<DailyOperationsBootstrapResponse | null>(null);
   const [dailySummary, setDailySummary] = useState<DailyFuelSummary | null>(null);
@@ -1186,6 +1188,32 @@ export const DailyOperationsPage: React.FC = () => {
 
   return (
     <div className="daily-ops-modern space-y-6 pb-12">
+      {selectedOutlet?.roCode==='369460' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+          <div>
+            <p className="font-bold text-[#17365D]">COCO-79 Complete Daily Operations Test</p>
+            <p className="text-xs text-amber-900">7 tanks · 5 DUs · 20 nozzles · 3 simulated shifts · DSR; no production writes.</p>
+          </div>
+          <button type="button" data-testid="launch-coco79-full-test-mode"
+            onClick={()=>setShowCoco79Test(true)}
+            className="rounded-lg bg-[#17365D] px-4 py-2 text-sm font-bold text-white">
+            Open Full TEST Mode
+          </button>
+        </div>
+      )}
+      {showCoco79Test && selectedOutlet?.roCode==='369460' && (
+        <div role="dialog" aria-modal="true" aria-label="COCO-79 isolated full test mode"
+          data-testid="coco79-isolated-test-dialog"
+          className="fixed inset-0 z-[110] overflow-y-auto bg-slate-950/80 p-2 sm:p-5">
+          <div className="mx-auto max-w-7xl rounded-2xl bg-white p-2 shadow-2xl sm:p-4">
+            <div className="mb-2 flex justify-end">
+              <button type="button" onClick={()=>setShowCoco79Test(false)}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800">Exit Test Mode</button>
+            </div>
+            <Coco79DailyOperationsTestMode/>
+          </div>
+        </div>
+      )}
       {/* 1. TOP BAR: OUTLET, BUSINESS DATE & VIEW SWITCHER */}
       <div className="space-y-3">
         <div className="option4-hero p-5 sm:p-7">
