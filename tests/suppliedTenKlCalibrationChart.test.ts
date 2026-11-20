@@ -1,6 +1,9 @@
 import {describe,it,expect} from 'vitest';
 import {compareSuppliedTenKlChart,suppliedTenKlChart} from '../src/frontend/utils/suppliedTenKlCalibrationChart';
 import type {GlobalTankCalibrationTemplate} from '../src/shared/types';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {ExcelCalibrationImportService} from '../src/worker/services/excelCalibrationImportService';
 function sourceChart(overrides:Partial<GlobalTankCalibrationTemplate>={}):GlobalTankCalibrationTemplate{
  const expected=suppliedTenKlChart;
  const points=Array.from({length:195},(_,i)=>({
@@ -38,6 +41,21 @@ describe('existing 10 KL master comparison against supplied scanned chart',()=>{
  });
  it('does not turn missing points into zero',()=>{
    expect(compareSuppliedTenKlChart(sourceChart({points:[]})).status).toBe('NOT_LOADED');
+ });
+ it('matches actual imported 10 KL workbook rows against the supplied PDF checkpoints',async()=>{
+   const file=fs.readFileSync(path.resolve('tests/fixtures/20KL_15KL_10KL_calibration_Dip_chart.xlsx'));
+   const extracted=await ExcelCalibrationImportService.extractWorkbook(file,'20KL_15KL_10KL_calibration_Dip_chart.xlsx');
+   const existing=extracted.charts.find(x=>x.templateCode==='EXCEL_10KL_REFERENCE');
+   expect(existing?.actualPointCount).toBe(195);
+   expect(existing?.tankDiameterMm).toBe(1940);
+   expect(existing?.tankLengthMm).toBe(3750);
+   const result=suppliedTenKlChart.checkpoints.map(ref=>{
+     const stored=existing?.points.find(row=>row.dipMm===ref.dipMm);
+     return {dip:ref.dipMm,expected:ref.litres,stored:stored?.volumeLitres};
+   });
+   expect(result).toEqual(suppliedTenKlChart.checkpoints.map(ref=>({
+     dip:ref.dipMm,expected:ref.litres,stored:ref.litres,
+   })));
  });
  it('uses 1940mm diameter, 3750mm length, 11073.41L maximum',()=>{
    expect(suppliedTenKlChart.diameterMm).toBe(1940);
