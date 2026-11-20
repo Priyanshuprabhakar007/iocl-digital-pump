@@ -183,7 +183,9 @@ export function buildSectionWiseSections(args: {
     dimensions:a.agreementType==='LAND_LEASE'?formatLeaseDimension(a.leaseTerms):undefined,
     monthlyLeaseValue:a.agreementType==='LAND_LEASE'&&a.leaseTerms?.monthlyLeaseValuePaise!=null?formatIndianCurrencyFromPaise(a.leaseTerms.monthlyLeaseValuePaise,{asciiPrefix:true}):undefined,
     contract:a.contractName||NR,
-    remarks: printable([a.agreementNumber ? 'Agreement: ' + a.agreementNumber : '', a.remarks || '']
+    remarks: printable([a.agreementNumber ? 'Agreement: ' + a.agreementNumber : '',
+      // Keep immutable source classification internally, not as a PDF field.
+      a.remarks?.replace(/^EXCEL_SOURCE_UNVERIFIED\s*\|\s*/, '') || '']
       .filter(Boolean).join(' | ') || EMPTY),
   });
   const manuals = (type: string) => agreementMasters.filter((a) => a.agreementType === type);

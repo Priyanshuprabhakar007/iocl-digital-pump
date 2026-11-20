@@ -1,0 +1,38 @@
+name: Release Clean Lease PDF Labels and Excel Fields
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-clean-lease-pdf.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iocl-worker-production-releases
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Verify and deploy PDF label cleanup to production Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+      - name: Typecheck, lease PDF tests and frontend build
+        run: |
+          node --check scripts/release/activate-readonly-excel-pdf.mjs
+          bun run typecheck
+          bun test tests/dealerExcelReportSource.test.ts tests/dealerExcelLeaseRegisterPreview.test.ts tests/cocoSectionWiseReport.test.ts tests/cocoLeaseTerms.test.ts
+          bun run build
+      - name: Verify production DB identity and deploy Worker without migrations
+        run: bun scripts/release/activate-readonly-excel-pdf.mjs

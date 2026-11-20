@@ -29,5 +29,7 @@ describe('Excel preview integrated with Registered Agreements without false sign
       reportDate:'2026-11-20'});
     expect(sections[0].tables[0].rows[0][2]).toBe('Recorded');
     expect(sections[0].tables[0].rows[0][5]).toBe('Not Recorded');
+    expect(sections[0].tables[1].rows[0].join(' ')).not.toContain('EXCEL_SOURCE_UNVERIFIED');
+    expect(sections[0].tables[1].rows[0].join(' ')).toContain('Imported from saved Dealer Master.');
   });
 });
