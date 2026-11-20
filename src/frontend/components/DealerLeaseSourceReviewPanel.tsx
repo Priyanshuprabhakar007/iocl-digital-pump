@@ -42,7 +42,15 @@ export function DealerLeaseSourceReviewPanel({outletId,revision=0}:{outletId:str
       const response=await apiFetch<Extension>('/api/v1/outlets/'+encodeURIComponent(outletId)+'/dealer-master-extension');
       if(!response.success||!response.data)throw Error(response.error?.message||'Lease source records unavailable');
       setData(response.data);
-    }catch(e){setData(null);setError(e instanceof Error?e.message:'Could not retrieve lease source records');}
+    }catch(e){
+      setData(null);
+      // Optional 0038 extension storage is separate from the 0039 immutable
+      // Excel draft. Keep the error visible, but do not imply source is lost.
+      const message=e instanceof Error?e.message:'Could not retrieve lease source records';
+      setError(/migration 0038|SCHEMA_MIGRATION_REQUIRED/i.test(message)
+        ?'Optional Dealer Master extension (migration 0038) is not active. Your 26 Excel fields remain available in the imported source above, and Use Excel Details can prefill an agreement review without migration 0038.'
+        :message);
+    }
     finally{setLoading(false);}
   },[outletId]);
   useEffect(()=>{void refresh();},[refresh,revision]);
