@@ -23,6 +23,15 @@ const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }, 'Invalid calendar date');
 const optDate = dateOnly.nullable().optional();
+const SOURCE_PREFIX='EXCEL_SOURCE_UNVERIFIED';
+const preserveSourceClassification=(remarks:string|null|undefined, sourced:boolean):string|null=>{
+  const raw=(remarks||'').trim();
+  if(!sourced)return raw||null;
+  // The status is retained on edits; removing a remark must never silently
+  // change an imported source into an independently verified legal agreement.
+  return raw.startsWith(SOURCE_PREFIX)?raw.slice(0,2000)
+    :(SOURCE_PREFIX+' | '+raw).slice(0,2000);
+};
 const agreementInput = z.object({
   outletId: z.string().trim().min(1),
   agreementType: z.enum(['LAND_LEASE', 'SERVICE_PROVIDER', 'OTHER', 'NFR_METADATA']),
@@ -35,6 +44,7 @@ const agreementInput = z.object({
   siteClass: z.enum(['A','B','C']).nullable().optional(),
   startDate: optDate, endDate: optDate,
   agreementDocumentId: optional(100),
+  sourceClassification: z.enum(['EXCEL_UNVERIFIED']).optional(),
   leaseTerms: leaseTermsSchema.nullable().optional(),
   remarks: optional(2000),
 }).superRefine((data, ctx) => {
@@ -188,7 +198,7 @@ cocoDocumentationMasterRoutes.post('/compliance/masters/agreements', requirePerm
     startDate: i.agreementType === 'NFR_METADATA' ? null : i.startDate || null,
     endDate: i.agreementType === 'NFR_METADATA' ? null : i.endDate || null,
     agreementDocumentId: i.agreementDocumentId || null,
-    remarks: i.remarks || null,
+    remarks: preserveSourceClassification(i.remarks,i.sourceClassification==='EXCEL_UNVERIFIED'),
     createdBy: c.var.user.user.id, updatedBy: c.var.user.user.id,
     createdAt: now, updatedAt: now,
   };
@@ -225,7 +235,11 @@ cocoDocumentationMasterRoutes.put('/compliance/masters/agreements/:id', requireP
     siteClass: i.siteClass || null,
     startDate: i.agreementType === 'NFR_METADATA' ? null : i.startDate || null,
     endDate: i.agreementType === 'NFR_METADATA' ? null : i.endDate || null,
-    agreementDocumentId: i.agreementDocumentId || null, remarks: i.remarks || null,
+    agreementDocumentId: i.agreementDocumentId || null,
+    remarks: preserveSourceClassification(
+      i.remarks,
+      i.sourceClassification==='EXCEL_UNVERIFIED'||Boolean(old.remarks?.startsWith(SOURCE_PREFIX)),
+    ),
     updatedBy: c.var.user.user.id, updatedAt: new Date().toISOString(),
   };
   try {

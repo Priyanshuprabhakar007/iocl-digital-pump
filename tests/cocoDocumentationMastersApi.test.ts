@@ -77,6 +77,30 @@ describe('COCO documentation master API / evidence protections', () => {
       expect(retained.leaseTermsAvailable).toBe(true);
       expect(retained.agreements[0].leaseTerms).toMatchObject(leaseTerms);
       expect(retained.agreements[0].agreementDocumentId).toBe('evidence-one');
+      // Evidence is OPTIONAL for user-entered agreement records; a document can
+      // be linked later, retaining its same-outlet access controls and history.
+      const withoutAttachment=await call('/compliance/masters/agreements','POST',{
+        ...agreement,agreementNumber:'SOURCE-ONLY-TEST',agreementDocumentId:null,
+        counterpartyName:null,sourceClassification:'EXCEL_UNVERIFIED',
+        remarks:'Draft source only',
+        leaseTerms:{dimensionUnit:null,areaMilli:null,lengthMilliFt:null,widthMilliFt:null,monthlyLeaseValuePaise:null},
+      });
+      expect(withoutAttachment.status).toBe(201);
+      const sourceId=(await withoutAttachment.json() as any).data.id;
+      const sourceList=(await (await call('/compliance/masters?outletId=ro-1001')).json() as any).data.agreements;
+      expect(sourceList.find((a:any)=>a.id===sourceId).agreementDocumentId).toBeNull();
+      expect(sourceList.find((a:any)=>a.id===sourceId).remarks)
+        .toContain('EXCEL_SOURCE_UNVERIFIED');
+      const linkedLater=await call('/compliance/masters/agreements/'+sourceId,'PUT',{
+        ...agreement,agreementNumber:'SOURCE-ONLY-TEST',agreementDocumentId:'evidence-one',
+        remarks:'Evidence attached later',
+      });
+      expect(linkedLater.status).toBe(200);
+      const savedAfter=(await (await call('/compliance/masters?outletId=ro-1001')).json() as any).data.agreements;
+      expect(savedAfter.find((a:any)=>a.id===sourceId).agreementDocumentId).toBe('evidence-one');
+      expect(savedAfter.find((a:any)=>a.id===sourceId).remarks)
+        .toContain('EXCEL_SOURCE_UNVERIFIED');
+
       const claimRes = await call('/compliance/masters/claims', 'POST', {
         outletId: 'ro-1001', claimCategory: 'UNIFORM_CHARGES', title: 'Uniform Expense',
         amountPaise: 10000, invoiceDocumentId: 'evidence-one',

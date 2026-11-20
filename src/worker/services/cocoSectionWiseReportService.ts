@@ -170,7 +170,9 @@ export function buildSectionWiseSections(args: {
       : start && start > asOf ? 'Upcoming' : 'Valid';
   const masterLine = (a: SectionWiseAgreement) => ({
     label: a.agreementName,
-    status: agreementStatus(a.startDate, a.endDate),
+    status: a.remarks?.startsWith('EXCEL_SOURCE_UNVERIFIED')
+      ?'Excel Source — Unverified'
+      :agreementStatus(a.startDate, a.endDate),
     from: date(a.startDate), to: date(a.endDate),
     with: a.counterpartyName || NR, duration: years(a.startDate, a.endDate),
     vendorCode: a.vendorCode || NR, customerCode: a.customerCode || NR,
