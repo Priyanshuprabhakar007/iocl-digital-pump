@@ -486,11 +486,17 @@ export const CocoDocumentationMastersPanel: React.FC<{
                             Excel Source — Unverified
                           </span>}
                       </td>
-                      <td className="p-2">{a.counterpartyName || 'Not Recorded'}</td>
+                      <td className="p-2">{a.counterpartyName || 'Not Recorded'}
+                        {a.remarks?.startsWith('EXCEL_SOURCE_UNVERIFIED')&&dealerSourceRow?.fields['LAND OWNER']&&
+                          <span className="block text-[11px] text-amber-800">Excel land owner: {dealerSourceRow.fields['LAND OWNER']} (not verified counterparty)</span>}
+                      </td>
                       <td className="p-2">{a.vendorCode || '—'}</td>
                       <td className="p-2">{a.customerCode || '—'}</td>
                       <td className="p-2">{a.endDate || (a.agreementType==='NFR_METADATA'?data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.leaseEndDate:'Not Recorded')}</td>
-                      <td className="p-2">{isLeaseAgreement(a.agreementType)?formatLeaseDimension(a.leaseTerms):'—'}</td>
+                      <td className="p-2">{isLeaseAgreement(a.agreementType)?formatLeaseDimension(a.leaseTerms):'—'}
+                        {a.agreementType==='LAND_LEASE'&&a.remarks?.startsWith('EXCEL_SOURCE_UNVERIFIED')&&dealerSourceRow?.fields.AREA&&
+                          <span className="block text-[11px] text-amber-800">Original Excel: {dealerSourceRow.fields.AREA} {dealerSourceRow.fields['measuring unit']||''} (unverified)</span>}
+                      </td>
                       <td className="p-2">{a.agreementType==='LAND_LEASE'?(a.leaseTerms?.monthlyLeaseValuePaise!=null?money(a.leaseTerms.monthlyLeaseValuePaise):'Not Recorded'):a.agreementType==='NFR_METADATA'?(data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.monthlyRentPaise!=null?money(data.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)!.monthlyRentPaise):'Not Recorded'):'—'}</td>
                       <td className="p-2">{(()=>{const id=a.agreementDocumentId||data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.agreementDocumentId;return id?<button type="button" className="text-[#17365D] underline" onClick={()=>void downloadContract(id)}>{docs.find(d=>d.id===id)?.name||'Download evidence'}</button>:'Optional · Not attached';})()}</td>
                       <td className="p-2">{canWrite && <button disabled={saving||uploadingContract||showAgreementForm} className="text-[#B8530D] font-semibold" onClick={()=>{setAgreementEdit(a);setAgreementType(a.agreementType);setShowAgreementForm(true);}}>Edit</button>}</td>
