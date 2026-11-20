@@ -26,6 +26,8 @@ describe('compact RO 373196 section-wise PDF',()=>{
    expect(printable).toHaveLength(2);
    expect(printable[0].rows).toHaveLength(1);
    expect(printable[0].rows[0][1]).toBe('Land Lease');
+   expect(printable[0].rows[0][5]).toBe('-');
+   expect(sections[0].tables[0].rows[0][5]).toBe('Not Recorded');
    expect(printable[1].rows[0].join(' ')).not.toContain('LAND OWNER:');
    expect(printable[1].rows[0].join(' ')).not.toContain('EXCEL_SOURCE_UNVERIFIED');
  });
