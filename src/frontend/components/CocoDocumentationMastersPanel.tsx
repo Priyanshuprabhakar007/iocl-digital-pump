@@ -89,6 +89,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const [success, setSuccess] = useState('');
   const [activeEditor, setActiveEditor] = useState<'agreements'|'claims'|'inspections'>(initialEditor);
   const registeredAgreementsRef = useRef<HTMLDivElement>(null);
+  const excelReviewFormRef = useRef<HTMLFormElement>(null);
   // Unlike changing the outlet selector alone, explicit navigation must also
   // reveal the agreement table and work when the same RO was already active.
   useEffect(() => {
@@ -110,6 +111,15 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const [settleClaim, setSettleClaim] = useState<Claim | null>(null);
   const [agreementType, setAgreementType] = useState<string>(initialAgreementType);
   const [showAgreementForm, setShowAgreementForm] = useState(initialCreate && initialEditor === 'agreements');
+  useEffect(()=>{
+    // Explicit Excel review action must visibly reveal the form even when the
+    // same outlet is already selected and the master screen is far down-page.
+    if(!showAgreementForm||!sourcePrefillActive||activeEditor!=='agreements')return;
+    const element=excelReviewFormRef.current;
+    if(!element)return;
+    element.scrollIntoView({behavior:'smooth',block:'start'});
+    element.focus({preventScroll:true});
+  },[showAgreementForm,sourcePrefillActive,activeEditor]);
   const [dimensionUnit,setDimensionUnit]=useState<LeaseTerms['dimensionUnit']>(null);
   const [linkedLeaseId,setLinkedLeaseId]=useState('');
   const [contractId,setContractId]=useState('');
@@ -308,18 +318,24 @@ export const CocoDocumentationMastersPanel: React.FC<{
               + Add Agreement
             </button>
             {dealerSourceRow&&<button type="button" disabled={saving||uploadingContract} className={buttonStyle}
-              onClick={()=>{setSourceVerified(false);setSourcePrefillActive(true);setAgreementEdit(null);setAgreementType('LAND_LEASE');setShowAgreementForm(true);}}>
+              onClick={()=>{
+                setError('');setSuccess('');
+                setSourceVerified(false);setAgreementEdit(null);setAgreementType('LAND_LEASE');
+                setSourcePrefillActive(true);setShowAgreementForm(true);
+              }}>
               Use Excel Details (Review &amp; Save)
             </button>}
           </div>}
           {canWrite && data && showAgreementForm && (
-            <form key={agreementEdit?.id||(sourcePrefillActive?'excel-suggestions':'new-agreement')} onSubmit={onAgreementSubmit} className={col}>
+            <form ref={excelReviewFormRef} tabIndex={-1} data-testid="excel-lease-review-form"
+              key={agreementEdit?.id||(sourcePrefillActive?'excel-suggestions':'new-agreement')}
+              onSubmit={onAgreementSubmit} className={col+' scroll-mt-24'}>
               <div className="flex items-center justify-between">
-                <h4 className="font-bold text-[#17365D]">{agreementEdit ? 'Edit Agreement' : 'Register Agreement'}</h4>
+                <h4 className="font-bold text-[#17365D]">{agreementEdit ? 'Edit Agreement' : sourcePrefillActive ? 'Review Excel Details — RO '+selectedRoCode : 'Register Agreement'}</h4>
                 <button type="button" disabled={saving||uploadingContract} onClick={() => { setAgreementEdit(null);setSourcePrefillActive(false);setSourceVerified(false); setShowAgreementForm(false); }} className="text-sm underline text-[#64748B]">Cancel</button>
               </div>
               {sourcePrefillActive&&sourceSuggestions&&<div className="text-xs border border-amber-200 bg-amber-50 rounded-lg p-3 text-amber-900 space-y-1">
-                <strong>Excel source suggestions — NOT a signed agreement</strong>
+                <strong>Excel source suggestions for RO {dealerSourceRow?.roCode} — NOT a signed agreement</strong>
                 <p>Land owner is not assumed to be a legal counterparty. Ambiguous dates and unsupported units are not converted.
                   Verify all terms against the signed contract before saving.</p>
                 <pre className="whitespace-pre-wrap break-words max-h-32 overflow-y-auto">{sourceSuggestions.reviewNotes}</pre>

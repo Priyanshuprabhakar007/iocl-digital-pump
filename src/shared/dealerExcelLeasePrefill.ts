@@ -8,9 +8,15 @@ export function dealerLeaseFormSuggestions(row:DealerDraftRow){
   const f=row.fields;
   const date=(value:string)=>{
     const raw=value.trim();
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(raw))return '';
-    const d=new Date(raw+'T00:00:00Z');
-    return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===raw?raw:'';
+    // IOCL Dealer Master uses DD.MM.YYYY (e.g. 30.01.2018); the browser's
+    // date input requires ISO YYYY-MM-DD. Never guess slash-delimited dates.
+    const dotDate=/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(raw);
+    const iso=dotDate
+      ?dotDate[3]+'-'+dotDate[2].padStart(2,'0')+'-'+dotDate[1].padStart(2,'0')
+      :raw;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(iso))return '';
+    const d=new Date(iso+'T00:00:00Z');
+    return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===iso?iso:'';
   };
   const rent=(value:string)=>{
     const candidate=value.trim().replace(/^(₹|Rs\.?\s*|INR\s*)/i,'').replace(/,/g,'').trim();

@@ -19,6 +19,24 @@ describe('Excel lease suggestions are review-only and preserve ambiguous values'
     expect(p.reviewNotes).toContain('LAND OWNER');
     expect('counterpartyName' in p).toBe(false);
   });
+  it('prefills exact DD.MM.YYYY workbook dates after strict calendar validation',()=>{
+    const p=dealerLeaseFormSuggestions(make({
+      FROM:'30.01.2018',TO:'29.01.2051',
+      'LAND OWNER':'CANDIGARH HOUSING BOARD',
+      AREA:'0.5','measuring unit':'ACR',
+      'DURATION (YEARS)':'33',
+    }));
+    expect(p.startDate).toBe('2018-01-30');
+    expect(p.endDate).toBe('2051-01-29');
+    expect(p.dimensionUnit).toBe(null);
+    expect(p.reviewNotes).toContain('DURATION (YEARS): 33');
+    expect('counterpartyName' in p).toBe(false);
+  });
+  it('rejects impossible DD.MM.YYYY dates and remains blank rather than inventing data',()=>{
+    const p=dealerLeaseFormSuggestions(make({FROM:'31.02.2018',TO:'99.12.2051'}));
+    expect(p.startDate).toBe('');
+    expect(p.endDate).toBe('');
+  });
   it('does not silently convert SQMT, ACR or guess date order',()=>{
     const p=dealerLeaseFormSuggestions(make({
       'AREA':'500','measuring unit':'SQMT',
