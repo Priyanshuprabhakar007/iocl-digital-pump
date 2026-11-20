@@ -482,6 +482,13 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
   // Requirement 4 & 5: Separate authorised approval action after chart verification (including explicit over-capacity confirmation)
   const handleUpdateTemplateStatus = async (nextStatus: 'APPROVED' | 'DRAFT') => {
     if (!activeTemplate || submitting) return;
+    if(nextStatus==='APPROVED' && activeTemplate.code==='EXCEL_10KL_REFERENCE'){
+      const sourceCheck=compareSuppliedTenKlChart(activeTemplate);
+      if(sourceCheck.status!=='MATCH'){
+        showError('10 KL calibration differs from supplied engineer chart. Resolve scanned dip-to-litre points in a reviewed revision before approval.');
+        return;
+      }
+    }
 
     if (nextStatus === 'APPROVED' && isTemplateOverNominalCapacity && !confirmApproveOverCapacity) {
       showError(
