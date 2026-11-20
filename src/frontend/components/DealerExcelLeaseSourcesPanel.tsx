@@ -127,7 +127,9 @@ export function DealerExcelLeaseSourcesPanel({outlets,activeOutletId,onChooseOut
                 <p className="text-slate-500 mt-1">{linked?'Linked to registered outlet':'Pending Setup · Not an operational outlet yet'}</p>
               </div>
               {linked&&<button type="button" className="px-3 py-2 text-xs bg-[#17365D] text-white rounded-lg"
-                onClick={()=>onChooseOutlet(linked.id)}>Select Registered Outlet</button>}
+                onClick={()=>onChooseOutlet(linked.id)}
+                aria-label={'View registered agreements for RO '+linked.roCode}>
+                View Registered Agreements</button>}
             </div>
             {sections.map(([type,title])=><div key={type} className="border rounded-xl overflow-hidden">
               <h4 className="font-semibold text-xs text-[#17365D] bg-slate-100 px-3 py-2">{title}</h4>

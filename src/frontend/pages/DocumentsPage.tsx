@@ -155,11 +155,25 @@ export const DocumentsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('REGISTER');
   const [dealerMasterSourceRows,setDealerMasterSourceRows]=useState<DealerDraftRow[]>([]);
   const [masterEditor, setMasterEditor] = useState<'agreements' | 'claims' | 'inspections'>('agreements');
+  // Increment on every explicit click, even if this RO is already selected.
+  const [registeredAgreementNavigation, setRegisteredAgreementNavigation] = useState(0);
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [masterPreset, setMasterPreset] = useState<'LAND_LEASE' | 'SERVICE_PROVIDER' | 'WAGES_INCENTIVES_MISC' | null>(null);
   const { activeOutletId, activeOutlet: selectedOutlet, accessibleOutlets: outlets, setActiveOutletId: setSelectedOutletId } = useActiveOutlet();
   const selectedOutletId = activeOutletId || '';
   const [showCocoOnly, setShowCocoOnly] = useState<boolean>(true);
+  const viewRegisteredAgreements = (outletId: string) => {
+    if (!outlets.some(outlet => outlet.id === outletId)) {
+      setBannerError('This outlet is not available in your accessible registered directory. Refresh the page.');
+      return;
+    }
+    setBannerError(null);
+    setSelectedOutletId(outletId);
+    setMasterPreset(null);
+    setMasterEditor('agreements');
+    setActiveTab('MASTERS');
+    setRegisteredAgreementNavigation(request => request + 1);
+  };
   const [reportDate, setReportDate] = useState<string>(() =>
     new Date().toISOString().slice(0, 10)
   );
@@ -1533,7 +1547,7 @@ export const DocumentsPage: React.FC = () => {
           outlets={outlets}
           activeOutletId={selectedOutletId}
           onSourceLoaded={setDealerMasterSourceRows}
-          onChooseOutlet={setSelectedOutletId}
+          onChooseOutlet={viewRegisteredAgreements}
         />
       }
 
@@ -1542,6 +1556,8 @@ export const DocumentsPage: React.FC = () => {
         <CocoDocumentationMastersPanel
           key={selectedOutletId}
           outletId={selectedOutletId}
+          selectedRoCode={selectedOutlet?.roCode||''}
+          registeredAgreementNavigation={registeredAgreementNavigation}
           vaultDocs={vaultDocs}
           dealerSourceRow={dealerMasterSourceRows.find(r=>r.roCode===selectedOutlet?.roCode)||null}
           initialEditor={masterEditor}
