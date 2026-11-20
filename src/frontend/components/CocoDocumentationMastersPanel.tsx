@@ -66,6 +66,8 @@ const dateValue = (value?: string | null) => value || '';
 
 export const CocoDocumentationMastersPanel: React.FC<{
   outletId: string;
+  selectedRoCode?: string;
+  registeredAgreementNavigation?: number;
   vaultDocs: VaultDocument[];
   dealerSourceRow?: DealerDraftRow | null;
   onSaved?: () => void;
@@ -74,7 +76,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
   initialClaimCategory?: string;
   initialCreate?: boolean;
   refreshRevision?: number;
-}> = ({ outletId, vaultDocs, dealerSourceRow, onSaved, initialEditor = 'agreements', initialAgreementType = 'LAND_LEASE', initialClaimCategory, initialCreate = false, refreshRevision = 0 }) => {
+}> = ({ outletId, selectedRoCode = '', registeredAgreementNavigation = 0, vaultDocs, dealerSourceRow, onSaved, initialEditor = 'agreements', initialAgreementType = 'LAND_LEASE', initialClaimCategory, initialCreate = false, refreshRevision = 0 }) => {
   const { userCtx, hasPermission } = useAuth();
   const canWrite = hasPermission(PERMISSIONS.DOCUMENTS_WRITE);
   const canInspect = canWrite && hasPermission(PERMISSIONS.EQUIPMENT_ASSETS_WRITE);
@@ -86,6 +88,20 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeEditor, setActiveEditor] = useState<'agreements'|'claims'|'inspections'>(initialEditor);
+  const registeredAgreementsRef = useRef<HTMLDivElement>(null);
+  // Unlike changing the outlet selector alone, explicit navigation must also
+  // reveal the agreement table and work when the same RO was already active.
+  useEffect(() => {
+    if (registeredAgreementNavigation <= 0) return;
+    setActiveEditor('agreements');
+    setShowAgreementForm(false);
+  }, [registeredAgreementNavigation]);
+  useEffect(() => {
+    if (registeredAgreementNavigation <= 0 || activeEditor !== 'agreements') return;
+    const target = registeredAgreementsRef.current;
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    target?.focus({ preventScroll: true });
+  }, [registeredAgreementNavigation, activeEditor, outletId]);
   const [agreementEdit, setAgreementEdit] = useState<Agreement | null>(null);
   const [sourcePrefillActive,setSourcePrefillActive]=useState(false);
   const [sourceVerified,setSourceVerified]=useState(false);
@@ -392,8 +408,10 @@ export const CocoDocumentationMastersPanel: React.FC<{
                 disabled={saving||uploadingContract||(sourcePrefillActive&&(!contractId||!sourceVerified))}><Save className="w-4 h-4"/> Save Agreement</button>
             </form>
           )}
-          <div className={col}>
-            <h4 className="font-bold text-[#17365D]">Registered Agreements</h4>
+          <div ref={registeredAgreementsRef} tabIndex={-1} className={col+' scroll-mt-24'}
+            data-testid="registered-agreements-target" aria-label="Registered agreements for the selected outlet">
+            <h4 className="font-bold text-[#17365D]">Registered Agreements{selectedRoCode?' — RO '+selectedRoCode:''}</h4>
+            <p className="text-xs text-slate-500">These are saved agreement records for the selected registered outlet. The Excel land/lease source above is separate and does not create a signed agreement.</p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-[#F1F5F9] text-[#17365D]">
