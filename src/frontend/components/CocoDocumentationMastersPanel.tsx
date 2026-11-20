@@ -6,6 +6,7 @@ import { PERMISSIONS } from '../../shared/constants';
 import { DealerLeaseSourceReviewPanel } from './DealerLeaseSourceReviewPanel';
 import type {DealerDraftRow} from '../../shared/dealerMasterDraft';
 import {dealerLeaseFormSuggestions} from '../../shared/dealerExcelLeasePrefill';
+import {getExcelLandLeaseRegisterPreview} from '../../shared/dealerExcelLeaseRegisterPreview';
 import { CheckCircle2, ClipboardList, Save, ShieldCheck, Upload, Download } from 'lucide-react';
 
 interface Agreement {
@@ -106,7 +107,6 @@ export const CocoDocumentationMastersPanel: React.FC<{
   }, [registeredAgreementNavigation, activeEditor, outletId, showAgreementForm]);
   const [agreementEdit, setAgreementEdit] = useState<Agreement | null>(null);
   const [sourcePrefillActive,setSourcePrefillActive]=useState(false);
-  const [sourceVerified,setSourceVerified]=useState(false);
   const sourceSuggestions=dealerSourceRow?dealerLeaseFormSuggestions(dealerSourceRow):null;
   const [claimEdit, setClaimEdit] = useState<Claim | null>(null);
   const [settleClaim, setSettleClaim] = useState<Claim | null>(null);
@@ -155,7 +155,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
     return () => { alive = false; };
   }, [outletId, rev, refreshRevision]);
   useEffect(() => {
-    setAgreementEdit(null);setSourcePrefillActive(false);setSourceVerified(false);setClaimEdit(null);setSettleClaim(null);setAgreementType(initialAgreementType);
+    setAgreementEdit(null);setSourcePrefillActive(false);setClaimEdit(null);setSettleClaim(null);setAgreementType(initialAgreementType);
     setShowAgreementForm(initialCreate && initialEditor === 'agreements');
     setShowClaimForm(initialCreate && initialEditor === 'claims');
     setShowInspectionForm(initialCreate && initialEditor === 'inspections');
@@ -175,10 +175,6 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const onAgreementSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if(!canWrite||saving||contractLock.current||agreementSaveLock.current)return;
-    if(sourcePrefillActive&&(!contractId||!sourceVerified)){
-      setError('Excel source cannot become a legal agreement until the signed contract is linked and all terms verified.');
-      return;
-    }
     const f = new FormData(e.currentTarget);
     let leaseTerms:LeaseTerms|null|undefined;
     try {
@@ -265,6 +261,10 @@ export const CocoDocumentationMastersPanel: React.FC<{
   };
   const docs = Array.from(new Map([...vaultDocs,...uploadedContracts].filter(d=>d.outletId===outletId).map(d=>[d.id,d])).values());
   const linkedNfr=data?.nfrLeases.find(l=>l.id===linkedLeaseId);
+  const excelSourcePreview=getExcelLandLeaseRegisterPreview(
+    dealerSourceRow,selectedRoCode,
+    Boolean(data?.agreements.some(a=>a.agreementType==='LAND_LEASE')),
+  );
   const currentTerms=agreementEdit?.agreementType===agreementType&&(agreementType!=='NFR_METADATA'||agreementEdit.linkedNfrLeaseId===linkedLeaseId)?agreementEdit.leaseTerms:null;
   const uploadContract=async(e:React.ChangeEvent<HTMLInputElement>)=>{
     const file=e.target.files?.[0];e.target.value='';
@@ -315,13 +315,13 @@ export const CocoDocumentationMastersPanel: React.FC<{
         <div className="space-y-4">
           {canWrite&&data&&!showAgreementForm&&<div className="flex flex-wrap gap-2">
             <button type="button" disabled={saving||uploadingContract} className={buttonStyle}
-              onClick={()=>{setSourcePrefillActive(false);setSourceVerified(false);setAgreementEdit(null);setAgreementType('LAND_LEASE');setShowAgreementForm(true);}}>
+              onClick={()=>{setSourcePrefillActive(false);setAgreementEdit(null);setAgreementType('LAND_LEASE');setShowAgreementForm(true);}}>
               + Add Agreement
             </button>
             {dealerSourceRow&&<button type="button" disabled={saving||uploadingContract} className={buttonStyle}
               onClick={()=>{
                 setError('');setSuccess('');
-                setSourceVerified(false);setAgreementEdit(null);setAgreementType('LAND_LEASE');
+                setAgreementEdit(null);setAgreementType('LAND_LEASE');
                 setActiveEditor('agreements');
                 setSourcePrefillActive(true);setShowAgreementForm(true);
               }}>
@@ -339,7 +339,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
               onKeyDown={e=>{
                 if(sourcePrefillActive&&e.key==='Escape'&&!saving&&!uploadingContract){
                   setAgreementEdit(null);setSourcePrefillActive(false);
-                  setSourceVerified(false);setShowAgreementForm(false);
+                  setShowAgreementForm(false);
                 }
               }}>
             <form ref={excelReviewFormRef} tabIndex={-1} data-testid="excel-lease-review-form"
@@ -350,12 +350,12 @@ export const CocoDocumentationMastersPanel: React.FC<{
                 :' scroll-mt-24')}>
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-[#17365D]">{agreementEdit ? 'Edit Agreement' : sourcePrefillActive ? 'Review Excel Details — RO '+selectedRoCode : 'Register Agreement'}</h4>
-                <button type="button" disabled={saving||uploadingContract} onClick={() => { setAgreementEdit(null);setSourcePrefillActive(false);setSourceVerified(false); setShowAgreementForm(false); }} className="text-sm underline text-[#64748B]">Cancel</button>
+                <button type="button" disabled={saving||uploadingContract} onClick={() => { setAgreementEdit(null);setSourcePrefillActive(false); setShowAgreementForm(false); }} className="text-sm underline text-[#64748B]">Cancel</button>
               </div>
               {sourcePrefillActive&&sourceSuggestions&&<div className="text-xs border border-amber-200 bg-amber-50 rounded-lg p-3 text-amber-900 space-y-1">
                 <strong>Excel source suggestions for RO {dealerSourceRow?.roCode} — NOT a signed agreement</strong>
                 <p>Land owner is not assumed to be a legal counterparty. Ambiguous dates and unsupported units are not converted.
-                  Verify all terms against the signed contract before saving.</p>
+                  These values are unverified source data. You can save them with no attachment and add evidence later.</p>
                 <pre className="whitespace-pre-wrap break-words max-h-32 overflow-y-auto">{sourceSuggestions.reviewNotes}</pre>
               </div>}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -418,57 +418,90 @@ export const CocoDocumentationMastersPanel: React.FC<{
                 {agreementType==='NFR_METADATA'&&<p className="text-xs text-slate-600">Monthly rent is read from NFR &amp; Lease Management. Edit it there so the rent ledger remains consistent.</p>}
               </section>}
               <section className="rounded-xl border border-[#D7E0EA] p-3 space-y-2">
-                <h5 className="font-semibold text-[#17365D]">Signed Contract / Agreement</h5>
+                <h5 className="font-semibold text-[#17365D]">Contract / Supporting Evidence (Optional)</h5>
                 {agreementType==='NFR_METADATA'&&linkedNfr?.agreementDocumentId&&<div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">Existing NFR contract: {docs.find(d=>d.id===linkedNfr.agreementDocumentId)?.name||'Linked source document'} <button type="button" onClick={()=>void downloadContract(linkedNfr.agreementDocumentId!)} className="text-[#17365D] underline">Download</button></div>}
                 <div className="flex flex-wrap items-end gap-3">
                   <div className="flex-1 min-w-[180px]"><Field label="Link existing contract"><select name="agreementDocumentId" value={contractId} disabled={uploadingContract||saving} onChange={e=>setContractId(e.target.value)} className={inputStyle}>
                     <option value="">No document linked</option>{contractId&&!docs.some(d=>d.id===contractId)&&<option value={contractId}>Existing linked document</option>}{docs.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
                   </select></Field></div>
                   <label className={'inline-flex items-center gap-2 rounded-lg border border-[#CBD5E1] bg-white px-4 py-2 text-sm font-semibold text-[#17365D] '+(uploadingContract||saving?'opacity-50':'cursor-pointer')}>
-                    <Upload className="w-4 h-4"/>{uploadingContract?'Uploading…':'Upload Contract'}
-                    <input aria-label="Upload signed contract" type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={uploadingContract||saving} className="sr-only" onChange={uploadContract}/>
+                    <Upload className="w-4 h-4"/>{uploadingContract?'Uploading…':'Upload Evidence (Optional)'}
+                    <input aria-label="Upload supporting evidence (optional)" type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={uploadingContract||saving} className="sr-only" onChange={uploadContract}/>
                   </label>
                   {contractId&&<button type="button" onClick={()=>void downloadContract(contractId)} className="inline-flex items-center gap-1 px-2 py-2 text-sm font-semibold text-[#17365D]"><Download className="w-4 h-4"/> Download</button>}
                 </div>
-                <p className="text-xs text-slate-600">PDF, JPG or PNG · Max 5 MB. A new upload is saved securely in the vault; Save Agreement links it to this record. For linked NFR, this attachment is supplementary to the source lease contract.</p>
+                <p className="text-xs text-slate-600">Evidence is optional. Save the available fields now, or upload a PDF/JPG/PNG (up to 5 MB) whenever available. Files are kept in the outlet-scoped Document Vault and can be linked, downloaded or replaced later. Uploading is not a verification or approval step.</p>
               </section>
               <Field label="Remarks"><textarea name="remarks" className={inputStyle} rows={2}
-                defaultValue={agreementEdit?.remarks||(sourcePrefillActive?'Excel Dealer Master evidence reviewed; original 26 fields retained in saved source.':'')}/></Field>
-              {sourcePrefillActive&&<label className="flex items-start gap-2 text-xs p-3 border border-amber-200 bg-amber-50 rounded-lg">
-                <input type="checkbox" checked={sourceVerified} onChange={e=>setSourceVerified(e.target.checked)}/>
-                I verified the RO Code, legal counterparty, dates, dimensions, rent and other terms against the linked signed contract.
-              </label>}
+                defaultValue={agreementEdit?.remarks||(sourcePrefillActive
+                  ?'EXCEL_SOURCE_UNVERIFIED | Imported from saved Dealer Master. Supporting evidence may be attached later. '+(sourceSuggestions?.reviewNotes||'').slice(0,1500)
+                  :'')}/></Field>
+              {sourcePrefillActive&&<p role="status" className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+                Saving will create a source-based agreement record marked <strong>Excel Source — Unverified</strong>.
+                A signed contract is NOT required; unsupported units and blank source fields stay unverified.
+              </p>}
               <button type="submit" className={buttonStyle}
-                disabled={saving||uploadingContract||(sourcePrefillActive&&(!contractId||!sourceVerified))}><Save className="w-4 h-4"/> Save Agreement</button>
+                disabled={saving||uploadingContract}><Save className="w-4 h-4"/>
+                {sourcePrefillActive?'Save Source-Based Agreement':'Save Agreement'}
+              </button>
             </form>
             </div>
           )}
           <div ref={registeredAgreementsRef} tabIndex={-1} className={col+' scroll-mt-24'}
             data-testid="registered-agreements-target" aria-label="Registered agreements for the selected outlet">
             <h4 className="font-bold text-[#17365D]">Registered Agreements{selectedRoCode?' — RO '+selectedRoCode:''}</h4>
-            <p className="text-xs text-slate-500">These are saved agreement records for the selected registered outlet. The Excel land/lease source above is separate and does not create a signed agreement.</p>
+            <p className="text-xs text-slate-500">This table shows saved agreement records and, where available, an amber Excel source row. Imported values are NOT verified or signed. Document uploads are optional evidence kept for later retrieval.</p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-[#F1F5F9] text-[#17365D]">
                   <tr>{['Type','Agreement','Counterparty','V Code','Customer Code','Valid Until','Dimensions','Lease Value / Month','Contract','Action'].map(t=><th key={t} className="p-2 text-left">{t}</th>)}</tr>
                 </thead><tbody>
+                  {excelSourcePreview&&<tr data-testid="excel-land-lease-register-source" className="bg-amber-50 border-b border-amber-200">
+                    <td className="p-2">Land Lease<br/><span className="font-bold text-amber-800">EXCEL SOURCE</span></td>
+                    <td className="p-2">
+                      <span className="font-semibold">{excelSourcePreview.label}</span>
+                      <span className="block text-amber-800">Not registered / not verified</span>
+                      <span className="block text-slate-600">Order ref: {excelSourcePreview.orderReference||'Blank in Excel'}</span>
+                    </td>
+                    <td className="p-2">{excelSourcePreview.owner||'Blank in Excel'}<span className="block text-amber-800">Land owner (source only; not verified counterparty)</span></td>
+                    <td className="p-2">—</td>
+                    <td className="p-2">{excelSourcePreview.roCode}</td>
+                    <td className="p-2">{excelSourcePreview.endDate||'Blank in Excel'}<span className="block text-slate-500">From: {excelSourcePreview.startDate||'Blank in Excel'}</span></td>
+                    <td className="p-2">{excelSourcePreview.area||'Blank in Excel'}<span className="block text-slate-500">{excelSourcePreview.landStatus||''} · Duration: {excelSourcePreview.duration||'—'}</span></td>
+                    <td className="p-2">{excelSourcePreview.rentMonthly||'Blank in Excel'}</td>
+                    <td className="p-2">Optional · Not attached</td>
+                    <td className="p-2">{canWrite&&<button type="button" className="font-semibold text-[#17365D] underline"
+                      onClick={()=>{
+                        setError('');setSuccess('');setAgreementEdit(null);setAgreementType('LAND_LEASE');
+                        setSourcePrefillActive(true);setShowAgreementForm(true);
+                      }}>Save / edit source</button>}</td>
+                  </tr>}
                   {data?.agreements.map(a=>(
                     <tr key={a.id} className="border-b border-[#E2E8F0]">
                       <td className="p-2">{a.agreementType.replaceAll('_', ' ')}</td>
-                      <td className="p-2">{a.agreementName}</td>
+                      <td className="p-2">{a.agreementName}
+                        {a.remarks?.startsWith('EXCEL_SOURCE_UNVERIFIED')&&
+                          <span className="block text-[11px] font-semibold text-amber-800">
+                            Excel Source — Unverified
+                          </span>}
+                      </td>
                       <td className="p-2">{a.counterpartyName || 'Not Recorded'}</td>
                       <td className="p-2">{a.vendorCode || '—'}</td>
                       <td className="p-2">{a.customerCode || '—'}</td>
                       <td className="p-2">{a.endDate || (a.agreementType==='NFR_METADATA'?data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.leaseEndDate:'Not Recorded')}</td>
                       <td className="p-2">{isLeaseAgreement(a.agreementType)?formatLeaseDimension(a.leaseTerms):'—'}</td>
                       <td className="p-2">{a.agreementType==='LAND_LEASE'?(a.leaseTerms?.monthlyLeaseValuePaise!=null?money(a.leaseTerms.monthlyLeaseValuePaise):'Not Recorded'):a.agreementType==='NFR_METADATA'?(data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.monthlyRentPaise!=null?money(data.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)!.monthlyRentPaise):'Not Recorded'):'—'}</td>
-                      <td className="p-2">{(()=>{const id=a.agreementDocumentId||data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.agreementDocumentId;return id?<button type="button" className="text-[#17365D] underline" onClick={()=>void downloadContract(id)}>{docs.find(d=>d.id===id)?.name||'Download contract'}</button>:'Not linked';})()}</td>
+                      <td className="p-2">{(()=>{const id=a.agreementDocumentId||data?.nfrLeases.find(l=>l.id===a.linkedNfrLeaseId)?.agreementDocumentId;return id?<button type="button" className="text-[#17365D] underline" onClick={()=>void downloadContract(id)}>{docs.find(d=>d.id===id)?.name||'Download evidence'}</button>:'Optional · Not attached';})()}</td>
                       <td className="p-2">{canWrite && <button disabled={saving||uploadingContract||showAgreementForm} className="text-[#B8530D] font-semibold" onClick={()=>{setAgreementEdit(a);setAgreementType(a.agreementType);setShowAgreementForm(true);}}>Edit</button>}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {data && !data.agreements.length && <p className="p-3 text-sm text-[#64748B]">No dedicated agreement entries yet. Existing NFR leases remain available in the section-wise report.</p>}
+              {data && !data.agreements.length && <p className="p-3 text-sm text-[#64748B]">
+                No dedicated agreement entries yet. {excelSourcePreview
+                  ?'Excel land/lease details are shown above as an unregistered source row; save the record to make it operational.'
+                  :'Existing NFR leases remain available in the section-wise report.'}
+              </p>}
             </div>
           </div>
           <DealerLeaseSourceReviewPanel outletId={outletId} revision={rev}/>
