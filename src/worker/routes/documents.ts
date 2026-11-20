@@ -413,6 +413,7 @@ documentRoutes.get('/compliance/section-wise', requirePermission(PERMISSIONS.DOC
   try {
     const report = await new CocoSectionWiseReportService(db).getReport({
       outletId, reportDate: c.req.query('reportDate')?.trim(), actorUserId: user.user.id,
+      includeDealerDraftSource: user.isGlobalScope && user.roles.includes('ADMIN'),
     });
     return successResponse(c, report);
   } catch (err) {
@@ -432,6 +433,7 @@ documentRoutes.get('/compliance/section-wise/pdf', requirePermission(PERMISSIONS
   try {
     const report = await new CocoSectionWiseReportService(db).getReport({
       outletId, reportDate: c.req.query('reportDate')?.trim(), actorUserId: user.user.id,
+      includeDealerDraftSource: user.isGlobalScope && user.roles.includes('ADMIN'),
     });
     const pdfBytes = await CocoSectionWisePdfService.generatePdf(report);
     await new AuditRepository(db).logAction({

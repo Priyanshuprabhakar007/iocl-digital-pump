@@ -1,7 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { desc,eq } from 'drizzle-orm';
+import {buildDealerExcelSourceTables,findDealerExcelReportSource,type DealerExcelReportSource} from '../../shared/dealerExcelReportSource';
 import { DrizzleD1Database } from 'drizzle-orm/d1';
 import * as schema from '../../db/schema';
-import { equipmentAssets, nfrLeases, nfrVendors, users, cocoAgreementDetails, cocoExpenseClaims, cocoClaimSettlements, cocoAssetInspections, documents } from '../../db/schema';
+import { equipmentAssets, nfrLeases, nfrVendors, users, cocoAgreementDetails, cocoExpenseClaims, cocoClaimSettlements, cocoAssetInspections, documents, dealerMasterDraftUploads } from '../../db/schema';
 import {
   CocoComplianceMergedItem,
   formatComplianceDateDisplay,
@@ -142,6 +143,7 @@ export function buildSectionWiseSections(args: {
   inspections?: SectionWiseInspection[];
   outletType: string;
   reportDate?: string;
+  dealerExcelSource?: DealerExcelReportSource | null;
 }): SectionWiseSection[] {
   const { items, leases, assets, outletType } = args;
   const agreementMasters = args.agreements || [];
@@ -366,9 +368,10 @@ export function buildSectionWiseSections(args: {
         { title: 'Lease Dimensions, Monthly Value & Contract Evidence', source: 'Agreement details / NFR lease / Document Vault',
           headers:['Sr.','Agreement / Lease Type','Dimensions','Lease Value','Basis','Contract / Evidence'],
           widths:[25,133,104,97,53,97],rows:leaseTermsRows },
+        ...buildDealerExcelSourceTables(args.dealerExcelSource, args.dealerExcelSource?.roCode||''),
       ],
       noteTitle: 'Source / Missing Data',
-      note: 'NFR dates, vendor and monthly rent are sourced from NFR Management. Land lease terms and linked NFR dimensions come from Agreement Details. Contract names identify saved outlet evidence. Monthly lease value is not proof of payment; missing fields remain Not Recorded.',
+      note: 'NFR dates, vendor and monthly rent are sourced from NFR Management. Land lease terms and linked NFR dimensions come from Agreement Details. Contract names identify saved outlet evidence. Excel source tables, if shown, are unverified raw values; they do not prove a legal agreement, property title, GST liability or payment. Canonical missing agreement fields remain Not Recorded.',
     },
     {
       title: 'Bills, Taxes & Charges',
@@ -447,7 +450,7 @@ export function buildSectionWiseSections(args: {
 export class CocoSectionWiseReportService {
   constructor(private db: DrizzleD1Database<typeof schema>) {}
 
-  async getReport(args: { outletId: string; reportDate?: string; actorUserId: string }): Promise<CocoSectionWiseReport> {
+  async getReport(args: { outletId: string; reportDate?: string; actorUserId: string; includeDealerDraftSource?: boolean }): Promise<CocoSectionWiseReport> {
     const compliance = new CocoComplianceService(this.db);
     const register = await compliance.getOutletComplianceRegister({
       outletId: args.outletId,
@@ -476,6 +479,24 @@ export class CocoSectionWiseReportService {
       getCocoLeaseTerms(this.db,args.outletId),
       this.db.select({id:documents.id,name:documents.name}).from(documents).where(eq(documents.outletId,args.outletId)).all(),
     ]);
+    // Drafts are creator-private: expose their source only to a global admin
+    // who owns the saved immutable draft and is authorized by the route.
+    // Other users receive the pre-existing canonical-only report.
+    let dealerExcelSource:DealerExcelReportSource|null=null;
+    if(args.includeDealerDraftSource){
+      const drafts=await legacySafe(
+        this.db.select({sourceDataJson:dealerMasterDraftUploads.sourceDataJson})
+          .from(dealerMasterDraftUploads)
+          .where(eq(dealerMasterDraftUploads.createdBy,args.actorUserId))
+          .orderBy(desc(dealerMasterDraftUploads.createdAt))
+          .limit(25).all(),
+        [] as {sourceDataJson:string}[],
+      );
+      dealerExcelSource=findDealerExcelReportSource(
+        drafts.map(record=>record.sourceDataJson),
+        register.outlet.roCode,
+      );
+    }
     const docNames=new Map(contractDocs.map(d=>[d.id,d.name]));
     const vendorById = new Map(vendors.map((v) => [v.id, v]));
     const leaseInfo: SectionWiseLease[] = leases.map((l) => ({
@@ -525,6 +546,7 @@ export class CocoSectionWiseReportService {
           manufacturer: e.manufacturer, status: e.status,
         })),
         outletType: register.outlet.outletType,
+        dealerExcelSource,
         reportDate: register.reportDate,
       }),
     };
