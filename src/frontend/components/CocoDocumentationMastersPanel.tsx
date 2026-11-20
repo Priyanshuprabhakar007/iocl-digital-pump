@@ -98,11 +98,11 @@ export const CocoDocumentationMastersPanel: React.FC<{
     setShowAgreementForm(false);
   }, [registeredAgreementNavigation]);
   useEffect(() => {
-    if (registeredAgreementNavigation <= 0 || activeEditor !== 'agreements') return;
+    if (registeredAgreementNavigation <= 0 || activeEditor !== 'agreements' || showAgreementForm) return;
     const target = registeredAgreementsRef.current;
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     target?.focus({ preventScroll: true });
-  }, [registeredAgreementNavigation, activeEditor, outletId]);
+  }, [registeredAgreementNavigation, activeEditor, outletId, showAgreementForm]);
   const [agreementEdit, setAgreementEdit] = useState<Agreement | null>(null);
   const [sourcePrefillActive,setSourcePrefillActive]=useState(false);
   const [sourceVerified,setSourceVerified]=useState(false);
@@ -117,7 +117,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
     if(!showAgreementForm||!sourcePrefillActive||activeEditor!=='agreements')return;
     const element=excelReviewFormRef.current;
     if(!element)return;
-    element.scrollIntoView({behavior:'smooth',block:'start'});
+    if(!sourcePrefillActive)element.scrollIntoView({behavior:'smooth',block:'start'});
     element.focus({preventScroll:true});
   },[showAgreementForm,sourcePrefillActive,activeEditor]);
   const [dimensionUnit,setDimensionUnit]=useState<LeaseTerms['dimensionUnit']>(null);
@@ -321,15 +321,32 @@ export const CocoDocumentationMastersPanel: React.FC<{
               onClick={()=>{
                 setError('');setSuccess('');
                 setSourceVerified(false);setAgreementEdit(null);setAgreementType('LAND_LEASE');
+                setActiveEditor('agreements');
                 setSourcePrefillActive(true);setShowAgreementForm(true);
               }}>
-              Use Excel Details (Review &amp; Save)
+              Open Excel Review Form
             </button>}
           </div>}
           {canWrite && data && showAgreementForm && (
+            <div className={sourcePrefillActive
+              ?'fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-950/70 p-3 sm:p-6'
+              :'contents'}
+              data-testid={sourcePrefillActive?'excel-lease-review-dialog':'agreement-inline-form'}
+              role={sourcePrefillActive?'dialog':undefined}
+              aria-modal={sourcePrefillActive?true:undefined}
+              aria-label={sourcePrefillActive?'Review Excel lease details for RO '+selectedRoCode:undefined}
+              onKeyDown={e=>{
+                if(sourcePrefillActive&&e.key==='Escape'&&!saving&&!uploadingContract){
+                  setAgreementEdit(null);setSourcePrefillActive(false);
+                  setSourceVerified(false);setShowAgreementForm(false);
+                }
+              }}>
             <form ref={excelReviewFormRef} tabIndex={-1} data-testid="excel-lease-review-form"
               key={agreementEdit?.id||(sourcePrefillActive?'excel-suggestions':'new-agreement')}
-              onSubmit={onAgreementSubmit} className={col+' scroll-mt-24'}>
+              onSubmit={onAgreementSubmit}
+              className={col+(sourcePrefillActive
+                ?' w-full max-w-5xl max-h-[92vh] overflow-y-auto shadow-2xl outline-none'
+                :' scroll-mt-24')}>
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-[#17365D]">{agreementEdit ? 'Edit Agreement' : sourcePrefillActive ? 'Review Excel Details — RO '+selectedRoCode : 'Register Agreement'}</h4>
                 <button type="button" disabled={saving||uploadingContract} onClick={() => { setAgreementEdit(null);setSourcePrefillActive(false);setSourceVerified(false); setShowAgreementForm(false); }} className="text-sm underline text-[#64748B]">Cancel</button>
@@ -423,6 +440,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
               <button type="submit" className={buttonStyle}
                 disabled={saving||uploadingContract||(sourcePrefillActive&&(!contractId||!sourceVerified))}><Save className="w-4 h-4"/> Save Agreement</button>
             </form>
+            </div>
           )}
           <div ref={registeredAgreementsRef} tabIndex={-1} className={col+' scroll-mt-24'}
             data-testid="registered-agreements-target" aria-label="Registered agreements for the selected outlet">
