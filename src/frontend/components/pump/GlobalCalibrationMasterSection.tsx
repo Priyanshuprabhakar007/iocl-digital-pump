@@ -2062,13 +2062,13 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
         </div>
       )}
 
-      {/* Existing 10 KL master already contains the imported scan's chart values. */}
+      {/* Existing 10 KL master geometry is similar, but scan rows may differ. */}
       {templates.some(t => t.code === 'EXCEL_10KL_REFERENCE') && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3">
           <div>
             <p className="text-sm font-bold text-white">10 KL — Existing Calibration Master</p>
             <p className="text-xs text-slate-300">
-              Use the stored 195-point reference; do not import a duplicate or replace historical tank charts.
+              Compare the stored 195-point master with the supplied engineer chart before any tank assignment. Fix mismatched rows in a reviewed new revision.
             </p>
           </div>
           <button type="button" onClick={() => {
@@ -2190,7 +2190,7 @@ export const GlobalCalibrationMasterSection: React.FC<GlobalCalibrationMasterSec
                 <span className={'rounded-md border px-2 py-1 text-xs font-bold '+
                   (suppliedTenKlComparison.status==='MATCH'
                     ?'border-emerald-600 bg-emerald-950 text-emerald-300'
-                    :'border-amber-600 bg-amber-950 text-amber-300')}>
+                    :'border-rose-600 bg-rose-950 text-rose-300')}>
                   {suppliedTenKlComparison.status==='MATCH'?'Chart values matched':suppliedTenKlComparison.status==='MISMATCH'?'Review mismatch':'Load points'}
                 </span>
               </div>

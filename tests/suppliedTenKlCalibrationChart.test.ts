@@ -42,7 +42,7 @@ describe('existing 10 KL master comparison against supplied scanned chart',()=>{
  it('does not turn missing points into zero',()=>{
    expect(compareSuppliedTenKlChart(sourceChart({points:[]})).status).toBe('NOT_LOADED');
  });
- it('matches actual imported 10 KL workbook rows against the supplied PDF checkpoints',async()=>{
+ it('detects a real mismatch between the imported workbook and certified scan',async()=>{
    const file=fs.readFileSync(path.resolve('tests/fixtures/20KL_15KL_10KL_calibration_Dip_chart.xlsx'));
    const extracted=await ExcelCalibrationImportService.extractWorkbook(file,'20KL_15KL_10KL_calibration_Dip_chart.xlsx');
    const existing=extracted.charts.find(x=>x.templateCode==='EXCEL_10KL_REFERENCE');
@@ -53,9 +53,11 @@ describe('existing 10 KL master comparison against supplied scanned chart',()=>{
      const stored=existing?.points.find(row=>row.dipMm===ref.dipMm);
      return {dip:ref.dipMm,expected:ref.litres,stored:stored?.volumeLitres};
    });
-   expect(result).toEqual(suppliedTenKlChart.checkpoints.map(ref=>({
-     dip:ref.dipMm,expected:ref.litres,stored:ref.litres,
-   })));
+   expect(result.find(p=>p.dip===0)).toEqual({dip:0,expected:0,stored:0});
+   expect(result.find(p=>p.dip===10)).toEqual({dip:10,expected:6.90,stored:6.95});
+   expect(result.find(p=>p.dip===810)).toEqual({dip:810,expected:4378.94,stored:4379.19});
+   expect(result.find(p=>p.dip===1940)).toEqual({dip:1940,expected:11073.41,stored:11073.41});
+   expect(result.some(p=>p.stored!==p.expected)).toBe(true);
  });
  it('uses 1940mm diameter, 3750mm length, 11073.41L maximum',()=>{
    expect(suppliedTenKlChart.diameterMm).toBe(1940);
