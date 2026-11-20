@@ -37,7 +37,7 @@ describe('COCO79 (369460) fully isolated daily operations simulator',()=>{
      expect(output.errors).toEqual([]);
      expect(output.stockBalanced).toBe(true);
      expect(output.financeBalanced).toBe(true);
-     expect(output.nozzles).toBeUndefined();
+     expect(shift.nozzles).toHaveLength(20);
      expect(output.products.reduce((v,p)=>v+p.netL,0)).toBeGreaterThan(0);
      expect(output.collected).toBe(output.revenue);
      expect(output.tanks.every(t=>t.varianceL===0)).toBe(true);
