@@ -88,6 +88,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeEditor, setActiveEditor] = useState<'agreements'|'claims'|'inspections'>(initialEditor);
+  const [showAgreementForm, setShowAgreementForm] = useState(initialCreate && initialEditor === 'agreements');
   const registeredAgreementsRef = useRef<HTMLDivElement>(null);
   const excelReviewFormRef = useRef<HTMLFormElement>(null);
   // Unlike changing the outlet selector alone, explicit navigation must also
@@ -110,7 +111,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
   const [claimEdit, setClaimEdit] = useState<Claim | null>(null);
   const [settleClaim, setSettleClaim] = useState<Claim | null>(null);
   const [agreementType, setAgreementType] = useState<string>(initialAgreementType);
-  const [showAgreementForm, setShowAgreementForm] = useState(initialCreate && initialEditor === 'agreements');
+
   useEffect(()=>{
     // Explicit Excel review action must visibly reveal the form even when the
     // same outlet is already selected and the master screen is far down-page.
