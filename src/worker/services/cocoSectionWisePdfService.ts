@@ -2,6 +2,7 @@ import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from 'pdf-lib';
 import { formatComplianceDateDisplay } from '../../shared/cocoComplianceUtils';
 import { sanitizePdfText, wrapPdfText } from './cocoCompliancePdfService';
 import type { CocoSectionWiseReport, SectionWiseSection, SectionWiseTable } from './cocoSectionWiseReportService';
+import {printableSectionTables} from './cocoSectionWisePdfProjection';
 
 const A4_W = 595.28;
 const A4_H = 841.89;
@@ -68,7 +69,7 @@ export class CocoSectionWisePdfService {
       write(page, fitted(section.title.toUpperCase() + (continued ? ' - CONTINUED' : ''), bold, 8.6, WIDTH - 205),
         LEFT + 9, y - 14.5, 8.6, true);
       if (!continued) {
-        const mainRows = section.tables[0].rows;
+        const mainRows = printableSectionTables(section)[0]?.rows||[];
         // A clean total avoids repeating "Recorded / Not Recorded"
         // scorecards across the printed report.
         const count = 'Total: ' + mainRows.length;
@@ -151,11 +152,16 @@ export class CocoSectionWisePdfService {
     };
 
     for (const section of report.sections) {
+      const printableTables=printableSectionTables(section);
       // The agreement section has three linked tables; tighten vertical padding only.
       // Keep font sizes and wrapping unchanged, and allow continuation for larger registers.
       const compact = section.title === 'Lease & Agreements';
       let { page, y } = startPage(section, false);
-      for (const table of section.tables) {
+      if(!printableTables.length){
+        write(page,'No saved records for this section.',LEFT+9,y-15,9,false,GREY);
+        continue;
+      }
+      for (const table of printableTables) {
         let index = 0;
         const widths = tableWidths(table);
         const headerHeight = rowHeight(table.headers.map((value, i) =>
@@ -181,10 +187,7 @@ export class CocoSectionWisePdfService {
         }
         y -= compact ? 8 : 16;
       }
-      const noteHeight = Math.max(56,
-        34 + wrapPdfText(section.note, font, 8, WIDTH - 20).length * 11.5);
-      if (y - noteHeight < FOOTER_TOP + 18) ({ page, y } = startPage(section, true));
-      noteBlock(page, y, section);
+      // The full policy/source notes stay in the on-screen preview, not the concise PDF.
     }
 
     const pages = pdf.getPages();

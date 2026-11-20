@@ -184,9 +184,15 @@ export function buildSectionWiseSections(args: {
     monthlyLeaseValue:a.agreementType==='LAND_LEASE'&&a.leaseTerms?.monthlyLeaseValuePaise!=null?formatIndianCurrencyFromPaise(a.leaseTerms.monthlyLeaseValuePaise,{asciiPrefix:true}):undefined,
     contract:a.contractName||NR,
     remarks: printable([a.agreementNumber ? 'Agreement: ' + a.agreementNumber : '',
-      // Keep immutable source classification internally, not as a PDF field.
-      a.remarks?.replace(/^EXCEL_SOURCE_UNVERIFIED\s*\|\s*/, '') || '']
-      .filter(Boolean).join(' | ') || EMPTY),
+      (() => {
+        const raw=a.remarks?.replace(/^EXCEL_SOURCE_UNVERIFIED\s*\|\s*/, '').trim()||'';
+        // This boilerplate is displayed in the dedicated Excel Source tables.
+        // Keep user-entered remarks, but avoid wrapping generated checklists in
+        // the narrow Agreement Identification / Remarks column.
+        return raw.startsWith('Imported from saved Dealer Master. Supporting evidence may be attached later.')
+          ? '' : raw;
+      })()]
+      .filter(Boolean).join(' | ') || EMPTY,65),
   });
   const manuals = (type: string) => agreementMasters.filter((a) => a.agreementType === type);
   const land = manuals('LAND_LEASE');
