@@ -81,20 +81,25 @@ describe('COCO documentation master API / evidence protections', () => {
       // be linked later, retaining its same-outlet access controls and history.
       const withoutAttachment=await call('/compliance/masters/agreements','POST',{
         ...agreement,agreementNumber:'SOURCE-ONLY-TEST',agreementDocumentId:null,
-        counterpartyName:null,remarks:'EXCEL_SOURCE_UNVERIFIED | Draft source only',
+        counterpartyName:null,sourceClassification:'EXCEL_UNVERIFIED',
+        remarks:'Draft source only',
         leaseTerms:{dimensionUnit:null,areaMilli:null,lengthMilliFt:null,widthMilliFt:null,monthlyLeaseValuePaise:null},
       });
       expect(withoutAttachment.status).toBe(201);
       const sourceId=(await withoutAttachment.json() as any).data.id;
       const sourceList=(await (await call('/compliance/masters?outletId=ro-1001')).json() as any).data.agreements;
       expect(sourceList.find((a:any)=>a.id===sourceId).agreementDocumentId).toBeNull();
+      expect(sourceList.find((a:any)=>a.id===sourceId).remarks)
+        .toContain('EXCEL_SOURCE_UNVERIFIED');
       const linkedLater=await call('/compliance/masters/agreements/'+sourceId,'PUT',{
         ...agreement,agreementNumber:'SOURCE-ONLY-TEST',agreementDocumentId:'evidence-one',
-        remarks:'EXCEL_SOURCE_UNVERIFIED | Evidence attached later',
+        remarks:'Evidence attached later',
       });
       expect(linkedLater.status).toBe(200);
       const savedAfter=(await (await call('/compliance/masters?outletId=ro-1001')).json() as any).data.agreements;
       expect(savedAfter.find((a:any)=>a.id===sourceId).agreementDocumentId).toBe('evidence-one');
+      expect(savedAfter.find((a:any)=>a.id===sourceId).remarks)
+        .toContain('EXCEL_SOURCE_UNVERIFIED');
 
       const claimRes = await call('/compliance/masters/claims', 'POST', {
         outletId: 'ro-1001', claimCategory: 'UNIFORM_CHARGES', title: 'Uniform Expense',

@@ -16,10 +16,11 @@ describe('Excel lease review entry point visibility',()=>{
     expect(ui).toContain('excel-lease-review-form');
     expect(ui).toContain("selectedRoCode : 'Register Agreement'");
   });
-  it('permits cancel without agreement creation and keeps signed contract verification gates',()=>{
-    expect(ui).toContain("setSourceVerified(false); setShowAgreementForm(false)");
-    expect(ui).toContain("sourcePrefillActive&&(!contractId||!sourceVerified)");
-    expect(ui).toContain("if(sourcePrefillActive&&(!contractId||!sourceVerified))");
+  it('permits cancelling and saving Excel-derived records WITHOUT a mandatory contract',()=>{
+    expect(ui).toContain('setShowAgreementForm(false)');
+    expect(ui).toContain('Upload Evidence (Optional)');
+    expect(ui).toContain("sourcePrefillActive?'Save Source-Based Agreement':'Save Agreement'");
+    expect(ui).not.toContain('!contractId||!sourceVerified');
   });
   it('does not automatically elevate raw land owner or unsupported ACR measurements',()=>{
     const prefill=fs.readFileSync(path.resolve(__dirname,'../src/shared/dealerExcelLeasePrefill.ts'),'utf8');

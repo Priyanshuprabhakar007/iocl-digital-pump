@@ -198,6 +198,7 @@ export const CocoDocumentationMastersPanel: React.FC<{
       startDate: f.get('startDate') || null,
       endDate: f.get('endDate') || null,
       agreementDocumentId: contractId || null,
+      ...(sourcePrefillActive?{sourceClassification:'EXCEL_UNVERIFIED'}:{}),
       ...(leaseTerms!==undefined?{leaseTerms}:{}),
       remarks: f.get('remarks') || null,
     };

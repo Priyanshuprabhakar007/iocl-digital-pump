@@ -38,7 +38,7 @@ describe('Lease terms and contract evidence',()=>{
     expect(sql).not.toMatch(/(^|\n)\s*(ALTER|DROP|DELETE|UPDATE|INSERT)\b/im);
     const form=fs.readFileSync('src/frontend/components/CocoDocumentationMastersPanel.tsx','utf8');
     expect(form).toContain('isLeaseAgreement(agreementType)');
-    expect(form).toContain('Upload Contract');
+    expect(form).toContain('Upload Evidence (Optional)');
     expect(form).toContain('contractLock.current');
     expect(form).toContain("agreementDocumentId: contractId || null");
     expect(form).toContain("'/api/v1/documents'");
